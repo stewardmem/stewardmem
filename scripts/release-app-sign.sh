@@ -1037,11 +1037,21 @@ publish_tools_dmg() {
 	# is a DEAD PORT. Measured the hard way (2026-11-01): `bench --version`
 	# is not a version probe, it is a load generator — it POSTs synthetic
 	# documents at the default target, and the default target is a running
-	# kernel. A binary that exits 0, that RAN and was bounded by the timeout,
-	# or that fails with the foreign-arch message PASSED Gatekeeper (its
-	# check precedes the CPU check — measured on the x86_64 set); a SIGKILL
-	# or a named Gatekeeper refusal is a red.
-	local probe_out probe_rc quarantine_fail=0 probe_args
+	# kernel; its argv is ignored entirely (a `--target` probe arg reached
+	# nothing and the default BRAIN_URL took the load), so bench is probed
+	# through the environment below.
+	#
+	# THE VERDICT RULES (measured on the v1.29.39 lane, 2026-11-01 — the arm's
+	# first live run refused a set that had PASSED, and the refusals were the
+	# probe's own classifications): a binary that EXITED 0, that RAN and was
+	# bounded by the timeout, that fails with the foreign-arch message (the
+	# loader's own casing — `Bad CPU type in executable`; the W-T0 manual
+	# observation quoted zsh's lowercase), or that exits NONZERO AFTER
+	# PRINTING ITS OWN OUTPUT (a Gatekeeper-refused binary is SIGKILLed
+	# before main and can print nothing) — all PASSED Gatekeeper. The red
+	# classes are SIGKILL (rc 137), the named refusal texts, and silence at a
+	# nonzero exit.
+	local probe_out probe_rc quarantine_fail=0
 	local quarantine_dir="$dir/quarantine-test"
 	mkdir -p "$quarantine_dir"
 	for name in "${assets[@]}"; do
@@ -1049,12 +1059,21 @@ publish_tools_dmg() {
 		cp "$dir/Binaries-Signed/$name" "$copy"
 		xattr -w com.apple.quarantine "0081;$(printf '%08x' "$(date +%s)");Safari;" "$copy" ||
 			die "refusing: the Safari-shaped quarantine could not be applied to $name"
+		# bench has no --version and no --target flag (its argv is ignored;
+		# measured 2026-11-01 — a `--target` probe arg reached nothing and the
+		# default BRAIN_URL, a RUNNING KERNEL, took the load). The knob bench
+		# honors is the environment: BRAIN_URL at a dead port, and the auth
+		# ladder's file leg neutralized with an empty BRAIN_TOKEN_FILE.
+		local -a probe_env=()
+		local -a probe_args=(--version)
 		case "$name" in
-			bench-*) probe_args=(--target http://127.0.0.1:1) ;;
-			*)       probe_args=(--version) ;;
+			bench-*)
+				probe_env=(BRAIN_URL=http://127.0.0.1:1 BRAIN_TOKEN_FILE=/dev/null)
+				probe_args=()
+				;;
 		esac
 		probe_rc=0
-		probe_out="$(env -u BRAIN_TOKEN -u BRAIN_TOKEN_FILE -u BRAIN_URL \
+		probe_out="$(env -u BRAIN_TOKEN -u BRAIN_TOKEN_FILE -u BRAIN_URL "${probe_env[@]}" \
 			timeout 15 "$copy" "${probe_args[@]}" 2>&1)" || probe_rc=$?
 		case "$probe_rc" in
 			0)
@@ -1064,7 +1083,7 @@ publish_tools_dmg() {
 				echo "   quarantine-exec $name: PASS (the process RAN — Gatekeeper passed it — and was bounded)"
 				;;
 			126 | 127)
-				if grep -q "bad CPU type in executable" <<<"$probe_out"; then
+				if grep -qi "bad cpu type in executable" <<<"$probe_out"; then
 					echo "   quarantine-exec $name: PASS (foreign arch — Gatekeeper's check precedes the CPU check)"
 				else
 					echo "::error::quarantine-exec $name rc=$probe_rc: $probe_out" >&2
@@ -1072,8 +1091,13 @@ publish_tools_dmg() {
 				fi
 				;;
 			*)
-				echo "::error::quarantine-exec $name rc=$probe_rc: $probe_out" >&2
-				quarantine_fail=1
+				if grep -qiE "killed: *9|cannot be opened|developer cannot be verified|code signature invalid" <<<"$probe_out" ||
+					[[ "$probe_rc" == "137" || -z "$probe_out" ]]; then
+					echo "::error::quarantine-exec $name rc=$probe_rc: $probe_out" >&2
+					quarantine_fail=1
+				else
+					echo "   quarantine-exec $name: PASS (the process RAN — it printed its own output and exited $probe_rc)"
+				fi
 				;;
 		esac
 	done
