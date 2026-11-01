@@ -1,5 +1,65 @@
 # Agent Execution Log — StewardMem
 
+> **R145 "The first trimmed release" (v1.29.39, 2026-11-01): the trim is
+> BEHAVIORAL — the page is the ~9-asset set exactly, the chain answers, and
+> the stapled Tools DMG carries the darwin set.** The cut went through the
+> trimmed workflow (CI matrix green, 22 jobs; the release workflow green),
+> and the round's own gates fired LIVE: the lane's dirty-tree gate (a
+> manifest names a commit, and a commit is not a dirty tree), the provenance
+> gate (the release's bytes build AT THE TAG — the probe fix rode `main`,
+> never the release), and the quarantine-exec arm's first live run, which
+> REFUSED A PASSING SET and taught its own verdict rules in the refusal:
+> the loader's casing is \`Bad CPU type in executable\` (the W-T0 manual
+> observation quoted zsh's lowercase), a program's OWN nonzero exit is not
+> a Gatekeeper refusal (a refused binary is SIGKILLed before main and can
+> print NOTHING — the red classes are SIGKILL, the named refusal texts, and
+> silence), and bench parses NO argv (its \`--target\` probe arg reached
+> nothing and the default BRAIN_URL took the load) — the probe's leash is
+> the ENVIRONMENT: \`BRAIN_URL\` at a dead port, \`BRAIN_TOKEN_FILE\`
+> empty. Three accidental bench writes landed as PENDING proposals (5195,
+> 5206, 5207) and were each REJECTED, the queue verified back each time;
+> the kernel's memory was never touched (pending proposals are not memory).
+>
+> **The signing pass ran as the §7 recipe, third run, on the fresh tag's
+> bytes:** 16/16 digests agree across TWO transports (gh run download +
+> the CRC-verified artifact ZIP through the API — the run's artifacts carry
+> no sums file of their own, so the second transport IS the hash check;
+> truncation measured: a 93%-cut binary fails \`codesign --verify
+> --strict\`), 16/16 signed with hardened runtime on every CodeDirectory,
+> one zip one submission (Accepted), quarantine-exec **16/16** (never
+> spctl), the sums over the signed bytes, the builders' two notarizations
+> Accepted (the selective pkg + the stapled DMG), the Tools DMG uploaded,
+> and the page's SHA256SUMS REGENERATED over the final 9 (the lane-owned
+> five re-summed from the published bytes; the CI lines kept verbatim).
+>
+> **W-R3, all fail-closed:** the page check GREEN ("PAGE OK — 9 assets,
+> exactly the trimmed set for v1.29.39"; the LIVE red drill on v1.29.38's
+> 40-asset wall read 2 missing, 32 extra, rc=1); the published sums verify
+> from the internet (all 9 assets fetched fresh, every line OK); the chain
+> round trip (latest.json → the artefact URL it names → HTTP 200,
+> 13,103,985 bytes → \`minisign -V\` verified against the app's OWN pinned
+> key \`C27C1E11196062D5\`, the trusted comment naming the artefact); the
+> published Tools DMG (stapler validate, 10/10 sums inside the mounted
+> volume, brain-server and brain answering 1.29.39 straight from the mount,
+> a Safari-quarantined binary FROM THE IMAGE executing clean, and the pkg
+> inside carrying the Developer ID Installer chain with the notarization
+> trusted); the Linux tarball untarred with the 16 historical names (ELF ×2
+> arches). The installer drill was NOT repeated — the preserve law is
+> machine-witnessed and the pkg's signature receipts are the evidence.
+>
+> **The incident that shaped the lane:** the operator's keychain LOST the
+> notarytool profile \`stewardmem\` mid-release (the Developer ID
+> identities remained; only the data-protection item vanished overnight;
+> Keychain Access re-unlocked it). The updater's endpoint was dead for
+> ~3 h — the exact gap the page-shape and chain checks exist to catch —
+> and the lane's idempotency carried the completion. The verdict-logic fix
+> landed on \`main\` (dacfc7c1) BETWEEN the tag and the lane's completion;
+> the next release runs the fixed script natively. **Owed, named:** a
+> release-cut e2e drill for the lane's Tools step (its first live run
+> refused a passing set — the script's own probe defects, now fixed);
+> Windows presence; the x86_64 Tools variant (the builders take --arch);
+> the arm64-VM clean-machine witness (gate 8's last surface).
+
 > **R144 "Distributed" (the Tools round lands, 2026-10-31): the 35-asset
 > release wall is superseded by one stapled Tools DMG, a selective pkg that
 > PROPOSES instead of asking blind, and a deterministic detection core both
