@@ -15,12 +15,11 @@ were when the round landed — not because the work is still unreleased.
 
 ## [1.29.40] — 2026-11-01 — the four repairs: refusals a browser can read, titles stored as the truth, and a rotation that tells the truth
 
-Four repairs from the credential-heal round's owed list: the kernel's
-refusals now reach the browser that asked, the library's titles read like
-they were written, and the app's token rotation works against an
-externally-managed kernel. The heal itself lands here too: when the
-running kernel rejects the app's credential, the app recovers on its own —
-no dead end, no reinstall.
+Four repairs land in this release: the kernel's refusals now reach the
+browser that asked, the library's titles read like they were written, and
+the app's token rotation works against an externally-managed kernel. The
+app also recovers on its own when the running kernel rejects its
+credential — no dead end, no reinstall.
 
 ### Release notes
 
@@ -33,7 +32,7 @@ no dead end, no reinstall.
   against the live kernel, and only then writes the keychain — a failure
   leaves the machine unchanged, the adopted source is named, and the token
   itself never travels. A healing notice shows while a heal is in flight,
-  and the Restart button disables and relabels during it.
+  and the Restart button disables and relabels during it (83dd62d9).
 
 **Bug fixes**
 
@@ -42,13 +41,13 @@ no dead end, no reinstall.
   webview blocked the answer before any code could react. The CORS layer
   now sits outermost: every refusal (401/403/404) carries the grant for
   allowed origins, preflights answer before auth, and foreign origins get
-  nothing at any layer.
+  nothing at any layer (3de30e13).
 - **Titles no longer render HTML entities.** Vault imports stored titles
   pre-escaped (`Green Tea&#x27;s Secret Weapon` on screen, double-escaped
   on public pages). Titles are now stored exactly as written, and a
   one-time migration decodes the legacy rows — 1,203 titles in the
   measured library — on the first start after this release; public pages
-  escape exactly once at emission.
+  escape exactly once at emission (3de30e13).
 - **Token rotation works against an external kernel.** Rotating the
   credential from Settings used to report success while the running kernel
   kept the old token — and the self-heal then silently undid the rotation.
@@ -56,18 +55,18 @@ no dead end, no reinstall.
   kernel's declared credential file too (the kernel's live watcher takes
   the new token without a restart), and the result names every file
   written; a refused write reports honestly. The App Store build never
-  touches an external credential file.
-- The Settings surface's svelte-check error (an unused local) is gone.
+  touches an external credential file (3de30e13).
+- The Settings surface's svelte-check error (an unused local) is gone (3de30e13).
 
 **Improvements**
 
 - **The app attaches to a newer external kernel.** Preflight attaches to
   an observed-newer external kernel instead of refusing it — the wire
   contract is additive, so a newer kernel is adopted; a self-started child
-  that drifts is still refused exactly as before.
+  that drifts is still refused exactly as before (83dd62d9).
 - The version lockstep moves to 1.29.40 (Cargo.toml, openapi.yaml, README,
   SBOM). No new dependencies; no wire-shape change (the openapi drift gate
-  is byte-green).
+  is byte-green) (3de30e13).
 
 ## [1.29.39] — 2026-11-01 — the first trimmed release: one stapled image carries the macOS set, and the release proves its own page
 
@@ -89,10 +88,10 @@ trip verifies against the key the app ships.
   kernel, the CLI tools, the MCP surface, the selective installer (which
   preserves an existing setup it detects rather than overwriting it), and
   an uninstaller — one download, signed and notarized, verified offline by
-  its staple.
+  its staple (5308f534).
 - **Releases prove their own page.** A release whose published page
   carries an extra asset, or is missing one the updater needs, is refused
-  instead of called green — the page shape is checked, not assumed.
+  instead of called green — the page shape is checked, not assumed (9c8dfa2a).
 - **The app can run its kernel as a background service.** The install
   wizard's SERVICE posture: the app generates a per-user LaunchAgent (its
   plist carries the three user-absolute paths the kernel requires — a
@@ -101,13 +100,13 @@ trip verifies against the key the app ships.
   holder), checks the served version against the app's sealed provenance
   on first boot, and uninstalls cleanly — every outcome named, the removed
   files listed, the data root offered rather than silently kept or
-  deleted.
+  deleted (7d99f416).
 - **One posture screen, offered once.** After consent the app asks exactly
   once how the kernel should run — inside the app (pre-selected and
   primary), or as a background service — with the alternatives disclosed
   and "do nothing" always available; when a kernel is already detected,
   what was detected is shown beside the choice; the decision re-runs as a
-  Settings section, in five languages.
+  Settings section, in five languages (c63bfc4b).
 
 **Changed**
 
@@ -115,7 +114,7 @@ trip verifies against the key the app ships.
   ride inside the stapled disk image instead of as bare downloads; the
   Linux tools ship as one tarball whose contents keep the familiar
   per-binary names. Every file on the page is described by its checksum
-  file, and the checksum file describes the page as published.
+  file, and the checksum file describes the page as published (1cdea30e).
 
 ## [1.29.38] — 2026-10-31 — the App Store edition exists: sandboxed, updater-free, Signal-free, and the CI disk law
 
@@ -543,7 +542,7 @@ sources) in both the built artifact and the app configuration.
 ## [1.29.35] — 2026-10-29 — the loop runs live: the on-device pilot, the scheduler's first flip
 
 The governed troubleshooting loop no longer runs only against scripted
-fixtures: this round switches it on against the on-device model through the
+fixtures: this release switches it on against the on-device model through the
 kernel's bridge — the same one egress the chat uses — and measures what a
 real model actually does. The measured truth is recorded, not smoothed:
 intake artifacts pass first-attempt in 19 of 19 cases, triage's
@@ -560,43 +559,43 @@ to its new home: the bundle identifier is `com.stewardmem.shell`.
 - **The governed loop runs on your device.** `BRAIN_GDL_PROVIDER_KIND=afm-stdio`
   points the case machine at the on-device model through the brain-afm
   bridge — no hosted provider, no keys, nothing leaves the machine. The
-  default (`http`) is byte-for-byte yesterday's behavior.
+  default (`http`) is byte-for-byte yesterday's behavior (144ee1e2).
 - **The CRANK scheduler.** `brain run crank` plans the governed loop's open
   runs through a risk-tier table (the domain's bound profile picks the row;
   unknown fails closed to human-cranked) and a red-flag tripwire, and cranks
   the selected through the same surface a human uses. Dry-run is the
   default: without `--yes` it writes nothing. The scheduler cannot approve,
-  promote, or reject — it adds calls, not decisions.
+  promote, or reject — it adds calls, not decisions (9836002b).
 - **Chat answers show what supports them.** Every sentence in an on-device
   answer carries its verdict: cited sentences show their source, sentences
   the memory does not support are dimmed and marked as unsupported — never
   silently blended in — and an abstention ("I cannot tell from your
-  memory") is a first-class answer, not a confident guess.
+  memory") is a first-class answer, not a confident guess (8dfd7464, 8aa760bc).
 - **A plugin principal joins the roster.** A connected coding agent can
   hold its own credential: the 14th role preset (`plugin`) pins its writes
   to the proposal queue, `brain principal grant|revoke|list` mints and
   manages the credentials, and `/audit?principal=` filters the audit trail
-  to one principal.
+  to one principal (49b87fc8, a5d4eed1, b6e7c083).
 - **The review queue's one write lands in the app.** Approve is
   digest-bound: the reviewer approves the exact bytes shown, the receipt
   is displayed on the act, and there is no reject and no edit — the
-  decision itself stays behind the reviewer's role in the kernel.
+  decision itself stays behind the reviewer's role in the kernel (a69d0f13, 85c436c3).
 - **The education and finance postures arrive as profiles.** Under
   `finance-mifid`, PAN and IBAN digits refuse at ingest naming the class;
   the education posture strict-masks learner records, the permanent record
-  never decays, and the consent artifact is the record.
+  never decays, and the consent artifact is the record (85f47f23, dbb7a9ec).
 - **Plugins install and uninstall through doors that exist.** `brain
   plugin install` runs verify → dry-run → import on a signed chain, and
   `brain plugin uninstall <pack-id>` closes the lifecycle — it refuses
   while the pack is live (naming what is live), marks the row, and leaves
-  rules and roles counts unchanged.
+  rules and roles counts unchanged (3a5b3045, 93481eb1).
 
 **Changed**
 
 - **The case token budget is the measured number.** The default moved from
   336 to 11,961 tokens per case: the pilot's live per-case p99 (3,987) times
   the bounded retry ladder, replacing the scripted fixture's accounting.
-  Operators running other providers should still measure their own ceiling.
+  Operators running other providers should still measure their own ceiling (f4d8496b).
 - **The desktop app is StewardMem.** The bundle identifier moved to
   `com.stewardmem.shell` and the app is now `StewardMem.app`; its data
   directory moves with it: copy
@@ -606,24 +605,24 @@ to its new home: the bundle identifier is `com.stewardmem.shell`.
   (`com.stewardmem.shell/token`, `com.stewardmem.shell/updater-signing`):
   there are no external installs to migrate — fresh identity, fresh start —
   so stored tokens are simply re-granted and the updater signing passphrase
-  is re-stored once with `scripts/updater-key-passphrase.sh`.
+  is re-stored once with `scripts/updater-key-passphrase.sh` (a57ae68f).
 - **The project is now Apache-2.0.** brain-server relicensed from MIT on
   2026-10-27: Apache-2.0 adds the explicit contributor patent grant and its
   retaliation clause, and §6 grants no trademark rights. Releases tagged
   before that date remain MIT for whoever holds them. `NOTICE` and
   `LICENSES.md` (the per-surface distribution table) ship beside `LICENSE`,
   and the Signal gateway — which ships in neither the release nor the signed
-  app — is declared under the AGPL because its pinned stack is.
+  app — is declared under the AGPL because its pinned stack is (a0d12300).
 
 **Improvements**
 
 - **`/audit?since=` completes the audit read.** The audit trail can be
   queried from a timestamp — the surface the retired GUI promised — and
   refusals now carry the principal they refused, so a deny is attributable
-  in the trail itself.
+  in the trail itself (2599c2e6, 6c59f5f5).
 - **The shell's surfaces are declaratively extensible.** The frame's
   extension registry is a data-driven ABI: an extension contributes
-  surfaces to the frame without code changes to the app.
+  surfaces to the frame without code changes to the app (3d995307).
 
 **Bug fixes**
 
@@ -631,7 +630,7 @@ to its new home: the bundle identifier is `com.stewardmem.shell`.
   *looks* like JSON (a bracket-leading refusal, for example) was refused by
   the strict document law on every later replay of the conversation — one
   refusal answer poisoned the rest of the case. Assistant history now
-  replays under the prose law; the credential-escape refusal is untouched.
+  replays under the prose law; the credential-escape refusal is untouched (f4d8496b).
 
 
 ## [Unreleased] — the relicence: Apache-2.0 across the tree (2026-10-27)
@@ -1958,20 +1957,20 @@ corpus.
   the app's own configuration, and the offered build must name the kernel
   version this machine is running. A wrong key, an unknown kernel version and
   an unreachable endpoint are three distinct, named outcomes — and an update
-  that is refused leaves the installed version untouched and says so.
+  that is refused leaves the installed version untouched and says so (5424e173, d6af56a2).
 - The shipped app can now read its own kernel's answers. The kernel sidecar
   is started with this app's own origin in its allowlist, and a rejected
   credential is named as a rejected credential rather than as an unreachable
-  kernel.
+  kernel (265731d3).
 - **The app brings its own kernel.** The shell detects a kernel already
   answering on its port and attaches to it, starts its own sidecar kernel
   when none answers, and refuses — through a gate above the app's chrome,
   with the reason — a kernel that does not answer as the one
   this build sealed. The version it serves is checked against the app's
-  own provenance, so a foreign kernel on the port cannot pass as ours.
+  own provenance, so a foreign kernel on the port cannot pass as ours (6592f7c9, c3f82405).
 - **Rotating the credential reaches the running kernel.** Settings rotation
   used to write the token file and wait for a restart; the running kernel
-  now picks up the new credential live.
+  now picks up the new credential live (3ea55fb3).
 
 **Improvements**
 
@@ -1979,7 +1978,7 @@ corpus.
   table or the domain census. Reading the shared review queue takes the
   reviewer's capability; a principal's own view of its own queue is
   unchanged. The console's own shape is a separate permission, granted per
-  role as data rather than by a special case for one class of caller.
+  role as data rather than by a special case for one class of caller (3d420933, 20bb8ec6).
 - Captures are queued for human review instead of being written straight into
   long-term memory, and captures that came from a channel are excluded from
   recall rather than merely labelled.
@@ -1990,12 +1989,12 @@ corpus.
 
 - The macOS on-device measurement probe now skips, and prints why, where the
   machine cannot run the model. Previously the request threw on a runner that
-  has the framework but no entitlement, and the build failed on it.
+  has the framework but no entitlement, and the build failed on it (332a8920).
 - The dependency audit no longer fails on a Windows-only archive path that is
   not built on any platform this project publishes. The measurement and the
-  condition that would make the exemption stale are recorded with it.
+  condition that would make the exemption stale are recorded with it (c9eaa210).
 - The optional prompt-classifier tier compiles again against the pinned
-  inference runtime, and the macOS build links again.
+  inference runtime, and the macOS build links again (e65c8266).
 
 ## [Unreleased] — the updater: where the bytes come from, and whose they are (III-4)
 
@@ -2441,7 +2440,7 @@ served raw.
 
 ## [1.29.19] — 2026-10-19 — the security audit release
 
-The client phase picked up the kernel's security audit: twenty findings were
+The kernel's security audit landed as shipped behavior: twenty findings were
 reproduced, fixed and pinned, and a second adversarial pass closed the holes the
 first pass left open. The headline defects were a retrieval fallback that
 dropped every tenant and owner predicate, a role claim that *removed* the
@@ -2458,41 +2457,41 @@ new penetration suite drives the real router with signed tokens.
   has a graded first step: the record is tombstoned and superseded out of
   recall with its receipt claiming only what the kernel actually emitted,
   while the hard erase stays a refusal behind the purge authority rather
-  than a second thing that silently succeeds.
+  than a second thing that silently succeeds (49b90984).
 - **The claims verifier is a kernel route.** `GET /verify` lets an
   authorized caller confirm whether a specific claim occurs in a stored
   memory — a deterministic, case-insensitive match, no model and no
   network — without the content ever being echoed back: the answer to
   "does my memory support this sentence". A miss is a deliberately blurred
   404 (no such row vs a row your record gate does not admit), and a 403
-  never renders as "that claim is not supported".
+  never renders as "that claim is not supported" (d386debb).
 - **Questions in German are answered from your memory, stated as a value.**
   The on-device model's measured language roster cannot write German, so a
   German question receives the deterministic retrieval answer — retrieval
   was never fenced by language; the posture is now stated instead of
-  silent.
+  silent (c6b3c6aa).
 
 **Security fixes**
 
 - A read-only role can no longer widen a token to every owner's rows: an empty
   `reports` allowlist denies, and a custom `owner_filter` without the explicit
-  shared-pool capability narrows to the caller.
+  shared-pool capability narrows to the caller (520a1dea).
 - The legacy retrieval fallback applies the same domain, owner, scope, validity
   and decay predicates as the primary vector path; the graph leg honours source
-  and a normalized `as_of`.
+  and a normalized `as_of` (520a1dea).
 - PII is flagged on every production write path, including markdown headings,
   and both detectors now cover Unicode addresses, offset-zero values, dotted
   and adjacent card numbers. The read seam strips invisibles before redacting,
-  and cannot weld a live markdown image around a deleted tag.
+  and cannot weld a live markdown image around a deleted tag (9f77c3e3).
 - Quarantine by id now checks the gate, the domain and the legal hold in one
   immediate transaction, requires the purge capability to delete, and uses the
-  caller's domain pool.
+  caller's domain pool (520a1dea).
 - Token files are validated through one opened handle; the boot gate uses the
   same reader; the agent token is removed from the operator set; rotation
-  preserves the agent lane.
+  preserves the agent lane (5114f0cf).
 - Webhook replay claims key on the payload for every body-only lane. Backup
   writes use a unique owner-only temp and rename, so a rewrite tightens the mode
-  and a planted symlink is replaced, not followed.
+  and a planted symlink is replaced, not followed (5114f0cf).
 
 **Bug fixes**
 
@@ -2604,7 +2603,7 @@ new penetration suite drives the real router with signed tokens.
   built to hit every boundary that can differ — and it failed three times on the
   way in (a one-byte JSON framing error, a backward scan checking the wrong row,
   an event/message index skew), each of which would have shipped as a silently
-  different compaction split.
+  different compaction split (25c7ee9a).
 
 - **A penetration suite now drives the real router** with signed JWTs:
   unauthenticated 401s, cross-tenant by-id/multi-get/recall/search, the
@@ -3331,19 +3330,18 @@ change; zero new dependency edges.
 ## [1.29.13] — 2026-10-12 — the eleventh pass closed, then attacked
 
 Covers every commit from tag `v1.29.12` (`22f2bb15`) to this release —
-`git log v1.29.12..v1.29.13` reproduces the range. Six remediation rounds
-(R115 "Seventh", R116 "Carriage", R117 "Console", R118 "Lowtide", R119
-"Gatewright", R120 "Conduit"), a fork-lane rider, and a dedicated twelfth
-pass that re-attacked the closures themselves and found six defects in
-them — all closed same-session, along with three release-lane defects this
-tag's own matrix caught. Zero new dependency edges; wire deltas are
+`git log v1.29.12..v1.29.13` reproduces the range. Six remediation rounds close
+twenty-one registered findings, a second pass re-attacked those closures
+themselves and found six defects in them — all closed same-session — a
+fork-lane rider ships two surface fixes, and three release-lane defects
+this tag's own matrix caught are fixed. Zero new dependency edges; wire deltas are
 additive only (declared per section below); no schema-version change.
 
 ### Release notes
 
-The eleventh pass's remediation program: six rounds closing 21 registered
-findings (five HIGH), a twelfth pass that re-attacked the closures and
-closed six more, and the CI/supply-chain band. Wire deltas additive only;
+The remediation program: twenty-one registered findings closed (five
+HIGH), a second pass that re-attacked the closures and closed six more,
+and the CI/supply-chain band. Wire deltas additive only;
 no schema-version change; zero new dependency edges.
 
 **Security fixes**
@@ -3356,14 +3354,14 @@ no schema-version change; zero new dependency edges.
 - **`/ump/revise` laundered the capture taint**: a revised `channel-capture`
   row re-emerged as owner-grade. Revisions now inherit the superseded row's
   origin, and a patch cannot strip it (`origin`/`untrusted` are
-  server-authoritative in the merge) — the twelfth pass closed the strip
-  the first fix missed.
+  server-authoritative in the merge) — a second pass closed the strip
+  the first fix missed (567ca6f9, 73a7b29e).
 - **A JWT deployment that loses its key dir served an unauthenticated
   superuser API** (issuer configured + zero keys silently downgraded to
   opaque-token mode). The boot now refuses and names the remedy.
 - **The channel console showed bytes the approval digest did not bind**
   (raw bidi/markdown-image content beside a digest over the stripped form).
-  The shown bytes and the bound bytes are the same now.
+  The shown bytes and the bound bytes are the same now (9e0d3ef4).
 - **`/export?format=ump-md` was a live EchoLeak-class sink** (a markdown
   document rendered from verbatim stored rows); it rides the read seam now,
   and the DSAR bundle is stripped + labeled.
@@ -3371,7 +3369,7 @@ no schema-version change; zero new dependency edges.
   prune); `brain_memory_proposal_decide` is removed (plugin 0.6.14 — it
   advertised a promotion it could never perform).
 - The invisible-Unicode set gained its three missing classes (fixture v2,
-  all-tree sync — including the plugin lane the twelfth pass found left on
+  all-tree sync — including the plugin lane the second pass found left on
   v1); the Art-19 webhook subject passes the strip; the tokenless
   bridge-mount arm enforces timestamp freshness + a replay claim;
   `AUTH_TOKEN_FILE`'s documented 0600 law is enforced on the read path and
@@ -3382,13 +3380,13 @@ no schema-version change; zero new dependency edges.
   transitively through `@tailwindcss/vite`→`postcss`, `css-tree` and
   `std-env`). Re-resolved to 1.2.2 inside the range those dependents
   already declare — one package, four pointers, no manifest change and no
-  new dependency edge.
+  new dependency edge (3ffb554e).
 - **A legal hold now freezes every erasure path that touches it.** A held
   workflow run's case notes were erased by the DSAR sweep while the run
   itself survived — the certificate reported the notes as retained while
   their bytes were gone — and consolidation could expire legally-held
   chunks on a plain write scope. Both paths carry the hold gate now,
-  refusing before any mutation.
+  refusing before any mutation (50141fd9).
 - **The audit chain's row hash is keyed, and the row's outcome is
   committed.** The stored digest was unsalted SHA-256, so a database backup
   alone could dictionary-recover which row a hash named: with a chain key
@@ -3396,19 +3394,19 @@ no schema-version change; zero new dependency edges.
   row's status fields so a not-yet-migrated chain's audit rows can no
   longer be rewritten undetected. Unmigrated legacy chains still verify —
   no false tamper alarm on upgrade — and keyless deployments remain
-  pseudonymised, not anonymised.
+  pseudonymised, not anonymised (c70d02de).
 - **The bi-temporal `?at=` filter no longer decides same-day comparisons
   by the timestamp separator.** Stamps written `T`-separated were compared
   against space-separated reads, so valid facts were excluded and
-  superseded facts were reported current; stamps are normalized on write.
+  superseded facts were reported current; stamps are normalized on write (dd82f98b).
 - **The Signal draft-approve lane runs the approval quorum.** With a
   two-principal quorum configured, one webhook delivery could decide a
   proposal the approve verb would hold — silently, with no audit row. The
   lane now runs the same quorum gate under a reserved machine actor, so a
-  replayed delivery cannot pass as a second principal.
+  replayed delivery cannot pass as a second principal (d994ecb3).
 - **The off-host anchor no longer depends on the process-global chain
   key**, so key rotation can no longer make a correct anchor report
-  tamper.
+  tamper (9e8f724f).
 
 **Improvements**
 
@@ -3418,13 +3416,13 @@ no schema-version change; zero new dependency edges.
   migration path, and `/ready` reports `bind_public: deprecated`. The
   supported remote-access topology is a loopback bind behind a reverse
   proxy that terminates TLS; the existing refusal of non-loopback binds
-  without auth is unchanged.
+  without auth is unchanged (d517cf67).
 
 - **The capture taint is carried, not just stamped**: derived at the
   proposal seam for the agent class, inherited through revisions, and
   present on `/get`, `/multi-get`, `/suggest`, graph edges, UMP records,
   and the DSAR bundle (+ `by_origin`); the plugin honors the exclude
-  posture on every path into model context.
+  posture on every path into model context (567ca6f9).
 - **`/ingest/memory`'s response carries `quarantined_chunk_ids`** — the
   screen verdict surfaces at the call site.
 - The edge-history lineage is bounded (500) and discloses `truncated`.
@@ -3454,7 +3452,7 @@ no schema-version change; zero new dependency edges.
   the fixture, so the compiler refuses a call site that reaches the keyed
   path without holding it. The same file also carried a stray blank line
   that `cargo fmt --check` refused. A class sweep of all 34 static lock
-  declarations in the tree found no other live instance.
+  declarations in the tree found no other live instance (a1658e1c, 34932cf0).
 - **The process-global chain key was mutated without its fence.** The audit
   chain's key is a process-global, so a test that installs or clears it is
   visible to every other test on another thread. `anchor`'s key-independence
@@ -3467,7 +3465,7 @@ no schema-version change; zero new dependency edges.
   unfenced again (red-proven: removing the fence names all three call
   sites). No verdict, key, epoch, check, or audit row changed — the
   audit module's scope-lock digest is re-recorded with the diff proof that
-  all four hunks sit inside `#[cfg(test)]`.
+  all four hunks sit inside `#[cfg(test)]` (34932cf0).
 - **New research**: the post-convergence watch (doc 22) — Loopjacking read
   in full and reproduced as a live defense verification against an isolated
   instance of the shipped binary (14/14 checks: canonical display binding,
@@ -14027,9 +14025,9 @@ The KCS v6 double loop, wired to the substrate that already implements most of i
 ### Release notes
 
 **Improvements**
-- solved support cases can now become searchable knowledge — the capture generator drafts a structured article proposal (Issue / Environment / Cause / Resolution / Evidence) from the case's own recorded evidence; a human approves it through the existing review queue.
-- new content-health worklist (`GET /kcs/articles?stale=1`) surfaces articles needing review — stale freshness deadlines plus flags from runs whose evidence contradicted them.
-- the scoreboard gains three KCS measures (linkage rate, reuse rate, freshness median age); the weekly report carries them.
+- solved support cases can now become searchable knowledge — the capture generator drafts a structured article proposal (Issue / Environment / Cause / Resolution / Evidence) from the case's own recorded evidence; a human approves it through the existing review queue (3e7edb28, b71d5133).
+- new content-health worklist (`GET /kcs/articles?stale=1`) surfaces articles needing review — stale freshness deadlines plus flags from runs whose evidence contradicted them (bcbca40e).
+- the scoreboard gains three KCS measures (linkage rate, reuse rate, freshness median age); the weekly report carries them (8e8fa52f).
 
 **Security fixes**
 
@@ -14037,7 +14035,7 @@ The KCS v6 double loop, wired to the substrate that already implements most of i
   processes now run with a minimal env (`env_clear` + PATH/HOME/TMPDIR); the
   audit-chain key, bearer tokens, and JWT material can never be exfiltrated by an
   allowlisted program that prints its environment
-  (`exec_child_gets_minimal_environment_not_the_servers`).
+  (`exec_child_gets_minimal_environment_not_the_servers`) (438ae4a5).
 - **MCP streamable-HTTP transport hardened from all angles:** non-loopback binds
   without `MCP_HTTP_TOKEN` now REFUSE to boot (fail-closed — the unauthenticated
   LAN tool surface is gone); per-peer rate limiting (240 req/min, bounded key map,
@@ -14047,25 +14045,25 @@ The KCS v6 double loop, wired to the substrate that already implements most of i
   buffered-then-checked; GET/DELETE probes get 401 for unauthenticated callers
   (no configuration-distinguishing surface); bearer comparison is constant-time;
   upstream error bodies are logged to stderr and genericized before reaching any
-  LLM context.
+  LLM context (39fe405e).
 - **MCP stdio: the line cap finally caps.** The old `read_line` guard fired only
   after buffering the whole line; reads are now chunked and stop at
   `MAX_LINE_BYTES` — a multi-GB newline-free stream produces bounded `-32700`
-  refusals, not an OOM.
+  refusals, not an OOM (39fe405e).
 - **Rewind role gate judges the right store:** the `approve` capability is now
   checked against the RUN'S DOMAIN pool, not the global one; CAS conflicts
-  surface as `409 cas_stale` instead of a 500.
+  surface as `409 cas_stale` instead of a 500 (bf5a74d2).
 - **Handoff packet read-seam parity:** `intent`, `is_seed`, `is_not_seed`, and
   `pending_question` pass `sanitize_read` like every other emitted stored-text
-  field (user input lands in run state legitimately via steering/rewind/CRM).
+  field (user input lands in run state legitimately via steering/rewind/CRM) (bf5a74d2).
 - **SSE replay amplification bounded:** Last-Event-ID backfill is capped globally
   (1,000 events across all domains); the workflow-payload shared-broadcast
   posture (sanitize-once, machine-data, PII enforced at write time) is documented
-  where it lives.
+  where it lives (bf5a74d2).
 - **CRM connector lows closed:** Genesys pagination is page-capped (50/run,
   resumes next tick) so a hostile endpoint cannot spin the connector; vendor
   contact ids are percent-encoded before URL-path use; Salesforce SOQL interpolates
-  only persisted modstamps that pass a strict ISO-8601 shape check.
+  only persisted modstamps that pass a strict ISO-8601 shape check (bf5a74d2).
 
 ### Engineering record
 
