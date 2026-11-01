@@ -8137,6 +8137,14 @@ snapshot — the US counterpart to the CRA reporting runbook.
   a repeat approval by the same principal is refused with
   `quorum_same_principal`. Default remains single approval; the
   publish/remedy decision branches keep their own semantics.
+- **Credentials and the read seam tighten.** Token validation bounds the
+  token lifetime and `iat`, refresh tokens come in per-login families, and
+  revocation no longer waits on a negative-cache window; the injection
+  screen and the PII flag became title-aware (markdown headings screen and
+  flag like body text); the read seam hardens and strips markdown
+  reference-link definitions (a7eb2028).
+- The final audit's remaining findings close across auth and the read
+  seam, with the security docs reconciled to the code (4d96c7d2).
 
 **Improvements**
 
@@ -8162,10 +8170,8 @@ snapshot — the US counterpart to the CRA reporting runbook.
 - Compliance mapping adds the Microsoft AI Red Team Taxonomy v2
   one-line map and the LLM Top 10 2026 LLM09 (Vector/Embedding
   Weaknesses) row; both are control maps, not conformance claims.
-
-**Bug fixes**
-
-- None.
+- The plugin manifest declares its license (MIT), so a validating host
+  reads the field instead of a silent absence (6c9bcfd5).
 
 ### Engineering record
 
