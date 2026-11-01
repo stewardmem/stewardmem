@@ -1262,12 +1262,12 @@ pub fn rotate_auth_files(
     if let Some(declared) = declared {
         let our_path = data_root.join(AUTH_FILE);
         if declared != our_path {
-            match atomic_token_write(declared, token) {
-                Ok(()) => outcome.declared_written = Some(declared.to_path_buf()),
-                Err(error) => {
-                    outcome.declared_error = Some(error.kind().to_string());
-                }
-            }
+            // A refused declared write is CARRIED, not fatal: the data-root
+            // fact survives in the outcome, and the DTO reports the honest
+            // false with the REAL error's stable kind named.
+            let written = atomic_token_write(declared, token);
+            outcome.declared_written = written.is_ok().then(|| declared.to_path_buf());
+            outcome.declared_error = written.err().map(|error| error.kind().to_string());
         }
     }
     Ok(outcome)
