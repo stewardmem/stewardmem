@@ -90,17 +90,30 @@
 > sha256 byte-exact, the kernel answering the original again. The drill
 > window's self-correction IS the R146 heal working as designed.
 >
-> **OWED, named:** (1) the live DB migration (the 1,203-title decode)
-> applies at the next release restart under the pre-decode backup —
-> verify the boot log's decode line against the measured counts; (2) the
-> operator's service picks up the CORS fix at that same restart — the
-> tree-level pins + the scratch-port wire receipt carry the evidence
-> until then; (3) the release cut (v1.29.40) goes through the trimmed
-> lane when the operator asks — not this round's duty; (4) a literal
-> `&amp;` in a NEWLY ingested title decodes once at the next boot (the
-> accepted honest-reading edge, named in the migration doc); (5) the chat
-> spine's raw-fetch 401 (R146's owed item 4) still rides beside the heal
-> — unchanged.
+> **OWED, named:** (1) ~~the live DB migration~~ **DONE, witnessed
+> 2026-11-02:** v1.29.40 was CUT through the trimmed lane (tag → CI green →
+> release green → the sidecar chain signed/notarized/stapled → the updater
+> endpoint LIVE → the page 9/9 the trimmed set) and the operator-ordered
+> restart happened 07:17 local — the boot log's decode line read EXACTLY
+> `1203 knowledge title(s), 36 source title(s), 31 entity name(s) decoded,
+> 0 entity node(s) merged` (the measured counts, byte-for-byte), zero
+> escaped rows remain in the live DB, and the CORS receipt is LIVE on the
+> real deployment (401 + `access-control-allow-origin: tauri://localhost` +
+> `vary: origin`; the :3000 origin granted; the foreign origin granted
+> nothing; the preflight 200 before auth); the operator's real token
+> answers 200 (the keychain agreement holds, the heal has nothing to fire
+> on). The install rode the Tools pkg's preserve law (1.29.40 beside,
+> `brain-server-1.29.40` links, the hand-off receipt in install.log) and
+> the "migrate when ready" act repointed `~/.local/bin/brain-server` → the
+> 1.29.40 anchor by atomic rename before the kickstart; the 1.29.39 binary
+> (sha256 `c1ac1a03…`) and the pre-restart DB (sha256 `34ecfeca…`) are in
+> `~/Backups/`. (2) `brain` + `mcp` still resolve 1.29.39 (the preserve law
+> kept them; `brain-1.29.40`/`mcp-1.29.40` links sit beside) — the CLI/mcp
+> migration is the operator's "when ready" act. (3) a literal `&amp;` in a
+> NEWLY ingested title decodes once at the next boot (the accepted
+> honest-reading edge, named in the migration doc); (4) the chat spine's
+> raw-fetch 401 (R146's owed item 4) still rides beside the heal —
+> unchanged.
 >
 > *Ponytail: 9 kernel files (router/mod.rs, bootstrap.rs, memory.rs,
 > migration.rs, Cargo.toml, openapi.yaml, gate-law-register, AGENTS,
