@@ -13,6 +13,62 @@ measured. Those records are kept as they were written (this file is
 append-only), and their heading says `Unreleased` because that is what they
 were when the round landed — not because the work is still unreleased.
 
+## [1.29.40] — 2026-11-01 — the four repairs: refusals a browser can read, titles stored as the truth, and a rotation that tells the truth
+
+Four repairs from the credential-heal round's owed list: the kernel's
+refusals now reach the browser that asked, the library's titles read like
+they were written, and the app's token rotation works against an
+externally-managed kernel. The heal itself lands here too: when the
+running kernel rejects the app's credential, the app recovers on its own —
+no dead end, no reinstall.
+
+### Release notes
+
+**New**
+
+- **The app heals its own credential.** When the running kernel rejects
+  the app's credential, the shell recovers without you: it reads the
+  kernel's documented token files (never its environment variables), takes
+  only an owner-only, wire-safe candidate, proves it with a real request
+  against the live kernel, and only then writes the keychain — a failure
+  leaves the machine unchanged, the adopted source is named, and the token
+  itself never travels. A healing notice shows while a heal is in flight,
+  and the Restart button disables and relabels during it.
+
+**Bug fixes**
+
+- **Refusals are readable by the app.** The kernel answered an expired or
+  wrong credential with a 401 that carried no CORS header, so the app's
+  webview blocked the answer before any code could react. The CORS layer
+  now sits outermost: every refusal (401/403/404) carries the grant for
+  allowed origins, preflights answer before auth, and foreign origins get
+  nothing at any layer.
+- **Titles no longer render HTML entities.** Vault imports stored titles
+  pre-escaped (`Green Tea&#x27;s Secret Weapon` on screen, double-escaped
+  on public pages). Titles are now stored exactly as written, and a
+  one-time migration decodes the legacy rows — 1,203 titles in the
+  measured library — on the first start after this release; public pages
+  escape exactly once at emission.
+- **Token rotation works against an external kernel.** Rotating the
+  credential from Settings used to report success while the running kernel
+  kept the old token — and the self-heal then silently undid the rotation.
+  With the operator's recorded consent, the rotation now writes the
+  kernel's declared credential file too (the kernel's live watcher takes
+  the new token without a restart), and the result names every file
+  written; a refused write reports honestly. The App Store build never
+  touches an external credential file.
+- The Settings surface's svelte-check error (an unused local) is gone.
+
+**Improvements**
+
+- **The app attaches to a newer external kernel.** Preflight attaches to
+  an observed-newer external kernel instead of refusing it — the wire
+  contract is additive, so a newer kernel is adopted; a self-started child
+  that drifts is still refused exactly as before.
+- The version lockstep moves to 1.29.40 (Cargo.toml, openapi.yaml, README,
+  SBOM). No new dependencies; no wire-shape change (the openapi drift gate
+  is byte-green).
+
 ## [1.29.39] — 2026-11-01 — the first trimmed release: one stapled image carries the macOS set, and the release proves its own page
 
 The release page shrinks from a 40-asset wall to the nine files that
@@ -37,6 +93,21 @@ trip verifies against the key the app ships.
 - **Releases prove their own page.** A release whose published page
   carries an extra asset, or is missing one the updater needs, is refused
   instead of called green — the page shape is checked, not assumed.
+- **The app can run its kernel as a background service.** The install
+  wizard's SERVICE posture: the app generates a per-user LaunchAgent (its
+  plist carries the three user-absolute paths the kernel requires — a
+  static plist cannot), asks for consent before anything is stored,
+  refuses a port already held by a kernel it did not start (naming the
+  holder), checks the served version against the app's sealed provenance
+  on first boot, and uninstalls cleanly — every outcome named, the removed
+  files listed, the data root offered rather than silently kept or
+  deleted.
+- **One posture screen, offered once.** After consent the app asks exactly
+  once how the kernel should run — inside the app (pre-selected and
+  primary), or as a background service — with the alternatives disclosed
+  and "do nothing" always available; when a kernel is already detected,
+  what was detected is shown beside the choice; the decision re-runs as a
+  Settings section, in five languages.
 
 **Changed**
 
@@ -92,45 +163,6 @@ could block a release.
 - **Seven stacked CI reds from the previous push are cleared at their
   roots** — unhandled test rejections, formatting drift, two stale pins, a
   comments-gate label, a badge drift, and the e2e harness seed race.
-
-## [1.29.40] — 2026-11-01 — the four repairs: refusals a browser can read, titles stored as the truth, and a rotation that tells the truth
-
-Four repairs from the credential-heal round's owed list: the kernel's
-refusals now reach the browser that asked, the library's titles read like
-they were written, and the app's token rotation works against an
-externally-managed kernel.
-
-### Release notes
-
-**Bug fixes**
-
-- **Refusals are readable by the app.** The kernel answered an expired or
-  wrong credential with a 401 that carried no CORS header, so the app's
-  webview blocked the answer before any code could react. The CORS layer
-  now sits outermost: every refusal (401/403/404) carries the grant for
-  allowed origins, preflights answer before auth, and foreign origins get
-  nothing at any layer.
-- **Titles no longer render HTML entities.** Vault imports stored titles
-  pre-escaped (`Green Tea&#x27;s Secret Weapon` on screen, double-escaped
-  on public pages). Titles are now stored exactly as written, and a
-  one-time migration decodes the legacy rows — 1,203 titles in the
-  measured library — on the first start after this release; public pages
-  escape exactly once at emission.
-- **Token rotation works against an external kernel.** Rotating the
-  credential from Settings used to report success while the running kernel
-  kept the old token — and the self-heal then silently undid the rotation.
-  With the operator's recorded consent, the rotation now writes the
-  kernel's declared credential file too (the kernel's live watcher takes
-  the new token without a restart), and the result names every file
-  written; a refused write reports honestly. The App Store build never
-  touches an external credential file.
-- The Settings surface's svelte-check error (an unused local) is gone.
-
-**Improvements**
-
-- The version lockstep moves to 1.29.40 (Cargo.toml, openapi.yaml, README,
-  SBOM). No new dependencies; no wire-shape change (the openapi drift gate
-  is byte-green).
 
 ## [Unreleased] — the four repairs: the CORS'd refusals, the raw-title truth, the dead `address`, and the rotation that tells the truth (R147, 2026-11-01, kernel touched and named)
 
@@ -535,6 +567,29 @@ to its new home: the bundle identifier is `com.stewardmem.shell`.
   the selected through the same surface a human uses. Dry-run is the
   default: without `--yes` it writes nothing. The scheduler cannot approve,
   promote, or reject — it adds calls, not decisions.
+- **Chat answers show what supports them.** Every sentence in an on-device
+  answer carries its verdict: cited sentences show their source, sentences
+  the memory does not support are dimmed and marked as unsupported — never
+  silently blended in — and an abstention ("I cannot tell from your
+  memory") is a first-class answer, not a confident guess.
+- **A plugin principal joins the roster.** A connected coding agent can
+  hold its own credential: the 14th role preset (`plugin`) pins its writes
+  to the proposal queue, `brain principal grant|revoke|list` mints and
+  manages the credentials, and `/audit?principal=` filters the audit trail
+  to one principal.
+- **The review queue's one write lands in the app.** Approve is
+  digest-bound: the reviewer approves the exact bytes shown, the receipt
+  is displayed on the act, and there is no reject and no edit — the
+  decision itself stays behind the reviewer's role in the kernel.
+- **The education and finance postures arrive as profiles.** Under
+  `finance-mifid`, PAN and IBAN digits refuse at ingest naming the class;
+  the education posture strict-masks learner records, the permanent record
+  never decays, and the consent artifact is the record.
+- **Plugins install and uninstall through doors that exist.** `brain
+  plugin install` runs verify → dry-run → import on a signed chain, and
+  `brain plugin uninstall <pack-id>` closes the lifecycle — it refuses
+  while the pack is live (naming what is live), marks the row, and leaves
+  rules and roles counts unchanged.
 
 **Changed**
 
@@ -559,6 +614,16 @@ to its new home: the bundle identifier is `com.stewardmem.shell`.
   `LICENSES.md` (the per-surface distribution table) ship beside `LICENSE`,
   and the Signal gateway — which ships in neither the release nor the signed
   app — is declared under the AGPL because its pinned stack is.
+
+**Improvements**
+
+- **`/audit?since=` completes the audit read.** The audit trail can be
+  queried from a timestamp — the surface the retired GUI promised — and
+  refusals now carry the principal they refused, so a deny is attributable
+  in the trail itself.
+- **The shell's surfaces are declaratively extensible.** The frame's
+  extension registry is a data-driven ABI: an extension contributes
+  surfaces to the frame without code changes to the app.
 
 **Bug fixes**
 
@@ -1898,6 +1963,15 @@ corpus.
   is started with this app's own origin in its allowlist, and a rejected
   credential is named as a rejected credential rather than as an unreachable
   kernel.
+- **The app brings its own kernel.** The shell detects a kernel already
+  answering on its port and attaches to it, starts its own sidecar kernel
+  when none answers, and refuses — through a gate above the app's chrome,
+  with the reason — a kernel that does not answer as the one
+  this build sealed. The version it serves is checked against the app's
+  own provenance, so a foreign kernel on the port cannot pass as ours.
+- **Rotating the credential reaches the running kernel.** Settings rotation
+  used to write the token file and wait for a restart; the running kernel
+  now picks up the new credential live.
 
 **Improvements**
 
@@ -2377,6 +2451,26 @@ contract that indexed a derived string. Every fix has an executable pin; the
 new penetration suite drives the real router with signed tokens.
 
 ### Release notes
+
+**New**
+
+- **A soft-forget verb joins the kernel: `POST /ump/forget`.** Deletion now
+  has a graded first step: the record is tombstoned and superseded out of
+  recall with its receipt claiming only what the kernel actually emitted,
+  while the hard erase stays a refusal behind the purge authority rather
+  than a second thing that silently succeeds.
+- **The claims verifier is a kernel route.** `GET /verify` lets an
+  authorized caller confirm whether a specific claim occurs in a stored
+  memory — a deterministic, case-insensitive match, no model and no
+  network — without the content ever being echoed back: the answer to
+  "does my memory support this sentence". A miss is a deliberately blurred
+  404 (no such row vs a row your record gate does not admit), and a 403
+  never renders as "that claim is not supported".
+- **Questions in German are answered from your memory, stated as a value.**
+  The on-device model's measured language roster cannot write German, so a
+  German question receives the deterministic retrieval answer — retrieval
+  was never fenced by language; the posture is now stated instead of
+  silent.
 
 **Security fixes**
 
@@ -3289,8 +3383,42 @@ no schema-version change; zero new dependency edges.
   `std-env`). Re-resolved to 1.2.2 inside the range those dependents
   already declare — one package, four pointers, no manifest change and no
   new dependency edge.
+- **A legal hold now freezes every erasure path that touches it.** A held
+  workflow run's case notes were erased by the DSAR sweep while the run
+  itself survived — the certificate reported the notes as retained while
+  their bytes were gone — and consolidation could expire legally-held
+  chunks on a plain write scope. Both paths carry the hold gate now,
+  refusing before any mutation.
+- **The audit chain's row hash is keyed, and the row's outcome is
+  committed.** The stored digest was unsalted SHA-256, so a database backup
+  alone could dictionary-recover which row a hash named: with a chain key
+  installed the digest is HMAC-keyed, and a new chain epoch commits the
+  row's status fields so a not-yet-migrated chain's audit rows can no
+  longer be rewritten undetected. Unmigrated legacy chains still verify —
+  no false tamper alarm on upgrade — and keyless deployments remain
+  pseudonymised, not anonymised.
+- **The bi-temporal `?at=` filter no longer decides same-day comparisons
+  by the timestamp separator.** Stamps written `T`-separated were compared
+  against space-separated reads, so valid facts were excluded and
+  superseded facts were reported current; stamps are normalized on write.
+- **The Signal draft-approve lane runs the approval quorum.** With a
+  two-principal quorum configured, one webhook delivery could decide a
+  proposal the approve verb would hold — silently, with no audit row. The
+  lane now runs the same quorum gate under a reserved machine actor, so a
+  replayed delivery cannot pass as a second principal.
+- **The off-host anchor no longer depends on the process-global chain
+  key**, so key rotation can no longer make a correct anchor report
+  tamper.
 
 **Improvements**
+
+- **The public plain-HTTP opt-in is deprecated.** `BIND_PUBLIC=1` keeps
+  working through April 2027 and then is scheduled for removal: when it
+  activates a non-loopback bind, startup prints the removal date and the
+  migration path, and `/ready` reports `bind_public: deprecated`. The
+  supported remote-access topology is a loopback bind behind a reverse
+  proxy that terminates TLS; the existing refusal of non-loopback binds
+  without auth is unchanged.
 
 - **The capture taint is carried, not just stamped**: derived at the
   proposal seam for the agent class, inherited through revisions, and
@@ -13904,8 +14032,7 @@ The KCS v6 double loop, wired to the substrate that already implements most of i
 - the scoreboard gains three KCS measures (linkage rate, reuse rate, freshness median age); the weekly report carries them.
 
 **Security fixes**
-- none (no auth/gate changes; both new routes are role-gated and audited).
-### Security fixes (deep hardening pass over v1.28.15–v1.28.22)
+
 - **HIGH — mediated exec no longer leaks the server's environment.** Engine-spawned
   processes now run with a minimal env (`env_clear` + PATH/HOME/TMPDIR); the
   audit-chain key, bearer tokens, and JWT material can never be exfiltrated by an
