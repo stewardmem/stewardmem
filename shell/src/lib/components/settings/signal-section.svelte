@@ -13,7 +13,6 @@
 	type GatewayStatus = { present: boolean; address: string };
 
 	let present = $state<boolean | null>(null);
-	let address = $state('');
 
 	onMount(async () => {
 		if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return;
@@ -21,7 +20,6 @@
 			const { invoke } = await import('@tauri-apps/api/core');
 			const status = await invoke<GatewayStatus>('signal_gateway_status');
 			present = status.present;
-			address = status.address;
 		} catch {
 			// The core did not answer: "not detected" is the honest resting
 			// state, never an error banner over an optional module.

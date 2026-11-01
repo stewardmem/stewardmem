@@ -984,6 +984,280 @@ fn a_rotation_replaces_the_token_file_atomically() {
     );
 }
 
+// ── the rotation-target decision (the operator's recorded yes) ─────────────
+//
+// Under an EXTERNAL operator kernel (the D1-declared `AUTH_TOKEN_FILE`), the
+// old rotation wrote only `<data_root>/auth-token` and reported
+// `kernel_synced: true` — a lie twice over: the kernel never saw the token,
+// and the credential self-heal then silently adopted the kernel's OLD token
+// back. The operator chose the boundary-crossing fix: the rotation writes
+// BOTH files, the declared one through the same atomic 0600 law, because
+// the operator's own rotation asked it to — never a background write, never
+// without the posture fact named in the outcome.
+
+/// The external-kernel rotation writes BOTH files the postures read — our
+/// root AND the D1-declared file — each at 0600, each carrying the new
+/// token.
+#[test]
+fn a_rotation_under_an_external_kernel_writes_both_files() {
+    let scratch = Scratch::new("rotate-external");
+    let data_root = scratch.path().join("kernel");
+    let declared_dir = scratch.path().join("operator-declared");
+    fs::create_dir_all(&data_root).expect("data root");
+    fs::create_dir_all(&declared_dir).expect("declared dir");
+    for dir in [&data_root, &declared_dir] {
+        fs::set_permissions(dir, fs::Permissions::from_mode(0o700)).expect("dir mode");
+    }
+    let declared = declared_dir.join("auth-token");
+
+    let outcome = sidecar::rotate_auth_files(&data_root, Some(&declared), "rotated-token")
+        .expect("the external rotation writes both files");
+    assert!(outcome.data_root_written);
+    assert_eq!(
+        outcome.declared_written.as_deref(),
+        Some(declared.as_path())
+    );
+    assert!(outcome.declared_error.is_none());
+
+    for path in [data_root.join(sidecar::AUTH_FILE), declared] {
+        assert_eq!(
+            fs::read_to_string(&path).expect("read"),
+            "rotated-token\n",
+            "{}: the new token",
+            path.display()
+        );
+        assert_eq!(mode(&path), 0o600, "{}: owner-only", path.display());
+    }
+}
+
+/// A rotation under a SELF-SPAWNED kernel is unchanged: no declared file,
+/// one write, the same truth as every round before this one.
+#[test]
+fn a_rotation_under_a_self_spawned_kernel_is_unchanged() {
+    let scratch = Scratch::new("rotate-self");
+    let data_root = scratch.path().join("kernel");
+    fs::create_dir_all(&data_root).expect("data root");
+    fs::set_permissions(&data_root, fs::Permissions::from_mode(0o700)).expect("root mode");
+
+    let outcome = sidecar::rotate_auth_files(&data_root, None, "rotated-token")
+        .expect("the self-spawned rotation");
+    assert!(outcome.data_root_written);
+    assert!(outcome.declared_written.is_none());
+    assert!(outcome.declared_error.is_none());
+    assert_eq!(
+        fs::read_to_string(data_root.join(sidecar::AUTH_FILE)).expect("read"),
+        "rotated-token\n"
+    );
+}
+
+/// THE TRUTH PIN: `kernel_synced` reflects the file the RUNNING kernel
+/// actually reads — true when both postures' files were written, FALSE with
+/// the refusal named when the declared write failed after our root was
+/// written (the keychain and our root hold the new token; the RUNNING
+/// external kernel does not — never a saved-and-live claim again).
+#[test]
+fn a_rotation_reports_the_truth() {
+    let scratch = Scratch::new("rotate-truth");
+    let data_root = scratch.path().join("kernel");
+    let declared_dir = scratch.path().join("operator-declared");
+    fs::create_dir_all(&data_root).expect("data root");
+    fs::create_dir_all(&declared_dir).expect("declared dir");
+    for dir in [&data_root, &declared_dir] {
+        fs::set_permissions(dir, fs::Permissions::from_mode(0o700)).expect("dir mode");
+    }
+    let declared = declared_dir.join("auth-token");
+
+    // Both written: the DTO says true and NAMES both files.
+    let outcome =
+        sidecar::rotate_auth_files(&data_root, Some(&declared), "rotated-token").expect("rotate");
+    let dto = sidecar::rotation_dto(&data_root, &outcome);
+    assert!(dto.kernel_synced);
+    assert_eq!(dto.files_written.len(), 2);
+    assert_eq!(dto.files_written[0].role, "dataRoot");
+    assert_eq!(
+        dto.files_written[0].path,
+        data_root.join(sidecar::AUTH_FILE).display().to_string()
+    );
+    assert_eq!(dto.files_written[1].role, "declared");
+    assert_eq!(dto.files_written[1].path, declared.display().to_string());
+    assert!(dto.error.is_none());
+
+    // The declared write REFUSED (a group-readable declared file): our root
+    // is still written, `kernel_synced` is the honest FALSE, the refusal is
+    // named, and the DTO never claims the running kernel took the token.
+    let insecure = declared_dir.join("insecure");
+    fs::write(&insecure, "old\n").expect("pre-existing declared file");
+    fs::set_permissions(&insecure, fs::Permissions::from_mode(0o644)).expect("loosen");
+    let outcome =
+        sidecar::rotate_auth_files(&data_root, Some(&insecure), "rotated-token").expect("rotate");
+    let dto = sidecar::rotation_dto(&data_root, &outcome);
+    assert!(
+        !dto.kernel_synced,
+        "a refused declared write is the honest false"
+    );
+    assert_eq!(dto.error.as_deref(), Some("insecureAuthFile"));
+    assert_eq!(dto.files_written.len(), 1, "only our root was written");
+    assert_eq!(dto.files_written[0].role, "dataRoot");
+    // The refused declared file was neither read nor tightened.
+    assert_eq!(fs::read_to_string(&insecure).expect("read"), "old\n");
+    assert_eq!(mode(&insecure), 0o644);
+}
+
+/// The machine witness for the declared-file write, run BY LEG with the
+/// operator present (their recorded yes is the round note's boundary
+/// signature). Each leg restores the operator's credential exactly.
+///
+///   WITNESS_LEG=1 — the pre-drill receipt: the declared file's path, mode,
+///     byte count and sha256, printed for the round note.
+///   WITNESS_LEG=2 — the rotation leg: the shipped
+///     `rotate_auth_files` core writes a DRILL token to the declared file;
+///     the LIVE kernel's watcher answers the NEW token on the next request
+///     (no restart); the shell's current bearer is left untouched.
+///   WITNESS_LEG=3 — the restore leg: the pre-drill bytes (saved by leg 1)
+///     go back through the same atomic write, sha256-verified, and the
+///     LIVE kernel answers the ORIGINAL token again.
+#[test]
+#[ignore = "the machine witness: run explicitly, one operator-gated leg at a time"]
+fn rotation_target_machine_witness() {
+    let leg = match std::env::var("WITNESS_LEG").as_deref() {
+        Ok("1") | Ok("2") | Ok("3") => std::env::var("WITNESS_LEG").expect("checked above"),
+        Ok(other) => panic!("WITNESS_LEG={other} is not a leg (1|2|3)"),
+        Err(_) => panic!(
+            "the rotation witness runs BY LEG, operator-gated: WITNESS_LEG=1 \
+             (the pre-drill receipt) → WITNESS_LEG=2 (the declared-file \
+             rotation; the live kernel takes the new token) → WITNESS_LEG=3 \
+             (the restore receipt)"
+        ),
+    };
+    let home = PathBuf::from(std::env::var("HOME").expect("HOME"));
+    let declared = crate::detect::operator_auth_token_file(&home).expect(
+        "the operator's D1-declared AUTH_TOKEN_FILE (this witness is for the external posture)",
+    );
+    // The witness's state survives across legs (separate test invocations),
+    // so it lives at a FIXED path, like the service witness's.
+    let witness_dir = std::env::temp_dir().join("r147-rotation-witness");
+    fs::create_dir_all(&witness_dir).expect("witness dir");
+    fs::set_permissions(&witness_dir, fs::Permissions::from_mode(0o700)).expect("dir mode");
+    let receipt = witness_dir.join("pre-drill-auth-token");
+    let drill_token_file = witness_dir.join("drill-token");
+    let drill_root = witness_dir.join("kernel");
+    fs::create_dir_all(&drill_root).expect("drill data root");
+    fs::set_permissions(&drill_root, fs::Permissions::from_mode(0o700)).expect("root mode");
+
+    match leg.as_str() {
+        "1" => {
+            let bytes = fs::read(&declared).expect("read the declared file");
+            let meta = fs::metadata(&declared).expect("metadata");
+            assert_eq!(
+                meta.permissions().mode() & 0o077,
+                0,
+                "the declared file must already be owner-only"
+            );
+            fs::write(&receipt, &bytes).expect("save the pre-drill bytes");
+            fs::set_permissions(&receipt, fs::Permissions::from_mode(0o600)).expect("receipt mode");
+            println!(
+                "receipt: declared file {} — mode {:o}, {} bytes, sha256 {}; pre-drill copy at {}",
+                declared.display(),
+                meta.permissions().mode() & 0o777,
+                bytes.len(),
+                shasum256(&bytes),
+                receipt.display()
+            );
+        }
+        "2" => {
+            // The DRILL token: 32 bytes from the OS random device, the same
+            // shape the shell's own rotation mints.
+            let mut bytes = [0u8; 32];
+            fs::File::open("/dev/urandom")
+                .expect("urandom")
+                .read_exact(&mut bytes)
+                .expect("read urandom");
+            let drill_token: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+            // THE SHIPPED CORE, exactly as the Settings rotation drives it:
+            // a witness-owned data root, the REAL declared file as the
+            // posture fact.
+            let outcome = sidecar::rotate_auth_files(&drill_root, Some(&declared), &drill_token)
+                .expect("the declared-file rotation");
+            assert_eq!(
+                outcome.declared_written.as_deref(),
+                Some(declared.as_path())
+            );
+            assert!(outcome.declared_error.is_none());
+            // The drill token travels to the leg-2 prover via a 0600 file —
+            // never on a command line, never in a log.
+            fs::write(&drill_token_file, format!("{drill_token}\n"))
+                .expect("stage the drill token");
+            fs::set_permissions(&drill_token_file, fs::Permissions::from_mode(0o600))
+                .expect("token file mode");
+            println!(
+                "receipt: the declared file now holds the drill token ({} bytes at {:o}); \
+                 prove the live kernel took it with the leg-2 curl (bearer = {}), then WITNESS_LEG=3",
+                fs::metadata(&declared).expect("metadata").len(),
+                fs::metadata(&declared)
+                    .expect("metadata")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                drill_token_file.display()
+            );
+        }
+        _ => {
+            let pre = fs::read(&receipt).expect("the pre-drill copy (run leg 1 first)");
+            let bytes = fs::read(&declared).expect("read the (drilled) declared file");
+            assert_ne!(
+                &pre, &bytes,
+                "leg 3 witnesses a RESTORE; the declared file still matches the pre-drill copy — run leg 2 first"
+            );
+            // The restore goes through the SAME shipped atomic 0600 write
+            // the rotation used — the operator's file is never rewritten in
+            // place.
+            let pre_str = String::from_utf8(pre.clone()).expect("the pre-drill bytes are utf-8");
+            let token = pre_str.trim_end_matches('\n').to_string();
+            let outcome = sidecar::rotate_auth_files(&drill_root, Some(&declared), &token)
+                .expect("the restore write");
+            assert_eq!(
+                outcome.declared_written.as_deref(),
+                Some(declared.as_path())
+            );
+            let now = fs::read(&declared).expect("read the restored file");
+            assert_eq!(
+                shasum256(&now),
+                shasum256(&pre),
+                "the restore is byte-exact"
+            );
+            println!(
+                "receipt: the declared file is RESTORED — sha256 {} matches the pre-drill copy",
+                shasum256(&now)
+            );
+        }
+    }
+}
+
+/// sha256 over the machine's own `shasum` — no hand-rolled crypto and no
+/// new dependency in the shell crate.
+fn shasum256(bytes: &[u8]) -> String {
+    use std::io::Write as _;
+    use std::process::Stdio;
+    let mut child = std::process::Command::new("/usr/bin/shasum")
+        .args(["-a", "256"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("shasum");
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin")
+        .write_all(bytes)
+        .expect("write bytes");
+    let out = child.wait_with_output().expect("shasum output");
+    let line = String::from_utf8(out.stdout).expect("utf-8");
+    line.split_whitespace()
+        .next()
+        .expect("a digest")
+        .to_string()
+}
+
 // ── D5's token law ─────────────────────────────────────────────────────────
 
 #[test]

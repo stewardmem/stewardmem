@@ -208,6 +208,7 @@ async fn store_kernel_token(
         kernel_synced: false,
         data_root_missing: false,
         error: Some(error.kind().to_string()),
+        files_written: Vec::new(),
     }))
 }
 

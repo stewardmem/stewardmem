@@ -1,5 +1,121 @@
 # Agent Execution Log — StewardMem
 
+> **R147 "The four repairs" (2026-11-01): the kernel's CORS'd refusals are
+> readable, titles are stored RAW with the legacy rows decoded once, the
+> dead `address` is gone, and the rotation tells the truth — the kernel IS
+> touched this round, named, each behavior change with its pin and
+> red-proof, and the preserve law crossed ONCE with the operator's recorded
+> signature.** Four independent lanes from R146's owed list, executed in
+> risk order on top of the R146 commit (`83dd62d9`).
+>
+> **(1) The CORS'd refusals, measured root cause → one moved line.** The
+> layer stack ran `auth_middleware` OUTSIDE the CORS layer, so the
+> middleware's 401 (`unauthorized_response`, byte-identical, untouched)
+> returned from a seat the response never passed back through — no
+> `access-control-allow-origin` on any refusal, and the webview
+> CORS-blocked every real 401 before the shell's heal could see it (the
+> R146 drill's twelve unreadable 401s). CORS is now OUTERMOST (the last
+> `.layer` before `.with_state`): preflights (no credentials by spec) are
+> answered before auth/jwt/rate-limit/security-headers, every refusal
+> 401/403/404 passes outward through the predicate, and foreign origins
+> get nothing at any layer — the browser remains the enforcer. ONE
+> implementation: the inline CORS construction became
+> `pub fn cors_layer_from_config()` (bootstrap.rs, beside `AppState`;
+> boot and the pins call the same fn), and the state builder feeds the
+> boot-built layer — a bare `CorsLayer::new()` would make every CORS pin
+> vacuous. The pins (`tests/cors_wire_pins.rs`) drive the real
+> `app(state)`: the refusal carries the grant for `tauri://localhost`, a
+> disallowed origin gets none, a preflight answers 2xx with zero
+> auth-denied audit rows. The red-proof RAN: the move reverted, the
+> refusal pin failed exactly as the drill measured, restored green. The
+> r47 RBAC pin reads call sites, not line numbers — unmoved. The live wire
+> receipt came from a tree-run kernel on a scratch port + scratch DB (the
+> operator's launchd service UNRESTARTED): stale bearer → 401 WITH the
+> grant + `vary: origin`; foreign origin → 401 without; preflight → 200.
+>
+> **(2) Titles stored RAW; the legacy escape decoded once.** The vault
+> markdown ingest HTML-escaped the title BEFORE storage (the hex
+> apostrophe form `&#x27;` — kb.rs's emission escaper is the decimal
+> `&#39;`; seeing `&#x27;` named the writer): the shell rendered entities
+> verbatim, every HTML emission double-escaped, and 1,203 of the
+> operator's 8,745 knowledge titles + 36 source titles + 31 entity names
+> held the escaped form (measured read-only on the live DB). The ingest
+> now stores the raw title (`html_escape` deleted, compiler-confirmed
+> orphan); `migration::decode_legacy_entity_titles` decodes ONE pass over
+> both apostrophe forms + `&lt; &gt; &quot; &amp;` (`&amp;` LAST so
+> `&amp;lt;` → `&lt;`, never `<`), across `knowledge.title` (FTS triggers
+> keep the index in step), `sources.title` (the measured addition), and —
+> defensively, with merge-on-collision re-pointing edges —
+> `entities.name` (the 31 are PRE-CHARSET legacy rows: today's
+> `normalize_name` charset `^[A-Za-z0-9 _-]{1,100}$` cannot produce an
+> entity-ref name; projected merges 0, all hex forms). Idempotent every
+> boot, byte-stable — the pin drives it twice and the second pass rewrites
+> nothing. The read seam stays byte-faithful; the decode lives ONLY in the
+> migration. The honest-reading law, named: a literal `&amp;` in a title
+> is indistinguishable from an escaped one and decodes to `&`. The
+> double-escape live-page confirmation has NO subject (0 published KB rows
+> on the live seat) — recorded, and the end-to-end single-escape pin
+> carries the evidence. BACKUP BEFORE THE MIGRATION ERA:
+> `~/Backups/brain-pre-entity-decode-2026-11-01.db` (197,349,376 bytes,
+> sha256 `da82a678…b61903`, 0600); the live DB migration applies at the
+> next release restart. The shell witness the R146 prompt asked for
+> landed (`citation-title.test.ts`): the raw apostrophe title renders
+> verbatim, the shell never becomes a decoder.
+>
+> **(3) The dead `address`** — the unused local gone, the DTO field kept
+> (the design sentence stays true): svelte-check 1 error → 0.
+>
+> **(4) The rotation truth — the preserve law crossed WITH A SIGNATURE.**
+> Under the external operator kernel, Settings rotation wrote only
+> `<data_root>/auth-token` and reported `kernel_synced: true` — a lie
+> twice over (the kernel never saw the token; the R146 heal then silently
+> adopted the kernel's OLD token back, undoing the rotation). The operator
+> chose, from three offered options and recorded verbatim: **"(b) Write
+> the declared file"**. The rotation now writes BOTH files the postures
+> read — our root (law unchanged, consent-gated) and the D1-declared
+> `AUTH_TOKEN_FILE` — through ONE atomic 0600 write (`atomic_token_write`:
+> mode pre-check refusing group/world-readable files, never read, never
+> silently tightened; sibling temp at 0600, fsync, rename, mode
+> re-verified); a refused declared write is carried, not fatal, and
+> `kernel_synced` tells the truth (true only when every file the RUNNING
+> kernel reads was written; the false names the stable code). The DTO
+> names every file written (`files_written`, path + role, additive wire —
+> the drift gate byte-green). The `mas` boundary holds: the lane compiles
+> OUT of the App Store build with the detection core it reads. The
+> machine witness RAN leg-by-leg with the operator present: leg 1 the
+> pre-drill receipt (mode 600, 130 bytes, sha256 `a7f7299a…cc9a55` saved);
+> leg 2 the shipped core wrote a drill token and the LIVE kernel answered
+> the NEW token 200 while refusing the old 401 — NO restart, the mtime
+> watcher took it; leg 3 the restore through the same atomic write,
+> sha256 byte-exact, the kernel answering the original again. The drill
+> window's self-correction IS the R146 heal working as designed.
+>
+> **OWED, named:** (1) the live DB migration (the 1,203-title decode)
+> applies at the next release restart under the pre-decode backup —
+> verify the boot log's decode line against the measured counts; (2) the
+> operator's service picks up the CORS fix at that same restart — the
+> tree-level pins + the scratch-port wire receipt carry the evidence
+> until then; (3) the release cut (v1.29.40) goes through the trimmed
+> lane when the operator asks — not this round's duty; (4) a literal
+> `&amp;` in a NEWLY ingested title decodes once at the next boot (the
+> accepted honest-reading edge, named in the migration doc); (5) the chat
+> spine's raw-fetch 401 (R146's owed item 4) still rides beside the heal
+> — unchanged.
+>
+> *Ponytail: 9 kernel files (router/mod.rs, bootstrap.rs, memory.rs,
+> migration.rs, Cargo.toml, openapi.yaml, gate-law-register, AGENTS,
+> CHANGELOG) + 4 kernel test files (2 new: `cors_wire_pins.rs` with 3
+> pins + `ingest_title_pins.rs` with 3 pins; 2 touched: trace harness
+> untouched, census re-derived) + 6 shell files (sidecar.rs, sidecar_pins.rs,
+> lib.rs, signal-section.svelte, citation-title.test.ts new, test-census
+> doc), no new dependencies (Rust or npm), `cargo check --features mas`
+> green, kernel 3619 passed / 0 failed / 7 ignored (the 3,613 baseline +
+> six net-new pins), shell 108 passed / 0 failed / 2 ignored, vitest 372
+> passed / 2 skipped, eslint clean, svelte-check 0 errors, fmt + clippy
+> clean — and THE OPERATOR'S SERVICE UNRESTARTED, the live DB migration
+> backed up before its era, the boundary crossed once with the operator's
+> recorded yes and witnessed with receipts.*
+
 > **R146 "The shell heals its own credential" (2026-11-01): the incident in
 > the operator's screenshot — "The running kernel rejected this app's
 > credential" with no way back in — is closed by a self-heal that adopts the

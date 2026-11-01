@@ -201,6 +201,55 @@ pub struct AppState {
     pub cors: CorsLayer,
 }
 
+/// The ONE CORS layer implementation: boot and the CORS wire pins
+/// (`tests/cors_wire_pins.rs`) both call this, so a pin drives the REAL
+/// shipped policy instead of a test-local copy of it (a pin against a
+/// second construction could pass while the boot layer drifted). Origins
+/// are exact-matched (no wildcard) so production deployments are locked
+/// down by default; the predicate refuses to add ACAO for anything not in
+/// `config::cors_origins()` — for a foreign origin the response carries no
+/// grant at any layer, and the browser remains the enforcer. `pub`
+/// because the integration-test pins reach it through the public crate
+/// surface (the house pattern: `JwtMiddlewareState::opaque_for_tests`).
+pub fn cors_layer_from_config() -> CorsLayer {
+    let origins: Vec<String> = config::cors_origins()
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let methods: Vec<String> = config::cors_methods()
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let headers: Vec<String> = config::cors_headers()
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    CorsLayer::new()
+        .allow_origin(AllowOrigin::predicate(move |origin, _| {
+            // origin is &HeaderValue; compare as string
+            origin
+                .to_str()
+                .map(|o| origins.iter().any(|allowed| allowed == o))
+                .unwrap_or(false)
+        }))
+        .allow_methods(
+            methods
+                .iter()
+                .filter_map(|m| m.parse().ok())
+                .collect::<Vec<_>>(),
+        )
+        .allow_headers(
+            headers
+                .iter()
+                .filter_map(|h| h.parse().ok())
+                .collect::<Vec<_>>(),
+        )
+        .max_age(std::time::Duration::from_secs(config::CORS_MAX_AGE_SECS))
+}
+
 /// The offline `--re-embed <profile>` body. Loads the TARGET
 /// profile's embedder, repoints the vec store at its dim (the fail-closed
 /// guard's sanctioned bypass), then re-embeds every chunk — the same loop shape
@@ -914,28 +963,17 @@ pub fn bootstrap() -> Result<BootOutcome> {
     // On a default deploy the annotator was already a no-op, so this is
     // behaviour-preserving for live boxes.
 
-    // ── CORS: wire the documented env vars into the real layer ─────────
-    // CORS_ORIGINS / CORS_METHODS / CORS_HEADERS override the defaults in
-    // config.rs.  Origins are exact-matched (no wildcard) so that production
-    // deployments are locked down by default.
-    let origins: Vec<String> = config::cors_origins()
-        .split(',')
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
-    let methods: Vec<String> = config::cors_methods()
-        .split(',')
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
-    let headers: Vec<String> = config::cors_headers()
-        .split(',')
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
+    // ── CORS: the ONE layer implementation lives in cors_layer_from_config
+    // (below, beside AppState) — boot and the CORS wire pins call the same
+    // fn, so a pin can never pass against a second, diverging copy of the
+    // policy. CORS_ORIGINS / CORS_METHODS / CORS_HEADERS override the
+    // defaults in config.rs; origins are exact-matched (no wildcard) so
+    // production deployments stay locked down by default.
     info!(
         "CORS origins: {:?}, methods: {:?}, headers: {:?}",
-        origins, methods, headers
+        config::cors_origins(),
+        config::cors_methods(),
+        config::cors_headers()
     );
     info!(
         "Auth: {}",
@@ -954,27 +992,7 @@ pub fn bootstrap() -> Result<BootOutcome> {
         }
     );
 
-    let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::predicate(move |origin, _| {
-            // origin is &HeaderValue; compare as string
-            origin
-                .to_str()
-                .map(|o| origins.iter().any(|allowed| allowed == o))
-                .unwrap_or(false)
-        }))
-        .allow_methods(
-            methods
-                .iter()
-                .filter_map(|m| m.parse().ok())
-                .collect::<Vec<_>>(),
-        )
-        .allow_headers(
-            headers
-                .iter()
-                .filter_map(|h| h.parse().ok())
-                .collect::<Vec<_>>(),
-        )
-        .max_age(std::time::Duration::from_secs(config::CORS_MAX_AGE_SECS));
+    let cors = cors_layer_from_config();
 
     // clone the pool for the webhook drain worker before it is
     // moved into AppState below.

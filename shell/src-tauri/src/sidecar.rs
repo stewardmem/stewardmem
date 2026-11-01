@@ -1053,13 +1053,34 @@ pub enum AuthSync {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RotationDto {
-    /// The running kernel's token file was rewritten; the kernel's watcher
-    /// reloads it, so the new token is live without a restart.
+    /// The file(s) the RUNNING kernel reads now hold the new token; the
+    /// kernel's watcher reloads it, so the new token is live without a
+    /// restart. Self-spawned: the data-root write. External: ALSO the
+    /// D1-declared file's write — false when that write was refused.
     pub kernel_synced: bool,
     /// There is no data root yet: the next start writes the token itself.
     pub data_root_missing: bool,
     /// A stable code when the rotation failed.
     pub error: Option<String>,
+    /// Every token file the rotation wrote, NAMED — the posture fact the
+    /// boundary law requires on the wire ("the shell writes the operator's
+    /// declared credential file because the operator's own rotation asked
+    /// it to — never a background write, never without the posture fact
+    /// named"). Empty when nothing was written. Additive wire law: a field
+    /// added, nothing renamed, nothing removed.
+    pub files_written: Vec<RotationFileOutcome>,
+}
+
+/// One token file the rotation wrote: its absolute path (never the token)
+/// and which posture's file it is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RotationFileOutcome {
+    /// The written file's absolute path.
+    pub path: String,
+    /// `dataRoot` — the shell's own kernel file; `declared` — the external
+    /// operator kernel's D1-declared `AUTH_TOKEN_FILE`.
+    pub role: String,
 }
 
 /// The Settings rotation path (plan §4.7).
@@ -1079,10 +1100,29 @@ pub fn rotate_auth_file(data_root: &Path, token: &str) -> Result<AuthSync, Contr
         return Ok(AuthSync::NoDataRoot);
     }
     let path = data_root.join(AUTH_FILE);
+    atomic_token_write(&path, token)?;
+    Ok(AuthSync::Rotated { path })
+}
+
+/// The ONE atomic 0600 token-file write, shared by both rotation targets
+/// (the data-root file and the D1-declared external file): the mode pre-check
+/// (a group/world-readable token file is refused — never read, never silently
+/// tightened), a sibling temp file at 0600, fsync, rename over the target,
+/// and the mode re-verified on the renamed file. A missing target is legal
+/// (the kernel's reader treats an absent file as "no tokens"); anything
+/// non-regular is refused.
+fn atomic_token_write(path: &Path, token: &str) -> Result<(), ContractError> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| ContractError::Filesystem {
+            path: path.display().to_string(),
+            reason: "auth-token path has no parent directory".to_string(),
+        })?
+        .to_path_buf();
 
     // The mode law, before the write: a group/world-readable token file is
     // refused, not read and not silently tightened.
-    match fs::symlink_metadata(&path) {
+    match fs::symlink_metadata(path) {
         Ok(metadata) => {
             if !metadata.file_type().is_file() {
                 return Err(ContractError::Filesystem {
@@ -1107,7 +1147,15 @@ pub fn rotate_auth_file(data_root: &Path, token: &str) -> Result<AuthSync, Contr
         }
     }
 
-    let temp = data_root.join(format!(".{AUTH_FILE}.rotate"));
+    let temp = parent.join(format!(
+        ".{}.rotate",
+        path.file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| ContractError::Filesystem {
+                path: path.display().to_string(),
+                reason: "auth-token path has no file name".to_string(),
+            })?
+    ));
     let written = (|| -> Result<(), ContractError> {
         let mut file = OpenOptions::new()
             .create(true)
@@ -1132,7 +1180,7 @@ pub fn rotate_auth_file(data_root: &Path, token: &str) -> Result<AuthSync, Contr
                 reason: error.to_string(),
             }
         })?;
-        fs::rename(&temp, &path).map_err(|error| ContractError::Filesystem {
+        fs::rename(&temp, path).map_err(|error| ContractError::Filesystem {
             path: path.display().to_string(),
             reason: error.to_string(),
         })?;
@@ -1144,7 +1192,7 @@ pub fn rotate_auth_file(data_root: &Path, token: &str) -> Result<AuthSync, Contr
     }
     written?;
 
-    let mode = fs::metadata(&path)
+    let mode = fs::metadata(path)
         .map_err(|error| ContractError::Filesystem {
             path: path.display().to_string(),
             reason: error.to_string(),
@@ -1158,25 +1206,125 @@ pub fn rotate_auth_file(data_root: &Path, token: &str) -> Result<AuthSync, Contr
             mode,
         });
     }
-    Ok(AuthSync::Rotated { path })
+    Ok(())
+}
+
+/// What one rotation wrote, before the wire DTO flattens it. The rich form
+/// the pins drive: our root's outcome and the declared external file's,
+/// each named.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RotationOutcome {
+    /// `<data_root>/auth-token` was rewritten. A rotation NEVER creates the
+    /// data root — the consent gate owns that.
+    pub data_root_written: bool,
+    /// There is no data root yet (no consent): nothing was written there.
+    pub data_root_missing: bool,
+    /// The D1-declared external kernel's `AUTH_TOKEN_FILE` was ALSO
+    /// rewritten (the same token, the same atomic law). `None` when no
+    /// external posture declared a DIFFERENT file — a self-spawned kernel
+    /// reads our root, and equal paths are one file, written once.
+    pub declared_written: Option<PathBuf>,
+    /// The declared write's stable refusal code when it failed AFTER our
+    /// root was written: the keychain and our root hold the new token but
+    /// the RUNNING external kernel does not — the honest false, never a
+    /// saved-and-live claim. Never carries the token.
+    pub declared_error: Option<String>,
+}
+
+/// The rotation's core (the write side of the operator's recorded decision):
+/// the token file(s) the RUNNING kernel actually reads. Under a self-spawned
+/// kernel that is `<data_root>/auth-token` alone (`declared: None`); under an
+/// external operator kernel it is ALSO the D1-declared `AUTH_TOKEN_FILE`
+/// (`declared: Some(path)`) — written because the operator's own rotation
+/// asked it to, never a background write, never without the posture fact
+/// named in the outcome. The kernel's live mtime watcher
+/// (`reload_picks_up_new_token`, pinned kernel-side) takes the new token
+/// without a restart.
+pub fn rotate_auth_files(
+    data_root: &Path,
+    declared: Option<&Path>,
+    token: &str,
+) -> Result<RotationOutcome, ContractError> {
+    let mut outcome = match rotate_auth_file(data_root, token)? {
+        AuthSync::Rotated { .. } => RotationOutcome {
+            data_root_written: true,
+            data_root_missing: false,
+            declared_written: None,
+            declared_error: None,
+        },
+        AuthSync::NoDataRoot => RotationOutcome {
+            data_root_written: false,
+            data_root_missing: true,
+            declared_written: None,
+            declared_error: None,
+        },
+    };
+    if let Some(declared) = declared {
+        let our_path = data_root.join(AUTH_FILE);
+        if declared != our_path {
+            match atomic_token_write(declared, token) {
+                Ok(()) => outcome.declared_written = Some(declared.to_path_buf()),
+                Err(error) => {
+                    outcome.declared_error = Some(error.kind().to_string());
+                }
+            }
+        }
+    }
+    Ok(outcome)
+}
+
+/// The pure DTO mapping: the rich rotation outcome flattened onto the wire,
+/// with `kernel_synced` telling the truth about the file(s) the RUNNING
+/// kernel actually reads — true only when every file it reads was written
+/// (self-spawned: the data-root write; external: ALSO the declared write;
+/// a refused declared write is the honest false, with the refusal named).
+pub fn rotation_dto(data_root: &Path, outcome: &RotationOutcome) -> RotationDto {
+    let mut files = Vec::new();
+    if outcome.data_root_written {
+        files.push(RotationFileOutcome {
+            path: data_root.join(AUTH_FILE).display().to_string(),
+            role: "dataRoot".to_string(),
+        });
+    }
+    if let Some(declared) = &outcome.declared_written {
+        files.push(RotationFileOutcome {
+            path: declared.display().to_string(),
+            role: "declared".to_string(),
+        });
+    }
+    RotationDto {
+        kernel_synced: outcome.data_root_written && outcome.declared_error.is_none(),
+        data_root_missing: outcome.data_root_missing,
+        error: outcome.declared_error.clone(),
+        files_written: files,
+    }
 }
 
 /// The Tauri edge for the rotation: resolve the paths, then rotate. The
 /// rotation's outcome is stated, never swallowed.
 pub fn rotate_running_auth(app: &AppHandle, token: &str) -> Result<RotationDto, ContractError> {
     let paths = app_paths(app)?;
-    match rotate_auth_file(&paths.data_root, token)? {
-        AuthSync::Rotated { .. } => Ok(RotationDto {
-            kernel_synced: true,
-            data_root_missing: false,
-            error: None,
-        }),
-        AuthSync::NoDataRoot => Ok(RotationDto {
-            kernel_synced: false,
-            data_root_missing: true,
-            error: None,
-        }),
-    }
+    // The posture fact: the D1-declared credential file of an external
+    // operator kernel, when one is installed. A self-spawned kernel reads
+    // our data-root file and this resolves to None. The direct-channel
+    // builds only — the `mas` boundary compiles the detection core (and
+    // with it the operator-posture read, and therefore the declared-file
+    // write) OUT of the App Store shell by design.
+    #[cfg(not(feature = "mas"))]
+    let declared = {
+        let home = app
+            .path()
+            .home_dir()
+            .map_err(|error| ContractError::Filesystem {
+                path: "home_dir".to_string(),
+                reason: error.to_string(),
+            })?;
+        crate::detect::operator_auth_token_file(&home)
+    };
+    #[cfg(feature = "mas")]
+    let declared: Option<std::path::PathBuf> = None;
+    let outcome = rotate_auth_files(&paths.data_root, declared.as_deref(), token)?;
+    Ok(rotation_dto(&paths.data_root, &outcome))
 }
 
 /// 32 bytes from the OS random device, lowercase hex (64 chars).

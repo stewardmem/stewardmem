@@ -1701,14 +1701,6 @@ pub fn parse_annotations(content: &str) -> Vec<(String, String)> {
     results
 }
 
-fn html_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#x27;")
-}
-
 pub(crate) async fn ingest_markdown(
     State(state): State<Arc<AppState>>,
     principal: crate::handlers::auth::OptPrincipal,
@@ -1775,7 +1767,15 @@ pub(crate) async fn ingest_markdown(
     }
     let quarantine_flagged = screen_result == screen::ScreenResult::Quarantine;
 
-    let escaped_title = html_escape(&title);
+    // THE TITLE IS STORED RAW. Escaping is a RENDERING concern: every HTML
+    // emission in this tree escapes at output (kb.rs `esc`, the sitemap), so
+    // a title escaped here was double-escaped on every public page and —
+    // worse — the escaped form was a DIFFERENT byte string on the row: the
+    // shell rendered `Green Tea&#x27;s Secret Weapon` verbatim, and the KG
+    // doc-node edges carried the escaped lowercase form. Legacy rows that
+    // hold the escaped form are decoded once by
+    // `migration::decode_legacy_entity_titles` (idempotent); this path now
+    // writes the truth.
 
     // KG edges, document-level (attached to the first chunk):
     //   - inline [[relation::entity]] annotations (legacy)
@@ -1786,10 +1786,10 @@ pub(crate) async fn ingest_markdown(
     //     from section headings, bold terms, and sentence patterns
     let mut kg_edges: Vec<(String, String, String)> = parse_annotations(&content)
         .into_iter()
-        .map(|(rel, ent)| (rel, escaped_title.to_lowercase(), ent.to_lowercase()))
+        .map(|(rel, ent)| (rel, title.to_lowercase(), ent.to_lowercase()))
         .collect();
     if !content.is_empty() {
-        let from = escaped_title.to_lowercase();
+        let from = title.to_lowercase();
 
         // deterministic entity linker — Aho-Corasick backed, zero LLM.
         // Builds vocabulary from document structure, merges in existing entities
@@ -1937,7 +1937,7 @@ pub(crate) async fn ingest_markdown(
         return Err(AppError::Internal("Embedding count mismatch".into()));
     }
 
-    let doc_title = escaped_title.clone();
+    let doc_title = title.clone();
     let doc_id = document_id.clone();
     let edges = kg_edges.clone();
     let raw_content_for_source = payload.content.clone();

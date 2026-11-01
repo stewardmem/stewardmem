@@ -10,7 +10,7 @@
 //! the lib has no dependency on the server-private `config` module.
 
 use anyhow::Result;
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tracing::{info, warn};
 use xxhash_rust::xxh3::xxh3_64;
@@ -977,6 +977,17 @@ pub fn run_migration_with_store_dim(
     let pii_rows = backfill_pii_flag(db)?;
     if pii_rows > 0 {
         info!("pii backfill: {pii_rows} row(s) flagged for read-time redaction");
+    }
+
+    // The one-time decode of the ingest-time entity escape (the raw-title
+    // law's legacy counterpart — same placement law as the pii backfill
+    // above: idempotent, runs in the chain, logs only what it changed).
+    let decoded = decode_legacy_entity_titles(db)?;
+    if decoded.total_rows() > 0 {
+        info!(
+            "legacy entity-title decode: {} knowledge title(s), {} source title(s), {} entity name(s) decoded, {} entity node(s) merged",
+            decoded.titles, decoded.sources, decoded.entities, decoded.merges
+        );
     }
 
     // v1.20.19 "Vault": the v1.14 `pii_map` table was never written to (the
@@ -3685,6 +3696,149 @@ fn backfill_pii_flag(db: &Connection) -> Result<u64> {
         }
     }
     Ok(flagged)
+}
+
+/// The one-time decode of the ingest-time entity escape — the raw-title
+/// law's legacy counterpart. Vault markdown ingests used to HTML-escape the
+/// title AT INGEST (`Green Tea&#x27;s Secret Weapon`, the hex apostrophe
+/// form), and the same escaped string rode `sources.title` and the KG
+/// doc-node edge endpoints. The read seam is byte-faithful, so those rows
+/// rendered entities verbatim on every surface, and every HTML emission
+/// that re-escaped a stored title double-escaped it. The write side now
+/// stores raw; this migration decodes the legacy rows once.
+///
+/// Decode law: ONE pass, `&amp;` replaced LAST (`&amp;lt;` decodes to
+/// `&lt;`, never to `<`), over `&lt; &gt; &quot; &#x27; &#39; &amp;` —
+/// both apostrophe forms (hex was the ingest escaper, decimal the kb.rs
+/// escaper, in case any row predates one of them). Idempotency law: after
+/// a run no row contains a decodable entity, so the next boot rewrites
+/// nothing. The accepted honest-reading edge: a title whose LEGITIMATE
+/// text contains `&amp;` decodes to `&` — a literal `&amp;` is
+/// indistinguishable from an escaped one, and never migrating leaves every
+/// affected row wrong forever.
+///
+/// Scope: `knowledge.title` + `sources.title` (the two columns the escaped
+/// ingest wrote) and — defensively — `entities.name`: the graph's closed
+/// charset (`^[A-Za-z0-9 _-]{1,100}$`, `normalize_name`) cannot produce an
+/// entity-ref name today, but a pre-charset legacy row must rejoin the
+/// graph rather than fragment it. A decoded name that collides with an
+/// existing entity (two escaped spellings decoding alike, e.g. the hex and
+/// decimal apostrophe forms) MERGES into the existing row: edges re-point,
+/// the orphan is deleted (its remaining edges follow the CASCADE), the
+/// earlier row's id wins. `pub` because the migration pin drives it
+/// directly against a fixture DB (the house pattern:
+/// `rebuild_vec_store_at_dim`).
+pub fn decode_legacy_entity_titles(db: &Connection) -> Result<DecodeReport> {
+    fn decode_once(s: &str) -> String {
+        s.replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&#x27;", "'")
+            .replace("&#39;", "'")
+            .replace("&amp;", "&")
+    }
+    let mut report = DecodeReport::default();
+
+    // knowledge.title — the FTS triggers keep knowledge_fts in step with
+    // every UPDATE here.
+    {
+        let rows: Vec<(i64, String)> = {
+            let mut stmt = db.prepare("SELECT id, title FROM knowledge WHERE title LIKE '%&%'")?;
+            stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        let mut upd = db.prepare("UPDATE knowledge SET title = ?1 WHERE id = ?2")?;
+        for (id, title) in rows {
+            let decoded = decode_once(&title);
+            if decoded != title {
+                upd.execute(params![decoded, id])?;
+                report.titles += 1;
+            }
+        }
+    }
+
+    // sources.title — the same escaped string link_vault_source stored.
+    {
+        let rows: Vec<(i64, String)> = {
+            let mut stmt = db.prepare("SELECT id, title FROM sources WHERE title LIKE '%&%'")?;
+            stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        let mut upd = db.prepare("UPDATE sources SET title = ?1 WHERE id = ?2")?;
+        for (id, title) in rows {
+            let decoded = decode_once(&title);
+            if decoded != title {
+                upd.execute(params![decoded, id])?;
+                report.sources += 1;
+            }
+        }
+    }
+
+    // entities.name — decode, or merge when the decoded form already has a
+    // node. `name = ?` compares under the column's NOCASE collation, the
+    // same law the UNIQUE constraint enforces.
+    {
+        let rows: Vec<(i64, String)> = {
+            let mut stmt = db.prepare("SELECT id, name FROM entities WHERE name LIKE '%&%'")?;
+            stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        for (id, name) in rows {
+            let decoded = decode_once(&name);
+            if decoded == name {
+                continue;
+            }
+            let existing: Option<i64> = db
+                .query_row(
+                    "SELECT id FROM entities WHERE name = ?1",
+                    params![&decoded],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            match existing {
+                Some(keeper) if keeper != id => {
+                    db.execute(
+                        "UPDATE relationships SET from_entity_id = ?1 WHERE from_entity_id = ?2",
+                        params![keeper, id],
+                    )?;
+                    db.execute(
+                        "UPDATE relationships SET to_entity_id = ?1 WHERE to_entity_id = ?2",
+                        params![keeper, id],
+                    )?;
+                    db.execute("DELETE FROM entities WHERE id = ?1", params![id])?;
+                    report.merges += 1;
+                }
+                _ => {
+                    db.execute(
+                        "UPDATE entities SET name = ?1 WHERE id = ?2",
+                        params![decoded, id],
+                    )?;
+                    report.entities += 1;
+                }
+            }
+        }
+    }
+
+    Ok(report)
+}
+
+/// What one pass of [`decode_legacy_entity_titles`] changed.
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DecodeReport {
+    /// `knowledge.title` rows rewritten.
+    pub titles: u64,
+    /// `sources.title` rows rewritten.
+    pub sources: u64,
+    /// `entities.name` rows rewritten in place.
+    pub entities: u64,
+    /// entity nodes merged away (edges re-pointed to the keeper).
+    pub merges: u64,
+}
+
+impl DecodeReport {
+    fn total_rows(&self) -> u64 {
+        self.titles + self.sources + self.entities + self.merges
+    }
 }
 
 pub fn rebuild_vec_store_at_dim(db: &mut Connection, store_dim: usize) -> Result<()> {

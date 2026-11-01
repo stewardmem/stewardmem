@@ -183,7 +183,10 @@ pub async fn rate_limit_middleware(
 /// vocabulary, and the layer order below are frozen (openapi.yaml +
 /// the route-authz table + the law-9 matrix pin them); the layer ORDER
 /// is load-bearing — the rate limiter sits OUTSIDE both auth layers
-/// (429 before token work), security headers outermost of all, and the
+/// (429 before token work), CORS outermost of all (a refusal the browser
+/// cannot read is a refusal that never happened — the auth middleware's
+/// 401 must pass outward through the CORS layer to carry the grant),
+/// security headers outermost of the auth half, and the
 /// 1 MiB body limit is applied BEFORE the 1 GiB import-router merge
 /// (tower-http eager-application pitfall — see the import_router
 /// comment below).
@@ -268,8 +271,16 @@ pub fn app(state: Arc<AppState>) -> Router {
         axum::http::header::COOKIE,
         axum::http::header::SET_COOKIE,
     ]))
-    // Security layers
-    .layer(state.cors.clone())
+    // The auth/refusal layers. The CORS layer used to sit HERE — between
+    // the sensitive-header marking and the opaque auth, i.e. INSIDE the
+    // auth middleware — so the middleware's 401 returned from a layer
+    // outside CORS and never passed outward through it: the response
+    // carried no access-control-allow-origin and the webview CORS-blocked
+    // every real refusal (measured on the wire in the credential-heal
+    // round's drill: twelve 401s, every one unreadable by the shell).
+    // CORS now sits at the outermost seat (below, before `.with_state`),
+    // where the pin `an_auth_refusal_carries_the_cors_headers`
+    // (tests/cors_wire_pins.rs) holds it.
     .layer(middleware::from_fn_with_state(
         auth::OpaqueAuthState {
             tokens: state.token_store.clone(),
@@ -296,5 +307,20 @@ pub fn app(state: Arc<AppState>) -> Router {
         axum::http::HeaderName::from_static("x-api-version"),
         axum::http::HeaderValue::from_static(env!("CARGO_PKG_VERSION")),
     ))
+    // CORS OUTERMOST — the last layer before `.with_state`, so a
+    // LATER source line runs OUTER at request time and every response
+    // (401/403/404 alike) passes outward through the predicate:
+    //   (a) preflights (OPTIONS, no credentials by spec) are answered by
+    //       CorsLayer BEFORE auth/jwt/rate-limit/security-headers — a
+    //       preflight carries no x-request-id, no security headers, and is
+    //       not rate-limited (standard CORS posture);
+    //   (b) refusals raised by any inner layer now carry the grant for
+    //       allowed origins — the shell can READ its 401s;
+    //   (c) foreign origins are unchanged — the predicate still refuses to
+    //       add ACAO at any layer; the browser remains the enforcer.
+    // The r47 RBAC pin reads call sites (`auth_middleware,`), not line
+    // numbers, and asserts only rbac < auth && rbac > catchpanic — the
+    // move shifts neither.
+    .layer(state.cors.clone())
     .with_state(state.clone())
 }

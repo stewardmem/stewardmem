@@ -93,6 +93,98 @@ could block a release.
   roots** — unhandled test rejections, formatting drift, two stale pins, a
   comments-gate label, a badge drift, and the e2e harness seed race.
 
+## [1.29.40] — 2026-11-01 — the four repairs: refusals a browser can read, titles stored as the truth, and a rotation that tells the truth
+
+Four repairs from the credential-heal round's owed list: the kernel's
+refusals now reach the browser that asked, the library's titles read like
+they were written, and the app's token rotation works against an
+externally-managed kernel.
+
+### Release notes
+
+**Bug fixes**
+
+- **Refusals are readable by the app.** The kernel answered an expired or
+  wrong credential with a 401 that carried no CORS header, so the app's
+  webview blocked the answer before any code could react. The CORS layer
+  now sits outermost: every refusal (401/403/404) carries the grant for
+  allowed origins, preflights answer before auth, and foreign origins get
+  nothing at any layer.
+- **Titles no longer render HTML entities.** Vault imports stored titles
+  pre-escaped (`Green Tea&#x27;s Secret Weapon` on screen, double-escaped
+  on public pages). Titles are now stored exactly as written, and a
+  one-time migration decodes the legacy rows — 1,203 titles in the
+  measured library — on the first start after this release; public pages
+  escape exactly once at emission.
+- **Token rotation works against an external kernel.** Rotating the
+  credential from Settings used to report success while the running kernel
+  kept the old token — and the self-heal then silently undid the rotation.
+  With the operator's recorded consent, the rotation now writes the
+  kernel's declared credential file too (the kernel's live watcher takes
+  the new token without a restart), and the result names every file
+  written; a refused write reports honestly. The App Store build never
+  touches an external credential file.
+- The Settings surface's svelte-check error (an unused local) is gone.
+
+**Improvements**
+
+- The version lockstep moves to 1.29.40 (Cargo.toml, openapi.yaml, README,
+  SBOM). No new dependencies; no wire-shape change (the openapi drift gate
+  is byte-green).
+
+## [Unreleased] — the four repairs: the CORS'd refusals, the raw-title truth, the dead `address`, and the rotation that tells the truth (R147, 2026-11-01, kernel touched and named)
+
+Four independent lanes from the credential-heal round's owed list. The
+kernel IS touched this round, named unlike R146: the CORS layer move and
+the ingest raw-title change are kernel behavior changes, each with its pin
+and red-proof; the auth deny shapes (`unauthorized_response`, byte-for-byte)
+and the audit rows are untouched.
+
+- **The kernel's 401 now carries the CORS grant.** Measured root cause: the
+  layer stack ran `auth_middleware` OUTSIDE the CORS layer, so the
+  middleware's 401 returned from a seat the response never passed back
+  through — no `access-control-allow-origin` on any refusal, the webview
+  CORS-blocking every real 401 (the R146 drill's twelve unreadable 401s).
+  CORS is now the OUTERMOST layer (the CORS-spec posture: preflights —
+  which carry no credentials — answered before auth, every refusal
+  readable), built by ONE fn (`cors_layer_from_config`) that boot and the
+  pins share. Foreign origins get nothing at any layer — the browser
+  remains the enforcer. Three pins hold it (`tests/cors_wire_pins.rs`),
+  the red-proof ran (the reverted order fails the refusal-grant pin
+  exactly as the drill measured), and a tree-run kernel on a scratch port
+  reproduced the wire receipt (401 WITH the grant + `vary: origin`).
+- **Titles are stored RAW; the legacy escaped rows decode once.** The
+  vault markdown ingest used to HTML-escape the title BEFORE storage
+  (`Green Tea&#x27;s Secret Weapon` on the row, rendered verbatim by the
+  shell, double-escaped by every HTML emission — 1,203 of 8,745 live
+  knowledge titles + 36 source titles + 31 pre-charset entity names
+  measured affected). The ingest now stores the raw title, and the
+  idempotent `decode_legacy_entity_titles` migration decodes one pass
+  (both apostrophe forms; `&amp;` last so `&amp;lt;` never becomes `<`)
+  over `knowledge.title`, `sources.title`, and — defensively, with
+  merge-on-collision — `entities.name`; byte-stable across boots (the pin
+  drives it twice; the second pass rewrites nothing). The read seam stays
+  byte-faithful. Backup before the migration era:
+  `~/Backups/brain-pre-entity-decode-2026-11-01.db` (sha256 `da82a678…`);
+  the live migration applies at the next release restart.
+- **The Settings rotation tells the truth.** Under an external kernel,
+  `kernel_synced: true` was a lie twice over. The operator chose (b,
+  recorded): the rotation writes BOTH our data-root file AND the
+  D1-declared `AUTH_TOKEN_FILE` through the same atomic 0600 law, the DTO
+  names every file written, and a refused write is the honest false. The
+  machine witness ran against the LIVE kernel with the operator present:
+  the drill token answered 200 with no restart, the old token 401'd, and
+  the restore was sha256 byte-exact. The mas build compiles the lane out
+  with the detection core.
+- **The dead `address` local is gone** — svelte-check 1 error → 0.
+
+Lanes at the round's close: kernel 3619 passed / 0 failed / 7 ignored
+(the 3,613 baseline + six net-new pins), shell Rust 108 passed / 0 failed
+/ 2 ignored, vitest 372 passed / 2 skipped, svelte-check 0 errors, eslint
+clean, fmt + clippy clean, `cargo check --features mas` green, the
+openapi drift gate byte-green; version lockstep 1.29.40 (Cargo.toml +
+openapi.yaml).
+
 ## [Unreleased] — the shell heals its own credential (R146, 2026-11-01, kernel untouched)
 
 The operator's screenshot — "The running kernel rejected this app's
