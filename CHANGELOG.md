@@ -68,6 +68,18 @@ credential — no dead end, no reinstall.
   SBOM). No new dependencies; no wire-shape change (the openapi drift gate
   is byte-green) (3de30e13).
 
+### Engineering record
+
+- The quarantine-exec probe learns its verdict rules from its first live
+  run, and bench is probed through the environment rather than the argv
+  (dacfc7c1) — release tooling, no user-facing behavior.
+- The trimmed-release round's closing record and its register row
+  (e4cc25c9) — documentation of work this release's tag range carries.
+- The declared-write refusal carries the real error kind without the
+  verbose two-arm match (3288a977) — gate diagnostics only.
+- The test-count badge rides the derivation, 3639 (fce0020d) — a derived
+  number, not a behavior.
+
 ## [1.29.39] — 2026-11-01 — the first trimmed release: one stapled image carries the macOS set, and the release proves its own page
 
 The release page shrinks from a 40-asset wall to the nine files that
@@ -7287,6 +7299,12 @@ change; zero route change; no schema.
   runbook cannot silently regress to the one-clock form. Citations
   re-verified 2026-09-14 against the EUR-Lex full text and the Commission's
   CRA reporting page.
+- The client's Content-Security-Policy restores `unsafe-eval` on client
+  routes: the wasm-bindgen glue emits `new Function()`, which
+  `wasm-unsafe-eval` does not permit, so the earlier trim served a blank
+  GUI ("call to Function() blocked by CSP"). The main-suite assertion now
+  requires the eval permission for the glue's stack, and the GUI is
+  verified live on the built bytes (c68e2bf9).
 - The regulatory calendar's article citations moved to final-OJ numbering:
   the CRA two-trigger schedules sit at Art 14(1)–(2)/(3)–(4) with the
   severe-incident definition at 14(5), and the reporting obligations apply
@@ -8472,6 +8490,11 @@ Theme: **nothing stripped may reassemble, and no gate has a side door.**
   `hostile_element_strip_does_not_heal_nested_tag` (incl. the 65-level
   overflow construction) and
   `strip_markdown_refs_does_not_heal_nested_construct`.
+- The plugin's exclude knob reaches production (0.6.1): it existed in the
+  code and the docs but was missing from the manifest's config schema, so a
+  validating host rejected or stripped it — the manifest now declares the
+  knob with its hint, and invalid values degrade to the label default
+  (c6477230).
 - **The ONNX injection scorer is budgeted** (SP-S1 — HIGH): scoring ran
   every sentence of a field through the process-wide ONNX session with no
   cap, and all screened writes serialize behind that mutex — a 1 MiB
@@ -10881,8 +10904,9 @@ Predecessor: [1.28.56] — "Vaulting": the lib flip.
 
 ## [1.28.56] — 2026-09-04 — "Vaulting": the lib flip — bootstrap + router decomposition
 
-Third milestone of the Spire Line. No behavior change of any kind: no new
-routes, no removed routes, no wire edits, no schema movement. Vaulting
+Third milestone of the Spire Line. No route, wire, or schema movement —
+the release's only operator-visible addition is two `/metrics` gauges, and
+the wire is otherwise byte-identical to 1.28.55. Vaulting
 splits the monolith into the thin-bin seam: the server module tree moved
 into the library behind a single named surface (`pub mod server { boot
 strap, router }`), the boot region became a protocol-free `bootstrap()`,
@@ -10897,7 +10921,9 @@ to wiring (main + serve + graceful shutdown) over its test region.
 
 **Improvements**
 
-- None (refactor-only release; the wire is byte-identical to 1.28.55).
+- The database's contention is observable: `brain_db_busy_total` and the
+  pool-saturation series expose busy-database events and pool pressure on
+  `/metrics`, for operators watching a busy deployment (9f6ccd44).
 
 **Security fixes**
 
@@ -12136,6 +12162,9 @@ are protocol adapters, and a source pin keeps it that way.
   row. The failure-path delta is pinned by
   `dsar_sweep_takes_the_run_fk_children_delegations_and_channel_threads`.
 
+**Security fixes**
+- The Teams channel bridge allowlists the service URL's host before any tokened delivery. The activity body is verified but not signed, so the `serviceUrl` echoed inside it is attacker-influenceable — and `send_activity`/`send_card` attached the Bot Connector bearer token to whatever https origin it named, with only an https-prefix check in the way. The drain path now delivers only to an allowlisted service host (2c8acc62).
+
 **Improvements**
 - **The rights surface converges onto the service layer:**
   `src/service/dsar.rs` owns locate, the portable export bundle (Art 15
@@ -12885,6 +12914,12 @@ no route changes; the CI matrix can be disabled independently of code.
   `series_exit_gate_checklist_green_or_ceiling_marked` pins it, and the
   AUDIT.md register carries the close-out entry. v1.29.x Console inherits
   with zero doctrine debt.
+- **The plugin seats agents on the governed dashboards (0.5.0):** the Team
+  Bridge lands, with fail-fast hook budgets — the team-bridge gate drops
+  from 8 s to 2 s and auto-recall from 5 s to 2 s — so a slow host call
+  cannot stall a turn (d21d3d45, a06b1e43).
+- **`brain ropa add|list`:** the operator gains a direct CLI door to the
+  Art 30 processing register (83b2cfd9).
 
 ### Engineering record
 
@@ -13345,6 +13380,15 @@ scoreboard.
   window × complaint history × recorded repeat contact) surfaces each
   member's signals AND retention-consent state. Retention stays a human
   strategy; the tool makes the cohort visible.
+- **The CRM connector rides the installer:** `install-service.sh` builds
+  and installs `brain-connector-crm` best-effort beside the GitHub
+  connector, compiled on the first run that needs the feature and skipped
+  cleanly when absent — the Bridges cron recipes no longer require a manual
+  feature build (4262b15d).
+- **Docker deployments keep their JWT keys:** the compose file sets
+  `BRAIN_JWT_KEY_DIR=/data/keys`, so a container's signing keys live on a
+  persisted path instead of an ephemeral in-container directory that fell
+  back silently (02d6d65d).
 
 ### Engineering record
 
@@ -14156,11 +14200,15 @@ A case lives in ONE run from intake to close — no new sessions, ever — and e
 - The transcript scrolls forever: the run panel renders a bounded keyset slice of the assembler's ordered nodes (live tail + pulled-up earlier ranges, pure `Vec` slicing — no new dependency); "Load earlier" extends the window; a ten-thousand-node run never renders ten thousand nodes.
 - Session-age badge on the composer (`N events · M checkpoints · oldest #id`) instead of any "new session" affordance — there is none anywhere in the GUI, and a source-scan test keeps it that way.
 - Stream resume: SSE consumers send `Last-Event-ID` (the workflow outbox id) on reconnect; the server replays stored rows past it (bounded to one drain batch per pass, same envelope shape, same read seam, fail-closed per-domain Read gate) before going live; `GET /workflow/runs/{id}/events?since=` backfills older gaps; client dedup admits the gap and drops replays (pinned).
-- Continuity contract documented for consumers ([docs/memory-lifecycle.md](memory-lifecycle.md) §The continuity contract + plugin README): sessions are unbounded; LLM-side compaction is the CONSUMER's contract using the derivation API — brain-server never summarizes (zero-token rule); rewind replaces rotation.
+- Continuity contract documented for consumers ([docs/memory-lifecycle.md](docs/memory-lifecycle.md) §The continuity contract + plugin README): sessions are unbounded; LLM-side compaction is the CONSUMER's contract using the derivation API — brain-server never summarizes (zero-token rule); rewind replaces rotation.
 - wasm-split enabled (operator-requested deviation from the plan's non-goals): `dx build --platform web --release --wasm-split` is green. `.cargo/config.toml` swaps `-C strip=symbols` → `strip=debuginfo` + `-C link-arg=--emit-relocs` (the splitter needs relocations + function names; DWARF-only stripping); `bundle-budget.sh` measures the SHIPPED posture (custom sections stripped via a pure section-frame walk) since the raw artifact legitimately carries splitter metadata. No `#[wasm_split]` boundaries annotated yet — see ceilings.
 
 **Security fixes**
 - None (additive release; all gates reused — the context route is Read-gated on the run's domain with row-domain re-auth, and every emitted payload rides the existing `sanitize_read` seam).
+
+**Bug fixes**
+- Legacy-shaped `_meta` on MCP calls dispatches the bare era again. Era stickiness is checked before `_meta` presence, and a `_meta` block with no declared protocol version serves bare instead of erroring — a 2025-era host attaching progress tokens to post-handshake calls was refused with `-32602` on real legacy traffic (reproduced with opencode over stdio); only a declared version triggers strict modern validation (a8b4d877).
+
 ### Engineering record
 
 - **M1 (cadence):** `resolve_checkpoint_every(Option<u32>)` (default 25, clamp 1..=100) beside `resolve_budget`; the crank tracks `events_since_ckpt` and fires through ONE checkpoint seam (bounded by the existing ≤256 KiB guard — oversized states still error loudly, never truncate). Keys: `run-{id}-ckpt-ask-{ordinal}` / `-adv-{rev}` / `-n-{ordinal}` / `-ckpt-end` — persisted facts only, so crash-replay dedups. Pinned by `checkpoints_fire_on_askhuman_phase_and_event_count` + `checkpoint_cadence_is_env_tunable_with_ceiling`; predecessor pins (`checkpoint_payload_round_trips_state_exactly`, rewind branch/replay-idempotence) pass UNCHANGED.
@@ -14177,6 +14225,7 @@ A case lives in ONE run from intake to close — no new sessions, ever — and e
 - SSE resume covers the WORKFLOW coordinate space only (the alert feed's own re-sync remains the poll fallback + lineage read); replay is bounded to one drain batch per domain per request — older gaps go through `/events?since=`.
 - Compaction/summarization is NOT built here (zero-token rule); the openclaw consumer owns its prompt slice construction.
 - The engine-pull worker remains unwired (v1.28.20 ceiling carried): the GUI crank button still says so honestly.
+
 
 ---
 
@@ -14343,6 +14392,7 @@ Every engine tool-effect goes through one mediated, countable, auditable door. T
 
 **Bug fixes**
 - `/workflow/scoreboard` no longer 500s: the audited-run linkage queried a plain-text `audit_events.target` column that the migrated DDL never had (same dead-code class as the removed executor INSERTs). The set now reconstructs via `hash("run:{id}")` membership over `target_hash` — the canonical target every run-bound substrate write emits — and stays fail-closed (unparseable/unlinkable = not green). Pinned by an in-memory DB regression test.
+- Client binaries (`brain`, `mcp`, `bench`, `brain-connector-stub`, `brain-connector-gh`) sent the WHOLE multi-line rotation token file as one Authorization header value; the embedded newline corrupted the request into an empty-body 400 before auth ran. All five now send exactly one slot via the shared `first_token` helper in `bin_common/http.rs` (pinned), which also fixes MCP `brain_search`/`ump.*` calls against rotation-slot files (fd702609).
 
 **Security fixes**
 - Engine exec is fail-closed by default: `BRAIN_ENGINE_EXEC_ALLOWLIST` empty/absent = deny ALL exec, and the global deny still outranks any per-engine grant for other capabilities. Destructive commands are refused by the SDK mediation table even when allowlisted.
@@ -14350,7 +14400,6 @@ Every engine tool-effect goes through one mediated, countable, auditable door. T
 - Exec stdout/stderr are each capped at 64 KiB and the whole result passes `sanitize_read` — PII in process output cannot cross into engine hands raw.
 ### Engineering record
 
-- Client binaries (`brain`, `mcp`, `bench`, `brain-connector-stub`, `brain-connector-gh`) sent the WHOLE multi-line rotation token file as one Authorization header value; the embedded newline corrupted the request into an empty-body 400 before auth ran. All five now send exactly one slot via the shared `first_token` helper in `bin_common/http.rs` (pinned), which also fixes MCP `brain_search`/`ump.*` calls against rotation-slot files.
 - **M1 (server):** `src/workflow/hostcalls.rs::build()` registers all seven kinds via the extracted `register_handlers`. `production_policy(engine)` grants the per-engine `exec` allow ONLY when `BRAIN_ENGINE_EXEC_ALLOWLIST` resolves non-empty (deny-cap removal + explicit per-engine override for THAT engine; every other engine falls through to Prompt == Denied). Exec: JSON `{"argv":[...]}` body, argv0 admission (exact or trailing-`/` directory prefix), `exec_mediation` refusal table, `BRAIN_ENGINE_WORKDIR` pin (default: process cwd — see ceilings), pipe-drain threads so a chatty child cannot wedge on a full pipe, poll-kill at the 30 s budget bound, `{exit_code, stdout, stderr}` sanitized. Http: `{"host","path"}` body, host shape validation, `build_url` scheme law (pinned pure), one-shot current-thread runtime for the sync handler seam. Events: run id in the dispatch name, topic prefix + payload size + key bounds enforced, replayed keys return the idempotent `enqueued:false` receipt. Every refusal path audits `workflow/hostcall/{kind}/denied` through the host chain.
 - **M2 (SDK):** `HostCallContext` gains an append-only `BTreeMap<(label, kind), u64>` behind a `counters()` accessor — incremented for every canonicalized dispatch INCLUDING denials; plus `has_handler(kind)` (the exhaustiveness pin's read seam).
 - **M3 (engine):** steward-harness `effects::Effects` is the ONE effect door — `exec`/`http`/`event`/`suggest`/`log` serialize the exact mediated body shapes and ride `dispatch`; crank event emissions route through it when provided (`crank_full`, additive — existing signatures unchanged) with the per-call tally landing in `CrankReport.hostcalls`. The reqwest transport stays solely in `remote_host.rs`, pinned by the include_str! self-grep `engine_has_no_direct_effect_paths`.
@@ -14386,6 +14435,7 @@ The governed-workflow substrate (v1.27.30) gets its FIRST consumer: the steward-
 
 **Bug fixes**
 - Dead code removed: `src/workflow/executor.rs` + `consensus.rs` INSERTed into columns absent from the migrated DDL — they would have failed if ever called. Deleted (zero callers).
+- The shipped connector stub exits 0 on a `202 proposal_pending` review outcome instead of failing the run — a proposal waiting for a human is the review posture working, not an error (05952b91).
 
 **Security fixes**
 - Answer text runs the prompt-injection blocklist BEFORE it can reach run state (`400 answer_rejected`); answers are bounded at 4000 chars like steering.
@@ -14465,6 +14515,8 @@ The governed-workflow substrate (v1.27.30) gets its FIRST consumer: the steward-
 - **Breach deadline overflow closed:** an unbounded `discovered_at` on `POST /breach` overflowed the notification-deadline arithmetic and the persisted row re-aborted every read. Timestamps are bounded at the boundary (positive, ≤ 1 day future skew) and deadline math saturates.
 - **MCP protocol-version echo hardened:** a hostile `_meta.protocolVersion` was hex-escaped in `error.message` but echoed RAW in `error.data.requested` — same injection carrier. Both are escaped now.
 - **CLI hardening:** `brain domains-recompute` no longer panics on an unexpected response shape; `client *` subcommands percent-encode `{name}` path segments; `brain restore` refuses to run while a brain-server listener answers on its port (split-brain guard) unless `--force`.
+- **The compliance pack builds by default, and the deploy provisions its 0600 audit signing key** — the Art. 12/14 evidence the pack carries activates on a default install instead of sitting dormant behind a feature flag (46f0ace6).
+- **The monthly calibration sign serializes its write:** the once-per-month gate is decided inside one immediate transaction and the bound profile's strict posture is re-checked under the write lock, so two concurrent sign attempts can no longer both pass (ac1206d6).
 
 **Security fixes**
 - Pass-3 security-audit closure (14 findings): consensus join-gates require DISTINCT reviewer identities; the decision ledger verifies fail-closed when signatures exist but the signing key is absent, pins its head per append (tip truncation detected), and refuses records with NUL bytes in engine-controlled fields (preimage ambiguity); `/audit/export` tags every row with its owning domain in both JSONL and PDF; the UMP-markdown projection YAML-escapes all frontmatter values and neutralizes the record-separator sequence in bodies (identity forgery across export/import closed); the GitHub App PEM key enforces the repo-wide 0600 secret-mode posture; reject-path oversight evidence carries the review DIGEST of what was seen; oversight rows bind proposal id + domain; renderer-hostile URI schemes (`javascript:`/`data:`/`file:`/…) are denied at evidence-link and ingest boundaries; archived clients can no longer be silently re-registered; RoPA `retention_days` is bounded and RoPA/inventory/export reads are audited; interview persist propagates outbox failures and stamps caller-supplied time; corrupt workflow state is refused rather than treated as a completed run.

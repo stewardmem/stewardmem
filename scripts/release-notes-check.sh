@@ -92,6 +92,81 @@ if [ -n "$ids" ]; then
   fail "audit/finding IDs must not appear in the published notes — put them in the Engineering record and name proof commits in the bullets."
 fi
 
+# 5. COMPLETENESS: everything that shipped between the previous tag and this
+#    one must be named in the released section. The proof-commit convention
+#    is the input: a user-facing change names the commit that landed it
+#    inside its bullet, and a change that deliberately ships no note is
+#    named under the section's `### Engineering record` with the reason.
+#    A commit named in NEITHER place is a gap — the exact class that once
+#    published a release carrying two rounds while its section described
+#    only one, with every shape check above green. Two directions, both
+#    fail-closed:
+#      - coverage: every commit whose subject is not an engineering-only
+#        marker must appear in the section (as a cited proof commit or an
+#        engineering-record line) — over-inclusion is cheap (one record
+#        line), under-inclusion is the published gap;
+#      - integrity: every commit the section cites must actually have
+#        shipped in this range — a proof that proves nothing is worse than
+#        no proof.
+#    Skipped where git or the tags are absent (the scratch-tree drills),
+#    and the skip is PRINTED, so a disarmed arm is visible, never silent.
+completeness="skipped (no git repository or missing tags)"
+if git rev-parse --git-dir >/dev/null 2>&1; then
+  prev=$(sed -nE 's/^## \[([0-9][0-9.]*)\].*/\1/p' CHANGELOG.md | sort -V \
+        | awk -v v="$VERSION" '$0 == v { print p } { p = $0 }')
+  if [ -n "$prev" ] \
+     && git rev-parse -q --verify "v$prev^{commit}" >/dev/null \
+     && git rev-parse -q --verify "v$VERSION^{commit}" >/dev/null; then
+    awk -v ver="$VERSION" '
+      /^## \[/ { insec = ($0 ~ "^## \\[" ver "\\]"); next }
+      !insec { next }
+      { print }
+    ' CHANGELOG.md > /tmp/release-notes-section.$$
+    grep -oE '[0-9a-f]{7,40}' /tmp/release-notes-section.$$ | sort -u > /tmp/release-notes-tokens.$$ || true
+    git log --format='%H %s' --no-merges "v$prev..v$VERSION" > /tmp/release-notes-range.$$
+    # the subject sits AFTER the sha on each line — the exclusion anchors
+    # must name that gap, or they exclude nothing and every range commit
+    # becomes a candidate (the first live run found exactly that).
+    grep -vE '^[0-9a-f]{7,40} (chore|ci|deps|docs|doc|test|tests|style|refactor|fmt|lint|badge|release|build|Merge|merge|revert|Revert|CHANGELOG|comments?|pins|register|evidence|plans|repo|AGENTS|fuzz)([:(]|\b)' /tmp/release-notes-range.$$ \
+      | grep -vE '^[0-9a-f]{7,40} (fix|feat)\((ci|docs|doc|test|tests|lint|fmt|changelog|deps|sbom|badge)\)' \
+      > /tmp/release-notes-candidates.$$ || true
+    missing=0
+    while read -r sha subj; do
+      [ -n "$sha" ] || continue
+      named=0
+      while read -r tok; do
+        case "$sha" in "$tok"*) named=1; break;; esac
+      done < /tmp/release-notes-tokens.$$
+      if [ "$named" = 0 ]; then
+        echo "COMPLETENESS::  ${sha:0:8} $subj" >&2
+        missing=$((missing + 1))
+      fi
+    done < /tmp/release-notes-candidates.$$
+    if [ "$missing" -gt 0 ]; then
+      rm -f /tmp/release-notes-*.$$
+      fail "COMPLETENESS: $missing commit(s) between v$prev and v$VERSION are named nowhere in the released section — cite each user-facing one inside its bullet (the commit that landed it), or list it under '### Engineering record' with the reason it ships no note. A round that landed between the tags and lives only in its own record publishes exactly the incomplete page this check exists to refuse."
+    fi
+    badcit=0
+    while read -r tok; do
+      [ -n "$tok" ] || continue
+      c=$(git rev-parse -q --verify "$tok^{commit}" 2>/dev/null) || continue
+      if git merge-base --is-ancestor "$c" "v$VERSION" 2>/dev/null \
+         && ! git merge-base --is-ancestor "$c" "v$prev" 2>/dev/null; then
+        continue
+      fi
+      echo "CITATION::  $tok does not resolve to a commit in v$prev..v$VERSION" >&2
+      badcit=$((badcit + 1))
+    done < /tmp/release-notes-tokens.$$
+    if [ "$badcit" -gt 0 ]; then
+      rm -f /tmp/release-notes-*.$$
+      fail "CITATION: $badcit cited commit(s) did not ship in v$prev..v$VERSION — a proof commit must be a commit this release carries."
+    fi
+    cand=$(wc -l < /tmp/release-notes-candidates.$$ | tr -d ' ')
+    completeness="$cand candidate commit(s) named, citations verified (range v$prev..v$VERSION)"
+    rm -f /tmp/release-notes-section.$$ /tmp/release-notes-tokens.$$ /tmp/release-notes-range.$$ /tmp/release-notes-candidates.$$
+  fi
+fi
+
 bullets=$(grep -c '^- ' /tmp/release-notes-bullets.$$ || true)
 if [ "$bullets" -lt 1 ]; then
   rm -f /tmp/release-notes-intro.$$ /tmp/release-notes-bullets.$$
@@ -99,4 +174,4 @@ if [ "$bullets" -lt 1 ]; then
 fi
 
 rm -f /tmp/release-notes-intro.$$ /tmp/release-notes-bullets.$$
-echo "OK  release notes for $VERSION: intro present, $bullets categorized bullet(s), no audit IDs"
+echo "OK  release notes for $VERSION: intro present, $bullets categorized bullet(s), no audit IDs, completeness: $completeness"

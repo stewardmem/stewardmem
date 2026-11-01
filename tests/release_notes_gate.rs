@@ -109,6 +109,12 @@ fn the_release_being_cut_has_publishable_notes() {
         "the gate must report what it checked, or a silent early-exit reads \
          as a pass: {stdout}"
     );
+    assert!(
+        stdout.contains("completeness:") && !stdout.contains("completeness: skipped"),
+        "the completeness arm must RUN in the real repository — the version \
+         being cut is exactly the cut the check exists to guard, and a skip \
+         here would leave the gate shape-only again: {stdout}"
+    );
 }
 
 /// The two historical defects, each proven to fire.
@@ -236,6 +242,184 @@ fn the_publisher_still_runs_the_same_gate() {
     assert!(
         out.status.success(),
         "the gate must run from a test as well as from the workflow"
+    );
+}
+
+/// A scratch tree that is also a GIT REPOSITORY with two tagged commits, so
+/// the completeness arm — the one check that needs history — is driven red
+/// and green by construction. The previous tag's commit is a change the
+/// release being cut does NOT carry (a bad citation would reach for it);
+/// the tagged HEAD carries a user-facing change a correct section must name.
+fn git_repo_scratch(tag: &str) -> (PathBuf, String, String) {
+    let dir = std::env::temp_dir().join(format!("brain-relnotes-{tag}"));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("scripts")).expect("mkdir scripts");
+    std::fs::copy(gate_script(), dir.join("scripts/release-notes-check.sh"))
+        .expect("copy the gate script");
+    std::fs::write(dir.join("Cargo.toml"), "version = \"9.9.9\"\n").expect("write Cargo.toml");
+    git(&dir, &["init", "--quiet"]);
+    git(&dir, &["config", "user.email", "drill@example.invalid"]);
+    git(&dir, &["config", "user.name", "drill"]);
+    std::fs::write(dir.join("seed.txt"), "seed\n").expect("write seed");
+    git(&dir, &["add", "seed.txt"]);
+    git(
+        &dir,
+        &["commit", "--quiet", "-m", "the previous release's change"],
+    );
+    git(&dir, &["tag", "v9.9.8"]);
+    let prev_sha = git(&dir, &["rev-parse", "HEAD"]);
+    std::fs::write(dir.join("seed.txt"), "grown\n").expect("write seed");
+    git(&dir, &["add", "seed.txt"]);
+    git(
+        &dir,
+        &[
+            "commit",
+            "--quiet",
+            "-m",
+            "feat: the widget refuses hostile input",
+        ],
+    );
+    let feat_sha = git(&dir, &["rev-parse", "HEAD"]);
+    // An engineering-only commit rides the same range: the exclusion list
+    // must keep it out of the candidates, or the green case below would
+    // demand a bullet for a lockfile bump. If this commit is ever flagged,
+    // the exclusion anchors broke — the first live run found exactly that,
+    // because they anchored on the line's start (the sha) instead of the
+    // subject.
+    std::fs::write(dir.join("lock.txt"), "bumped\n").expect("write lock");
+    git(&dir, &["add", "lock.txt"]);
+    git(&dir, &["commit", "--quiet", "-m", "chore: bump the lockfile"]);
+    git(&dir, &["tag", "v9.9.9"]);
+    (dir, prev_sha, feat_sha)
+}
+
+fn git(dir: &Path, args: &[&str]) -> String {
+    let out = Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .unwrap_or_else(|e| panic!("git {args:?}: {e}"));
+    assert!(
+        out.status.success(),
+        "git {args:?} failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).to_string()
+}
+
+/// The completeness arm: everything that shipped between the previous tag
+/// and this one must be named in the released section — by a cited proof
+/// commit in a bullet, or by an engineering-record line. Two red proofs,
+/// one green, and the skip must be VISIBLE: the same section in a
+/// repository-less scratch still passes, with the skip printed rather than
+/// silent, because a skip nobody can see is an arm nobody can trust.
+#[test]
+fn the_completeness_arm_refuses_unnamed_commits_and_out_of_range_citations() {
+    let (dir, prev_sha, head_sha) = git_repo_scratch("completeness");
+    let prev8 = &prev_sha[..8.min(prev_sha.len())];
+    let head8 = &head_sha[..8.min(head_sha.len())];
+
+    let changelog = |bullet: &str| {
+        format!(
+            "# Changelog\n\n## [9.9.8] — prev\n\nPrev prose.\n\n### Release notes\n\n\
+             **Improvements**\n\n- prev bullet.\n\n\
+             ## [9.9.9] — cut\n\nCut prose about the widget.\n\n### Release notes\n\n\
+             **New**\n\n{bullet}\n"
+        )
+    };
+
+    // (a) COVERAGE — the user-facing commit is named nowhere: the exact
+    // class that once published a release carrying two rounds while its
+    // section described only one.
+    std::fs::write(
+        dir.join("CHANGELOG.md"),
+        changelog("- The widget refuses hostile input."),
+    )
+    .expect("write CHANGELOG");
+    let out = run_gate(&dir, "9.9.9");
+    assert!(
+        !out.status.success(),
+        "a shipped user-facing commit named nowhere in the section must be refused"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("COMPLETENESS"),
+        "the refusal must name the completeness rule: {stderr}"
+    );
+    assert!(
+        stderr.contains("feat: the widget refuses hostile input"),
+        "the refusal must name the uncovered commit itself: {stderr}"
+    );
+
+    // (b) INTEGRITY — a citation that points at a commit this release does
+    // not carry: a proof that proves nothing is worse than no proof. The
+    // range's own commit is named (coverage passes) beside the previous
+    // release's commit (integrity fails).
+    std::fs::write(
+        dir.join("CHANGELOG.md"),
+        changelog(&format!(
+            "- The widget refuses hostile input ({head8}).\n\
+             - Also rides the previous change ({prev8})."
+        )),
+    )
+    .expect("write CHANGELOG");
+    let out = run_gate(&dir, "9.9.9");
+    assert!(
+        !out.status.success(),
+        "a citation outside the release's range must be refused"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("CITATION"),
+        "the refusal must name the citation rule: {stderr}"
+    );
+    assert!(
+        stderr.contains(prev8),
+        "the refusal must name the offending citation: {stderr}"
+    );
+
+    // (c) GREEN — the shipped commit cited, nothing else.
+    std::fs::write(
+        dir.join("CHANGELOG.md"),
+        changelog(&format!("- The widget refuses hostile input ({head8}).")),
+    )
+    .expect("write CHANGELOG");
+    let out = run_gate(&dir, "9.9.9");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "a section that names its shipped work must pass: {}{}",
+        stdout,
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        stdout.contains("completeness:"),
+        "the OK line must report the completeness verdict, or a disarmed arm \
+         reads as a pass: {stdout}"
+    );
+    assert!(
+        stdout.contains("1 candidate commit(s) named"),
+        "the OK line must name the coverage count: {stdout}"
+    );
+
+    // (d) The skip is visible: the same green section in a repository-less
+    // scratch passes with the skip PRINTED — a skip nobody can see is an
+    // arm nobody can trust.
+    let norepo = scratch(
+        "completeness-norepo",
+        &changelog(&format!("- The widget refuses hostile input ({head8}).")),
+    );
+    let out = run_gate(&norepo, "9.9.9");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "the shape checks must still pass without a repository: {}{}",
+        stdout,
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        stdout.contains("completeness: skipped"),
+        "the skip must be printed, never silent: {stdout}"
     );
 }
 
