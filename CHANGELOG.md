@@ -93,6 +93,60 @@ could block a release.
   roots** — unhandled test rejections, formatting drift, two stale pins, a
   comments-gate label, a badge drift, and the e2e harness seed race.
 
+## [Unreleased] — the shell heals its own credential (R146, 2026-11-01, kernel untouched)
+
+The operator's screenshot — "The running kernel rejected this app's
+credential" with no way back in — is closed. The shell now carries a
+self-heal: when the wire names a credential fault, the Rust core reads
+candidate token FILES (our two app-data roots, the D1-declared plist path,
+the documented `~/.config/brain-server/auth-token`), takes only an
+owner-only, wire-safe, first-whitespace-fragment token, PROVES it against
+the live kernel (a 2xx from the candidate itself), and only then writes the
+login keychain — failure leaves the machine unchanged, the DTO names the
+adopted source and never carries token material. `token.rs`'s env law
+stands: documented FILES, never the kernel's env vars.
+
+**The round's own live drill then exposed the deeper defect, measured, not
+assumed:** the poisoned keychain, the rebuilt bundle, TWELVE 401s on the
+wire and ZERO heal invocations — the kernel's 401 answer carries no
+`access-control-allow-origin` (the 200 does), so the WKWebView CORS-blocks
+the response and fetch() rejects before any middleware sees a Response; the
+onResponse-only choke point was structurally unreachable for real 401s on
+the tauri origin. The heal's arm moved to where the fault is NAMED (the
+error path's diagnosis), onResponse kept as the fallback. **Landed green:**
+the deleted item recreated by the bundle binary (drill A), the canonical
+poison healed in ~10 s with NO keychain dialog (drill B), the queue badge
+reading over the healed credential, and a grounded on-device chat answer
+from the healed session.
+
+- **`heal.rs` + 11 behavioral pins** over a real loopback stub kernel with
+  real temp token files (mode law, prove-before-adopt, already-rejected
+  skip without a probe, candidate order, wire-safety, kernel-down,
+  multi-token fragment). Four red-first drills run and reverted.
+- **The 401 choke point + the CORS-blocked arm** — 10 pins in
+  `credential-self-heal.test.ts` plus the backoff pin in its own module
+  graph; four frontend red-first drills run and reverted; the CORS-block
+  pin records the test-order trap it measured (a prior pin's
+  `unstubAllGlobals` strips the `__TAURI_INTERNALS__` stub).
+- **attach-newer, a named policy reversal:** preflight ATTACHES an
+  observed-NEWER external kernel (the wire contract is additive by law);
+  `wait_bounded` and `decide()` stay EXACT-version — a self-spawned child
+  that drifts is a sealing defect.
+- **The healing banner speaks five languages** (`chat.status.healing` in
+  en/de/fr/es/nl); the Restart button disables and relabels while a heal is
+  in flight; the PWA never heals (no core, the operator owns the kernel
+  there).
+- **Named, not hidden:** the kernel's 401 still carries no CORS header (a
+  kernel round could add it — one header, own round); citation titles
+  render raw HTML entities (decode at render or stop double-escaping —
+  small fix + one pin); the pre-existing `signal-section.svelte` unused
+  `address` (present on clean v1.29.39); the chat spine's own 401 (raw
+  fetch) does not ride the heal middleware — acceptable, the badge/facts
+  reads heal the session; the Settings rotation still writes
+  `<data_root>/auth-token` only (the heal recovers external-kernel drift
+  automatically; writing the operator's declared file is a preserve-law
+  decision needing its own round).
+
 ## [Unreleased] — the MAS fork round: the store edition's build side, the detecting onboarding designed, and the CI disk law (2026-10-31, shipped in 1.29.38)
 
 The App Store fork's IMPLEMENTATION half (the plan was approved the day

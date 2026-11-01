@@ -1,5 +1,91 @@
 # Agent Execution Log — StewardMem
 
+> **R146 "The shell heals its own credential" (2026-11-01): the incident in
+> the operator's screenshot — "The running kernel rejected this app's
+> credential" with no way back in — is closed by a self-heal that adopts the
+> kernel's own token, PROVES it against the live kernel, and only then
+> writes the keychain; and the round's own live drill exposed the deeper
+> defect: the shell's 401 choke point was UNREACHABLE, because the kernel's
+> 401 answer carries no CORS header and the webview blocks the response
+> before any middleware sees it.** Measured root cause of the incident: the
+> kernel's token file holds TWO 64-char tokens on two lines (the DOCUMENTED
+> multi-token convention — `src/config.rs` → `auth_tokens()`, whitespace
+> split in `auth_middleware`), the app's keychain item held a bearer the
+> running kernel no longer accepted, and the shell had NO recovery path.
+> NOT a kernel bug — an app gap.
+>
+> **The mechanism decisions, each named:** (1) **adopt-not-rotate with
+> proof-before-adopt** — the heal reads candidate token FILES (our two
+> app-data roots first, then the D1-declared plist path, then the documented
+> `~/.config/brain-server/auth-token`), takes only an owner-only (mode
+> & 0o077 == 0, named `InsecureMode` otherwise, never silently tightened),
+> wire-safe, first-whitespace-fragment token, skips the fragment the kernel
+> just rejected WITHOUT a probe, requires a live 2xx probe FROM the
+> candidate before adopting, and writes the keychain LAST — failure leaves
+> the machine unchanged. The DTO names the adopted source path and never
+> carries token material. (2) **The boundary law STANDS:** `token.rs`'s
+> "never read the kernel's `AUTH_TOKEN`/`BRAIN_TOKEN` env vars" — the heal
+> reads documented FILES (the same class of read detect.rs's D1 card already
+> performs), only when the wire itself named the fault. (3) **A diagnostic
+> never mutates:** `kernel_wire_status` is untouched; the heal is its own
+> named command. (4) **A 401 refusal still never draws the banner** — the
+> taxonomy holds; the heal runs BESIDE the refusal, silently, with the
+> store's own storm guards (one heal in flight, 30 s backoff).
+> (5) **attach-newer, a NAMED policy reversal:** preflight now ATTACHES an
+> observed-NEWER external kernel (the wire contract is additive by law —
+> "a differing kernel must refuse" is superseded for preflight only;
+> `wait_bounded` and `decide()` stay EXACT — a self-spawned child that
+> drifts is a sealing defect).
+>
+> **THE DRILL THAT TAUGHT (2026-11-01, the operator's machine):** the
+> poisoned keychain, the rebuilt bundle, TWELVE 401s on the wire (audit ids
+> 389797–389808, all `auth denied`) and ZERO heal invocations — the
+> onResponse-only choke point measured dead. Header-by-header measurement
+> against a 200: the 401 carries NO `access-control-allow-origin` (the 200
+> does), so the WKWebView CORS-blocks the response and fetch() rejects —
+> no Response ever reaches the middleware; the surface still NAMED the fault
+> via the error diagnosis. The fix moved the heal's arm to where the fault is
+> NAMED (`wireFaultMiddleware.onError` → diagnosis is `unauthorized` /
+> `no_credential` → the store's trigger), onResponse kept as the fallback.
+> **Then the drills that LANDED, all green:** the dev run's DTO
+> (`HealDto { outcome: "healed", source: Some("…/auth-token") }`, the deleted
+> item recreated); bundle drill A (no item → clean CREATE by the bundle
+> binary — no dialog, permanently app-owned); bundle drill B (the canonical
+> poison `stale-final-drill-*`, len 28 → relaunched → healed in ~10 s, NO
+> SecurityAgent dialog — the CLI `-U` poison preserved the bundle binary's
+> ACL trust, so the write was silent); and the full witness — the queue
+> badge reading "50 waiting" over the healed credential and a grounded
+> on-device chat answer ("…richest source of EGCG…", 2 citations) from the
+> healed session. Red-proofs recorded in the register row: Rust — mode-law,
+> prove-step, adopt-order, wire-safety removals (4, each pin red then
+> restored); frontend — invalidateBearer dropped, heal trigger dropped
+> (6 red), choke point dropped, backoff guard dropped; the CORS-block pin's
+> own measured test-order trap (the earlier pin's `unstubAllGlobals` strips
+> the `__TAURI_INTERNALS__` stub — a pin that needs the runtime re-stubs it).
+>
+> **OWED, named:** (1) the KERNEL's 401 carries no ACAO — the shell now heals
+> beside it, but a kernel round could add the CORS header to auth refusals
+> (one header; needs its own round per the preserve law — THE KERNEL IS
+> UNTOUCHED this round); (2) citation titles render raw HTML entities
+> (`Green Tea&#x27;s Secret Weapon`) — the shell must decode at render or
+> the kernel stop double-escaping (small fix + one pin); (3) the
+> pre-existing `signal-section.svelte:16` svelte-check error (`address`
+> unused — present on clean v1.29.39); (4) the chat spine's own 401 (raw
+> fetch) does not ride the heal middleware — acceptable, the badge/facts
+> reads heal the session; (5) the rotation-target gap: Settings rotation
+> writes `<data_root>/auth-token` only — under an EXTERNAL operator kernel
+> the heal recovers the drift automatically, but WRITING the operator's
+> declared file is a bigger boundary decision (the preserve law) and needs
+> its own round + operator sign-off; (6) Windows presence / x86_64 Tools —
+> pre-existing owed rows.
+>
+> *Ponytail: 17 shell files (2 new Rust modules `heal.rs` + `heal_pins.rs`
+> with 11 behavioral pins, 2 new frontend test files with 10 + 1 pins), no
+> new dependencies (Rust or npm), `cargo check --features mas` green, the
+> frontend gates 371 passed / 2 skipped + eslint clean + svelte-check
+> pre-existing-only, cargo 105 passed / 1 ignored, fmt + clippy clean —
+> and THE KERNEL IS UNTOUCHED.*
+
 > **R145 "The first trimmed release" (v1.29.39, 2026-11-01): the trim is
 > BEHAVIORAL — the page is the ~9-asset set exactly, the chain answers, and
 > the stapled Tools DMG carries the darwin set.** The cut went through the

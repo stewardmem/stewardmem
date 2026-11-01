@@ -217,6 +217,7 @@
   "chat.evidence.collapse": "ocultar las fuentes",
   "chat.status.restart": "Reiniciar el kernel",
   "chat.status.restarting": "Reiniciando…",
+  "chat.status.healing": "Reparando la credencial…",
   "gate.checking": "Comprobando el kernel local…",
   "gate.starting": "Iniciando el kernel local…",
   "gate.consent.heading": "¿Iniciar el kernel local?",

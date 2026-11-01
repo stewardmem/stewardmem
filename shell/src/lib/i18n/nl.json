@@ -217,6 +217,7 @@
   "chat.evidence.collapse": "bronnen verbergen",
   "chat.status.restart": "Kernel herstarten",
   "chat.status.restarting": "Herstarten…",
+  "chat.status.healing": "Toegangsgegevens worden hersteld…",
   "gate.checking": "Het lokale kernel wordt gecontroleerd…",
   "gate.starting": "Het lokale kernel wordt gestart…",
   "gate.consent.heading": "Lokaal kernel starten?",

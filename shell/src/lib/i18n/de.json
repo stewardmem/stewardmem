@@ -217,6 +217,7 @@
   "chat.evidence.collapse": "Belege verbergen",
   "chat.status.restart": "Kernel neu starten",
   "chat.status.restarting": "Wird neu gestartet…",
+  "chat.status.healing": "Zugangsdaten werden repariert…",
   "gate.checking": "Der lokale Kernel wird geprüft…",
   "gate.starting": "Der lokale Kernel wird gestartet…",
   "gate.consent.heading": "Lokalen Kernel starten?",

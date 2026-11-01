@@ -44,6 +44,13 @@ pub mod service;
 // the design; ZERO writes, pinned.
 #[cfg(not(feature = "mas"))]
 pub mod detect;
+// The credential self-heal: when the running kernel rejects the shell's
+// bearer, adopt the kernel's own proven token file fragment into the
+// keychain — prove before adopt, mode law before read. Depends on `detect`
+// (the declared token path) and `token` (the keychain), so it shares the
+// same config boundary as the service/detect cores it reads alongside.
+#[cfg(not(feature = "mas"))]
+pub mod heal;
 
 mod token;
 
@@ -51,6 +58,8 @@ mod token;
 mod detect_pins;
 #[cfg(test)]
 mod forget_pins;
+#[cfg(all(test, not(feature = "mas")))]
+mod heal_pins;
 #[cfg(test)]
 mod recall_pins;
 #[cfg(all(test, not(feature = "mas")))]
@@ -249,6 +258,47 @@ async fn kernel_wire_status() -> Result<sidecar::WireDto, String> {
         .map_err(|_| "wire_status task failed".to_string())
 }
 
+/// The credential SELF-HEAL: when the running kernel rejects this app's
+/// bearer (`unauthorized`) or none is configured (`no_credential`), adopt the
+/// kernel's own token — read from the kernel's on-disk source under the mode
+/// law, PROVEN against the live kernel on an authenticated route, and only
+/// then written to the keychain. The answer names every candidate tried and
+/// why it produced nothing; no token material ever leaves this module.
+///
+/// Read-only on the kernel's files: the heal never WRITES a token file — a
+/// rotation stays the Settings panel's explicit act. Blocking loopback + fs
+/// work: the blocking pool, like every edge beside it.
+#[cfg(not(feature = "mas"))]
+#[tauri::command]
+async fn kernel_heal_credential(app: tauri::AppHandle) -> Result<heal::HealDto, String> {
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+        let data_root = app
+            .path()
+            .app_data_dir()
+            .map(|dir| dir.join("kernel"))
+            .map_err(|error| format!("app_data_dir: {error}"))?;
+        let service_root = app
+            .path()
+            .app_data_dir()
+            .map(|dir| dir.join("service"))
+            .map_err(|error| format!("app_data_dir: {error}"))?;
+        let home = app
+            .path()
+            .home_dir()
+            .map_err(|error| format!("home_dir: {error}"))?;
+        let bearer = crate::token::resolve_platform(std::env::var("BRAIN_SHELL_TOKEN").ok());
+        Ok(heal::heal_running(
+            &data_root,
+            &service_root,
+            &home,
+            bearer.as_deref(),
+        ))
+    })
+    .await
+    .map_err(|_| "heal task failed".to_string())?
+}
+
 /// W-1 — the SERVICE posture's install (posture B). Consent, the port
 /// decision, the generated LaunchAgent plist, the mode laws and the version
 /// gate all live in `service.rs`; this edge only moves the work to the
@@ -435,6 +485,8 @@ pub fn run() {
             kernel_status,
             kernel_start,
             kernel_wire_status,
+            #[cfg(not(feature = "mas"))]
+            kernel_heal_credential,
             build_channel,
             signal_gateway_status,
             #[cfg(not(feature = "mas"))]

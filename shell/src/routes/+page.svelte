@@ -40,7 +40,8 @@
 	import {
 		classifyWireFault,
 		clearWireFault,
-		currentWireFault
+		currentWireFault,
+		healInFlight
 	} from '#lib/chat/wire-status.svelte.js';
 	import {
 		verifyClaim,
@@ -1163,10 +1164,14 @@
 					size="sm"
 					class="w-fit"
 					data-testid="chat-fault-restart"
-					disabled={restarting}
+					disabled={restarting || healInFlight()}
 					onclick={() => void restartKernel()}
 				>
-					{restarting ? m['chat.status.restarting']() : m['chat.status.restart']()}
+					{healInFlight()
+						? m['chat.status.healing']()
+						: restarting
+							? m['chat.status.restarting']()
+							: m['chat.status.restart']()}
 				</Button>
 			{/if}
 		</div>

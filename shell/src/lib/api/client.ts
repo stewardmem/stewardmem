@@ -14,6 +14,7 @@ import createClient, { type Middleware } from 'openapi-fetch';
 import type { paths } from './schema';
 import { authHeaders } from './token';
 import { bootstrapToken } from './bootstrap';
+import { noteUnauthorizedResponse } from '#lib/chat/wire-status.svelte.js';
 
 export const DEFAULT_BASE = 'http://127.0.0.1:8765';
 
@@ -121,7 +122,38 @@ const bearerMiddleware: Middleware = {
  * port identically; the core asks the kernel which one it is. */
 const wireFaultMiddleware: Middleware = {
 	async onError() {
-		return new WireError(await diagnoseWire());
+		const fault = await diagnoseWire();
+		// A credential fault named by the diagnosis is the 401 the response
+		// choke point below can never see: the kernel's 401 answer carries
+		// no `access-control-allow-origin`, so the webview blocks the
+		// response and fetch() REJECTS — `onResponse` never runs (measured
+		// 2026-11-01, the credential drill: twelve 401s on the wire, zero
+		// heal invocations, the choke point silent). The heal triggers HERE,
+		// beside the diagnosis, under the store's own storm guards.
+		if (fault === 'unauthorized' || fault === 'no_credential') noteUnauthorizedResponse();
+		return new WireError(fault);
+	}
+};
+
+/**
+ * The 401 choke point — the credential self-heal's SECOND trigger. A 401
+ * answer is the kernel SPEAKING (a refusal, never a banner fault), but it is
+ * also the exact symptom the heal repairs: the keychain bearer went stale
+ * against the running kernel. MEASURED CAVEAT (2026-11-01 drill): on the
+ * tauri origin this arm is a FALLBACK, not the main path — the kernel's 401
+ * carries no CORS header, the webview blocks the response, and this
+ * onResponse never runs (the heal fires in the error diagnosis above). It
+ * stays for the origin-less PWA context and for a kernel that one day CORSes
+ * its refusals. The store guards the storm: one heal in flight, at most one
+ * attempt per window. On success the store also invalidates the memoized
+ * bearer, so the NEXT request on this client carries the healed credential
+ * (surfaces re-read on their existing triggers — Try again, focus,
+ * remount).
+ */
+const healMiddleware: Middleware = {
+	onResponse({ response }) {
+		if (response.status === 401) noteUnauthorizedResponse();
+		return response;
 	}
 };
 
@@ -181,6 +213,7 @@ export let client = createClient<paths>({ baseUrl: activeBase });
 client.use(bearerMiddleware);
 client.use(timeoutMiddleware);
 client.use(wireFaultMiddleware);
+client.use(healMiddleware);
 client.use(rawCaptureMiddleware);
 
 function rebuildClient(base: string): void {
@@ -189,6 +222,7 @@ function rebuildClient(base: string): void {
 	client.use(bearerMiddleware);
 	client.use(timeoutMiddleware);
 	client.use(wireFaultMiddleware);
+	client.use(healMiddleware);
 	client.use(rawCaptureMiddleware);
 }
 

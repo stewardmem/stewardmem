@@ -812,7 +812,51 @@ pub fn decide(expected: &str, probe: &Probe) -> Decision {
     Decision::Ready
 }
 
+/// Semver ordering for the version gates: numeric components, left to
+/// right, missing components are zero; when the cores are equal a
+/// pre-release loses to its release — the same convention the kernel's own
+/// version gate holds. Lives HERE (not in `detect`) because the preflight's
+/// adopt-newer policy consumes it and `sidecar` compiles in every build
+/// configuration, including the one where `detect` is excised.
+pub fn version_order(a: &str, b: &str) -> std::cmp::Ordering {
+    fn components(version: &str) -> Vec<u64> {
+        let core = version.split(['-', '+']).next().unwrap_or(version);
+        core.split('.')
+            .map(|part| part.parse::<u64>().unwrap_or(0))
+            .collect()
+    }
+    fn is_prerelease(version: &str) -> bool {
+        version.split_once('-').is_some()
+    }
+    let (left, right) = (components(a), components(b));
+    let width = left.len().max(right.len());
+    for index in 0..width {
+        let l = left.get(index).copied().unwrap_or(0);
+        let r = right.get(index).copied().unwrap_or(0);
+        match l.cmp(&r) {
+            std::cmp::Ordering::Equal => continue,
+            other => return other,
+        }
+    }
+    match (is_prerelease(a), is_prerelease(b)) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => std::cmp::Ordering::Equal,
+    }
+}
+
 /// Detect before start. `Start` exists only on `NotRunning` + a present binary.
+///
+/// A MISMATCH is read by DIRECTION, not by difference alone: a NEWER running
+/// kernel is adopted (attached), an OLDER one is refused naming both versions.
+/// The wire contract is additive by law — a newer kernel serves everything an
+/// older build of this shell asks of it — so the newest kernel on the port is
+/// the one to use. An older kernel may lack fields this shell's typed client
+/// consumes, so it is never adopted; the updater (or the operator) brings the
+/// kernel forward. The pure `decide` above stays exact — the direction policy
+/// lives HERE, at the preflight, and `wait_bounded` still requires EXACT for
+/// a kernel this process spawned itself (a fresh child answering another
+/// version is a sealing defect, not an upgrade).
 pub fn preflight(expected: &str, outcome: ProbeOutcome, sidecar: &Path) -> Preflight {
     match outcome {
         ProbeOutcome::Probe(probe) => match decide(expected, &probe) {
@@ -820,7 +864,11 @@ pub fn preflight(expected: &str, outcome: ProbeOutcome, sidecar: &Path) -> Prefl
                 version: probe.api_version,
             },
             Decision::Mismatch { expected, observed } => {
-                Preflight::Refuse(ContractError::VersionMismatch { expected, observed })
+                if version_order(&expected, &observed) == std::cmp::Ordering::Less {
+                    Preflight::Attach { version: observed }
+                } else {
+                    Preflight::Refuse(ContractError::VersionMismatch { expected, observed })
+                }
             }
             Decision::Foreign => Preflight::Refuse(ContractError::ForeignListener { port: PORT }),
             Decision::Inconsistent { header, body } => {

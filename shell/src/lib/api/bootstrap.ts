@@ -28,6 +28,19 @@ export async function refreshBearer(): Promise<boolean> {
 }
 
 /**
+ * Drop the memoized credential and re-read it NOW. The self-heal's other
+ * half: after `kernel_heal_credential` has adopted the kernel's token into
+ * the keychain, the renderer's in-memory bearer is still the stale one —
+ * the memoization that fixed the startup race would otherwise hold it for
+ * the whole session. Invalidate, await, and the next request carries the
+ * healed credential.
+ */
+export async function invalidateBearer(): Promise<void> {
+	pending = null;
+	await refreshBearer();
+}
+
+/**
  * The ONE credential read per app session.
  *
  * Memoized, and shared: the layout kicks the bootstrap off at startup, and

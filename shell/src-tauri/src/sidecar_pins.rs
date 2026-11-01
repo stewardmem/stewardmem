@@ -755,8 +755,13 @@ fn a_silent_listener_is_refused_before_any_start() {
 
 /// P15 — attach, never double-start. A matching running kernel is adopted
 /// even when the bundled binary is absent (the shell does not need the bundle
-/// to attach), and a DIFFERENT version is refused rather than adopted or
-/// spawned over.
+/// to attach). The version gate reads DIRECTION, not mere difference: a NEWER
+/// kernel is adopted (the wire is additive; the newest kernel on the port is
+/// the one to use), an OLDER one is refused naming both versions, and an
+/// exact match attaches. A mere difference is NOT the refusal class it once
+/// was — the 9.9.9-vs-1.29.23 case is an ADOPT now, and this file's earlier
+/// form used it as the refusal fixture. Restated as a named act with the
+/// direction law; the refusal fixture is an older kernel.
 #[test]
 fn a_matching_kernel_is_attached_and_never_respawned() {
     let scratch = Scratch::new("attach");
@@ -774,19 +779,75 @@ fn a_matching_kernel_is_attached_and_never_respawned() {
         other => panic!("a matching kernel must be attached, got {other:?}"),
     }
 
+    // An OLDER running kernel is refused, naming both versions.
     match sidecar::preflight(
         "1.29.23",
         ProbeOutcome::Probe(Probe {
-            api_version: "9.9.9".to_string(),
-            body_version: "9.9.9".to_string(),
+            api_version: "1.22.0".to_string(),
+            body_version: "1.22.0".to_string(),
         }),
         &absent,
     ) {
         Preflight::Refuse(ContractError::VersionMismatch { expected, observed }) => {
             assert_eq!(expected, "1.29.23");
-            assert_eq!(observed, "9.9.9");
+            assert_eq!(observed, "1.22.0");
         }
-        other => panic!("a differing kernel must refuse, got {other:?}"),
+        other => panic!("an older kernel must refuse, got {other:?}"),
+    }
+}
+
+/// The direction law: a NEWER running kernel is ADOPTED — the shell serves
+/// the best kernel on the machine instead of refusing it (the wire contract
+/// is additive by law, so a newer kernel answers everything this shell
+/// asks). A semver boundary case rides the same rule: 1.29.9 < 1.29.10
+/// (numeric, not lexicographic), and a pre-release loses to its release.
+#[test]
+fn a_newer_running_kernel_is_attached_not_refused() {
+    let scratch = Scratch::new("adopt-newer");
+    let absent = scratch.path().join("absent");
+
+    match sidecar::preflight(
+        "1.29.38",
+        ProbeOutcome::Probe(Probe {
+            api_version: "1.29.39".to_string(),
+            body_version: "1.29.39".to_string(),
+        }),
+        &absent,
+    ) {
+        Preflight::Attach { version } => {
+            assert_eq!(version, "1.29.39", "the ADOPTED version is the one served")
+        }
+        other => panic!("a newer kernel must be attached, got {other:?}"),
+    }
+
+    // The numeric-order trap: 1.29.9 < 1.29.10 — lexicographic order would
+    // read 9 > 1 and refuse the newer kernel.
+    match sidecar::preflight(
+        "1.29.9",
+        ProbeOutcome::Probe(Probe {
+            api_version: "1.29.10".to_string(),
+            body_version: "1.29.10".to_string(),
+        }),
+        &absent,
+    ) {
+        Preflight::Attach { version } => assert_eq!(version, "1.29.10"),
+        other => panic!("1.29.10 is NEWER than 1.29.9; it must attach, got {other:?}"),
+    }
+
+    // A pre-release never outranks its release.
+    match sidecar::preflight(
+        "1.30.0",
+        ProbeOutcome::Probe(Probe {
+            api_version: "1.30.0-beta.1".to_string(),
+            body_version: "1.30.0-beta.1".to_string(),
+        }),
+        &absent,
+    ) {
+        Preflight::Refuse(ContractError::VersionMismatch { expected, observed }) => {
+            assert_eq!(expected, "1.30.0");
+            assert_eq!(observed, "1.30.0-beta.1");
+        }
+        other => panic!("a pre-release must not be adopted over its release, got {other:?}"),
     }
 }
 

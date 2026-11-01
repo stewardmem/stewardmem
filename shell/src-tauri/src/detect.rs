@@ -40,6 +40,23 @@ fn d1_plist_path(home: &Path) -> PathBuf {
         .join(format!("{OPERATOR_LABEL}.plist"))
 }
 
+/// The operator kernel's DECLARED token file: the D1 plist's
+/// `EnvironmentVariables.AUTH_TOKEN_FILE`. A READ, like every D-card read —
+/// the credential self-heal consumes this as a candidate source, after the
+/// wire itself named the fault and under the same mode law the kernel's own
+/// reader applies. `None` when there is no operator install or the plist
+/// declares no token file.
+pub fn operator_auth_token_file(home: &Path) -> Option<PathBuf> {
+    let value = plist::Value::from_file(d1_plist_path(home)).ok()?;
+    value
+        .as_dictionary()?
+        .get("EnvironmentVariables")?
+        .as_dictionary()?
+        .get("AUTH_TOKEN_FILE")?
+        .as_string()
+        .map(PathBuf::from)
+}
+
 /// The OpenClaw config the D2 card reads (the measured path).
 fn d2_config_path(home: &Path) -> PathBuf {
     home.join(".openclaw/openclaw.json")
@@ -339,35 +356,12 @@ pub fn detect_update(offered: &Path, installed: &str) -> Option<UpdateDto> {
     })
 }
 
-/// Semver ordering for the update card: numeric components, left to right,
-/// missing components are zero; when the cores are equal a pre-release
-/// loses to its release — the same convention the kernel's own version
-/// gate holds.
+/// D5's compare, DELEGATED: the ordering now lives in `sidecar` (the
+/// preflight's adopt-newer policy consumes it there, and `sidecar` compiles
+/// in every build configuration). One implementation, two importers — the
+/// detect pins keep driving this name.
 pub fn version_order(a: &str, b: &str) -> std::cmp::Ordering {
-    fn components(version: &str) -> Vec<u64> {
-        let core = version.split(['-', '+']).next().unwrap_or(version);
-        core.split('.')
-            .map(|part| part.parse::<u64>().unwrap_or(0))
-            .collect()
-    }
-    fn is_prerelease(version: &str) -> bool {
-        version.split_once('-').is_some()
-    }
-    let (left, right) = (components(a), components(b));
-    let width = left.len().max(right.len());
-    for index in 0..width {
-        let l = left.get(index).copied().unwrap_or(0);
-        let r = right.get(index).copied().unwrap_or(0);
-        match l.cmp(&r) {
-            std::cmp::Ordering::Equal => continue,
-            other => return other,
-        }
-    }
-    match (is_prerelease(a), is_prerelease(b)) {
-        (true, false) => std::cmp::Ordering::Less,
-        (false, true) => std::cmp::Ordering::Greater,
-        _ => std::cmp::Ordering::Equal,
-    }
+    sidecar::version_order(a, b)
 }
 
 // ── the report ──────────────────────────────────────────────────────────────

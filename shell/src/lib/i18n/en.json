@@ -217,6 +217,7 @@
   "chat.evidence.collapse": "hide citations",
   "chat.status.restart": "Restart the kernel",
   "chat.status.restarting": "Restarting…",
+  "chat.status.healing": "Repairing the credential…",
   "gate.checking": "Checking the local kernel…",
   "gate.starting": "Starting the local kernel…",
   "gate.consent.heading": "Start the local kernel?",

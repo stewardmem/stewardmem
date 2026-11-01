@@ -217,6 +217,7 @@
   "chat.evidence.collapse": "masquer les sources",
   "chat.status.restart": "Redémarrer le noyau",
   "chat.status.restarting": "Redémarrage…",
+  "chat.status.healing": "Réparation des identifiants…",
   "gate.checking": "Vérification du noyau local…",
   "gate.starting": "Démarrage du noyau local…",
   "gate.consent.heading": "Démarrer le noyau local ?",
