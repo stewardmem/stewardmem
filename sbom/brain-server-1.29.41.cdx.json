@@ -2,9 +2,9 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
   "version": 1,
-  "serialNumber": "urn:uuid:3710b5ca-1e4f-432f-88c1-1d2663d4cd7b",
+  "serialNumber": "urn:uuid:cc200ab9-9613-4c19-a4d0-9c7e260627c6",
   "metadata": {
-    "timestamp": "2026-11-02T12:02:30.712432000Z",
+    "timestamp": "2026-11-02T15:28:13.358265000Z",
     "tools": [
       {
         "vendor": "CycloneDX",
@@ -6990,16 +6990,16 @@
     },
     {
       "type": "library",
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#pulldown-cmark@0.13.5",
+      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#pulldown-cmark@0.13.6",
       "author": "Raph Levien <raph.levien@gmail.com>, Marcus Klaas de Vries <mail@marcusklaas.nl>",
       "name": "pulldown-cmark",
-      "version": "0.13.5",
+      "version": "0.13.6",
       "description": "A pull parser for CommonMark",
       "scope": "required",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "278e9268c93b9e498a2da46c34d90ba93a3255eb99009646398f34bc73ab36eb"
+          "content": "3db2be46835f013dd3f4fa7f5f7402c537787b54ebb6fe2b94bbdd7e2669bb7b"
         }
       ],
       "licenses": [
@@ -7007,7 +7007,7 @@
           "expression": "MIT"
         }
       ],
-      "purl": "pkg:cargo/pulldown-cmark@0.13.5",
+      "purl": "pkg:cargo/pulldown-cmark@0.13.6",
       "externalReferences": [
         {
           "type": "vcs",
@@ -11294,7 +11294,7 @@
         "registry+https://github.com/rust-lang/crates.io-index#jsonwebtoken@11.1.0",
         "path+file:///Users/mark/Sites/brain-server/crates/legal-rules-db#1.28.7",
         "registry+https://github.com/rust-lang/crates.io-index#model2vec-rs@0.3.0",
-        "registry+https://github.com/rust-lang/crates.io-index#pulldown-cmark@0.13.5",
+        "registry+https://github.com/rust-lang/crates.io-index#pulldown-cmark@0.13.6",
         "registry+https://github.com/rust-lang/crates.io-index#r2d2@0.8.10",
         "registry+https://github.com/rust-lang/crates.io-index#r2d2_sqlite@0.35.0",
         "registry+https://github.com/rust-lang/crates.io-index#rand@0.10.3",
@@ -12822,7 +12822,7 @@
       ]
     },
     {
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#pulldown-cmark@0.13.5",
+      "ref": "registry+https://github.com/rust-lang/crates.io-index#pulldown-cmark@0.13.6",
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#bitflags@2.13.2",
         "registry+https://github.com/rust-lang/crates.io-index#memchr@2.8.3",

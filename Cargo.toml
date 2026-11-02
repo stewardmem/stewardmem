@@ -223,7 +223,7 @@ uuid = { version = "1.27.0", features = ["v4", "serde"] }
 # CommonMark constructs the previous hand-rolled line-scanner mis-handled).
 # Context7-verified 2026-07-17: 0.13 is current. default-features = false
 # drops the `html` + `getopts` deps we don't need (we only use the parser).
-pulldown-cmark = { version = "0.13.4", default-features = false }
+pulldown-cmark = { version = "0.13.6", default-features = false }
 
 # Multi-pattern string matching for deterministic entity linking (v1.4.0+).
 # Aho-Corasick with LeftmostFirst semantics enables O(n) entity mention
