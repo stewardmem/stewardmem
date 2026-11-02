@@ -68,21 +68,26 @@ vi.mock('$paraglide/messages.js', () => {
 
 import ImportSection from '../src/lib/components/settings/import-section.svelte';
 
+/** The tool's OWN report shape — snake_case, byte-for-byte the JSON
+ * `brain-server --import` prints (measured on the live wire drive
+ * 2026-11-02: a camelCase fixture passed these pins while the real tool's
+ * JSON rendered `undefined` into the act button's label — the fixture MUST
+ * carry the tool's field names, not the surface's wishes). */
 const PLANNED_REPORT = {
 	verdict: 'planned',
 	source: { path: '/home/u/.openclaw/workspace/brain.db' },
 	plan: {
-		batchId: 'wi-2d414d8d6592a7a5',
+		batch_id: 'wi-2d414d8d6592a7a5',
 		knowledge: {
-			sourceTotal: 8745,
-			toLand: 8609,
-			dedupeLive: 0,
-			dedupeTargetTombstone: 0,
-			sourceTombstoned: 136,
-			withoutContentHash: 0,
-			quarantinedToLand: 0
+			source_total: 8745,
+			to_land: 8609,
+			dedupe_live: 0,
+			dedupe_target_tombstone: 0,
+			source_tombstoned: 136,
+			without_content_hash: 0,
+			quarantined_to_land: 0
 		},
-		relationships: { toLand: 21103, skippedChunkNotLanded: 847 }
+		relationships: { to_land: 21103, skipped_chunk_not_landed: 847 }
 	}
 };
 
@@ -92,10 +97,10 @@ const COMMITTED_ANSWER = {
 		...PLANNED_REPORT,
 		verdict: 'committed',
 		outcome: {
-			knowledgeLanded: 8609,
-			entitiesLanded: 3786,
-			relationshipsLanded: 21103,
-			knowledgeUniqueConflicts: 0
+			knowledge_landed: 8609,
+			entities_landed: 3786,
+			relationships_landed: 21103,
+			knowledge_unique_conflicts: 0
 		}
 	},
 	exitCode: 0,

@@ -19,28 +19,32 @@
 	import { formatBytes } from '#lib/detection.js';
 
 	type Candidate = { name: string; path: string; sizeBytes: number; modifiedEpoch: number };
+	/** The tool's OWN report — the field names are the tool's (snake_case,
+	 * byte-for-byte what `--import` printed); the wrapper's camelCase stops
+	 * at `report`. The first live wire drive caught the mismatch: a
+	 * camelCase read renders `undefined` into the act button's label. */
 	type ImportReport = {
 		verdict: string;
 		source?: { path?: string };
 		plan?: {
-			batchId: string;
+			batch_id: string;
 			knowledge: {
-				toLand: number;
-				sourceTotal: number;
-				dedupeLive: number;
-				dedupeTargetTombstone: number;
-				sourceTombstoned: number;
-				withoutContentHash: number;
-				quarantinedToLand: number;
+				to_land: number;
+				source_total: number;
+				dedupe_live: number;
+				dedupe_target_tombstone: number;
+				source_tombstoned: number;
+				without_content_hash: number;
+				quarantined_to_land: number;
 			};
-			relationships: { toLand: number; skippedChunkNotLanded: number };
-			entities?: { referencedByLandedEdges: number };
+			relationships: { to_land: number; skipped_chunk_not_landed: number };
+			entities?: { referenced_by_landed_edges: number };
 		};
 		outcome?: {
-			knowledgeLanded: number;
-			entitiesLanded: number;
-			relationshipsLanded: number;
-			knowledgeUniqueConflicts: number;
+			knowledge_landed: number;
+			entities_landed: number;
+			relationships_landed: number;
+			knowledge_unique_conflicts: number;
 		};
 	};
 
@@ -113,7 +117,7 @@
 			const { invoke } = await import('@tauri-apps/api/core');
 			const answer = (await invoke('import_commit', {
 				sourcePath: chosenPath(),
-				batchId: report.plan.batchId
+				batchId: report.plan.batch_id
 			})) as ImportOutcome;
 			outcome = answer;
 			if (answer.state === 'refused') {
@@ -127,7 +131,7 @@
 	}
 
 	async function revertImport() {
-		const batch = outcome?.report?.plan?.batchId;
+		const batch = outcome?.report?.plan?.batch_id;
 		if (!batch || busy) return;
 		busy = true;
 		lastRefusal = '';
@@ -155,10 +159,12 @@
 		const k = report.plan?.knowledge;
 		if (!k) return '';
 		return [
-			k.sourceTombstoned > 0 ? m['settings.import.skips.tombstoned']({ count: k.sourceTombstoned }) : '',
-			k.dedupeLive > 0 ? m['settings.import.skips.duplicates']({ count: k.dedupeLive }) : '',
-			k.dedupeTargetTombstone > 0
-				? m['settings.import.skips.deleted']({ count: k.dedupeTargetTombstone })
+			k.source_tombstoned > 0
+				? m['settings.import.skips.tombstoned']({ count: k.source_tombstoned })
+				: '',
+			k.dedupe_live > 0 ? m['settings.import.skips.duplicates']({ count: k.dedupe_live }) : '',
+			k.dedupe_target_tombstone > 0
+				? m['settings.import.skips.deleted']({ count: k.dedupe_target_tombstone })
 				: ''
 		]
 			.filter(Boolean)
@@ -200,20 +206,20 @@
 			>
 				{m['settings.import.read']()}
 			</button>
-			{#if outcome?.state === 'planned' && outcome.report?.plan}
-				<button
-					type="button"
-					class="text-sm"
-					disabled={busy}
-					onclick={commitImport}
-					data-testid="settings-import-commit"
-				>
-					{m['settings.import.act']({
-						count: outcome.report.plan.knowledge.toLand,
-						path: chosen
-					})}
-				</button>
-			{/if}
+				{#if outcome?.state === 'planned' && outcome.report?.plan}
+					<button
+						type="button"
+						class="text-sm"
+						disabled={busy}
+						onclick={commitImport}
+						data-testid="settings-import-commit"
+					>
+						{m['settings.import.act']({
+							count: outcome.report.plan.knowledge.to_land,
+							path: chosen
+						})}
+					</button>
+				{/if}
 			{#if outcome?.state === 'committed' && outcome.report?.plan}
 				<button
 					type="button"
@@ -233,29 +239,29 @@
 			>
 				<p class="text-sm">
 					{m['settings.import.report.line']({
-						total: outcome.report.plan.knowledge.sourceTotal,
-						land: outcome.report.plan.knowledge.toLand,
-						edges: outcome.report.plan.relationships.toLand
+						total: outcome.report.plan.knowledge.source_total,
+						land: outcome.report.plan.knowledge.to_land,
+						edges: outcome.report.plan.relationships.to_land
 					})}
 				</p>
 				{#if planSkipLine(outcome.report)}
 					<p class="mt-1">{planSkipLine(outcome.report)}</p>
 				{/if}
 				<p class="mt-1 text-muted-foreground">
-					{m['settings.import.batch']({ batch: outcome.report.plan.batchId })}
+					{m['settings.import.batch']({ batch: outcome.report.plan.batch_id })}
 				</p>
 			</div>
 		{/if}
 		{#if outcome?.state === 'committed'}
 			<p class="text-sm text-brand" role="status" data-testid="settings-import-outcome">
 				{m['settings.import.done']({
-					landed: outcome.report?.outcome?.knowledgeLanded ?? 0
+					landed: outcome.report?.outcome?.knowledge_landed ?? 0
 				})}
 			</p>
 		{/if}
 		{#if outcome?.state === 'reverted'}
 			<p class="text-sm text-brand" role="status" data-testid="settings-import-reverted">
-				{m['settings.import.reverted.line']({ batch: outcome.report?.plan?.batchId ?? '?' })}
+				{m['settings.import.reverted.line']({ batch: outcome.report?.plan?.batch_id ?? '?' })}
 			</p>
 		{/if}
 		{#if lastRefusal}
