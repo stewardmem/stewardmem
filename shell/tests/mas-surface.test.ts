@@ -1,5 +1,8 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { render, screen, waitFor, cleanup } from '@testing-library/svelte';
+import { shellRoot } from './fixtures';
 
 // The App Store fork's SURFACE law (PLAN_MAS_FORK §1 + §3, 2026-10-30),
 // pinned in the renderer:
@@ -96,6 +99,48 @@ describe('the App Store fork surface', () => {
 			screen.queryByRole('button', { name: 'Check for updates' }),
 			'the mas build must never name the updater commands'
 		).toBeNull();
+	});
+
+	test('the_mas_edition_renders_the_import_inert_and_never_names_its_commands', async () => {
+		// The store edition has nothing to import from — the workspace fence
+		// reads a home directory the sandboxed app does not have. The section
+		// rides the same channel check as the updater: mas renders INERT, and
+		// the four import commands are compiled out of the registration (the
+		// invoke would be a lie). The wire drive's inert leg, over the built
+		// channel.
+		state.channel = 'mas';
+		const user = (await import('@testing-library/user-event')).default.setup();
+		render(SettingsPageHost);
+		await user.click(screen.getByRole('button', { name: 'General' }));
+		expect(
+			await screen.findByTestId('settings-import-inert'),
+			'the store edition renders the import card inert'
+		).toBeTruthy();
+		expect(
+			screen.queryByTestId('settings-import-picker'),
+			'no picker on mas — nothing to import from'
+		).toBeNull();
+		expect(
+			screen.queryByTestId('settings-import-read-report'),
+			'no report affordance on mas'
+		).toBeNull();
+		// And the four commands ride cfg(not(feature = "mas")) in the
+		// registration — the compile-out the inert render stands on.
+		const lib = readFileSync(join(shellRoot, 'src-tauri/src/lib.rs'), 'utf8');
+		for (const command of [
+			'import_report',
+			'import_commit',
+			'import_revert',
+			'import_workspace_candidates'
+		]) {
+			const gated = new RegExp(
+				`#\\[cfg\\(not\\(feature = "mas"\\)\\)\\]\\s*\\n\\s*${command},`
+			);
+			expect(
+				gated.test(lib),
+				`${command} must ride cfg(not(feature = "mas")) in the registration`
+			).toBe(true);
+		}
 	});
 
 	test('the_direct_edition_still_renders_the_updater', async () => {
