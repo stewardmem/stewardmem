@@ -71,6 +71,7 @@ import {
 	existsSync,
 	mkdirSync,
 	readFileSync,
+	rmSync,
 	readdirSync,
 	statSync,
 	writeFileSync
@@ -673,6 +674,12 @@ function stage() {
 
 	const universalName = `brain-server-${UNIVERSAL_TRIPLE}`;
 	const universalPath = join(STAGED_DIR, universalName);
+	// lipo refuses an existing -output (errno 17, measured live 2026-11-02:
+	// a previous stage's universal blocked the release cut's own staging
+	// and the chain step died on it). The staged file is THIS run's
+	// product, never an input — remove it before lipo, like the thin
+	// slices above, which copyFileSync overwrites.
+	rmSync(universalPath, { force: true });
 	const lipo = run('lipo', [
 		'-create',
 		artifacts[0].path,
