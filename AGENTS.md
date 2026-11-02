@@ -2,11 +2,14 @@
 
 > **R149 "Shipping the import" (2026-11-02/03): the wire drive drove the
 > import through the REAL app against scratch stores and caught three
-> defects the mocked pins could not see; v1.29.41 is CUT with CI green
-> and the core set published — the update chain and the Tools DMG wait on
-> the operator's notary credential, and the operator's first real import
-> is ASKED and OWED (silence = untouched).** The full receipts:
-> `~/round-scripts/wi-import-v1.29.41/WIRE-DRIVE-RECEIPT.md`.
+> defects the mocked pins could not see; v1.29.41 is SHIPPED END TO END —
+> the chain LIVE, the page the 9-asset set exactly, the Tools DMG
+> published through the lane's Tools step running NATIVELY for the first
+> time, and the full witness green including the bundled sidecar
+> answering the import mode by name from the mounted volume. The
+> operator's first real import is ASKED and OWED (silence = untouched).**
+> The full receipts: `~/round-scripts/wi-import-v1.29.41/`
+> (WIRE-DRIVE-RECEIPT.md, lane-rerun-4.log).
 >
 > **The vehicle, measured then chosen (step 0).** The e2e harness is
 > ruled out BY DESIGN (its PWA page has no `__TAURI_INTERNALS__`; the
@@ -91,14 +94,26 @@
 > time, and the item is verifiably absent from the keychain dump. The
 > re-store is THE OPERATOR'S ACT by the round scripts' own declaration
 > (`xcrun notarytool store-credentials stewardmem`; the ASC key route
-> needs the issuer ID this machine never stored). **STATE: the tag
-> (97d1c947) + CI matrix GREEN (23 jobs) + the release workflow GREEN +
-> the release PUBLISHED with the trimmed core set (Linux tarball,
-> SHA256SUMS, PLATFORMS.txt, the SBOM); the chain (latest.json + the app
-> tarball + the DMGs) and the Tools DMG wait on the credential — the
-> updater's endpoint is dead until then.** The lane is idempotent; the
-> re-run after the credential is the lane's own re-entry (the recipe
-> lives in `~/round-scripts/wr3-witness-v1.29.39/complete-the-chain.sh`).
+> needs the issuer ID this machine never stored). **RESOLUTION: the
+> operator restored the credential; the lane re-ran NATIVELY from a
+> worktree at the tag (main had advanced past it — the lane's provenance
+> law refused the stale staging, so the lane ran where the release
+> lives) and completed every step: the app + DMG notarized Accepted and
+> stapled, the chain (latest.json + the app tarball + the DMG) published
+> and LIVE (the endpoint serves the new manifest), the Tools step ran
+> for the first time from the script — the two independent transports,
+> the 16/16 digests, the quarantine-exec probes, the builders, the pkg
+> under Developer ID Installer notarization-trusted, the Tools DMG
+> uploaded, the page's SHA256SUMS clobbered over the final 9 — and the
+> page gate answers 9/9 exactly. THE WITNESS, from the internet: the
+> published sums verify (the tarball, the manifest, the Tools DMG), the
+> Tools DMG's staple validates, the mounted volume's 10/10 sums hold,
+> the binaries answer 1.29.41 from the volume, a Safari-quarantined
+> binary executes clean AND answers the import mode's named refusal, and
+> the bundled sidecar — the release's whole point — carries `--import`
+> in its shipped bytes. The lane's one silent transient (the manifest
+> writer exited 0 without output once) did not reproduce under tracing;
+> the re-run carried the lane through.
 >
 > **The closing dry-run verdict**: 34 PASS; lipstyk-gate green over the
 > RELEASE RANGE (`v1.29.40` base — the single-commit HEAD~1 diff sat
