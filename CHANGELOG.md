@@ -81,6 +81,18 @@ range carried.
   families, revocation without the negative-cache window, and the
   remaining auth/read-seam closures (0e88afb9).
 
+**Security fixes**
+
+- **A markdown-parsing dependency moved to its patched release.** The
+  advisory database gained a high-severity report (7.5) against the
+  markdown parser's wikilink handling — quadratic parsing that a crafted
+  document could turn into a hang — between the previous audit run and
+  this release's own gate, which refused the cut fail-closed. The
+  dependency this release ships moves to the patched version; the ingest
+  path never enabled the affected parser extension, so the vulnerable
+  combination was unreachable here, and the gate's green is the release's
+  green (435abdb5).
+
 ### Engineering record
 
 - The CI-only lane that compiles the shipped feature set under `-D
