@@ -55,6 +55,13 @@ range carried.
   "undefined" instead of the count, and the report's numbers stayed
   invisible. The card now reads the tool's report exactly as the tool
   writes it (bc15ea35).
+- **The import's audit row lands.** The first live drive also caught the
+  landing itself losing its audit row: a store the app's kernel has
+  booted carries a keyed audit chain, and the import process started
+  without the chain's key, so the row the act owes was silently skipped.
+  The merge now loads the chain key from the target's side — the same
+  ladder the kernel's own boot uses — so an import lands audited like
+  any other act, on the chain the kernel already keeps (f2ee21e4).
 - Release pages no longer publish empty category blocks. A section
   category with no bullets — and its twin, a "none" disclosure written
   as prose, which the page extractor cannot publish because only bullets
