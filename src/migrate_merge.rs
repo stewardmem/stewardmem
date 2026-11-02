@@ -989,6 +989,38 @@ pub fn tombstone_hashes(conn: &Connection) -> Result<HashSet<String>> {
 
 // ── the commit ──────────────────────────────────────────────────────────────
 
+/// The target's audit chain key, loaded from the TARGET's side before an
+/// act writes its audit row. The kernel boots its store FIRST (the chain
+/// is keyed, `hmac256`), and the import runs in its own process — whose
+/// chain-key slot starts empty, so the keyed arm refuses the write and the
+/// audit's best-effort law silently skips the ONE row the act owes. This
+/// is the boot's own ladder (env → the file beside the target) minus the
+/// generation arm: a chain whose key file is gone is already broken, and
+/// minting a fresh key would forge links a verifier must refuse. An
+/// unkeyed target resolves nothing and changes nothing.
+fn load_target_chain_key(dest: &Path) {
+    let env_key = std::env::var("BRAIN_AUDIT_CHAIN_KEY")
+        .ok()
+        .is_some_and(|s| !s.trim().is_empty());
+    let env_file = std::env::var("BRAIN_AUDIT_CHAIN_KEY_FILE")
+        .ok()
+        .is_some_and(|s| !s.trim().is_empty());
+    let dir = dest.parent().unwrap_or_else(|| Path::new("."));
+    let key_file = dir.join("audit-chain.key");
+    if !env_key && !env_file && !key_file.is_file() {
+        return;
+    }
+    if audit::chain_key().is_some() {
+        return; // this process already holds a key; never second-guess it
+    }
+    if let Err(error) = audit::init_chain_key(dir) {
+        eprintln!(
+            "import: audit chain key unavailable ({error}) — an act on a \
+             keyed chain cannot land its audit row"
+        );
+    }
+}
+
 pub fn commit_merge(
     source: &Path,
     dest: &Path,
@@ -998,6 +1030,7 @@ pub fn commit_merge(
     data: &PlanData,
     plan: &MergePlan,
 ) -> Result<LandOutcome> {
+    load_target_chain_key(dest);
     let src_sha_before = sha256_and_size(source)?.0;
 
     let mut outcome = LandOutcome {
@@ -1554,6 +1587,7 @@ pub fn chunked(v: &[i64], n: usize) -> Vec<&[i64]> {
 /// One audit row, the kernel's own chain machinery writing it.
 pub fn phase_revert_batch(dest: &Path, batch_id: &str) -> Result<()> {
     confirm_source_exists(dest).with_context(|| format!("target not found: {}", dest.display()))?;
+    load_target_chain_key(dest);
     let mut conn =
         Connection::open(dest).with_context(|| format!("open target {}", dest.display()))?;
     conn.pragma_update(None, "foreign_keys", "ON")
@@ -2071,6 +2105,83 @@ mod tests {
         assert_eq!(
             n, 0,
             "a deleted source whose chunk did not land stays absent"
+        );
+    }
+
+    #[test]
+    fn test_merge_commit_lands_its_audit_row_when_the_store_is_kernel_booted() {
+        // The SHIPPED flow's shape: the kernel boots its store before any
+        // import can reach it, and the boot keys the audit chain (hmac256;
+        // its 0600 `audit-chain.key` beside the store). The import runs in
+        // its OWN process — the app's sidecar — whose chain-key slot starts
+        // EMPTY, and the Hmac arm refuses a keyless writer: the audit's
+        // best-effort law swallows the refusal and the act's ONE audit row
+        // silently never lands. The wire drive measured exactly that loss
+        // through the real app (2026-11-02: 8,609 rows landed, zero audit
+        // rows). The merge loads the key from the TARGET's side — the boot's
+        // own ladder, env → the file beside the target — so the act stays
+        // auditable on the kernel's chain. (A chain whose key file is gone
+        // is already broken; the loader mints no replacement.)
+        let _gate = audit::key_gate_for_test();
+        let f = build_merge_fixture();
+        // The boot's chain state: a 0600 key beside the store, the epoch
+        // stamped hmac256 (what the boot's bootstrap writes).
+        let key_path = f.target.parent().unwrap().join("audit-chain.key");
+        std::fs::write(
+            &key_path,
+            "101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f",
+        )
+        .expect("write fixture chain key");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600))
+                .expect("chmod fixture chain key");
+        }
+        {
+            let conn = Connection::open(&f.target).expect("open fixture target");
+            conn.execute(
+                "INSERT INTO schema_meta(key, value) VALUES (?1, ?2)",
+                [audit::EPOCH_META_KEY, audit::EPOCH_HMAC],
+            )
+            .expect("stamp fixture epoch");
+        }
+        let args = merge_args(&f);
+        let src_conn =
+            SourceHandle::open_read_only(args.source.as_deref().expect("source present")).unwrap();
+        let src = SourceHandle::new(&src_conn);
+        let mut tgt = Connection::open(&args.dest).unwrap();
+        tgt.pragma_update(None, "foreign_keys", "ON").unwrap();
+        let (delta, mapping) = schema_delta(&src, &tgt).unwrap();
+        let (report, data) = plan_merge(
+            args.source.as_deref().expect("source present"),
+            &args.dest,
+            &src,
+            &tgt,
+            delta,
+        )
+        .unwrap();
+        let plan = report.plan.expect("plan");
+        let outcome = commit_merge(
+            args.source.as_deref().expect("source present"),
+            &args.dest,
+            &src,
+            &mut tgt,
+            &mapping,
+            &data,
+            &plan,
+        )
+        .unwrap();
+        assert_eq!(outcome.knowledge_landed, 2);
+        assert!(
+            outcome.audit_row.is_some(),
+            "the commit into a kernel-booted (keyed) store lands its ONE audit \
+             row — a keyless writer loads the target's chain key, it does not \
+             skip the row silently"
+        );
+        assert!(
+            audit::verify_chain(&tgt),
+            "the keyed chain must verify after the import row"
         );
     }
 
