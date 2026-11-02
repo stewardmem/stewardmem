@@ -381,6 +381,23 @@ pub fn bootstrap() -> Result<BootOutcome> {
     // `brain-server --version` never logs, opens sockets, or loads the model.
     handle_cli_args();
 
+    // ── the workspace import (offline one-shot, before every boot effect) ──
+    // The migrate tool's merge mode, in the kernel's own binary: the schema,
+    // the dedupe, the tombstone registry and the audit chain are kernel-side
+    // facts. It opens its OWN connections to the paths named on argv — the
+    // default store's pool is never built, no model loads, no socket binds.
+    // The JSON report (or the refusal) is the ONLY stdout surface; the app
+    // parses nothing else. Feature-gated with the merge core (the shipped
+    // sidecar builds with `--features bench,migrate`).
+    #[cfg(feature = "migrate")]
+    if std::env::args().any(|a| a == "--import") {
+        let argv: Vec<String> = std::env::args().skip(1).collect();
+        let inv =
+            crate::migrate_merge::parse_import_argv(&argv).map_err(|e| anyhow::anyhow!("{e}"))?;
+        let code = crate::migrate_merge::run_import(&inv)?;
+        std::process::exit(code);
+    }
+
     // ── fail-closed auth configuration ────────────────
     // An explicitly-set-but-broken token file must not silently disable auth
     // (the wrong failure direction); a secret file readable by group/world
@@ -1435,8 +1452,11 @@ pub fn handle_cli_args() {
                 );
                 std::process::exit(0);
             }
-            // Offline one-shot modes handled later in main_inner — passthrough.
+            // Offline one-shot modes handled later — passthrough. The import's
+            // own sub-flags ride along (the import parses them itself).
             "--re-embed" | "--re-audit" => {}
+            "--import" | "--source" | "--dest" | "--commit-batch" | "--revert-batch"
+            | "--dry-run" => {}
             other if other.starts_with('-') => {
                 eprintln!("brain-server: unknown flag '{other}'");
                 eprintln!("  pass --help for usage, or run with no args to start the server");

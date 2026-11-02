@@ -13,6 +13,7 @@ import AdvancedSection from '#lib/components/settings/advanced-section.svelte';
 import ModelSection from '#lib/components/settings/model-section.svelte';
 import SignalSection from '#lib/components/settings/signal-section.svelte';
 import RunModeSection from '#lib/components/settings/run-mode-section.svelte';
+import ImportSection from '#lib/components/settings/import-section.svelte';
 import type { ExtensionManifest } from './types.js';
 
 export const coreSettings: ExtensionManifest = {
@@ -27,6 +28,11 @@ export const coreSettings: ExtensionManifest = {
 			// Direct channel only: the component renders nothing in the mas
 			// build (its commands are compiled out there).
 			{ id: 'runmode', component: RunModeSection, category: 'general' },
+			// The workspace import (the D3 card's promise): the store's
+			// content crosses only through the tool's report + one named,
+			// reversible act. Direct channel only (the mas build compiles
+			// the commands out; the section renders inert there).
+			{ id: 'import', component: ImportSection, category: 'general' },
 			{ id: 'update', component: UpdateSection, category: 'updates' },
 			// The optional Signal gateway module (PLAN_MAS_FORK §1): an optional
 			// connect-your-own-gateway surface — describe + detect, nothing more —

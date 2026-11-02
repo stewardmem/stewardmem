@@ -546,6 +546,28 @@ const TEXT_AUDIT: Readonly<Record<string, AuditRow>> = {
 	'settings.signal.detected': 'verdict',
 	'settings.signal.absent': 'verdict',
 	'settings.signal.hint': 'hint',
+	// The workspace import (the D3 card's promise): the act's name is the
+	// consent sentence — it MUST carry the report's own count and path, so
+	// it is LAW-class (a count on a button is not a label bound); the
+	// disclosure names the artifact shape once; the refusals are law.
+	'settings.import.heading': 'label',
+	'settings.import.hint': 'hint',
+	'settings.import.disclosure': 'law',
+	'settings.import.pick': 'label',
+	'settings.import.none': 'label',
+	'settings.import.read': 'label',
+	'settings.import.act': 'law',
+	'settings.import.undo': 'label',
+	'settings.import.report.line': 'verdict',
+	'settings.import.skips.tombstoned': 'verdict',
+	'settings.import.skips.duplicates': 'verdict',
+	'settings.import.skips.deleted': 'verdict',
+	'settings.import.batch': 'verdict',
+	'settings.import.done': 'verdict',
+	'settings.import.reverted.line': 'verdict',
+	'settings.import.refused': 'law',
+	'settings.import.inert': 'verdict',
+	'settings.import.progress': 'verdict',
 	// The retrieval model's download surface (the S-4 onboarding round):
 	// heading + the three postures + the hint; the model NAME interpolates,
 	// so the loading/ready sentences are HINT-class (a name makes them

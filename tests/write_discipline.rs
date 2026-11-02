@@ -50,6 +50,10 @@ const CFG_TEST_INCLUDED_FILES: [&str; 1] = ["src/search/tests.rs"];
 /// The frozen DEFERRED inventory at the Headroom open (2026-09-05, v1.28.59):
 /// production-only counts of `.transaction(` + `.unchecked_transaction(`
 /// per file. A row may only be LOWERED in the commit that earns the burn.
+/// `src/migrate_merge.rs` (the workspace import, R148): its ONE deferred
+/// site is the SOURCE read snapshot — a transaction that never writes can
+/// never upgrade; both WRITE transactions (the batch commit, the revert)
+/// are BEGIN IMMEDIATE by the discipline this file pins.
 const DEFERRED_BASELINE: &[(&str, usize)] = &[
     ("src/handlers/breaches.rs", 3),
     ("src/handlers/clients.rs", 5),
@@ -65,6 +69,7 @@ const DEFERRED_BASELINE: &[(&str, usize)] = &[
     ("src/handlers/ump_ops.rs", 2),
     ("src/handlers/webhooks.rs", 1),
     ("src/handlers/workflow.rs", 1),
+    ("src/migrate_merge.rs", 1),
     ("src/migration.rs", 2),
     ("src/server/bootstrap.rs", 1),
     ("src/server/router/memory.rs", 4),

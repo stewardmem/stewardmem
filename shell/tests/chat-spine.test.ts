@@ -1051,7 +1051,12 @@ describe('the envelope law', () => {
 		// shared wire types + 8 message keys × five locales → 227,450
 		// gzipped (+2,114, two-build measured): named act, midpoint moves,
 		// register carries it.
-		const R0_BASELINE = 227_450;
+		// AND AGAIN (2026-11-02, the workspace-import round): the Settings
+		// import section (the D3 card's promise made an affordance: the
+		// picker by name + the report render + the named act + the undo) +
+		// 18 message keys × five locales → 230,956 gzipped (+3,506): named
+		// act, midpoint moves, register carries it.
+		const R0_BASELINE = 230_956;
 		const BAND = 512;
 		expect(
 			Math.abs(total - R0_BASELINE),

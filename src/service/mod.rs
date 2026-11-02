@@ -413,6 +413,10 @@ mod pins {
                 "search/tests.rs",
                 "whole-file test module included under cfg(test)",
             ),
+            (
+                "migrate_merge.rs",
+                "the workspace import maps the source's own pii flag by name (every                  source since the column was added carries it); a source predating                  the pii column gets pii COMPUTED by gate::pii_flag at commit time                  (the merge appends the column explicitly) — the INSERT is a by-name                  template, so the scanner cannot see the columns; the construction is                  pinned behaviorally in migrate_merge's tests",
+            ),
         ];
         let exempt: Vec<&str> = EXEMPT.iter().map(|(p, _)| *p).collect();
 
@@ -494,6 +498,10 @@ mod pins {
             (
                 "search/tests.rs",
                 "whole-file test module included under cfg(test)",
+            ),
+            (
+                "migrate_merge.rs",
+                "the workspace import RECOMPUTES every landed row's governance hash                  from the row's own (owner, access_scope, domain) via                  service::ingest::governance_hash and binds it by index (binds[gov_idx]) —                  the INSERT is a by-name template, so the scanner cannot see the column                  names; the recomputation is pinned behaviorally (every landed row                  names a non-empty hash; the live drill's merged store verified                  8609 ok / 0 tampered via brain verify-governance)",
             ),
         ];
         let exempt: Vec<&str> = EXEMPT.iter().map(|(p, _)| *p).collect();

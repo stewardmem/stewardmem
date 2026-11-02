@@ -52,6 +52,12 @@ pub mod detect;
 #[cfg(not(feature = "mas"))]
 pub mod heal;
 
+// The workspace import's APP SIDE: resolve, spawn the sidecar, hand back
+// the tool's own JSON. No SQL here - the shell has no second path to the
+// store's bytes. cfg(not(mas)): the store build has nothing to import from.
+#[cfg(not(feature = "mas"))]
+pub mod import;
+
 mod token;
 
 #[cfg(all(test, not(feature = "mas")))]
@@ -386,6 +392,59 @@ async fn detect_cards(app: tauri::AppHandle) -> Result<detect::DetectDto, String
     .map_err(|error| format!("detect_cards task failed: {error}"))?
 }
 
+/// The workspace import — the REPORT (the default act; lands nothing).
+/// `sourcePath` must name a file inside the documented OpenClaw workspace;
+/// the sidecar does every store-level check and its JSON is the answer.
+#[cfg(not(feature = "mas"))]
+#[tauri::command]
+async fn import_report(
+    app: tauri::AppHandle,
+    source_path: String,
+) -> Result<import::ImportOutcome, String> {
+    tauri::async_runtime::spawn_blocking(move || import::report(&app, &source_path))
+        .await
+        .map_err(|error| format!("import_report task failed: {error}"))?
+}
+
+/// The workspace import — the COMMIT (the named act; the batch id comes
+/// from the report the user saw; the tool refuses a stale one).
+#[cfg(not(feature = "mas"))]
+#[tauri::command]
+async fn import_commit(
+    app: tauri::AppHandle,
+    source_path: String,
+    batch_id: String,
+) -> Result<import::ImportOutcome, String> {
+    tauri::async_runtime::spawn_blocking(move || import::commit(&app, &source_path, &batch_id))
+        .await
+        .map_err(|error| format!("import_commit task failed: {error}"))?
+}
+
+/// The workspace import — the REVERSAL (the undo one click from the
+/// outcome; the receipt names what the batch created).
+#[cfg(not(feature = "mas"))]
+#[tauri::command]
+async fn import_revert(
+    app: tauri::AppHandle,
+    batch_id: String,
+) -> Result<import::ImportOutcome, String> {
+    tauri::async_runtime::spawn_blocking(move || import::revert(&app, &batch_id))
+        .await
+        .map_err(|error| format!("import_revert task failed: {error}"))?
+}
+
+/// The workspace candidates the Settings surface offers BY NAME (metadata
+/// only — the D3 listing's shape; the contents are the user's).
+#[cfg(not(feature = "mas"))]
+#[tauri::command]
+async fn import_workspace_candidates(
+    app: tauri::AppHandle,
+) -> Result<Vec<import::ImportCandidateDto>, String> {
+    tauri::async_runtime::spawn_blocking(move || import::workspace_candidates(&app))
+        .await
+        .map_err(|error| format!("import_workspace_candidates task failed: {error}"))?
+}
+
 /// III-4 — the update CHECK. Read-only: it never installs and never writes.
 /// The answer is a DTO, never a thrown error, and `unreachable` is its own
 /// state — an endpoint that cannot be reached is never "you are up to date".
@@ -502,6 +561,14 @@ pub fn run() {
             store_service_posture,
             #[cfg(not(feature = "mas"))]
             detect_cards,
+            #[cfg(not(feature = "mas"))]
+            import_report,
+            #[cfg(not(feature = "mas"))]
+            import_commit,
+            #[cfg(not(feature = "mas"))]
+            import_revert,
+            #[cfg(not(feature = "mas"))]
+            import_workspace_candidates,
             #[cfg(not(feature = "mas"))]
             update_check,
             #[cfg(not(feature = "mas"))]

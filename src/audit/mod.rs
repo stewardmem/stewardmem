@@ -158,6 +158,12 @@ pub enum AuditKind {
     /// the chain stores hashes of target + detail, so no session key and no
     /// turn text rides the chain raw.
     Chat,
+
+    /// the workspace import (the migrate tool's merge mode): one row per
+    /// committed batch and one per revert. A dedicated kind (the
+    /// `Forget`/`Procedure` precedent) so kind-filtered audit consumers can
+    /// find import/revert acts without detail-hash mining.
+    Import,
     /// governance-profile rule rows (the `rules` tables' ONE door — the CLI
     /// door closing C1's `the_rules_insert_door_is_missing`): every insert and
     /// revision through `brain rules` or the pack installer hashes one row.
@@ -197,6 +203,7 @@ impl AuditKind {
             AuditKind::Forget => "forget",
             AuditKind::Procedure => "procedure",
             AuditKind::Chat => "chat",
+            AuditKind::Import => "import",
             AuditKind::Rules => "rules",
             AuditKind::Plugin => "plugin",
         }

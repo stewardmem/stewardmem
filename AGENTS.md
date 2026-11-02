@@ -1,5 +1,144 @@
 # Agent Execution Log — StewardMem
 
+> **R148 "The workspace import" (2026-11-02): the D3 card's sentence is
+> TRUE — an existing OpenClaw brain's memories come into the kernel through
+> an explicit, named, reversible act, measured end to end against a copy
+> of the operator's real store.** The kernel gained the merge core
+> (`src/migrate_merge.rs`, feature `migrate`), the migrate tool's `merge`
+> mode, `brain-server --import` (the shipped sidecar already builds with
+> `--features bench,migrate`), and the Settings surface that drives the
+> tool's own JSON.
+>
+> **W-I0 — the measurements re-wrote the prompt's premises.** (1) The
+> source store stamps schema **1.32.29 — the SAME version the current
+> kernel writes** (`LATEST_KNOWN_SCHEMA`); the prompt compared the schema
+> line against the APP version (1.29.39/40). The delta drill built a
+> reference store from the current migration set and diffed all six scoped
+> tables: identical column sets, identical unique indexes — the mapping is
+> the IDENTITY, held by a run-time re-derivation that refuses by name
+> (table.column + reason) on any drift. (2) The source is the operator's
+> LIVE store (`lsof`: their running kernel holds it; the prompt called it
+> a previous kernel's root) — so every count is live and the merge reads
+> through ONE snapshot transaction per act. (3) The tombstone bind CANNOT
+> be (knowledge_id, content_hash): rowids are reused after deletes
+> (measured: 857 kid-only matches vs 143 strict binds) — the bind is
+> content_hash ALONE, safe here (0 different-id collisions) and honest
+> everywhere; tombstones without a usable digest (6,008 NULL-era rows) and
+> scheme mismatches (26 sha256-era) are NAMED in the report, never silent.
+> (4) The disclosure numbers moved (521 → 538 .db files): the UI computes
+> them at detection time, never a hardcoded count.
+>
+> **W-I1 — the merge core, kernel-side on purpose.** `SourceHandle` is the
+> source's only type: OS read-only open, every method a read, no write
+> verb names the source side (the scan pin reads the module's own source;
+> the behavioral pin hashed the source file before and after the real
+> 197 MB merge — `source_sha256_unchanged: true`). Report first (the
+> default lands nothing); `--commit-batch` must carry the plan-hashed
+> batch id (a hash of the land set + counts — any drift between report and
+> commit refuses by name, and a source row changed between snapshot and
+> fetch refuses via the carried land hashes); the dedupe rides the
+> kernel's own `(content_hash, domain)` UNIQUE index (unique-only catch —
+> extended code 2067 — never a blanket ConstraintViolation swallow, so an
+> FK bug fails loudly); provenance upserts are state-preserving (a deleted
+> source never resurrects) and remapped so landed rows point at the
+> TARGET's source/revision rows; every landed row carries
+> `origin='imported:<batch>'` + a governance_hash recomputed from the
+> row's own tuple (row 129's law — the live drill's merged store verified
+> **8,609 ok / 0 tampered** via `brain verify-governance`); entities dedupe
+> by name, edges ride landed chunks only (`INSERT OR IGNORE`, the kernel's
+> own open-edge discipline); ONE audit row per act through the kernel's
+> chain (`AuditKind::Import`, the Forget/Procedure precedent) — the source's
+> chain stays with the source; `--revert-batch` tombstones exactly its own
+> rows (the forget-path column set, reason `import-revert:<batch>`) and
+> deletes exactly the entities the receipt says the batch CREATED (the
+> audit chain stores hashes, so the act's readable record is the
+> `.import-batch-<id>.json` receipt beside the target — a revert without
+> it refuses rather than guess). Pre-v0.9.1 sources without the `pii`
+> column get the flag COMPUTED by `gate::pii_flag` (the schema default
+> would turn read-time redaction off — the pii pin's exact hazard), pinned
+> behaviorally; the two insert scanners carry reasoned EXEMPT entries for
+> the by-name template. Embeddings and FTS vocab never cross (the target
+> re-embeds/re-indexes with its own model — FTS triggers indexed all
+> 8,609 landed rows in the drill). 14 lib tests + 12 bin tests; seven
+> red-first drills (tombstone skip, dedupe, id binding, audit row,
+> revert scope, the source scan's planted write verb, the schema-delta
+> refusal) — all fired, all restored from the round's own copies.
+>
+> **The live drill — and its near-miss, named.** The FIRST run used a
+> stale debug binary that predated the `--import` wiring: it ignored the
+> flag and BOOTED THE SERVER against the operator's default store
+> (idempotent migration no-op, bind refused — their kernel holds 8765,
+> exit; the operator's store verified untouched, the +3 audit rows are
+> their kernel's 23:17 auth-denied rows from the night before). The
+> release round's lesson, re-learned: **the leash is the ENVIRONMENT, not
+> the argv** — every later run carried scratch `BRAIN_DATA_ROOT`/
+> `BRAIN_DB_PATH`. The real drill (a `.backup` COPY + a fresh
+> migration-built target): every report number reconciled against
+> independent SQL (8,609 to land / 136 tombstone-bound / 21,103 edges /
+> 3,786 entities / 270+270 provenance; all 136 flagged rows ARE the
+> tombstone-bound set, so quarantined-to-land 0 is honest); the commit
+> landed exactly the plan in 6.2 s; a re-report is a named no-op
+> (to_land 0, dedupe_live 8,609); the revert restored exactly (8,609
+> tombstoned, 3,786 batch-created entities removed, chain carries both
+> acts); a second revert refuses by name. The operator's real store is
+> merged only after their own named, asked approval — never this round.
+>
+> **W-I2 — the surface.** The shell gained `src-tauri/src/import.rs`
+> (cfg(not(mas))): the source is fenced to the documented OpenClaw
+> workspace before any process runs, the target is the app's own kernel
+> store required to EXIST, the sidecar runs under a bounded wait, and the
+> outcome carries the tool's own JSON — the shell parses nothing else and
+> holds no second path to the store's bytes (a UI pin scans the component
+> for SQL/store access and pins the exact four-command invoke set). The
+> Settings import section (General, after run-mode): candidates by name
+> (full paths ride the DTO — the UI never reconstructs a path), the
+> artifact disclosure computed from the live listing, the report rendered
+> with its skips, ONE named act whose label is composed from the report's
+> own numbers (`Import {count} memories from {path}`), the batch id
+> surfaced for the undo, and the reversal one click from the outcome —
+> four UI pins over the rendered DOM. Catalogs: 18 keys × five locales;
+> the three gates green (parity, the text audit's 18 new rows, the
+> loanword lists untouched). Two standing pins re-derived as named acts:
+> the settings-registry exact-set (+`import`) and the bundle band
+> (227,450 → 230,956 gzipped, +3,506 — a new surface, which the band's own
+> law says is not a refactor). Shell: 376 vitest passed; svelte-check 0/0;
+> the Rust shell suite 108 passed.
+>
+> **W-I3 — the records, and the five guards the closing gate caught.** The
+> dry-run's reds, each triaged and closed: (1) the R45-0 byte-pin on
+> `src/audit/mod.rs` fired on `AuditKind::Import` — re-pinned in the pin's
+> own escape hatch (a later round, its own RED-first battery, named in the
+> pin comment); (2) the write-discipline pin refused the merge's three
+> DEFERRED sites — both WRITE transactions (the batch commit, the revert)
+> are now BEGIN IMMEDIATE (a running kernel may hold the target's lock; a
+> DEFERRED read-then-write would deadlock on the upgrade), the source's
+> read snapshot keeps its DEFERRED transaction BY LAW OF USE (it never
+> writes, so it can never upgrade) and carries the inventory row with that
+> reason; (3) the comments gate refused the schema-version labels in my
+> comments — dropped, the invariant sentences kept; (4) the pii/governance
+> insert scanners flagged the by-name template — reasoned EXEMPT entries +
+> the `gate::pii_flag` by-construction arm, pinned behaviorally; (5)
+> `tauri-fmt` on import.rs + a BASELINE fmt drift in
+> `tests/release_notes_gate.rs` (committed state this round did not write —
+> reformatted, named). The mas-surface test caught the section crashing on
+> a null candidates answer — the null is now the honest empty list. One
+> unexplained transient: the dry-run's `tauri-test` lane saw
+> `detect_pins::the_report_over_an_empty_home_is_honest_absence` red once;
+> it does not reproduce (green in isolation + full suite green twice after)
+> — named, not explained. The bridge lane (`bridge-swift-test`) reds
+> ENVIRONMENTALLY: PCC refused the "History pressure" probe ("May contain
+> unsafe content" — the operator's known Apple-Intelligence model-state
+> condition, the release round's FM-probe note); this round touches no
+> Swift. The census re-derived twice; the badge 3639 → **3654** (derived,
+> matching, the migrate-family suites included); register row 143; the
+> plans record carries the drill receipts
+> (`WORKSPACE_IMPORT_LANDED_2026-11-02.md`). OWED, named: the shell-side
+> e2e drill of the section against a RUNNING app (the pins drive the
+> component; the wire drive is the next app round); the chat-history
+> import (the source's 1 session / 6 turns) stays a product decision; the
+> x86_64 Tools variant, Windows presence, the arm64-VM witness, and the
+> lane's Tools-step e2e stay owed from the release round.
+
 > **R147 "The four repairs" (2026-11-01): the kernel's CORS'd refusals are
 > readable, titles are stored RAW with the legacy rows decoded once, the
 > dead `address` is gone, and the rotation tells the truth — the kernel IS

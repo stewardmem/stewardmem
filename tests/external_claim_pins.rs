@@ -1124,8 +1124,19 @@ fn r45_0_correction_leaves_the_audit_chain_module_byte_untouched() {
 // untouched and still green. The filter reads rows; it never re-verifies
 // differently, and `/audit/verify` is pinned byte-identical across a
 // filtered call.
+//
+// RE-PINNED 2026-11-02 (the workspace-import round R148), the pin's own
+// escape hatch taken: a LATER round touched the module, in its own round,
+// with its own RED-first battery. The touch is ONE enum variant + its
+// as_str arm — `AuditKind::Import`, the workspace import's one audit row
+// per committed batch and per revert (the `Forget`/`Procedure` dedicated-
+// kind precedent); NO verdict, key, epoch, chain-link, scheme, check, or
+// audit-row WRITE shape moved. R148's battery: 14 merge pins (the audit
+// row's presence, kind, target digest, and chain verification among them),
+// seven red-first drills, and the live drill's chain evidence (one import
+// row on a real store, `verify_chain` green, head = the import row).
 const CHAIN_MODULE_SHA256: &str =
-    "9ca3fb9d4650d30208ba502d96f7da8641e50735ef9b91cccd898a963c2f7bb5";
+    "2b556b0e306e47befc06632dc6fec299d269b740053ccf8e9bc4ce118f83558e";
 
 /// E8's second half: the correction adds no key material and no audit row.
 #[test]

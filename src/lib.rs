@@ -41,6 +41,12 @@ pub mod census;
 // `brain_server::migration::`.
 pub mod migration;
 
+// The workspace import core (the migrate tool's `merge` mode AND the
+// `brain-server --import` offline mode) — feature-gated with the migrate
+// tool family; the shipped sidecar builds with `--features bench,migrate`.
+#[cfg(feature = "migrate")]
+pub mod migrate_merge;
+
 // Retrieval-quality metrics: pure P@k/R@k/MRR/NDCG/
 // answer_in_context functions for the regression bench harness. Lives in the
 // lib so the `bench` binary (feature-gated) consumes them without a #[path]

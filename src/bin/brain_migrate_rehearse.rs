@@ -25,11 +25,11 @@
 
 use anyhow::{Context, Result, bail};
 use rusqlite::Connection;
-use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use brain_server::backup;
+use brain_server::migrate_merge::{confirm_source_exists, sha256_and_size, write_atomic};
 use brain_server::migration::run_migration;
 use brain_server::register_sqlite_vec::register_sqlite_vec;
 use brain_server::storage_layout::{
@@ -215,6 +215,7 @@ fn run(argv: &[String]) -> Result<()> {
         "report" => phase_report(&args)?,
         "rollback" => phase_rollback(&args)?,
         "rehearse" => phase_rehearse(&args)?,
+        "merge" => phase_merge_cli(&args)?,
         other => {
             usage();
             bail!("unknown subcommand: {other}");
@@ -225,8 +226,12 @@ fn run(argv: &[String]) -> Result<()> {
 
 fn usage() {
     eprintln!(
-        "usage: brain-migrate-rehearse <backup|copy|verify|report|rollback|rehearse> \
-         [--source PATH] [--dest PATH] [--strict] [--force] [--keep-snapshot]"
+        "usage: brain-migrate-rehearse <backup|copy|verify|report|rollback|rehearse|merge> \
+         [--source PATH] [--dest PATH] [--strict] [--force] [--keep-snapshot] \
+         [--commit-batch ID] [--revert-batch ID] [--dry-run]\n\
+         merge: report-first workspace import — without --commit-batch it prints the\n\
+         JSON report and lands NOTHING; --commit-batch must carry the report's own\n\
+         batch id; --revert-batch tombstones exactly that batch's rows."
     );
 }
 
@@ -237,6 +242,9 @@ struct RawArgs {
     strict: bool,
     force: bool,
     keep_snapshot: bool,
+    commit_batch: Option<String>,
+    revert_batch: Option<String>,
+    dry_run: bool,
 }
 
 fn parse_args(rest: &[String]) -> Result<RawArgs> {
@@ -246,6 +254,9 @@ fn parse_args(rest: &[String]) -> Result<RawArgs> {
         strict: false,
         force: false,
         keep_snapshot: false,
+        commit_batch: None,
+        revert_batch: None,
+        dry_run: false,
     };
     let mut i = 0;
     while i < rest.len() {
@@ -261,6 +272,18 @@ fn parse_args(rest: &[String]) -> Result<RawArgs> {
             "--strict" => raw.strict = true,
             "--force" => raw.force = true,
             "--keep-snapshot" => raw.keep_snapshot = true,
+            "--commit-batch" => {
+                i += 1;
+                raw.commit_batch = Some(require_value(rest, i, "--commit-batch")?.to_string());
+            }
+            "--revert-batch" => {
+                i += 1;
+                raw.revert_batch = Some(require_value(rest, i, "--revert-batch")?.to_string());
+            }
+            // The report IS the dry run: merge without --commit-batch lands
+            // nothing. The flag is accepted so an explicit invocation reads
+            // as explicit as it behaves.
+            "--dry-run" => raw.dry_run = true,
             other => bail!("unknown flag: {other}"),
         }
         i += 1;
@@ -282,16 +305,31 @@ struct ResolvedArgs {
     strict: bool,
     force: bool,
     keep_snapshot: bool,
+    commit_batch: Option<String>,
+    revert_batch: Option<String>,
+    #[allow(dead_code)]
+    dry_run: bool,
+    /// merge refuses the layout defaults: the import target is chosen BY
+    /// NAME, never "everything found" / "wherever the layout points".
+    source_explicit: bool,
+    dest_explicit: bool,
 }
 
 impl ResolvedArgs {
     fn from_raw(raw: RawArgs, layout: &StorageLayout) -> Result<Self> {
+        let source_explicit = raw.source.is_some();
+        let dest_explicit = raw.dest.is_some();
         Ok(Self {
             source: raw.source.unwrap_or_else(|| layout.legacy_db()),
             dest: raw.dest.unwrap_or_else(|| layout.global_domain_db()),
             strict: raw.strict,
             force: raw.force,
             keep_snapshot: raw.keep_snapshot,
+            commit_batch: raw.commit_batch,
+            revert_batch: raw.revert_batch,
+            dry_run: raw.dry_run,
+            source_explicit,
+            dest_explicit,
         })
     }
 }
@@ -422,16 +460,6 @@ fn copy_meta_path(dest: &Path) -> PathBuf {
 /// truncated JSON that `report` parses as a DIFFERENT version history. The
 /// rename is atomic on POSIX; the tmp name carries the pid so two concurrent
 /// rehearsals never share it.
-fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
-    let mut tmp = path.as_os_str().to_os_string();
-    tmp.push(format!(".tmp-{}", std::process::id()));
-    let tmp_path = PathBuf::from(tmp);
-    fs::write(&tmp_path, bytes).with_context(|| format!("write {}", tmp_path.display()))?;
-    fs::rename(&tmp_path, path)
-        .with_context(|| format!("rename {} → {}", tmp_path.display(), path.display()))?;
-    Ok(())
-}
-
 fn write_copy_meta(dest: &Path, meta: &CopyMeta) -> Result<()> {
     let path = copy_meta_path(dest);
     let json = serde_json::to_string_pretty(meta)?;
@@ -863,14 +891,37 @@ fn phase_rehearse(args: &ResolvedArgs) -> Result<()> {
     Ok(())
 }
 
-// ── helpers ─────────────────────────────────────────────────────────────────
+// ── merge phase (thin wrapper) ──────────────────────────────────────────────
+//
+// The merge core lives in the LIBRARY (`brain_server::migrate_merge`) —
+// kernel-side on purpose: the schema, the dedupe, the tombstone registry,
+// the provenance upserts and the audit chain are the kernel's own facts,
+// and `brain-server --import` (the app's surface) runs the SAME core. This
+// binary's merge arm is argv parsing + the explicit-path refusal only.
 
-fn confirm_source_exists(source: &Path) -> Result<()> {
-    if !source.exists() {
-        bail!("source DB not found: {}", source.display());
+/// The merge arm's argv contract: BOTH paths are explicit — the import
+/// target is chosen by name, never a layout default (the report's own law).
+fn phase_merge_cli(args: &ResolvedArgs) -> Result<()> {
+    if !args.source_explicit || !args.dest_explicit {
+        bail!(
+            "merge requires an explicit --source and --dest — the import target \
+             is chosen by name, never a layout default"
+        );
+    }
+    let inv = brain_server::migrate_merge::ImportInvocation {
+        source: Some(args.source.clone()),
+        dest: args.dest.clone(),
+        commit_batch: args.commit_batch.clone(),
+        revert_batch: args.revert_batch.clone(),
+    };
+    let code = brain_server::migrate_merge::run_import(&inv)?;
+    if code != 0 {
+        std::process::exit(code);
     }
     Ok(())
 }
+
+// ── helpers ─────────────────────────────────────────────────────────────────
 
 /// Warn loudly if the source's WAL file looks active (>1 KiB heuristic).
 /// Requires --force to proceed when the heuristic trips. ponytail: opening the
@@ -932,14 +983,6 @@ fn read_schema_version(db_path: &Path) -> Result<Option<String>> {
     Ok(brain_server::storage_layout::schema_version(&conn))
 }
 
-fn sha256_and_size(path: &Path) -> Result<(String, u64)> {
-    let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
-    let size = bytes.len() as u64;
-    let mut h = Sha256::new();
-    h.update(&bytes);
-    Ok((hex::encode(h.finalize()), size))
-}
-
 fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339()
 }
@@ -992,6 +1035,11 @@ mod tests {
             strict: false,
             force: true, // tests don't stop a "server"
             keep_snapshot: true,
+            commit_batch: None,
+            revert_batch: None,
+            dry_run: true,
+            source_explicit: true,
+            dest_explicit: true,
         }
     }
 

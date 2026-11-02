@@ -220,10 +220,14 @@ test('the_settings_dialog_renders_the_registry_s_sections_in_contribution_order'
 	// module, so it lives with the operator acts, never the onboarding steps.
 	// 2026-10-31 (the W-2 wizard round): "How StewardMem runs" joins General —
 	// the gate's one-time decision, re-runnable as a SECTION, not a dialog.
+	// 2026-11-02 (the workspace-import round): "Import" joins General after
+	// runmode — the D3 card's "import later from Settings" promise, as a
+	// section whose every act is named and reversible (direct channel only).
 	expect(settingsSections.map((section) => section.id)).toEqual([
 		'model',
 		'locale',
 		'runmode',
+		'import',
 		'update',
 		'signal',
 		'advanced'

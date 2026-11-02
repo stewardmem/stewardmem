@@ -231,7 +231,10 @@ fn the_gate_refuses_an_empty_notes_block_and_audit_ids() {
     let empty_categories = format!(
         "### Release notes\n\n{anchor}\n\n- a real bullet so the block is alive.\n\n**Bug fixes**\n\nNone.\n\n**Security fixes**\n\n"
     );
-    assert_ne!(empty_categories, block, "could not plant the empty categories");
+    assert_ne!(
+        empty_categories, block,
+        "could not plant the empty categories"
+    );
     let dir = scratch(
         "emptycat",
         &format!(
@@ -320,7 +323,10 @@ fn git_repo_scratch(tag: &str) -> (PathBuf, String, String) {
     // subject.
     std::fs::write(dir.join("lock.txt"), "bumped\n").expect("write lock");
     git(&dir, &["add", "lock.txt"]);
-    git(&dir, &["commit", "--quiet", "-m", "chore: bump the lockfile"]);
+    git(
+        &dir,
+        &["commit", "--quiet", "-m", "chore: bump the lockfile"],
+    );
     git(&dir, &["tag", "v9.9.9"]);
     (dir, prev_sha, feat_sha)
 }
