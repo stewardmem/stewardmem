@@ -110,6 +110,29 @@ function archName(cputype) {
  * Read the arch set out of a thin or fat Mach-O header. Pure Node — the
  * verifier must not depend on `lipo`, which exists only on macOS.
  */
+/**
+ * The stage build's cargo argv, per target triple. The feature set is the
+ * SHIPPED one (`bench,migrate` — the same set release.yml compiles for the
+ * Linux binaries): the bundled sidecar's `--import` lives behind the kernel's
+ * `migrate` feature, and a default-feature build would silently ignore the
+ * app's import argv and fall through to the server boot. Staged without the
+ * feature set is staged wrong; the pin in `tests/sidecar-bundle.test.ts`
+ * carries this argv's shape.
+ */
+export function stageBuildArgs(triple) {
+	return [
+		'build',
+		'--release',
+		'--locked',
+		'--features',
+		'bench,migrate',
+		'--bin',
+		'brain-server',
+		'--target',
+		triple
+	];
+}
+
 export function machoArchs(path) {
 	const buf = readFileSync(path);
 	if (buf.length < 8) return [];
@@ -601,12 +624,11 @@ function stage() {
 
 	const started = Date.now();
 	for (const target of TARGETS) {
-		console.log(`[stage] cargo build --release --locked --bin brain-server --target ${target.triple}`);
-		const build = spawnSync(
-			'cargo',
-			['build', '--release', '--locked', '--bin', 'brain-server', '--target', target.triple],
-			{ cwd: REPO_ROOT, stdio: 'inherit' }
-		);
+		console.log(`[stage] cargo ${stageBuildArgs(target.triple).join(' ')}`);
+		const build = spawnSync('cargo', stageBuildArgs(target.triple), {
+			cwd: REPO_ROOT,
+			stdio: 'inherit'
+		});
 		if (build.status !== 0) {
 			console.error(`[stage] cargo build failed for ${target.triple}`);
 			process.exit(1);
