@@ -49,6 +49,12 @@ range carried.
 
 **Bug fixes**
 
+- **The import card reads the tool's own report.** The first live drive of
+  the import through the real app caught the Settings card reading field
+  names the import tool never emits: the act button's label rendered
+  "undefined" instead of the count, and the report's numbers stayed
+  invisible. The card now reads the tool's report exactly as the tool
+  writes it (bc15ea35).
 - Release pages no longer publish empty category blocks. A section
   category with no bullets — and its twin, a "none" disclosure written
   as prose, which the page extractor cannot publish because only bullets
