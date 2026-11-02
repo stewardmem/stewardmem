@@ -1698,7 +1698,6 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rusqlite::params;
 
     // ── merge pins (the workspace import) ────────────────────────────────
     //

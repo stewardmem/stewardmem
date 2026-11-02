@@ -122,6 +122,14 @@
 > `tests/release_notes_gate.rs` (committed state this round did not write —
 > reformatted, named). The mas-surface test caught the section crashing on
 > a null candidates answer — the null is now the honest empty list. One
+> and a SIXTH the fix round caught: CI's badge gate builds
+> `--features bench,migrate` under `RUSTFLAGS="-D warnings"` — a lane NO
+> local gate compiled (the dry-run's clippy/test lanes are default-featured;
+> its test-bench lane carries no migrate) — so one unused test-import
+> (`rusqlite::params` in migrate_merge's tests) was a CI-only compile red
+> that killed the derivation silently at the pipe. Fixed (the import
+> dropped; the migrate suite still 14 green) and the dry-run gained the
+> `migrate-warnings` lane so the class dies locally from now on. One
 > unexplained transient: the dry-run's `tauri-test` lane saw
 > `detect_pins::the_report_over_an_empty_home_is_honest_absence` red once;
 > it does not reproduce (green in isolation + full suite green twice after)
