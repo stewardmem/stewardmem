@@ -1,5 +1,122 @@
 # Agent Execution Log — StewardMem
 
+> **R149 "Shipping the import" (2026-11-02/03): the wire drive drove the
+> import through the REAL app against scratch stores and caught three
+> defects the mocked pins could not see; v1.29.41 is CUT with CI green
+> and the core set published — the update chain and the Tools DMG wait on
+> the operator's notary credential, and the operator's first real import
+> is ASKED and OWED (silence = untouched).** The full receipts:
+> `~/round-scripts/wi-import-v1.29.41/WIRE-DRIVE-RECEIPT.md`.
+>
+> **The vehicle, measured then chosen (step 0).** The e2e harness is
+> ruled out BY DESIGN (its PWA page has no `__TAURI_INTERNALS__`; the
+> section's own gates render it inert). The vehicle: the built
+> (`--no-bundle`) app under a SCRATCH `HOME`, driven by computer-use over
+> the accessibility tree, machine receipts by sqlite3. The kernel gate's
+> honest path through: the app's OWN posture-C — the gate adopts a chosen
+> loopback kernel BEFORE the local probe, so a SCRATCH 1.29.41 kernel on
+> 127.0.0.1:8799 opened the gate on a real version-matched answer, and
+> the drive app never probed the operator's 8765 at all after the marker
+> was written.
+>
+> **The consent loop, every act reconciled** (scratch source = a
+> byte-identical copy of R148's `source-copy.db`; scratch target = a
+> fresh migration-built store at the app-resolved path, served live by
+> the scratch kernel — the shipped flow's exact shape): the computed
+> disclosure ("2 of these files are tiny empty artifacts; 1 carry real
+> data"), the picker by name + size, the report reconciled against
+> independent SQL (8,745 total / 8,609 to land / 21,103 links / 136
+> tombstoned / batch `wi-c583d8d736e1ba50`), the act's label carrying the
+> report's own count, the landing exact (8,609 + 21,103 + 270/270,
+> governance 8,609 ok / 0 tampered, the source byte-identical through the
+> real 197 MB merge), the reversal exact (all 8,609 tombstones stamped
+> `import-revert:<batch>`, audit rows 2), and the second undo refusing by
+> name — structurally (the button gone) and mechanically ("no rows carry
+> the stamp … nothing to revert").
+>
+> **THE THREE CATCHES** — each invisible to the mocked pins, each fixed
+> red-first on this round's tree:
+>
+> 1. **The bundled sidecar had no `--import`.** The stage build compiled
+>    default features; the import mode lives behind `migrate` — a
+>    default sidecar ignores the app's import argv and falls through to
+>    the SERVER BOOT (the stale-binary near-miss shape, one release from
+>    the operator's store). R148's record said "the shipped sidecar
+>    already builds with `--features bench,migrate`" — true of
+>    release.yml's LINUX sidecar only; the app bundle's stage did not.
+>    Fixed: `sidecar.mjs stageBuildArgs` carries the feature set BY NAME,
+>    pinned in sidecar-bundle.test.ts; the lane's own stage log now
+>    shows the flag.
+> 2. **The card read a JSON shape the tool never emits** (camelCase
+>    reads against the tool's snake_case JSON): "Import undefined
+>    memories from source-copy.db" — caught on the drive's first live
+>    run; the vitest fixtures had modeled a fiction. Fixed (bc15ea35):
+>    the component reads the tool's own field names; the fixtures carry
+>    the measured shape.
+> 3. **The act's audit row silently never landed through the app.** The
+>    shipped flow boots its store FIRST (the chain keyed `hmac256`, the
+>    boot's 0600 `audit-chain.key` beside the store), and the import
+>    process starts keyless — the Hmac arm refuses, the audit's
+>    best-effort law swallows it: rows landed, ZERO audit rows. R148's
+>    drill could not see it (its target was never kernel-booted). Fixed
+>    (f2ee21e4): the merge loads the chain key from the TARGET's side
+>    (the boot's ladder minus the generation arm) before the commit's
+>    and the revert's audit writes; the pin
+>    `test_merge_commit_lands_its_audit_row_when_the_store_is_kernel_booted`
+>    reproduces the shape red-first; migrate suite 14 → 15; the census
+>    +1; the badge 3654 → 3655 (derived through the temp-tag trick).
+>
+> **The boundary pins** (§the prompt's "a pin to the e2e lane, not a new
+> register row"): `shell/e2e/import-inert.spec.ts` (the PWA renders the
+> honest inert disclosure and NO affordance) and the mas-surface pin
+> (the store edition renders inert; all four import commands ride
+> `cfg(not(mas))` in the registration) — both drilled RED-first against
+> a pretend-live mutant and restored from the round's own copy. The
+> register gains NO new row: the pins ride the workspace-import row's
+> law.
+>
+> **The cut, three attempts, every red mechanical until the credential:**
+> (1) the advisory database gained RUSTSEC-2026-0433 (pulldown-cmark
+> 0.13.5, quadratic wikilink parsing, severity 7.5) between
+> `c61b698f`'s green audit and the cut — the cargo-audit gate refused
+> FAIL-CLOSED; the lock moved to 0.13.6 (the chunker never enables
+> wikilinks — unreachable here; the gate's green is the release's
+> green) and the release section gained the Security fixes bullet.
+> (2) The staging step died on lipo's errno 17 — the stale staged
+> universal from the drive's manual stage; `stageBuildArgs`'s sibling
+> fix: stage removes its own previous universal before lipo, proven
+> live. (3) The lane's notary submission refused "No Keychain password
+> item found for profile: stewardmem" — the KNOWN vanished-profile
+> failure; opening Keychain Access restored it once before but not this
+> time, and the item is verifiably absent from the keychain dump. The
+> re-store is THE OPERATOR'S ACT by the round scripts' own declaration
+> (`xcrun notarytool store-credentials stewardmem`; the ASC key route
+> needs the issuer ID this machine never stored). **STATE: the tag
+> (97d1c947) + CI matrix GREEN (23 jobs) + the release workflow GREEN +
+> the release PUBLISHED with the trimmed core set (Linux tarball,
+> SHA256SUMS, PLATFORMS.txt, the SBOM); the chain (latest.json + the app
+> tarball + the DMGs) and the Tools DMG wait on the credential — the
+> updater's endpoint is dead until then.** The lane is idempotent; the
+> re-run after the credential is the lane's own re-entry (the recipe
+> lives in `~/round-scripts/wr3-witness-v1.29.39/complete-the-chain.sh`).
+>
+> **The closing dry-run verdict**: 34 PASS; lipstyk-gate green over the
+> RELEASE RANGE (`v1.29.40` base — the single-commit HEAD~1 diff sat
+> outside the scanned paths and the lane refused a vacuous pass, its own
+> law); migrate-warnings green once the dry-run script's own quoting bug
+> was fixed (`RUSTFLAGS=-D warnings` needs the `env` prefix in the lane
+> function — the check was always green, the lane never ran it);
+> bridge-swift-test red = the KNOWN OWED PCC refusal (the operator's
+> FM-probe note — the machine's Apple-Intelligence model state, not
+> this round's fix).
+>
+> **The operator's act, ASKED and OWED:** their first real import — the
+> live store into their own kernel — was offered and met with silence;
+> under the round's law silence leaves it OWED, untouched. The live
+> store was never written by this round: every drill ran against
+> scratch; the operator's kernel answered 8765 throughout, touched by
+> nothing but read-only health probes.
+
 > **R148 "The workspace import" (2026-11-02): the D3 card's sentence is
 > TRUE — an existing OpenClaw brain's memories come into the kernel through
 > an explicit, named, reversible act, measured end to end against a copy
