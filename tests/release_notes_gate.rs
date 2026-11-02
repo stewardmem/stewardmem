@@ -221,6 +221,38 @@ fn the_gate_refuses_an_empty_notes_block_and_audit_ids() {
         stderr.contains("audit/finding IDs"),
         "the refusal must name the ID rule: {stderr}"
     );
+
+    // Defect 3 — a category heading that ends with no bullet. Two live
+    // shapes: the truly empty heading, and a None disclosure written as
+    // prose ("None."), which the extractor cannot publish because only
+    // bullets travel — both leave a dangling heading on the page. The
+    // plant below carries BOTH in one section, and the gate must refuse
+    // naming the blank-block rule rather than publishing either.
+    let empty_categories = format!(
+        "### Release notes\n\n{anchor}\n\n- a real bullet so the block is alive.\n\n**Bug fixes**\n\nNone.\n\n**Security fixes**\n\n"
+    );
+    assert_ne!(empty_categories, block, "could not plant the empty categories");
+    let dir = scratch(
+        "emptycat",
+        &format!(
+            "# Changelog\n\n## [{version}] — test\n\nIntro prose line.\n\n{empty_categories}\n"
+        ),
+    );
+    let out = run_gate(&dir, &version);
+    assert!(
+        !out.status.success(),
+        "a category heading with no bullets must be refused — prose 'None.' \
+         and a bare heading both publish a blank block"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("publishes a blank block"),
+        "the refusal must name the blank-block rule: {stderr}"
+    );
+    assert!(
+        stderr.contains("**Bug fixes**") && stderr.contains("**Security fixes**"),
+        "the refusal must name BOTH empty categories: {stderr}"
+    );
 }
 
 /// The gate is only a real gate if BOTH callers still call it. The workflow

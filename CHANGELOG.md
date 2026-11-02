@@ -13142,6 +13142,11 @@ only.
 
 ## [1.28.37.1] — 2026-08-26 — the debt burn-down ledger
 
+The repo-law half of the dup-guard line: a per-release debt ledger that
+must burn down or refuse the build. Shipped as a .1 patch so the gate lands
+without colliding with the in-flight 1.28.38 line work — no binary change;
+the binaries build from v1.28.37's source plus this gate.
+
 ### Release notes
 
 **Improvements**
@@ -13154,11 +13159,11 @@ only.
 
 **Bug fixes**
 
-None.
+- None.
 
 **Security fixes**
 
-None.
+- None.
 
 ### Engineering record
 

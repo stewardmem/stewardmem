@@ -167,6 +167,27 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
   fi
 fi
 
+# 6. A category heading that ends with no bullet publishes a blank block —
+#    the bold-heading twin of the h3 defect. Two shapes live in the wild:
+#    the truly empty heading, and a None disclosure written as prose
+#    ("None.") which the extractor cannot publish because only bullets
+#    travel. Both leave a dangling heading on the page; both refuse here.
+#    The honest shapes are bullets ("real bullets" or "- None.").
+emptycat=$(awk '
+  /^\*\*(Improvements|New|Changed|Bug fixes|Security fixes)\*\*/ {
+    if (pending != "") print pending
+    pending = $0
+    next
+  }
+  NF { pending = "" }
+  END { if (pending != "") print pending }
+' /tmp/release-notes-bullets.$$)
+if [ -n "$emptycat" ]; then
+  printf '%s\n' "$emptycat" | sed 's/^/::error::  /' >&2
+  rm -f /tmp/release-notes-intro.$$ /tmp/release-notes-bullets.$$
+  fail "CHANGELOG.md '### Release notes' for $VERSION carries a category heading with no bullets — it publishes a blank block on the page. Write the bullets, or put the disclosure in bullet form ('- None.'); prose under a heading does not travel."
+fi
+
 bullets=$(grep -c '^- ' /tmp/release-notes-bullets.$$ || true)
 if [ "$bullets" -lt 1 ]; then
   rm -f /tmp/release-notes-intro.$$ /tmp/release-notes-bullets.$$
