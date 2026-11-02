@@ -13,6 +13,70 @@ measured. Those records are kept as they were written (this file is
 append-only), and their heading says `Unreleased` because that is what they
 were when the round landed — not because the work is still unreleased.
 
+## [1.29.41] — 2026-11-02 — the workspace import ships: bring your OpenClaw library home from Settings
+
+The import the installer's detection has been reporting all along is now
+an affordance: Settings lists the workspace's stores by name and size,
+reads the one you choose first, and lands it with a single act whose
+label carries the report's own numbers. The whole run is offline — the
+app drives the bundled kernel binary's dedicated import mode, the source
+is never written, and the reversal is one click away until its receipt
+is consumed. This release also repairs the release pages themselves: no
+more blank category blocks, and every page now names the work its own
+range carried.
+
+### Release notes
+
+**New**
+
+- **Import your OpenClaw workspace from Settings.** The General section's
+  import card lists the workspace's stores by name and size, reads the
+  chosen store first — a report of exactly what would land (counts,
+  skips, the batch id), with nothing written — and lands it only when
+  you press the act whose label names the report's own count and the
+  store you chose. The source store is never written; undo stays one
+  click away from the outcome until its receipt is consumed, and a
+  second undo is refused by name (41040fdf).
+- **The bundled kernel binary gains a dedicated offline import mode.**
+  The same engine the Settings card drives: report first, a batch id
+  bound to the plan it names (the commit must repeat it; a stale one is
+  refused), a read-only source verified byte-identical after a real
+  merge, and a revert that tombstones exactly its own rows (41040fdf).
+- **The import is audited.** Every landing and every reversal writes one
+  audit row of a dedicated import kind, and every landed row's
+  governance hash is recomputed at write time — imported history
+  verifies like native history (41040fdf).
+
+**Bug fixes**
+
+- Release pages no longer publish empty category blocks. A section
+  category with no bullets — and its twin, a "none" disclosure written
+  as prose, which the page extractor cannot publish because only bullets
+  travel — used to leave a literal blank heading on the page; both are
+  refused at the gate now, and the affected page is repaired (492b14ac).
+- Release pages now name what shipped. Seven published bodies dropped
+  rounds that landed inside their own ranges; every affected page is
+  republished, and the notes gate now cross-checks the released section
+  against the tag range in both directions — a user-facing change with
+  no note, and a note citing a commit the release does not carry, are
+  both refused (83c757c2, 63de63c9).
+- The published notes end in the commit that landed them again, across
+  seven repaired releases, and no longer carry internal round labels
+  (0fb539ef).
+- The 1.28.80 page gains the hardening batch its tag carried but never
+  published: token lifetime and freshness bounds, per-login refresh
+  families, revocation without the negative-cache window, and the
+  remaining auth/read-seam closures (0e88afb9).
+
+### Engineering record
+
+- The CI-only lane that compiles the shipped feature set under `-D
+  warnings` (bench,migrate) went red on a silent pipe death; fixed, and
+  the local dry-run gains the same lane (c61b698f) — CI tooling, no
+  user-facing behavior.
+- The previous release's witness round record (085eba6c) —
+  documentation of work this release's tag range carries.
+
 ## [1.29.40] — 2026-11-01 — the four repairs: refusals a browser can read, titles stored as the truth, and a rotation that tells the truth
 
 Four repairs land in this release: the kernel's refusals now reach the
