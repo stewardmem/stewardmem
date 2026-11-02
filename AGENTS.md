@@ -1,5 +1,51 @@
 # Agent Execution Log — StewardMem
 
+> **R150 "The first real import" (2026-11-03): the pre-flight caught
+> THREE REAL DEFECTS before any act — the import stays OWED, the
+> operator's stores were never written, and the round's deliverable is
+> the measurement.** (1) THE UNSERVED TARGET (§0.2 branch b): the
+> operator's kernel (launchd `com.brain.server`, the symlink
+> `~/.local/bin/brain-server` → `tools/1.29.40/brain-server`) serves
+> `~/.openclaw/workspace/brain.db` BY CONFIG (`BRAIN_DB_PATH` in the
+> plist), while the import card's `resolve_target` resolves
+> `<app_data_dir>/kernel/brain.db` — a file that does NOT exist on the
+> machine; the card would fail closed with `import_target_missing`, and
+> code-verified it matches ONLY app posture (the shell's own service
+> posture serves `<app_data_dir>/service/brain.db` — the resolver joins
+> `kernel`, the service root is `service`). The target must follow the
+> kernel's SERVED store, and the fix design must first answer what the
+> card MEANS when the target sits inside the source fence. (2) THE
+> UPDATER NEVER OFFERS: the shell's version axis pinned 1.0.0 since the
+> ASC bump (31b785b4), the manifest writer defaults `version` to that
+> conf line, and the plugin's comparator (`release.version >
+> current_version`) can never fire for a 1.0.0 app — the chain answers
+> and the app renders "up to date". (3) THE GATE REFUSES OLDER APPS:
+> `decide()` arm 4 demands the carried kernel ∈ `kernel_versions`, the
+> signing lane never passes `--kernel-versions`, so every manifest
+> vouches for exactly the offered kernel; the installed app carries
+> provenance x_api_version 1.29.39 (the prompt expected 1.29.40.x) ∉
+> `["1.29.41"]` → refused `unknown_local_kernel`. No app older than the
+> current release can update through the live chain; the module's own
+> doc says the manifest must vouch for BOTH carried and offered.
+> Measured green: the shipped state (main `0ace5d3`, 9 assets, CI green,
+> the chain LIVE serving 1.29.41 — the releases live on
+> `stewardmem/stewardmem`), the kernel answering 1.29.40 on 8765, 566
+> workspace .db files (it moves), the attach-newer law healthy (1.29.39
+> expected < 1.29.40 observed → adopted). The ASK went out in full (the
+> three defects, the round's honest shapes, the kernel-first Tools
+> update as the one machine act still available) and met SILENCE —
+> §0.6's law held: import OWED, nothing touched, kernel still 1.29.40,
+> app still 1.29.39-carrying. The floor is taken and unused
+> (`target-floor.db`, a read-only `.backup` of the SERVED store,
+> sha256 0176695916…8347685, in `~/round-scripts/wi-real-1.29.41/`
+> beside PRE-FLIGHT-RECEIPT.md). The register is untouched: a diagnosis
+> is not a guard; no tree change happened, no release is owed. THE FIX
+> ROUND IS NEXT: served-store target resolution, the updater's offer
+> law (the version axis moves, or the plugin's `version_comparator`
+> carries the kernel axis the design already names), `kernel_versions`
+> vouching for the carried kernels — one cut, v1.29.42, all through the
+> gates.
+
 > **R149 "Shipping the import" (2026-11-02/03): the wire drive drove the
 > import through the REAL app against scratch stores and caught three
 > defects the mocked pins could not see; v1.29.41 is SHIPPED END TO END —
