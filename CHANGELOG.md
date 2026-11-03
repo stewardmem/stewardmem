@@ -13,6 +13,52 @@ measured. Those records are kept as they were written (this file is
 append-only), and their heading says `Unreleased` because that is what they
 were when the round landed — not because the work is still unreleased.
 
+## [1.29.42] — 2026-11-03 — the update path works again: old apps update, the import card lands in the store the kernel actually serves
+
+This release repairs the two paths R150's pre-flight measured broken on a
+real machine. The updater never offered an update to any installed app:
+the transport compared a shell version line that stopped moving at the
+App Store bump, so every release announced "already up to date" no
+matter what it carried — and even when offered by hand, the release
+vouched only for its own kernel, refusing every app that carried an
+older one. The import card resolved the app posture's store while the
+kernel it attaches to serves wherever its operator pointed it — on the
+machine where this was measured, the card named a file that did not
+exist while the kernel served the workspace store. Both are fixed at the
+root, with the decisions named: the update is the gate's verdict about
+kernel versions, and the import target is the store the app can vouch
+for — never a guess about a kernel it did not start.
+
+### Release notes
+
+**Bug fixes**
+
+- **Updates are offered again.** The updater's own gate now decides from
+  the kernel version — the axis that means anything — instead of leaving
+  the decision to a transport comparison of the shell's frozen version
+  line: an offered kernel newer than the one the app carries is allowed,
+  the same kernel is "you are up to date", an older one is refused
+  naming both versions (61c51362).
+- **Old apps can update.** Each release now vouches for the kernels the
+  installed base still carries, not just its own: the release chain
+  computes the migration table from the recent releases' manifests, and
+  a manifest that vouched only for itself — the shape that refused every
+  older app on sight — is no longer produced (61c51362).
+- **The Settings import card lands in the store the kernel actually
+  serves.** The target follows the posture the app can vouch for: its
+  own spawned kernel's store, or its own installed service's store. A
+  kernel the app did not start is never vouched — the card names that
+  refusal instead of guessing at a foreign store — and choosing the
+  kernel's own store from the workspace refuses by name rather than
+  pretending to import a store into itself (61c51362).
+- **The local install script no longer overwrites a versioned binary in
+  place.** `scripts/install-service.sh` resolved its destination's shape
+  before writing: a symlink into the Tools layout gets a properly
+  versioned install and an atomic re-link, a plain file gets an atomic
+  rename, and any other symlink is refused naming link and target — the
+  write-through that overwrote the previous version's binary under its
+  own directory name is structurally impossible (e4c337e1).
+
 ## [1.29.41] — 2026-11-02 — the workspace import ships: bring your OpenClaw library home from Settings
 
 The import the installer's detection has been reporting all along is now
