@@ -3028,3 +3028,26 @@ brain status
 History: per-release detail lives in `CHANGELOG.md` §[version] and
 `docs/AGENTS_HISTORY.md` (load on demand). Nothing older than the note above
 is kept here.
+>
+> **THE v1.29.42 CUT RESOLVES — THE CHAIN IS LIVE (the operator's named
+> yes carried the round through the gates):** three force-moves, each
+> catch named — the notes gate's completeness arm flagged the operator's
+> MAS commit (fixed via the Engineering record), then lane run #1
+> stalled on R149 §5's "silent no-op" and it was ROOT-CAUSED at last:
+> the updater script's entry guard compared import.meta.url against the
+> unrealpathed argv[1], so any invocation through a symlinked directory
+> (macOS /tmp → /private/tmp — every lane worktree) silently did
+> nothing, exit 0 — fixed (765e9951: realpathSync + pathToFileURL,
+> a symlinked-path pin driving the REAL CLI, the lane's
+> silent-exit-is-a-refusal guards on both children), then CI caught the
+> fix commit itself unnamed in the released section (ea2301b5, and the
+> local lesson: gate with the tag MOVED FIRST — the arm skips where
+> tags are absent). CI + release green on ea2301b5; the lane published
+> THE CHAIN and the live manifest serves the migration table —
+> kernel_versions = [1.29.42, 1.29.41, 1.29.40, 1.29.39, 1.29.38,
+> 1.29.37] — verified from the internet: the first release through
+> which an old app can actually update. OWED: the stapled Tools DMG
+> (lane run #2 died on the Tools leg when the /tmp worktree was wiped
+> mid-run — this machine cleans /tmp aggressively; the re-run worktree
+> goes in the home dir, the exact sequence is in the next round's
+> prompt §0.2).
