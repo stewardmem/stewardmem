@@ -45,6 +45,46 @@
 > carries the kernel axis the design already names), `kernel_versions`
 > vouching for the carried kernels — one cut, v1.29.42, all through the
 > gates.
+>
+> **THE CONTINUATION (same day): the operator updated the machine
+> themselves** — `./install-service.sh` (twice) and the official 1.29.41
+> app — and the run MEASURED a fourth defect, in the installer: `cp -f`
+> wrote THROUGH the Tools pkg's `~/.local/bin/brain-server` symlink and
+> overwrote `tools/1.29.40/brain-server` in place with a local 1.29.41
+> build (the directory name stopped naming its contents; the true 1.29.40
+> bytes are gone from the machine; the pkg's `brain-server-1.29.40`
+> alias now points at the liar — smashed content sha256 6123f97a…,
+> 39,691,248 bytes; the restore path is the official v1.29.40 Tools DMG
+> on the release page, reachable, sha-verifiable). THE INSTALLER IS
+> FIXED (e4c337e1, red-first): the destination's SHAPE is resolved —
+> real file → temp-copy + atomic rename; Tools-layout symlink → the
+> pkg's OWN flow (the binary lands in `tools/<BUILD_VERSION>/` measured
+> fail-closed from the built binary's `--version`, the link re-pointed
+> atomically, the version aliases untouched); any other symlink →
+> REFUSED naming link and target. Pinned in
+> `shell/tests/install-service-pins.test.ts` (3 red on the old script,
+> green on the new), exercised in a scratch sandbox (all three shapes +
+> the idempotent re-run; the old version's bytes untouched), env-truth's
+> evidence re-lined, shellcheck clean, env-truth + selfcheck green.
+> Post-update state: the kernel answers **1.29.41** on 8765 (new PID;
+> the app's provenance matches — the gate is version-equal), the app in
+> /Applications is the OFFICIAL lane bundle (provenance built
+> 2026-11-02T17:31:22Z). The dry-run verdict (37 lanes): 35 PASS, 2
+> real fails — test-default's `draft_approve_still_approves_a_real_draft`
+> is a parallel-test env race (the process-global AUTH_TOKEN_FILE
+> mutation; it passes solo, 1 passed / 2583 filtered), NOT a baseline
+> red; migrate-warnings failed INSTANTLY on the gate script's own
+> quoting (`env RUSTFLAGS=-D warnings` — env took `warnings` as the
+> program name; the §6 "fixed 2026-11-03" note did not survive into the
+> file) — fixed in `~/round-scripts/ci-dryrun.sh` together with the
+> tally overcount (its `grep -c FAIL` matched its own tail lines: it
+> printed FAIL: 3 for 2 real fails), and the lane re-ran GREEN solo
+> (28.34s). The shell-test lane's PASS raced the pin test's red window
+> (vitest collected before the file landed); the final pin state is
+> green and committed. The import stays OWED; the smash repair waits on
+> the operator's named yes (re-home the local 1.29.41 build into
+> `tools/1.29.41/` + flip, restore `tools/1.29.40/` from the verified
+> DMG).
 
 > **R149 "Shipping the import" (2026-11-02/03): the wire drive drove the
 > import through the REAL app against scratch stores and caught three
