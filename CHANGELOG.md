@@ -64,6 +64,12 @@ for — never a guess about a kernel it did not start.
 - The MAS fork lane's first real App Store upload (3b855c53) — the
   parallel fork's record ships through the App Store submission, not
   this release's page; its evidence lives in its own round.
+- The release lane's own CLI stalled this cut twice on a silent no-op:
+  the updater script's entry guard compared the entry URL against the
+  unresolved `argv[1]` path, so invoking it through a symlinked
+  directory — every lane worktree lives under macOS's `/tmp` symlink —
+  silently did nothing (765e9951). Release tooling; the app surface
+  never carried it, and the lane now refuses a silent child by name.
 
 ## [1.29.41] — 2026-11-02 — the workspace import ships: bring your OpenClaw library home from Settings
 
