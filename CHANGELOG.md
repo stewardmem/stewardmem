@@ -59,6 +59,12 @@ for — never a guess about a kernel it did not start.
   write-through that overwrote the previous version's binary under its
   own directory name is structurally impossible (e4c337e1).
 
+### Engineering record
+
+- The MAS fork lane's first real App Store upload (3b855c53) — the
+  parallel fork's record ships through the App Store submission, not
+  this release's page; its evidence lives in its own round.
+
 ## [1.29.41] — 2026-11-02 — the workspace import ships: bring your OpenClaw library home from Settings
 
 The import the installer's detection has been reporting all along is now
