@@ -839,6 +839,20 @@ MANIFEST="$OUT_DIR/latest.json"
 STAGED="$SHELL_DIR/src-tauri/binaries"
 
 echo ">> writing the update manifest for $TAG…"
+# THE MIGRATION TABLE (measured 2026-11-03): the shipped manifests vouched
+# for exactly the offered kernel, and the app gate refuses any app whose
+# carried kernel is not on the manifest's kernel_versions list — so NO app
+# older than the release could ever update (the operator's machine carried
+# 1.29.39 while 1.29.41 shipped and was refused on sight). The table is
+# computed from the recent releases' own manifests, this release's kernel
+# first; a fetch failure REFUSES the publication (a table guessed at is a
+# table that lies).
+echo ">> computing the migration table (the kernels the installed base carries)…"
+KERNEL_VERSIONS="$(node "$SHELL_DIR/scripts/updater.mjs" prior-kernels \
+	--root "$REPO_ROOT" \
+	--staged "$STAGED" \
+	--tag "$TAG")" || die "refusing to publish: the migration table could not be computed"
+echo ">> the release vouches for: $KERNEL_VERSIONS"
 # --targets darwin-aarch64: the arm64-only app answers for ONE platform. A
 # manifest that offered darwin-x86_64 this artifact would hand an Intel
 # updater an app it downloads and CANNOT RUN (measured in dry run #4
@@ -850,6 +864,7 @@ node "$SHELL_DIR/scripts/updater.mjs" write \
 	--bundle "$BUNDLE" \
 	--release-tag "$TAG" \
 	--notes "$NOTES" \
+	--kernel-versions "$KERNEL_VERSIONS" \
 	--targets darwin-aarch64 \
 	--out "$MANIFEST" > "$TMPDIR_SIGN/manifest.log" 2>&1 || {
 	cat "$TMPDIR_SIGN/manifest.log" >&2

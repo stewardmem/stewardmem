@@ -73,21 +73,88 @@ fn validate_source(app: &tauri::AppHandle, source: &str) -> Result<PathBuf, Stri
     Ok(canon_source)
 }
 
-/// The app's own kernel store — the SAME resolution the service core uses
-/// (`<app_data_dir>/kernel/brain.db`). It must exist: the kernel's boot
-/// creates its store; the import never creates one.
+/// The import target, resolved from the posture the app can VOUCH for.
+///
+/// MEASURED (2026-11-03): the shipped resolution hard-coded
+/// `<app_data_dir>/kernel/brain.db` — the app posture's store — while the
+/// kernel the app attaches to serves wherever ITS operator pointed it (the
+/// service core resolves `BRAIN_DATA_ROOT` > `BRAIN_DB_PATH`'s parent > the
+/// workspace default). On the operator's own machine the card named a file
+/// that did not exist while the kernel served the workspace store: the
+/// unserved-store defect, caught fail-closed only because the guessed path
+/// happened to be absent. The resolution now follows the posture:
+///
+/// - `app` — the kernel this app spawns serves `<app_data_dir>/kernel/brain.db`;
+/// - `service` — the kernel this app installs serves `<app_data_dir>/service/brain.db`;
+/// - `external` (and any unrecognized marker) — REFUSED: a kernel the app
+///   did not start keeps its store wherever its operator pointed it, and an
+///   app-side guess is the defect itself. The card names the refusal.
+///
+/// The target must EXIST in the vouched postures — the kernel's boot owns
+/// store creation; the import never creates one. A `service` marker whose
+/// install root is absent is ALSO unresolved: the marker names a choice,
+/// the install names a fact.
+pub(crate) fn target_for(posture: &str, app_data_dir: &Path) -> Result<PathBuf, String> {
+    let (root, what) = match posture {
+        "app" => (app_data_dir.join("kernel"), "app"),
+        "service" => {
+            let root = app_data_dir.join("service");
+            if !root.is_dir() {
+                return Err(
+                    "import_target_unresolved: the service posture is chosen but this app has \
+                     not installed its service — the kernel on the port was not started by this \
+                     app, so the app cannot vouch for which store an import would land in"
+                        .to_string(),
+                );
+            }
+            (root, "service")
+        }
+        _ => {
+            return Err(
+                "import_target_unresolved: the attached kernel was not started by this app — \
+                 the app cannot vouch for which store an import would land in"
+                    .to_string(),
+            );
+        }
+    };
+    let db = root.join("brain.db");
+    if !db.is_file() {
+        return Err(format!(
+            "import_target_missing: the {what} posture's kernel has not booted its store \
+             ({}) — the kernel's boot owns store creation; run the kernel first",
+            db.display()
+        ));
+    }
+    Ok(db)
+}
+
 fn resolve_target(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     use tauri::Manager;
     let dir = app
         .path()
         .app_data_dir()
-        .map_err(|error| format!("app_data_dir: {error}"))?
-        .join("kernel");
-    let db = dir.join("brain.db");
-    if !db.is_file() {
-        return Err("import_target_missing".to_string());
+        .map_err(|error| format!("app_data_dir: {error}"))?;
+    let posture = crate::service::posture_load(app).posture;
+    target_for(&posture, &dir)
+}
+
+/// The degenerate deployment refuses BY NAME: the fence directory may
+/// contain the kernel's own store (the operator's machine serves
+/// `~/.openclaw/workspace/brain.db` itself), and importing a store into
+/// itself lands nothing while looking like an act. Both paths are compared
+/// canonicalized — the source already is; the target exists by law.
+pub(crate) fn ensure_distinct(source: &Path, target: &Path) -> Result<(), String> {
+    let target_canon = target
+        .canonicalize()
+        .unwrap_or_else(|_| target.to_path_buf());
+    if source == target_canon {
+        return Err(
+            "import_source_is_target: the chosen store IS the kernel's own — importing it into \
+             itself lands nothing; pick one of the workspace's other stores"
+                .to_string(),
+        );
     }
-    Ok(db)
+    Ok(())
 }
 
 fn resolve_sidecar() -> Result<PathBuf, String> {
@@ -222,6 +289,7 @@ const IMPORT_DEADLINE: Duration = Duration::from_secs(300);
 pub fn report(app: &tauri::AppHandle, source_path: &str) -> Result<ImportOutcome, String> {
     let source = validate_source(app, source_path)?;
     let target = resolve_target(app)?;
+    ensure_distinct(&source, &target)?;
     let sidecar = resolve_sidecar()?;
     let args = import_argv(&sidecar, Some(&source), &target, None, None);
     // argv[0] must not ride as an arg: rebuild without the program name.
@@ -242,6 +310,7 @@ pub fn commit(
     }
     let source = validate_source(app, source_path)?;
     let target = resolve_target(app)?;
+    ensure_distinct(&source, &target)?;
     let sidecar = resolve_sidecar()?;
     let args = import_argv(
         &sidecar,

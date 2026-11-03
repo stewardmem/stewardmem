@@ -350,3 +350,60 @@ fn the_updater_module_reads_exactly_one_environment_variable_and_it_is_the_endpo
         "the endpoint override has one name"
     );
 }
+
+// ── R150 · the direction law ──────────────────────────────────────────────
+
+/// R150 — the gate owns the DIRECTION too, by the same ordering the kernel
+/// gate's preflight uses. Measured 2026-11-03: the shipped manifests vouched
+/// for exactly the offered kernel, the shell's version axis was pinned 1.0.0
+/// by the ASC record match, and the plugin's default comparator could only
+/// ever answer "not newer" — this gate never ran, and no app older than the
+/// current release could update. Now the transport never pre-filters and
+/// THIS gate decides: equal is `Current` (its own verdict, never an offer),
+/// older is refused naming BOTH versions, newer is allowed.
+#[test]
+fn the_gate_owns_the_direction_adopt_newer_refuse_older_equal_is_current() {
+    let manifest = |offered: &str, known: &[&str]| {
+        serde_json::json!({
+            "version": "1.0.0",
+            "kernel_version": offered,
+            "kernel_versions": known,
+        })
+    };
+
+    // A newer offered kernel → allowed.
+    match updater::decide(
+        Some("1.29.41"),
+        &manifest("1.29.42", &["1.29.41", "1.29.42"]),
+    ) {
+        Decision::Allowed { offered_kernel } => {
+            assert_eq!(offered_kernel, "1.29.42", "the offer names the kernel");
+        }
+        other => panic!("a newer offered kernel must be allowed, got {other:?}"),
+    }
+
+    // The same kernel as the app carries → Current, its own verdict.
+    match updater::decide(Some("1.29.42"), &manifest("1.29.42", &["1.29.42"])) {
+        Decision::Current => {}
+        other => panic!("an equal offered kernel must be Current, got {other:?}"),
+    }
+
+    // An older offered kernel → refused, naming both (expected = the kernel
+    // this app carries, observed = the one the release offered — the attach
+    // mismatch card's direction, stated once for both gates).
+    match updater::decide(
+        Some("1.29.42"),
+        &manifest("1.29.40", &["1.29.40", "1.29.42"]),
+    ) {
+        Decision::Refused {
+            kind,
+            expected,
+            observed,
+        } => {
+            assert_eq!(kind, "older_kernel_offered", "the refusal names its law");
+            assert_eq!(expected.as_deref(), Some("1.29.42"));
+            assert_eq!(observed.as_deref(), Some("1.29.40"));
+        }
+        other => panic!("an older offered kernel must be refused, got {other:?}"),
+    }
+}

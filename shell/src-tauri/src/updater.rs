@@ -53,8 +53,15 @@ pub const CHECK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10
 /// What the gate decided about an offered release.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Decision {
-    /// The release may be installed.
+    /// The release may be installed: the offered kernel is NEWER than the
+    /// one this app carries (the attach laws' direction, stated once).
     Allowed { offered_kernel: String },
+    /// Nothing newer: the offered kernel EQUALS the one this app carries.
+    /// Its own verdict — "you are up to date" is a decision the gate made,
+    /// never a transport's silence (measured 2026-11-03: the plugin's
+    /// default comparator could only ever answer silence on the shell's
+    /// pinned 1.0.0 axis, so this gate never ran at all).
+    Current,
     /// The release may not. `kind` names WHICH law refused it; `expected`
     /// and `observed` name the versions involved whenever a version is
     /// involved at all (III-3's law, unchanged).
@@ -79,7 +86,14 @@ pub enum Decision {
 ///    (`unknown_local_kernel`), naming both;
 /// 5. the offered `kernel_version` ∉ `kernel_versions` → refused
 ///    (`unknown_offered_kernel`), naming both;
-/// 6. otherwise → allowed, carrying the offered kernel version.
+/// 6. the offered kernel EQUALS the carried one → `Current` (the attach
+///    laws' direction, by the same `version_order` the preflight uses);
+/// 7. the offered kernel is OLDER than the carried one → refused
+///    (`older_kernel_offered`), naming both — an app never downgrades
+///    through the chain, the same direction law the kernel gate enforces
+///    at attach time;
+/// 8. otherwise (the offered kernel is NEWER) → allowed, carrying the
+///    offered kernel version.
 ///
 /// A refusal names BOTH versions whenever it names one: `expected` is what
 /// the release vouches for, `observed` is what was found.
@@ -148,8 +162,19 @@ pub fn decide(current_kernel: Option<&str>, manifest: &serde_json::Value) -> Dec
         };
     }
 
-    Decision::Allowed {
-        offered_kernel: offered.to_string(),
+    // The direction law, by the same ordering the kernel-gate preflight
+    // uses — one version comparison, stated once, for both attachments and
+    // updates: adopt newer, refuse older, equal is its own verdict.
+    match sidecar::version_order(local, offered) {
+        std::cmp::Ordering::Equal => Decision::Current,
+        std::cmp::Ordering::Less => Decision::Allowed {
+            offered_kernel: offered.to_string(),
+        },
+        std::cmp::Ordering::Greater => Decision::Refused {
+            kind: "older_kernel_offered",
+            expected: Some(local.to_string()),
+            observed: Some(offered.to_string()),
+        },
     }
 }
 
@@ -285,6 +310,16 @@ fn updater_for(app: &tauri::AppHandle) -> Result<tauri_plugin_updater::Updater, 
         .ok_or_else(|| "the app's configuration carries no updater public key".to_string())?;
     let builder = builder.pubkey(pubkey);
     let builder = builder.timeout(CHECK_TIMEOUT);
+    // The transport never pre-filters. The plugin's default comparator
+    // (`manifest.version > app.version`) compares the SHELL version axis —
+    // pinned 1.0.0 since the ASC record match — so it could only ever
+    // answer "not newer" and the gate below never ran (measured 2026-11-03:
+    // the chain answered, the app rendered "up to date"). The version axis
+    // that means anything here is the kernel's (the two-axis law), and THAT
+    // decision is `decide`'s — current, refused, or allowed, before any
+    // byte is fetched. This closure is the handoff: always true, so the
+    // plugin fetches and parses, and the gate owns the verdict.
+    let builder = builder.version_comparator(|_current, _release| true);
     let builder = match endpoint_override() {
         Some(endpoint) => {
             let url = tauri::Url::parse(&endpoint)
@@ -325,6 +360,9 @@ pub async fn check(app: &tauri::AppHandle) -> Result<UpdateDto, String> {
             expected,
             observed,
         } => Ok(dto.refused(kind, expected, observed, None)),
+        // Nothing newer: the gate said so — the honest "up to date", named
+        // by the version comparison, not by a transport's silence.
+        Decision::Current => Ok(dto),
         Decision::Allowed { offered_kernel } => {
             Ok(dto.available(&offered_version, &offered_kernel))
         }
@@ -353,13 +391,14 @@ pub async fn install(app: &tauri::AppHandle) -> Result<UpdateDto, String> {
     };
 
     // The gate runs FIRST: a release the shell cannot vouch for is never
-    // fetched at all.
+    // fetched at all — and nothing newer means nothing to install.
     match decide(current_kernel.as_deref(), &update.raw_json) {
         Decision::Refused {
             kind,
             expected,
             observed,
         } => return Ok(dto.refused(kind, expected, observed, None)),
+        Decision::Current => return Ok(dto),
         Decision::Allowed { .. } => {}
     }
 

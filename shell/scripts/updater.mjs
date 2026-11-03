@@ -136,6 +136,133 @@ export function treeState(root = REPO_ROOT) {
 	};
 }
 
+/**
+ * The migration table: the kernel versions a release vouches for, in one
+ * list — THIS release's kernel first, then the kernels the installed base
+ * still carries (the recent releases'), deduped, order preserved.
+ *
+ * MEASURED (2026-11-03): the shipped manifests vouched for exactly ONE
+ * kernel — the offered one — and the app gate refuses any app whose carried
+ * kernel is not on the list (`unknown_local_kernel`). No app older than the
+ * release could ever update: the operator's own machine carried 1.29.39
+ * while 1.29.41 shipped and was refused on sight. The vouch list is the
+ * release's promise to the whole installed base, not to itself.
+ *
+ * @param {string} current this release's kernel version
+ * @param {readonly unknown[]} priors the prior releases' kernel versions
+ * @returns {string[]}
+ */
+export function combineKernelVersions(current, priors) {
+	const out = [];
+	for (const version of [current, ...priors]) {
+		if (typeof version !== 'string') continue;
+		const trimmed = version.trim();
+		if (trimmed.length === 0) continue;
+		if (!out.includes(trimmed)) out.push(trimmed);
+	}
+	return out;
+}
+
+/**
+ * The prior kernels: walk the given release tags (newest first), fetch each
+ * one's `latest.json`, and collect the kernel versions they served. The
+ * fetch is INJECTED so the walk stays pinnable offline; a tag whose
+ * manifest names no kernel version is skipped with a note (a pre-chain
+ * release has nothing to teach), but a fetch that FAILS is the caller's
+ * refusal — a table guessed at is a table that lies.
+ *
+ * @typedef {Object} PriorWalk
+ * @property {string[]} tags the release tags to walk, newest first
+ * @property {(tag: string) => string} urlFor the manifest URL for one tag
+ * @property {(url: string) => Promise<{ok: boolean, status: number, json: () => Promise<any>}>} [fetchImpl]
+ *   the injected transport (defaults to the global fetch)
+ * @returns {Promise<string[]>}
+ */
+export async function collectPriors({ tags, urlFor, fetchImpl = fetch }) {
+	const priors = [];
+	for (const tag of tags) {
+		const url = urlFor(tag);
+		let response;
+		try {
+			response = await fetchImpl(url);
+		} catch (error) {
+			throw new Error(
+				`the prior release's manifest could not be fetched (${url}): ${error instanceof Error ? error.message : error}`
+			);
+		}
+		if (!response.ok) {
+			throw new Error(`the prior release's manifest answered ${response.status} (${url})`);
+		}
+		let manifest;
+		try {
+			manifest = await response.json();
+		} catch (error) {
+			throw new Error(
+				`the prior release's manifest is not JSON (${url}): ${error instanceof Error ? error.message : error}`
+			);
+		}
+		const kernel = manifest?.kernel_version;
+		if (typeof kernel !== 'string' || kernel.trim().length === 0) {
+			console.error(`[updater] note: ${tag} serves no kernel_version; skipped`);
+			continue;
+		}
+		priors.push(kernel);
+	}
+	return priors;
+}
+
+/**
+ * The tags to walk for the migration table: the releases BEFORE this one,
+ * newest first, bounded by the window (the versions still plausibly live in
+ * the wild). Pure git; a repository with no earlier tags yields nothing.
+ *
+ * @param {string} root the repository root
+ * @param {string} tag the release tag this run publishes
+ * @param {number} window how many prior releases to walk
+ * @returns {string[]}
+ */
+export function priorTags(root, tag, window) {
+	const all = git(root, ['tag', '--sort=-creatordate'])
+		.split('\n')
+		.map((line) => line.trim())
+		.filter((line) => line.length > 0 && line.startsWith('v'));
+	const index = all.indexOf(tag);
+	const rest = index === -1 ? all : all.slice(index + 1);
+	return rest.slice(0, window);
+}
+
+/**
+ * `prior-kernels` — the migration table for the signing lane: the staged
+ * record's kernel first, then the prior releases', comma-joined on stdout
+ * for `--kernel-versions`. A fetch failure EXITS NONZERO (the lane refuses
+ * to publish an update whose migration table could not be computed); a
+ * repository with no earlier tags prints just this release's kernel.
+ */
+export async function runPriorKernels(options) {
+	const root = options.root ?? REPO_ROOT;
+	const staged = options.staged ?? join(root, STAGED_REL);
+	const tag = options.tag;
+	if (tag === undefined) throw new Error('prior-kernels needs --tag');
+	if (options.window !== undefined && !/^\d+$/.test(options.window)) {
+		throw new Error('--window must be a non-negative integer');
+	}
+	const window = options.window === undefined ? 5 : Number(options.window);
+	const record = readProvenance(staged);
+	const current = record?.kernel_version;
+	if (typeof current !== 'string' || current.trim().length === 0) {
+		throw new Error(
+			`the staged record names no kernel_version (${staged}) — the table starts with the kernel this release offers`
+		);
+	}
+	const urlTemplate = options['url-template'] ?? DEFAULT_URL_TEMPLATE;
+	const tags = priorTags(root, tag, window);
+	const priors = await collectPriors({
+		tags,
+		urlFor: (name) => `${urlTemplate.replace('{tag}', name)}/latest.json`
+	});
+	console.log(combineKernelVersions(current, priors).join(','));
+}
+
 /** The shell's own version — the version the updater compares. */
 export function shellVersion(root = REPO_ROOT) {
 	const config = JSON.parse(
@@ -514,18 +641,31 @@ function usage() {
 	console.error('       --release-tag <vX.Y.Z>   the RELEASE tag the URL names (not the app version)');
 	console.error('       [--root <repo>] [--staged <dir>] [--version <v>] [--targets <csv>]');
 	console.error('       [--kernel-versions <csv>] [--url-template <url>] [--out <file>]');
+	console.error('  node shell/scripts/updater.mjs prior-kernels --tag <vX.Y.Z>');
+	console.error('       [--root <repo>] [--staged <dir>] [--window <n>] [--url-template <url>]');
+	console.error('       the migration table for --kernel-versions: this release\'s kernel');
+	console.error('       first, then the prior releases\'; a fetch failure refuses');
 	process.exit(2);
 }
 
-function main() {
+async function main() {
 	const [command, ...rest] = process.argv.slice(2);
-	if (command !== 'write') usage();
+	if (command !== 'write' && command !== 'prior-kernels') usage();
 	let options;
 	try {
 		options = parseArgs(rest);
 	} catch (error) {
-		console.error(`refusing to write the update manifest: ${error instanceof Error ? error.message : error}`);
+		console.error(`refusing: ${error instanceof Error ? error.message : error}`);
 		process.exit(2);
+	}
+	if (command === 'prior-kernels') {
+		try {
+			await runPriorKernels(options);
+		} catch (error) {
+			console.error(`refusing to compute the migration table: ${error instanceof Error ? error.message : error}`);
+			process.exit(3);
+		}
+		return;
 	}
 	write(options);
 }

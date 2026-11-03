@@ -66,6 +66,8 @@ mod detect_pins;
 mod forget_pins;
 #[cfg(all(test, not(feature = "mas")))]
 mod heal_pins;
+#[cfg(all(test, not(feature = "mas")))]
+mod import_pins;
 #[cfg(test)]
 mod recall_pins;
 #[cfg(all(test, not(feature = "mas")))]
