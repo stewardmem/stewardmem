@@ -19,8 +19,12 @@
 
   Deliberately ABSENT (named, not hidden — PLAN_MAS_FORK §6 carries them as
   open questions): keychain-access-groups (the default app group is drilled
-  at Phase 0), the com.apple.developer.private-cloud-compute entitlement
-  (requested in the ASC record, never depended on), and the 27-era
+  at Phase 0), the private-cloud-compute entitlement (requested in the ASC
+  record; NOT GRANTED as of 2026-11-03 — the App ID is registered WITHOUT
+  the FoundationModels capability, so the store edition generates
+  on-device-only and .deep stays nominal; when granted, enabling the
+  capability on the App ID and regenerating the profile flips the tier with
+  zero code changes — the probe-first law), and the 27-era
   hardened-process enhanced-security-version (measured, not assumed, before
   it ships). The provisionprofile is injected by the MAS lane's generated
   overlay — never committed.

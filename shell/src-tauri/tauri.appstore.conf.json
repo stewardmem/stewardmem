@@ -5,8 +5,16 @@
 	"bundle": {
 		"active": true,
 		"icon": ["icons/icon.icns"],
+		"externalBin": [
+			"binaries/brain-server",
+			"binaries/brain-afm"
+		],
+		"resources": [
+			"binaries/SIDECAR_PROVENANCE.json"
+		],
 		"macOS": {
 			"entitlements": "./Entitlements.plist",
+			"minimumSystemVersion": "15.0",
 			"files": {
 				"Resources/PrivacyInfo.xcprivacy": "./privacy/PrivacyInfo.xcprivacy"
 			}

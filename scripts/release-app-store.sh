@@ -42,7 +42,7 @@
 #   preflight (identity, profile, tools) → build (mas feature + overlay +
 #   entitlements, ad-hoc-rejected: the distribution identity signs) → verify
 #   (entitlements ON the binary; sandbox key present; updater ABSENT; privacy
-#   manifest present; the three Mach-Os distribution-signed) → pkg → submit.
+#   manifest present; EVERY nested Mach-O distribution-signed) → pkg → submit.
 #
 set -euo pipefail
 
@@ -51,6 +51,7 @@ cd "$(dirname "$0")/.."
 PROFILE=""
 API_ISSUER=""
 API_KEY=""
+BUILD_NUMBER_OVERRIDE=""
 DRY_RUN=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -63,8 +64,13 @@ while [[ $# -gt 0 ]]; do
     # they are passed as ARGUMENTS, never committed.
     --api-issuer) API_ISSUER="$2"; shift 2 ;;
     --api-key) API_KEY="$2"; shift 2 ;;
+    # Optional pinned CFBundleVersion (e.g. --build-number 2 for the readable
+    # "1.0.0 (2)" pair in ASC). Default stays the date+time stamp: unique per
+    # run without the operator having to count. ASC refuses a duplicate
+    # version+build pair, so an override must never reuse a processed number.
+    --build-number) BUILD_NUMBER_OVERRIDE="$2"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
-    *) echo "usage: $0 --profile <embedded.provisionprofile> [--api-issuer <id> --api-key <keyid>] [--dry-run]" >&2; exit 2 ;;
+    *) echo "usage: $0 --profile <embedded.provisionprofile> [--api-issuer <id> --api-key <keyid>] [--build-number <n>] [--dry-run]" >&2; exit 2 ;;
   esac
 done
 
@@ -133,11 +139,16 @@ trap 'rm -rf "$STAGE"' EXIT
 cp "$PROFILE" "$STAGE/embedded.provisionprofile"
 # The BUILD NUMBER (CFBundleVersion): ASC refuses a re-upload whose
 # version+build pair already exists, so every lane run carries a fresh,
-# monotonically increasing build number (date+time — sortable, unique per
-# run, injected via the generated overlay). The SHORT version
-# (CFBundleShortVersionString) stays the app's own semver; only the build
-# number moves per upload.
-BUILD_NUMBER="$(date +%Y%m%d%H%M)"
+# monotonically increasing build number. ONE computation (the earlier draft
+# computed date+time twice — a minute boundary between them could stamp the
+# overlay and the record file with DIFFERENT numbers). Default: date+time —
+# sortable, unique per run. --build-number pins a readable number (e.g. 2).
+if [[ -n "$BUILD_NUMBER_OVERRIDE" ]]; then
+  BUILD_NUMBER="$BUILD_NUMBER_OVERRIDE"
+  [[ "$BUILD_NUMBER" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]] || fail "--build-number '$BUILD_NUMBER' is not a valid CFBundleVersion (Apple: one to three period-separated integers)."
+else
+  BUILD_NUMBER="$(date +%Y%m%d%H%M)"
+fi
 cat > "$STAGE/tauri.appstore.profile.conf.json" <<JSON
 {
   "bundle": {
@@ -151,14 +162,7 @@ cat > "$STAGE/tauri.appstore.profile.conf.json" <<JSON
 }
 JSON
 echo ">> build number: $BUILD_NUMBER"
-# The BUILD NUMBER (CFBundleVersion): ASC refuses a re-upload whose
-# version+build pair already exists, so every lane run carries a fresh,
-# monotonically increasing build number (date+time — sortable, unique per
-# run). The SHORT version (CFBundleShortVersionString) stays the app's own
-# semver; only the build number moves.
-BUILD_NUMBER="$(date +%Y%m%d%H%M)"
 echo -n "$BUILD_NUMBER" > "$STAGE/build-number.txt"
-echo ">> build number: $BUILD_NUMBER"
 
 echo ">> building the MAS edition (mas feature, appstore overlay)…"
 # `--target` is PINNED, not implied: without it the bundler outputs to
@@ -175,6 +179,17 @@ echo ">> building the MAS edition (mas feature, appstore overlay)…"
 
 APP="shell/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/StewardMem.app"
 [[ -d "$APP" ]] || fail "the MAS bundle did not appear at $APP"
+# The PRODUCT LAW: the store edition IS the app + kernel + bridge. externalBin
+# lives in the appstore OVERLAY (the merge chain is base + appstore + profile
+# overlay — tauri.macos.conf.json is NOT in it), so a config typo would ship a
+# kernel-less app that only dies on the user's machine. Refuse HERE, on the
+# bytes, named.
+for b in brain-server brain-afm; do
+  [[ -x "$APP/Contents/MacOS/$b" ]] \
+    || fail "the sidecar $b is NOT in the bundle — the MAS merge chain lost externalBin; a kernel-less app must not be submitted."
+done
+[[ -f "$APP/Contents/Resources/binaries/SIDECAR_PROVENANCE.json" ]] \
+  || fail "SIDECAR_PROVENANCE.json did not bundle — the kernel gate's sealed provenance would refuse at launch."
 
 # ── THE NESTED-EXECUTABLE LAW (ITMS-90885, 2026-10-31) ─────────────────
 # Tauri signed EVERY Mach-O with the FULL entitlements — including
@@ -187,17 +202,32 @@ APP="shell/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/StewardMem
 # re-sealing the bundle.
 IDENTITY_NAME="${IDENTITY_LINE#*\"}"
 IDENTITY_NAME="${IDENTITY_NAME%\"}"
-for b in brain-server brain-afm; do
+# THE SWEEP IS EXHAUSTIVE, NOT BY NAME: the bundler auto-bundles EVERY cargo
+# bin under src/bin/ (measured on the tauri-cli 2.12.4 source,
+# get_binaries(): it reads src/bin/ itself, independent of externalBin) —
+# brain-shell, brain-server, brain-afm AND stewardmem-detect all land in
+# Contents/MacOS. A by-name loop that misses one ships ITMS-90885 again:
+# sign() applies the FULL entitlements (application-identifier included) to
+# EVERY nested Mach-O. Re-sign each nested executable (everything in
+# Contents/MacOS except the main binary) with the REDUCED entitlements.
+MAIN_BIN="$(plutil -extract CFBundleExecutable raw "$APP/Contents/Info.plist")"
+shopt -s nullglob
+NESTED_BINS=("$APP/Contents/MacOS/"*)
+shopt -u nullglob
+for f in "${NESTED_BINS[@]}"; do
+  b="$(basename "$f")"
+  [[ "$b" == "$MAIN_BIN" ]] && continue
+  [[ -x "$f" ]] || continue
   codesign --force --options runtime --timestamp \
     --entitlements shell/src-tauri/Entitlements-sidecar.plist \
-    --sign "$IDENTITY_NAME" "$APP/Contents/MacOS/$b" \
-    || fail "the sidecar $b could not be re-signed with the reduced entitlements."
+    --sign "$IDENTITY_NAME" "$f" \
+    || fail "the nested executable $b could not be re-signed with the reduced entitlements."
 done
 codesign --force --options runtime --timestamp \
   --entitlements shell/src-tauri/Entitlements.plist \
   --sign "$IDENTITY_NAME" "$APP" \
-  || fail "the bundle could not be re-sealed after the sidecar re-sign."
-echo ">> sidecars re-signed: sandbox + network, NO application-identifier (ITMS-90885)"
+  || fail "the bundle could not be re-sealed after the nested re-sign."
+echo ">> nested executables re-signed: sandbox + network, NO application-identifier (ITMS-90885)"
 
 # ── 5. The verification: the store's shape, ON the bytes ──────────────────
 echo ">> verifying the MAS edition's shape…"
@@ -217,15 +247,20 @@ codesign -dvv "$APP" 2>&1 | grep 'Identifier=com.stewardmem.shell.mas' >/dev/nul
   || fail "the privacy manifest is missing from Contents/Resources — the ASC upload would take ITMS-91053."
 plutil -p "$APP/Contents/Info.plist" | grep -q 'ITSAppUsesNonExemptEncryption' \
   || fail "ITSAppUsesNonExemptEncryption is missing from Info.plist."
-# The nested-executable law, witnessed: NO sidecar may carry an
+# The nested-executable law, witnessed EXHAUSTIVELY: NO Mach-O in
+# Contents/MacOS except the main executable may carry an
 # application-identifier (ITMS-90885 refuses TestFlight for a nested Mach-O
-# with an identity entitlement but no profile of its own).
-for b in brain-server brain-afm; do
-  if codesign -d --entitlements :- "$APP/Contents/MacOS/$b" 2>/dev/null | grep -q 'application-identifier'; then
-    fail "the sidecar $b carries an application-identifier — ITMS-90885 will refuse TestFlight."
+# with an identity entitlement but no profile of its own). The sweep is
+# dynamic — a future src/bin/ addition is covered, not forgotten.
+for f in "${NESTED_BINS[@]}"; do
+  b="$(basename "$f")"
+  [[ "$b" == "$MAIN_BIN" ]] && continue
+  [[ -x "$f" ]] || continue
+  if codesign -d --entitlements - "$f" 2>/dev/null | grep 'application-identifier' >/dev/null; then
+    fail "the nested executable $b carries an application-identifier — ITMS-90885 will refuse TestFlight."
   fi
-  codesign -d --entitlements :- "$APP/Contents/MacOS/$b" 2>/dev/null | grep -q 'app-sandbox' \
-    || fail "the sidecar $b lost its sandbox entitlement in the re-sign."
+  codesign -d --entitlements - "$f" 2>/dev/null | grep 'app-sandbox' >/dev/null \
+    || fail "the nested executable $b lost its sandbox entitlement in the re-sign."
 done
 # The excision, proven on the bytes: the updater's own strings (its source
 # paths and its error prose, measured in the direct binary) must not appear
@@ -254,4 +289,8 @@ iTMSTransporter -m upload -assetFile "$PKG" \
   -apiIssuer "$API_ISSUER" -apiKey "$API_KEY" \
   || fail "the Transporter submission failed — inspect the ASC record; this lane does not retry."
 echo ">> submitted. The ASC record, the 'Data Not Collected' privacy label, and the"
-echo "   FoundationModels cloud entitlement request are OPERATOR acts (§5) — code cannot do them."
+echo "   TestFlight Test Information are OPERATOR acts (§5) — code cannot do them."
+echo "   Test Information says: on-device generation only in this build; a named"
+echo "   model_unavailable refusal is the DESIGNED posture on machines without"
+echo "   Apple Intelligence, not a defect (the PCC entitlement is requested, NOT"
+echo "   granted — PLAN_MAS_FORK §5.6)."
