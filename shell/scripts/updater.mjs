@@ -187,7 +187,8 @@ export async function collectPriors({ tags, urlFor, fetchImpl = fetch }) {
 			response = await fetchImpl(url);
 		} catch (error) {
 			throw new Error(
-				`the prior release's manifest could not be fetched (${url}): ${error instanceof Error ? error.message : error}`
+				`the prior release's manifest could not be fetched (${url}): ${error instanceof Error ? error.message : error}`,
+				{ cause: error }
 			);
 		}
 		if (!response.ok) {
@@ -198,7 +199,8 @@ export async function collectPriors({ tags, urlFor, fetchImpl = fetch }) {
 			manifest = await response.json();
 		} catch (error) {
 			throw new Error(
-				`the prior release's manifest is not JSON (${url}): ${error instanceof Error ? error.message : error}`
+				`the prior release's manifest is not JSON (${url}): ${error instanceof Error ? error.message : error}`,
+				{ cause: error }
 			);
 		}
 		const kernel = manifest?.kernel_version;
