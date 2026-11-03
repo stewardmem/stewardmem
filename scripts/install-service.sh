@@ -16,6 +16,12 @@ BIN_NAME="brain-server"
 SRC_BIN="$REPO/target/release/$BIN_NAME"
 DEST_DIR="$HOME/.local/bin"
 DEST_BIN="$DEST_DIR/$BIN_NAME"
+# The Tools pkg's versioned layout (the selective installer's):
+#   tools/<version>/<bin>, with ~/.local/bin/<bin> linked at the current
+#   one and <bin>-<version> aliases pinned per version. A destination
+#   symlink pointing in here is ADOPTED (the versioned install + flip,
+#   install_bin below); a symlink anywhere else is refused.
+TOOLS_ROOT="$HOME/Library/Application Support/StewardMem/tools"
 # Operator CLIs shipped alongside the server: brain (doctor/bench/ingest),
 # mcp (MCP bridge), bench (latency harness), brain-migrate-rehearse (v0.9.9
 # Qualify — copy-and-verify migration rehearsal). All are tiny static-ish
@@ -77,6 +83,14 @@ for entry in "${OPTIONAL_BINS[@]}"; do
     fi
 done
 
+# 1c. The build's own version, measured ONCE and fail-closed: the
+#     Tools-layout installs below name the versioned directory with it,
+#     and an unparseable `--version` is a refusal, not an empty dir name
+#     (the app gate's NEW_KERNEL law — a fact, never a hope).
+BUILD_VERSION="$("$SRC_BIN" --version 2>/dev/null | awk '{print $2}')"
+[[ "$BUILD_VERSION" =~ ^[0-9]+(\.[0-9]+)+$ ]] \
+	|| die "cannot read the built version from $SRC_BIN --version (got: '${BUILD_VERSION:-nothing}') — refusing to install an unmeasurable binary"
+
 # 2. Install server + operator CLIs to ~/.local/bin
 #    (decoupled from the checkout: survives cargo clean).
 #    On macOS (Sonoma+), newly-written executables get a `com.apple.provenance`
@@ -99,17 +113,15 @@ verify_signature() {
 	minisign -Vm "$src" -p "$BRAIN_RELEASE_PUBKEY" || die "signature verification FAILED for $src"
 	ok "verified $src against $BRAIN_RELEASE_PUBKEY"
 }
-install_bin() {
-	src="$1"; dest="$2"
-	verify_signature "$src"
-	cp -f "$src" "$dest"
-	chmod +x "$dest"
+# The post-landing treatment, shared by both landing shapes below: the
+# xattr strips and the re-adhoc-sign. Same trust basis: the operator is
+# installing brain-server on their own machine.
+seal_binary() {
 	# Strip the local-build provenance xattr (Gatekeeper SIGKILLs otherwise) AND
 	# the downloaded-file quarantine xattr, so an operator who installs a
-	# downloaded release artifact isn't blocked on first exec. Same trust basis:
-	# the operator is installing brain-server on their own machine.
-	xattr -d com.apple.provenance "$dest" 2>/dev/null || true
-	xattr -d com.apple.quarantine "$dest" 2>/dev/null || true
+	# downloaded release artifact isn't blocked on first exec.
+	xattr -d com.apple.provenance "$1" 2>/dev/null || true
+	xattr -d com.apple.quarantine "$1" 2>/dev/null || true
 	# macOS 27 (Tahoe, 26A434): a freshly-written ad-hoc binary can be refused
 	# at exec by taskgated — "Taskgated Invalid Signature", exit 137, empty
 	# stderr, nothing in the kernel log — even though `codesign -vv` validates
@@ -119,7 +131,54 @@ install_bin() {
 	# re-installed. Re-adhoc-sign here so the exec-time verdict is minted at
 	# install time; idempotent for an already-valid binary, same-trust (local
 	# ad-hoc), fail-open like the strips above.
-	codesign -f -s - "$dest" >/dev/null 2>&1 || true
+	codesign -f -s - "$1" >/dev/null 2>&1 || true
+}
+install_bin() {
+	src="$1"; dest="$2"
+	verify_signature "$src"
+	# THE LANDING RULES (measured 2026-11-03): a plain `cp -f` through a
+	# symlink destination writes THROUGH the link — the Tools pkg's
+	# `~/.local/bin/brain-server -> ".../tools/1.29.40/brain-server"` had
+	# its versioned binary overwritten in place by a local build: the
+	# directory's name stopped naming its contents, the previous version's
+	# bytes were gone, and the pkg's <name>-<version> alias pointed at the
+	# liar. The destination's SHAPE is resolved first:
+	#   • a real file — temp-copy + atomic rename (also removes cp's
+	#     truncated-binary window when the destination is being served);
+	#   • a symlink into the Tools layout — the pkg's OWN flow, adopted:
+	#     the binary lands in tools/<BUILD_VERSION>/ and the link is
+	#     re-pointed atomically; the pkg's <name>-<version> aliases are
+	#     untouched and keep naming their own versions;
+	#   • any other symlink — REFUSED, naming link and target: an unknown
+	#     link's target is not ours to overwrite.
+	if [[ -L "$dest" ]]; then
+		target="$(readlink "$dest")"
+		case "$target" in
+			"$TOOLS_ROOT"/*)
+				dir="$TOOLS_ROOT/$BUILD_VERSION"
+				name="$(basename "$dest")"
+				tmp="$dir/.$name.new.$$"
+				mkdir -p "$dir"
+				cp -f "$src" "$tmp"
+				chmod +x "$tmp"
+				seal_binary "$tmp"
+				mv -f "$tmp" "$dir/$name"
+				tmp_link="$dest.relink.$$"
+				ln -s "$dir/$name" "$tmp_link"
+				mv -f "$tmp_link" "$dest"
+				ok "installed $dir/$name (versioned; $dest re-pointed)"
+				;;
+			*)
+				die "refusing to write through the symlink $dest -> $target — only the Tools pkg layout ($TOOLS_ROOT) is adopted; remove the link or point it into $TOOLS_ROOT first"
+				;;
+		esac
+		return
+	fi
+	tmp="$dest.new.$$"
+	cp -f "$src" "$tmp"
+	chmod +x "$tmp"
+	seal_binary "$tmp"
+	mv -f "$tmp" "$dest"
 	ok "installed $dest"
 }
 install_bin "$SRC_BIN" "$DEST_BIN"

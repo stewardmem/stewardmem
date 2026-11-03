@@ -71,8 +71,8 @@ REMOVED_KNOBS=(
 # code-shape regex walks. Documented so operators can find them; consumed by
 # the pinned external process named in the evidence.
 INSTALLER_KNOBS=(
-  "BRAIN_RELEASE_PUBKEY|minisign release-artifact verification gate, read by scripts/install-service.sh:85-95 (fail-closed when set without a signature)"
-  "BRAIN_NO_COMPLIANCE_PACK|skips the compliance-pack install, read by scripts/install-service.sh:47-49"
+  "BRAIN_RELEASE_PUBKEY|minisign release-artifact verification gate, read by scripts/install-service.sh:105-114 (fail-closed when set without a signature)"
+  "BRAIN_NO_COMPLIANCE_PACK|skips the compliance-pack install, read by scripts/install-service.sh:54-57"
   "BRAIN_FORCE|overwrite guard for the Linux appliance installer, read by deploy/install.sh:35"
 )
 
