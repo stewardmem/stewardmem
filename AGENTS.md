@@ -85,6 +85,50 @@
 > the operator's named yes (re-home the local 1.29.41 build into
 > `tools/1.29.41/` + flip, restore `tools/1.29.40/` from the verified
 > DMG).
+>
+> **THE REPAIR + THE FIX ROUND (the operator's named yes, same day):**
+> THE SMASH IS REPAIRED, every receipt green — `tools/1.29.41/brain-server`
+> re-homed from the local build (temp + atomic mv), `~/.local/bin/brain-server`
+> flipped by atomic re-link (answers 1.29.41), `tools/1.29.40/brain-server`
+> restored from the OFFICIAL v1.29.40 Tools DMG (downloaded, sha256-verified
+> against the release's SHA256SUMS, the volume's own baked sums re-verified
+> `da45bc6c…`, answers 1.29.40, the `-1.29.40` alias truthful again); the
+> kernel kept serving 1.29.41 throughout. THE THREE R150 DEFECTS ARE FIXED
+> IN THE TREE (61c51362 + e873f393, gates green): (1) the import target
+> follows the posture the app can VOUCH for — app → `kernel/brain.db`,
+> service → `service/brain.db` (a marker without the install is
+> unresolved: the marker names a choice, the install names a fact), a
+> kernel the app did not start is never vouched (named refusal), and the
+> degenerate source==target deployment refuses `import_source_is_target`,
+> alias-proof by canonical compare; (2) the updater's gate owns the WHOLE
+> decision — the direction law by the preflight's own `version_order`
+> (equal → `Current`, older → refused naming both, newer → allowed), the
+> transport handed an always-true comparator (the plugin's default compared
+> the ASC-pinned 1.0.0 axis and could never offer); (3) `kernel_versions`
+> is the migration table the module's doc always claimed — the signing
+> lane computes it from the recent releases' manifests (`prior-kernels`,
+> this release's kernel first, a fetch failure refusing the publication;
+> measured: v1.29.41 vouched for exactly itself and refused the
+> 1.29.39-carrying app on sight). Pinned: the direction law (updater_pins),
+> the posture laws + the alias-proof refusal (import_pins, new), the
+> table's combine/walk/tags + the lane wiring through a real git repo and
+> a real HTTP fixture (updater-migration.test.ts, new — whose fixture
+> server must be awaited ASYNC: a synchronous spawn parked the event loop
+> the server needed, the self-deadlock the 20 s bound caught). THE CLOSING
+> DRY-RUN ON THE FIXED TREE: 37 lanes, 35 PASS — shell-lint red on the two
+> re-throws lacking `cause` (fixed e873f393, lint green, the round's own
+> gate catching its own round's code) and bridge-swift-test red on
+> AppleFMProbeTests (the CARRIED PCC-refusal lane, the machine's
+> Apple-Intelligence state; nothing in shell-macos touched); the
+> migrate-warnings lane PASSED in-lane this time (the quoting fix held).
+> The v1.29.42 cut is NAMED and READY: `v1.29.42` off the fixed main, the
+> lane's migration table will vouch for 1.29.42 + 1.29.41 + 1.29.40 + the
+> 1.29.39 the installed base still carries — the first release through
+> which an old app can actually update. The cut waits on the operator
+> (publishing is theirs to time) AND on a clean tree: the manifest writer
+> refuses a dirty tree, and the operator's parallel MAS-lane edits
+> (`release-app-store.sh`, `Entitlements.plist`, `tauri.appstore.conf.json`)
+> are uncommitted by design — not the agent's to commit.
 
 > **R149 "Shipping the import" (2026-11-02/03): the wire drive drove the
 > import through the REAL app against scratch stores and caught three
