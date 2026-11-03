@@ -67,9 +67,9 @@
  * and which version it was made for.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -672,6 +672,29 @@ async function main() {
 	write(options);
 }
 
-if (process.argv[1] !== undefined && import.meta.url === `file://${process.argv[1]}`) {
+if (isMain()) {
 	main();
+}
+
+/**
+ * The entry guard, SYMLINK-PROOF. MEASURED (2026-11-03, twice): the old
+ * guard compared `import.meta.url` against a `file://` URL built from
+ * `process.argv[1]` — but node REALPATHS the entry module, so invoking the
+ * script through a symlinked directory (`/tmp/...`, a symlink to
+ * `/private/tmp/...` on macOS) made the comparison false and the CLI
+ * silently did NOTHING, exit 0: the signing lane's migration-table child
+ * and the manifest writer both no-op'd inside a `/tmp` worktree, the
+ * vouch list came back empty, and the three-asset gate refused the
+ * publication (the system worked — nothing partial shipped — but the cut
+ * stalled twice on the same ghost; R149's "unreproducible" silent no-op
+ * was this same guard). The guard now realpaths argv[1] before building
+ * the URL, so the entry fires however the script is reached.
+ */
+function isMain() {
+	if (process.argv[1] === undefined) return false;
+	try {
+		return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+	} catch {
+		return false;
+	}
 }

@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -266,6 +266,66 @@ test('prior_kernels_cli_prints_the_table_and_refuses_a_failed_fetch', async () =
 	}
 });
 
+test('the_cli_fires_through_a_symlinked_path_measured_silent_noop_2026_11_03', async () => {
+	// MEASURED (the signing lane's stalled cut, twice): the entry guard
+	// compared `import.meta.url` against `file://${argv[1]}` — but node
+	// REALPATHS the entry, so invoking through a symlinked directory made
+	// the guard false and the CLI silently did NOTHING, exit 0: the lane's
+	// migration-table child and the manifest writer both no-op'd inside a
+	// /tmp worktree (macOS symlinks /tmp -> /private/tmp), the vouch list
+	// came back empty, and the three-asset gate refused the publication.
+	// The pin drives the REAL CLI through a symlink exactly like the
+	// lane's and demands the table on stdout — the no-op is a failure.
+	const root = fixtureRepo(['v1.29.41', 'v1.29.42']);
+	const staged = join(root, 'staged');
+	mkdirSync(staged, { recursive: true });
+	writeFileSync(
+		join(staged, 'SIDECAR_PROVENANCE.json'),
+		`${JSON.stringify({
+			schema: 1,
+			kernel_version: '1.29.42',
+			x_api_version: '1.29.42',
+			source_dirty: false,
+			built_at: '2026-11-03T00:00:00.000Z',
+			artifacts: []
+		})}\n`
+	);
+	// A server that answers NOTHING useful: the fix must make the CLI run
+	// (reach the fetch), not silently vanish — the empty reply refuses
+	// loudly, which is itself the proof the entry fired.
+	const server = createServer((request, response) => {
+		response.writeHead(500).end('the entry must fire for this pin to get here');
+	});
+	await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+	const port = (server.address() as { port: number }).port;
+	const linkDir = mkdtempSync(join(tmpdir(), 'brain-updater-symlink-'));
+	// The script path must BE the real script, reached THROUGH a symlink —
+	// exactly the lane's shape (an absolute path through /tmp's symlink).
+	symlinkSync(scriptPath, join(linkDir, 'updater-link.mjs'), 'file');
+	let stdout = '';
+	let stderr = '';
+	const linked = spawn('node', [join(linkDir, 'updater-link.mjs'), 'prior-kernels', '--root', root, '--staged', staged, '--tag', 'v1.29.42', '--url-template', `http://127.0.0.1:${port}/releases/download/{{tag}}`]);
+	linked.stdout.on('data', (chunk: Buffer) => {
+		stdout += String(chunk);
+	});
+	linked.stderr.on('data', (chunk: Buffer) => {
+		stderr += String(chunk);
+	});
+	const kill = setTimeout(() => linked.kill('SIGKILL'), SPAWN_BOUND_MS);
+	const status = await new Promise<number | null>((resolve) => {
+		linked.on('close', (code: number | null) => resolve(code));
+	});
+	clearTimeout(kill);
+	server.close();
+	rmSync(linkDir, { recursive: true, force: true });
+	rmSync(root, { recursive: true, force: true });
+	// The entry FIRED: the walk ran, the fixture answered 500, and the CLI
+	// refused loudly (exit 3, the named refusal) — never a silent 0.
+	expect(status).toBe(3);
+	expect(stderr).toMatch(/refusing to compute the migration table/);
+	expect(stdout).toBe('');
+});
+
 // ── the lane's wiring, by source shape ────────────────────────────────────
 
 test('the_signing_lane_computes_the_table_and_passes_it_to_the_writer', () => {
@@ -273,4 +333,9 @@ test('the_signing_lane_computes_the_table_and_passes_it_to_the_writer', () => {
 	expect(lane).toContain('prior-kernels');
 	expect(lane).toContain('--kernel-versions "$KERNEL_VERSIONS"');
 	expect(lane).toMatch(/migration table could not be computed/);
+	// THE SILENT-EXIT-IS-A-REFUSAL LAW (R149 §5's named remedy, recurrence
+	// measured 2026-11-03): an empty table and a writer exit without a
+	// manifest are refusals in the lane, not lines in a log.
+	expect(lane).toMatch(/the migration table came back empty/);
+	expect(lane).toMatch(/wrote no manifest/);
 });

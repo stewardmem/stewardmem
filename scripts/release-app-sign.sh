@@ -851,7 +851,15 @@ echo ">> computing the migration table (the kernels the installed base carries)�
 KERNEL_VERSIONS="$(node "$SHELL_DIR/scripts/updater.mjs" prior-kernels \
 	--root "$REPO_ROOT" \
 	--staged "$STAGED" \
-	--tag "$TAG")" || die "refusing to publish: the migration table could not be computed"
+	--tag "$TAG")" || {
+	 echo ">> the migration-table child failed (exit $?)" >&2
+	 die "refusing to publish: the migration table could not be computed"
+}
+# THE SILENT-EXIT-IS-A-REFUSAL LAW (R149 §5's named remedy; the recurrence
+# was measured 2026-11-03: the table child exited 0 with NO output inside a
+# /tmp worktree — the symlinked-entry guard bug, since fixed — and the cut
+# stalled on the three-asset gate instead of naming the real cause).
+[[ -n "$KERNEL_VERSIONS" ]] || die "the migration table came back empty (exit 0, no output) — a silent child is a refusal; refusing to publish"
 echo ">> the release vouches for: $KERNEL_VERSIONS"
 # --targets darwin-aarch64: the arm64-only app answers for ONE platform. A
 # manifest that offered darwin-x86_64 this artifact would hand an Intel
@@ -870,6 +878,9 @@ node "$SHELL_DIR/scripts/updater.mjs" write \
 	cat "$TMPDIR_SIGN/manifest.log" >&2
 	die "refusing to publish: the manifest writer refused"
 }
+# The same law, on the writer's success path: an exit 0 with no manifest
+# is the silent no-op, and it refuses here by name.
+[[ -s "$MANIFEST" ]] || die "the manifest writer exited 0 but wrote no manifest — a silent write is a refusal; refusing to publish"
 cat "$TMPDIR_SIGN/manifest.log"
 
 # ── 5 · THE THREE-ASSET GATE (D3, D7) ─────────────────────────────────────
