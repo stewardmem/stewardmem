@@ -55,6 +55,66 @@
 > THE ROUND'S GATE CATCHING ITS OWN ROUND'S CODE AGAIN: fixed in place
 > (`_request`), the lane re-run GREEN solo (svelte-check 0 errors).
 > Both the fix and the R151 entry await the operator's commit.
+>
+> **THE ACT (2026-11-04, the operator's NAMED YES at the gate, asked
+> again per §0.6): THE FIRST OFFERED UPDATE IS TAKEN — the app updates,
+> the kernel moves kernel-first, the chain takes over forever.** The
+> install: the release DMG's bundle (sha-verified via the page's
+> SHA256SUMS, provenance `ea2301b5` / kernel 1.29.42 / built
+> 2026-11-03T22:31Z, seal + spctl green), `ditto`-copied into
+> /Applications. NAMED CATCH: `open -a StewardMem` resolved to the
+> WORKTREE'S DEV BUILD (`target/release/bundle/.../brain-shell`) via
+> LaunchServices — killed in seconds, the installed path launched
+> explicitly; `open -a` is the wrong launcher when a dev bundle shares
+> the machine. THE KERNEL-FIRST LAW WITNESSED LIVE, both arms: (1) the
+> app launched while the port still answered 1.29.41 rendered the
+> attach gate's MISMATCH screen BY NAME ("Expected version 1.29.42 /
+> Reported version 1.29.41") — refused, no adoption; the official
+> 1.29.42 kernel then moved kernel-first (Tools DMG sums 10/10 OK,
+> `tools/1.29.42/brain-server` staged + `--version` verified before
+> landing, atomic mv + atomic re-link, `launchctl kickstart -k`, the
+> port answering 1.29.42, the served store unchanged via lsof), and
+> (2) the rendered Mismatch screen's Retry re-probed and ADOPTED —
+> full UI alive, "771 rows · integrity verified". WITNESS (a), the
+> new gate deciding its first real check: Settings → Updates renders
+> "Running version 1.0.0 — bundled kernel 1.29.42." + "**You are up
+> to date.**" — the verdict the old comparator rendered for the WRONG
+> reason (1.0.0 > 1.0.0); this one decided on the kernel axis, Equal →
+> Current, against the LIVE chain. WITNESS (b), THE DIRECTION LAW,
+> BOTH ARMS RENDERED — and a real transport finding named first: the
+> prompt's dry-override recipe assumed any local endpoint, but the
+> updater plugin REFUSES non-HTTPS endpoints in release builds
+> (`validate_endpoints` → `InsecureTransportProtocol`, measured as
+> "The update endpoint could not be reached" through BOTH env delivery
+> paths — direct-binary nohup AND `launchctl setenv` + `open`; the
+> default endpoint answered Current in the same session, isolating the
+> variable). The dry fixtures then rode a throwaway TLS CA
+> (`rustls-native-certs` in the graph — the updater honors the system
+> trust store), self-signed, user-domain-trusted for the witness and
+> REMOVED after (cert deleted, user trust settings empty — the
+> `remove-trusted-cert` admin-domain form hangs rootlessly; named).
+> Arm 1: a manifest vouching [1.29.42, 1.29.41] and OFFERING 1.29.41 →
+> rendered "**Refused: older_kernel_offered: expected 1.29.42, found
+> 1.29.41**" — an app never downgrades. Arm 2: the REAL v1.29.41
+> release manifest (which vouches only for itself — the shape that
+> stranded the 1.29.39-carrying app in R150's measurement) → rendered
+> "**Refused: unknown_local_kernel: expected 1.29.41, found 1.29.42**"
+> — an app on the migration-table release can never be dragged back
+> behind it. §2 RENDERED: the import card, asked for a report on the
+> live store itself ("brain.db — 195.5 MB", the picker's one real
+> candidate), refused BY NAME — "The import was refused:
+> import_target_unresolved: the service posture is chosen but this app
+> has not installed its service — the kernel on the port was not
+> started by this app, so the app cannot vouch for which store an
+> import would land in" — THE FIX WORKING AS DESIGNED on the
+> degenerate deployment. THE POSTURE DECISION, the operator's named
+> choice: **(b) keep the external kernel and accept the card's refusal
+> as the truth it is** — (a) redeploying under the shell's service
+> posture and (c) the kernel-vouches-for-its-own-store design
+> extension stay named alternatives, not taken. RESTORED and settled:
+> override env unset, fixtures' servers killed, the app relaunched
+> clean against the live chain — "You are up to date." The floor was
+> never exercised (no store write existed to roll back).
 
 > **R150 "The first real import" (2026-11-03): the pre-flight caught
 > THREE REAL DEFECTS before any act — the import stays OWED, the
