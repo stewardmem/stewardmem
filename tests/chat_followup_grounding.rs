@@ -247,4 +247,41 @@ async fn the_followup_grounds_to_the_prior_turns_topic_not_the_corpus_generic() 
         !turn2.iter().any(|(name, _)| name == "error"),
         "no error event rode the turn-2 stream: {turn2:?}"
     );
+
+    // ── turn 3: TOPIC DRIFT — a new-topic turn inherits nothing ──
+    // The session pivots to Vitamin D. Its grounding must be the fresh
+    // Vitamin D evidence: the prior green-tea topic's hits must not ride
+    // along (no carried labels, and the green-tea memory is not the top
+    // hit). Carried evidence exists only for an abstaining fresh recall —
+    // a turn that grounds fresh never carries.
+    let turn3 = post_turn(state.clone(), "followup", "what is Vitamin D?").await;
+    let grounding3 = grounding_of(&turn3);
+    let hits3 = hit_ids(&grounding3).expect("turn 3 grounding hits");
+    let final3 = final_of(&turn3);
+    assert!(
+        !hits3.is_empty(),
+        "turn 3 grounds on its own topic: {grounding3}"
+    );
+    assert_ne!(
+        hits3[0], prior_topic_id,
+        "turn 3 (new topic) must NOT ground to the prior tea topic — \
+         topic drift must not inherit prior hits. grounding: {grounding3}; final: {final3}"
+    );
+    let carried_labels = grounding3["hits"]
+        .as_array()
+        .map(|hits| {
+            hits.iter()
+                .filter(|h| h.get("carried_from_turn").is_some())
+                .count()
+        })
+        .unwrap_or(0);
+    assert_eq!(
+        carried_labels, 0,
+        "a freshly-grounded turn carries no evidence: {grounding3}"
+    );
+    assert_eq!(
+        final3["tier"].as_str(),
+        Some("on_device"),
+        "turn 3 answers from the model over its fresh evidence: {final3}"
+    );
 }

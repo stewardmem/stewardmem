@@ -138,27 +138,106 @@ fn truncate_to_bytes(s: &str, max_bytes: usize) -> &str {
     &s[..end]
 }
 
-/// The session's last user turn, read for grounding: the previous
+/// One prior turn, read for grounding: the last user message (the
+/// follow-up's topic), the assistant row's seq (the carried hits'
+/// provenance label), and the assistant row's grounding JSON verbatim.
+struct PriorTurn {
+    user_message: String,
+    assistant_seq: Option<i64>,
+    grounding_json: Option<String>,
+}
+
+/// The session's last turn pair, read for grounding: the previous
 /// turn's persisted message is the follow-up's topic. Owner-scoped like
 /// every session read (`None` = unrestricted loopback/Admin); an unknown or
 /// foreign session answers no prior turn — no existence oracle — and the
 /// query degrades to the current message alone. A storage failure degrades
 /// the same way (named by the caller's warning): the expansion is
 /// best-effort, never a new refusal on the chat route.
-fn prior_user_message(
+fn prior_turn(
     conn: &rusqlite::Connection,
     scope: &crate::service::chat_sessions::OwnerScope,
     session: &str,
-) -> Option<String> {
+) -> Option<PriorTurn> {
     let (_, total) = crate::service::chat_sessions::list_turns(conn, scope, session, 1, 0).ok()?;
     let page = total.min(crate::service::chat_sessions::MAX_PAGE_LIMIT);
     let (turns, _) =
         crate::service::chat_sessions::list_turns(conn, scope, session, page, total - page).ok()?;
-    turns
+    let user = turns.iter().rev().find(|t| t.role == "user")?;
+    let assistant = turns
         .iter()
         .rev()
-        .find(|t| t.role == "user")
-        .map(|t| t.content.clone())
+        .find(|t| t.role == "assistant" && t.seq > user.seq);
+    Some(PriorTurn {
+        user_message: user.content.clone(),
+        assistant_seq: assistant.map(|t| t.seq),
+        grounding_json: assistant.and_then(|t| t.grounding_json.clone()),
+    })
+}
+
+/// Whether the prior turn grounded on anything: its persisted grounding
+/// JSON carries hits. An abstained or unrecorded prior turn has nothing to
+/// carry — the carry retry would only re-ask an empty question. Pure.
+fn prior_grounding_has_hits(grounding_json: Option<&str>) -> bool {
+    let Some(raw) = grounding_json else {
+        return false;
+    };
+    serde_json::from_str::<serde_json::Value>(raw)
+        .ok()
+        .and_then(|v| v["hits"].as_array().map(|hits| !hits.is_empty()))
+        .unwrap_or(false)
+}
+
+/// The carry-forward trigger: the expanded recall abstained — the
+/// calibrated estimator said `ClarifyQuery` (wire: `low_confidence`) AND
+/// the retrieval still produced zero hits — AND there are prior hits to
+/// carry. Deliberately NOT `degraded`: a recall error is not an
+/// abstention, and evidence must never be trusted from a failed search.
+/// Pure, pinned.
+fn should_carry_forward(decision: &str, fresh_hits: usize, carried_hits: usize) -> bool {
+    decision == "low_confidence" && fresh_hits == 0 && carried_hits > 0
+}
+
+/// Every hit crosses the untrusted fence — the SAME fence the context
+/// projector uses, so a chat turn and a loop turn wrap retrieved memory
+/// identically. Fresh and carried hits share the one wrapper.
+fn fence_hits(tagged: &[(crate::SearchResult, String)]) -> String {
+    tagged
+        .iter()
+        .map(|(hit, domain)| {
+            crate::fence::wrap_fenced(&format!(
+                "Source: memory id {} (domain {domain}, score {:.3})\n{}",
+                hit.id, hit.score, hit.content
+            ))
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+/// The evidence union for a carried turn: fresh hits first, then carried
+/// hits deduped by id — fresh evidence always outranks carried evidence
+/// (a new-topic turn must not inherit the old topic's hits above its own).
+/// Carried entries are labeled with their source turn (the prior
+/// assistant row's seq); fresh entries are unlabeled. Tier rides the hit
+/// itself (`SearchResult.trust`), so it is preserved through the merge by
+/// construction. Pure, pinned.
+fn merge_carried(
+    fresh: Vec<(crate::SearchResult, String)>,
+    carried: Vec<(crate::SearchResult, String)>,
+    source_turn: Option<i64>,
+) -> Vec<((crate::SearchResult, String), Option<i64>)> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for hit in fresh {
+        seen.insert(hit.0.id);
+        out.push((hit, None));
+    }
+    for hit in carried {
+        if seen.insert(hit.0.id) {
+            out.push((hit, source_turn));
+        }
+    }
+    out
 }
 
 #[derive(Debug, Deserialize)]
@@ -275,7 +354,7 @@ pub async fn chat_turn(
         grounding_pool
             .get()
             .ok()
-            .and_then(|conn| prior_user_message(&conn, &grounding_scope, &grounding_session))
+            .and_then(|conn| prior_turn(&conn, &grounding_scope, &grounding_session))
     })
     .await
     .unwrap_or(None);
@@ -285,7 +364,8 @@ pub async fn chat_turn(
             "chat grounding: no readable prior turn; query is the current message alone"
         );
     }
-    let grounding_query = build_grounding_query(prior.as_deref(), &message);
+    let grounding_query =
+        build_grounding_query(prior.as_ref().map(|p| p.user_message.as_str()), &message);
     // Built through the WIRE's own defaulting (serde), not a struct literal:
     // RecallRequest carries two dozen knobs with contract defaults, and a
     // literal here would freeze today's defaults into the chat route — the
@@ -310,58 +390,129 @@ pub async fn chat_turn(
     )
     .await;
 
-    let (grounding_event, fenced_context, grounding_hit_count, grounding_degraded) = match grounding
+    let (mut grounding_event, mut fenced_context, mut grounding_hit_count, grounding_degraded) =
+        match grounding {
+            Ok(outcome) => {
+                let hits: Vec<serde_json::Value> = outcome
+                    .tagged
+                    .iter()
+                    .map(|(hit, domain)| {
+                        json!({
+                            "id": hit.id,
+                            "title": hit.title,
+                            "score": hit.score,
+                            "domain": domain,
+                            "flagged": hit.flagged,
+                            "trust": hit.trust,
+                        })
+                    })
+                    .collect();
+                let event = json!({
+                    "decision": format!("{:?}", outcome.decision).to_lowercase(),
+                    "hits": hits,
+                });
+                // Every hit crosses the untrusted fence — the SAME fence the
+                // context projector uses, so a chat turn and a loop turn wrap
+                // retrieved memory identically.
+                let fenced = fence_hits(&outcome.tagged);
+                // The packed set's SIZE is the verdict's whole universe: a cite
+                // is honest iff it indexes one of THESE.
+                (event, fenced, outcome.tagged.len(), false)
+            }
+            Err(e) => {
+                // Degraded grounding is STATED to the model, never hidden: the
+                // answer must know its evidence is missing.
+                tracing::warn!("chat grounding recall failed: {e:?}");
+                (
+                    json!({"decision": "degraded", "hits": []}),
+                    "(recall is degraded — no memory evidence could be retrieved for this turn.)"
+                        .to_owned(),
+                    0,
+                    true,
+                )
+            }
+        };
+
+    // EVIDENCE CARRY-FORWARD (follow-up grounding): the expanded recall
+    // abstained — `ClarifyQuery` + zero hits — and the prior turn grounded
+    // on real hits. Retry through the SAME recall core with the prior user
+    // message as the query (same 1,024 packing budget, tier preserved by
+    // construction) and carry those hits forward as this turn's evidence,
+    // each labeled with its source turn — never laundered into this turn's
+    // fresh grounding. The support verdict below then judges against the
+    // union, so a cite to a carried hit is honest. A still-empty retry
+    // (or no prior hits) falls through to the deterministic abstain.
+    if let Some(prior) = prior.as_ref()
+        && prior_grounding_has_hits(prior.grounding_json.as_deref())
+        && should_carry_forward(
+            grounding_event["decision"].as_str().unwrap_or_default(),
+            grounding_hit_count,
+            1,
+        )
     {
-        Ok(outcome) => {
-            let hits: Vec<serde_json::Value> = outcome
-                .tagged
+        // The prior message already passed the wire's own bound when it
+        // was stored; a refusal here is storage damage — degrade to the
+        // abstain below, never fail the turn.
+        let carry_request: Option<RecallRequest> = serde_json::from_value(json!({
+            "query": prior.user_message,
+            "limit": 5,
+            "provenance": true,
+            "max_context_tokens": GROUNDING_TOKEN_BUDGET,
+        }))
+        .ok();
+        let carried = match carry_request {
+            Some(request) => run_recall(
+                &state,
+                &principal.0,
+                request,
+                serde_json::from_str("{}").unwrap_or_default(),
+            )
+            .await
+            .ok(),
+            None => {
+                tracing::warn!("chat carry-forward: prior query refused; abstaining");
+                None
+            }
+        };
+        if let Some(outcome) = carried
+            && !outcome.tagged.is_empty()
+        {
+            let merged = merge_carried(Vec::new(), outcome.tagged, prior.assistant_seq);
+            let hits: Vec<serde_json::Value> = merged
                 .iter()
-                .map(|(hit, domain)| {
-                    json!({
+                .map(|((hit, domain), source_turn)| {
+                    let mut v = json!({
                         "id": hit.id,
                         "title": hit.title,
                         "score": hit.score,
                         "domain": domain,
                         "flagged": hit.flagged,
                         "trust": hit.trust,
-                    })
+                    });
+                    // The provenance label: carried evidence names its
+                    // source turn on the wire and in the persisted row —
+                    // additive, present ONLY on carried hits.
+                    if let Some(seq) = source_turn {
+                        v["carried_from_turn"] = json!(*seq);
+                    }
+                    v
                 })
                 .collect();
-            let event = json!({
-                "decision": format!("{:?}", outcome.decision).to_lowercase(),
+            // The decision stays the FRESH one (`low_confidence`): the
+            // fresh recall abstained and the evidence was carried — the
+            // event says both, never launders carried hits as fresh.
+            grounding_event = json!({
+                "decision": grounding_event["decision"],
                 "hits": hits,
             });
-            // Every hit crosses the untrusted fence — the SAME fence the
-            // context projector uses, so a chat turn and a loop turn wrap
-            // retrieved memory identically.
-            let fenced = outcome
-                .tagged
+            let carried_tagged: Vec<(crate::SearchResult, String)> = merged
                 .iter()
-                .map(|(hit, domain)| {
-                    crate::fence::wrap_fenced(&format!(
-                        "Source: memory id {} (domain {domain}, score {:.3})\n{}",
-                        hit.id, hit.score, hit.content
-                    ))
-                })
-                .collect::<Vec<_>>()
-                .join("\n\n");
-            // The packed set's SIZE is the verdict's whole universe: a cite
-            // is honest iff it indexes one of THESE.
-            (event, fenced, outcome.tagged.len(), false)
+                .map(|((r, d), _)| (r.clone(), d.clone()))
+                .collect();
+            fenced_context = fence_hits(&carried_tagged);
+            grounding_hit_count = merged.len();
         }
-        Err(e) => {
-            // Degraded grounding is STATED to the model, never hidden: the
-            // answer must know its evidence is missing.
-            tracing::warn!("chat grounding recall failed: {e:?}");
-            (
-                json!({"decision": "degraded", "hits": []}),
-                "(recall is degraded — no memory evidence could be retrieved for this turn.)"
-                    .to_owned(),
-                0,
-                true,
-            )
-        }
-    };
+    }
 
     let prompt = if fenced_context.is_empty() {
         format!("(no memory matched this question — say so plainly if it matters)\n\n{message}")
@@ -902,7 +1053,7 @@ mod tests {
     fn grounding_resolves_before_the_bridge_is_asked() {
         let src = include_str!("chat.rs");
         let query = src
-            .find("let grounding_query = build_grounding_query")
+            .find("let grounding_query =")
             .expect("the grounding query is built in the turn path");
         let recall = src
             .find("let grounding = run_recall(")
@@ -914,6 +1065,92 @@ mod tests {
             query < bridge_call && recall < bridge_call,
             "the query construction and the recall must resolve before the bridge is asked"
         );
+    }
+
+    /// THE CARRY TRIGGER (follow-up grounding): only a calibrated
+    /// abstention (`low_confidence`) with zero fresh hits AND prior hits
+    /// to carry fires the retry. `ok` with zero hits is an honest empty
+    /// store (never carried into), `degraded` is a failed search (never
+    /// trusted), and hits present means the fresh turn grounded alone.
+    #[test]
+    fn carry_forward_fires_only_on_calibrated_abstention_with_prior_hits() {
+        assert!(should_carry_forward("low_confidence", 0, 2));
+        assert!(!should_carry_forward("low_confidence", 0, 0));
+        assert!(!should_carry_forward("low_confidence", 3, 2));
+        assert!(!should_carry_forward("ok", 0, 2));
+        assert!(!should_carry_forward("degraded", 0, 2));
+    }
+
+    fn result(id: i64) -> crate::SearchResult {
+        crate::SearchResult {
+            id,
+            ..Default::default()
+        }
+    }
+
+    /// THE MERGE LAW (follow-up grounding): fresh outranks carried,
+    /// dedupe is by id (fresh wins), carried entries keep their tier and
+    /// their source-turn label, fresh entries stay unlabeled.
+    #[test]
+    fn carried_hits_never_outrank_fresh_and_keep_tier_and_provenance() {
+        let fresh = vec![
+            (
+                crate::SearchResult {
+                    id: 7,
+                    trust: Some(crate::search::TrustTier::Published),
+                    ..Default::default()
+                },
+                "global".to_owned(),
+            ),
+            (result(8), "global".to_owned()),
+        ];
+        let carried = vec![
+            // id 7 again: the fresh copy must win the dedupe.
+            (result(7), "global".to_owned()),
+            (
+                crate::SearchResult {
+                    id: 9,
+                    trust: Some(crate::search::TrustTier::Approved),
+                    ..Default::default()
+                },
+                "global".to_owned(),
+            ),
+        ];
+        let merged = merge_carried(fresh, carried, Some(4));
+        let ids: Vec<i64> = merged.iter().map(|((r, _), _)| r.id).collect();
+        assert_eq!(
+            ids,
+            vec![7, 8, 9],
+            "fresh first, carried deduped, order kept"
+        );
+        assert_eq!(merged[0].1, None, "fresh hits carry no provenance label");
+        assert_eq!(merged[1].1, None);
+        assert_eq!(merged[2].1, Some(4), "carried hits name their source turn");
+        assert_eq!(
+            merged[0].0.0.trust,
+            Some(crate::search::TrustTier::Published),
+            "the fresh copy (with its tier) wins the dedupe"
+        );
+        assert_eq!(
+            merged[2].0.0.trust,
+            Some(crate::search::TrustTier::Approved),
+            "carried hits retain their trust tier through the merge"
+        );
+    }
+
+    /// PRIOR GROUNDING WITH HITS: the carry gate reads the persisted
+    /// grounding JSON — hits present carries, empty/absent/unparseable
+    /// does not.
+    #[test]
+    fn prior_grounding_has_hits_reads_the_persisted_hits() {
+        assert!(prior_grounding_has_hits(Some(
+            r#"{"decision":"ok","hits":[{"id":3}]}"#
+        )));
+        assert!(!prior_grounding_has_hits(Some(
+            r#"{"decision":"low_confidence","hits":[]}"#
+        )));
+        assert!(!prior_grounding_has_hits(Some("not json")));
+        assert!(!prior_grounding_has_hits(None));
     }
 
     /// THE PAIR PERSISTS AT THE FINAL, and a Failed turn persists nothing —
