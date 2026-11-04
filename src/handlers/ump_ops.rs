@@ -197,7 +197,7 @@ fn superseded_by_for(conn: &rusqlite::Connection, id: i64) -> Result<Vec<String>
 async fn stored_ump_id(pool: &crate::Pool, id: i64) -> Result<String, HandlerError> {
     let pool = pool.clone();
     tokio::task::spawn_blocking(move || -> Result<String, HandlerError> {
-        let mut conn = pool.get().map_err(HandlerError::db_down)?;
+        let conn = pool.get().map_err(HandlerError::db_down)?;
         let row = load_knowledge_row(&conn, id)
             .map_err(|e| HandlerError::internal(e.to_string()))?
             .ok_or_else(|| HandlerError::not_found(format!("no chunk with id {id}")))?;
@@ -328,7 +328,7 @@ pub async fn get_memory(
     // promise, enforced beside the gates this entry point already runs.
     super::authorize_tool(&principal.0, &pool, "ump.get")?;
     let record = tokio::task::spawn_blocking(move || -> Result<Option<Value>, HandlerError> {
-        let mut conn = pool.get().map_err(HandlerError::db_down)?;
+        let conn = pool.get().map_err(HandlerError::db_down)?;
         let rid = resolve_row_id(&conn, &id_arg)?;
         // Belt-and-braces — the row's OWN domain must match the
         // header label AND the principal must pass the row-domain re-auth +
@@ -509,7 +509,7 @@ pub async fn recall(
     super::authorize_tool(&principal.0, &pool, "ump.recall")?;
     let now_unix = chrono::Utc::now().timestamp();
     let results = tokio::task::spawn_blocking(move || -> Result<Vec<Value>, HandlerError> {
-        let mut conn = pool.get().map_err(HandlerError::db_down)?;
+        let conn = pool.get().map_err(HandlerError::db_down)?;
         let mut out = Vec::with_capacity(outcome.tagged.len());
         for (r, domain) in &outcome.tagged {
             // §5.3: unverifiable rows are dropped, never served.
@@ -649,7 +649,7 @@ pub async fn revise(
     super::authorize_tool(&principal.0, &pool, "ump.revise")?;
     let old_id = tokio::task::spawn_blocking(
         move || -> Result<(i64, crate::handlers::ingest::IngestRequest), HandlerError> {
-            let mut conn = pool.get().map_err(HandlerError::db_down)?;
+            let conn = pool.get().map_err(HandlerError::db_down)?;
             let old_id = resolve_row_id(&conn, &id_arg)?;
             let row = load_knowledge_row(&conn, old_id)
                 .map_err(|e| HandlerError::internal(e.to_string()))?
@@ -1035,7 +1035,7 @@ pub async fn audit(
     let pool = state.pool.clone();
     let rows = tokio::task::spawn_blocking(
         move || -> Result<Vec<crate::audit::AuditRow>, HandlerError> {
-            let mut conn = pool.get().map_err(HandlerError::db_down)?;
+            let conn = pool.get().map_err(HandlerError::db_down)?;
             crate::audit::recent_tenant(
                 &conn,
                 kind.as_deref(),
