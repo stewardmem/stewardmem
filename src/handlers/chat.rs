@@ -103,6 +103,64 @@ fn abstains_without_bridge(decision: &str, hit_count: usize) -> bool {
     hit_count == 0 && (decision == "low_confidence" || decision == "degraded")
 }
 
+/// The prior-turn topic budget: the previous user message rides the recall
+/// query capped at this many BYTES (last turn only). The cap keeps a long
+/// prior message from swamping the grounding query; the current message
+/// always rides in full.
+const PRIOR_TOPIC_MAX_BYTES: usize = 200;
+
+/// The grounding query for a turn (follow-up grounding): the previous
+/// user turn's message (capped at [`PRIOR_TOPIC_MAX_BYTES`] bytes) followed
+/// by the current message. The prior turn is evidence actually used, with
+/// provenance — never a model summary, and zero model tokens are spent
+/// (memory is governed state, not retrieved text; no LLM query rewriting).
+/// No prior turn (a first turn, or an unreadable session) → the current
+/// message EXACTLY: first-turn behavior is byte-identical to pre-fix.
+/// Pure, pinned.
+fn build_grounding_query(prior_user_message: Option<&str>, current: &str) -> String {
+    let Some(prior) = prior_user_message.map(str::trim).filter(|p| !p.is_empty()) else {
+        return current.to_owned();
+    };
+    let prior = truncate_to_bytes(prior, PRIOR_TOPIC_MAX_BYTES);
+    format!("{prior} {current}")
+}
+
+/// The longest prefix of `s` fitting in `max_bytes` bytes, cut on a char
+/// boundary so the result is always valid UTF-8.
+fn truncate_to_bytes(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    let mut end = max_bytes;
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
+
+/// The session's last user turn, read for grounding: the previous
+/// turn's persisted message is the follow-up's topic. Owner-scoped like
+/// every session read (`None` = unrestricted loopback/Admin); an unknown or
+/// foreign session answers no prior turn — no existence oracle — and the
+/// query degrades to the current message alone. A storage failure degrades
+/// the same way (named by the caller's warning): the expansion is
+/// best-effort, never a new refusal on the chat route.
+fn prior_user_message(
+    conn: &rusqlite::Connection,
+    scope: &crate::service::chat_sessions::OwnerScope,
+    session: &str,
+) -> Option<String> {
+    let (_, total) = crate::service::chat_sessions::list_turns(conn, scope, session, 1, 0).ok()?;
+    let page = total.min(crate::service::chat_sessions::MAX_PAGE_LIMIT);
+    let (turns, _) =
+        crate::service::chat_sessions::list_turns(conn, scope, session, page, total - page).ok()?;
+    turns
+        .iter()
+        .rev()
+        .find(|t| t.role == "user")
+        .map(|t| t.content.clone())
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ChatTurnRequest {
     /// Conversation id. Round 1 defaults to one conversation ("default");
@@ -196,12 +254,44 @@ pub async fn chat_turn(
     // A refusal/absence here does not fail the chat — the model answers and
     // SAYS there was no memory, which is the honest behavior the plugin's
     // deterministic-recall precedent set.
+    // FOLLOW-UP GROUNDING: the query carries the session's previous
+    // user turn as the topic — a follow-up with no topic term of its own
+    // ("What are the benefits?" after "what is Vitamin D") retrieves from
+    // the topic the PRIOR turn set, not the corpus generic. The read rides
+    // the SAME owner fence the session surfaces use; a first turn, an
+    // unknown/foreign session, or a failed read all degrade to the current
+    // message alone (first-turn query byte-identical to pre-fix). Zero
+    // model tokens: the topic is the user's own persisted words.
+    let grounding_pool = state.pool.clone();
+    let grounding_scope = {
+        let gate = crate::handlers::gate::record_read_gate(&principal.0, &grounding_pool);
+        gate.owner_in.map_or_else(
+            crate::service::chat_sessions::OwnerScope::unrestricted,
+            crate::service::chat_sessions::OwnerScope::narrowed,
+        )
+    };
+    let grounding_session = session.clone();
+    let prior = tokio::task::spawn_blocking(move || {
+        grounding_pool
+            .get()
+            .ok()
+            .and_then(|conn| prior_user_message(&conn, &grounding_scope, &grounding_session))
+    })
+    .await
+    .unwrap_or(None);
+    if prior.is_none() {
+        tracing::debug!(
+            session = %crate::server::router::memory::LogValue::new(&session),
+            "chat grounding: no readable prior turn; query is the current message alone"
+        );
+    }
+    let grounding_query = build_grounding_query(prior.as_deref(), &message);
     // Built through the WIRE's own defaulting (serde), not a struct literal:
     // RecallRequest carries two dozen knobs with contract defaults, and a
     // literal here would freeze today's defaults into the chat route — the
     // same drift the `/recall` validation matrix exists to prevent.
     let grounding_request: RecallRequest = match serde_json::from_value(json!({
-        "query": message,
+        "query": grounding_query,
         "limit": 5,
         "provenance": true,
         "max_context_tokens": GROUNDING_TOKEN_BUDGET,
@@ -627,6 +717,74 @@ fn bounded_session_label(raw: Option<&str>) -> Result<String, String> {
 mod tests {
     use super::*;
 
+    /// FIRST-TURN BYTE-IDENTICAL: with no prior turn — or an empty
+    /// one — the grounding query IS the current message, exactly. Any
+    /// first-turn drift reds here.
+    #[test]
+    fn the_first_turns_query_is_the_current_message_exactly() {
+        assert_eq!(
+            build_grounding_query(None, "what is Vitamin D?"),
+            "what is Vitamin D?"
+        );
+        assert_eq!(
+            build_grounding_query(Some(""), "what is Vitamin D?"),
+            "what is Vitamin D?"
+        );
+        assert_eq!(
+            build_grounding_query(Some("   "), "what is Vitamin D?"),
+            "what is Vitamin D?"
+        );
+    }
+
+    /// FOLLOW-UP CARRIES THE PRIOR TURN: the recall query contains
+    /// the prior user turn's terms ahead of the current message — the
+    /// Vitamin D sequence's fix in one line. Order is pinned too (topic
+    /// first, follow-up second).
+    #[test]
+    fn the_followup_query_contains_the_prior_turns_terms() {
+        let query = build_grounding_query(Some("what is Vitamin D?"), "What are the benefits?");
+        assert_eq!(query, "what is Vitamin D? What are the benefits?");
+        assert!(
+            query.contains("Vitamin D"),
+            "the prior turn's topic term must ride the query: {query}"
+        );
+        assert!(
+            query.contains("benefits"),
+            "the current message must ride the query: {query}"
+        );
+    }
+
+    /// THE 200-BYTE CAP: a long prior message is cut to at most
+    /// 200 bytes (char-boundary safe), the current message always in full.
+    #[test]
+    fn the_prior_topic_is_capped_at_200_bytes() {
+        let prior = "x".repeat(500);
+        let query = build_grounding_query(Some(&prior), "and now?");
+        let (head, tail) = query
+            .split_once(" and now?")
+            .expect("current rides in full");
+        assert!(
+            head.len() <= PRIOR_TOPIC_MAX_BYTES,
+            "prior capped: {}",
+            head.len()
+        );
+        assert_eq!(head.len(), PRIOR_TOPIC_MAX_BYTES);
+        assert_eq!(tail, "");
+        // A multi-byte boundary is never split: the cut lands on a boundary.
+        let prior = "é".repeat(150); // 300 bytes, 2 bytes per char
+        let query = build_grounding_query(Some(&prior), "next?");
+        let head = query.split(" next?").next().unwrap();
+        assert!(head.len() <= PRIOR_TOPIC_MAX_BYTES);
+        assert!(
+            prior.starts_with(head),
+            "the cap is a prefix cut, never a rewrite"
+        );
+        assert!(
+            query.is_char_boundary(query.len()),
+            "the query stays valid text"
+        );
+    }
+
     #[test]
     fn session_labels_take_a_domain_labels_shape() {
         assert_eq!(bounded_session_label(None).unwrap(), "default");
@@ -733,6 +891,28 @@ mod tests {
         assert!(
             DETERMINISTIC_ABSTAIN_NOTICE.contains("not guessing"),
             "the notice says plainly that the kernel is not guessing"
+        );
+    }
+
+    /// ZERO MODEL CALLS IN THE GROUNDING PATH: the prior-turn read
+    /// and the recall both resolve BEFORE the bridge is asked for prose —
+    /// no `bridge.turn` may sit ahead of the grounding query's
+    /// construction. Source scan over the handler's own text.
+    #[test]
+    fn grounding_resolves_before_the_bridge_is_asked() {
+        let src = include_str!("chat.rs");
+        let query = src
+            .find("let grounding_query = build_grounding_query")
+            .expect("the grounding query is built in the turn path");
+        let recall = src
+            .find("let grounding = run_recall(")
+            .expect("the grounding recall runs in the turn path");
+        let bridge_call = src
+            .find("bridge\n        .turn(BridgeTurn {")
+            .expect("the bridge turn call");
+        assert!(
+            query < bridge_call && recall < bridge_call,
+            "the query construction and the recall must resolve before the bridge is asked"
         );
     }
 
