@@ -214,6 +214,46 @@ fn fence_hits(tagged: &[(crate::SearchResult, String)]) -> String {
         .join("\n\n")
 }
 
+/// The capture proposal for a still-abstaining turn (ignorance becomes
+/// governed work): the unanswered question as the candidate content, the
+/// session topic when one exists, and the grounding query as the source
+/// prompt — all bounded to the proposal seam's own ceilings (content,
+/// title, source prompt), so `create_proposal` never refuses on length.
+/// Kind `fact`, source `chat-abstention`: the review queue sees WHAT kind
+/// of ignorance this is. Pure, pinned.
+fn abstention_capture(
+    message: &str,
+    topic: Option<&str>,
+    grounding_query: &str,
+) -> crate::handlers::gate::ProposalRequest {
+    let topic_line = topic
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .map(|t| format!(" Session topic: {t}"))
+        .unwrap_or_default();
+    let content = truncate_to_bytes(
+        &format!(
+            "Unanswered chat question (abstention capture for human review): {message}{topic_line}"
+        ),
+        crate::handlers::MAX_PROPOSAL_CONTENT,
+    )
+    .to_owned();
+    let title = truncate_to_bytes(message.trim(), crate::handlers::MAX_TITLE).to_owned();
+    crate::handlers::gate::ProposalRequest {
+        content,
+        kind: "fact".to_owned(),
+        source: Some("chat-abstention".to_owned()),
+        origin_context: None,
+        authority: None,
+        observed_at: None,
+        domain: None,
+        title: (!title.is_empty()).then_some(title),
+        source_prompt: Some(
+            truncate_to_bytes(grounding_query, crate::handlers::MAX_SOURCE_PROMPT).to_owned(),
+        ),
+    }
+}
+
 /// The evidence union for a carried turn: fresh hits first, then carried
 /// hits deduped by id — fresh evidence always outranks carried evidence
 /// (a new-topic turn must not inherit the old topic's hits above its own).
@@ -556,6 +596,18 @@ pub async fn chat_turn(
         let abstain_session = session.clone();
         let abstain_message = message.clone();
         let abstain_grounding = grounding_event.to_string();
+        // The capture proposal (ignorance becomes governed work): filed
+        // through the SAME proposal core the review queue reads — a
+        // pending row, never a knowledge row; only a human approval
+        // promotes. The topic is the prior turn's message (the same words
+        // the grounding query carried); the source prompt is that query.
+        let abstain_state = state.clone();
+        let abstain_principal = principal.0.clone();
+        let abstain_capture = abstention_capture(
+            &message,
+            prior.as_ref().map(|p| p.user_message.as_str()),
+            &grounding_query,
+        );
         let (tx, rx_out) = tokio::sync::mpsc::channel::<Result<Event, Infallible>>(64);
         tokio::spawn(async move {
             let send = |event: Event| async { tx.send(Ok(event)).await.is_ok() };
@@ -619,6 +671,29 @@ pub async fn chat_turn(
                     }
                     Err(e) => {
                         tracing::error!("chat abstain persistence task failed: {e}");
+                    }
+                }
+                // THE ABSTENTION FILES ITS CAPTURE PROPOSAL, exactly once:
+                // one call, this branch only — no proposal without
+                // abstention, no knowledge row without a human approval
+                // (the proposal core writes the queue, never memory). A
+                // filing refusal (e.g. a principal the Write gate denies)
+                // is logged loud and never poisons the answered turn.
+                match crate::handlers::gate::create_proposal(
+                    abstain_state,
+                    abstain_principal,
+                    abstain_capture,
+                )
+                .await
+                {
+                    Ok(filed) => {
+                        tracing::info!(
+                            proposal_id = filed.id,
+                            "chat abstain capture proposal filed"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!("chat abstain capture proposal failed: {e:?}");
                     }
                 }
             }
@@ -1151,6 +1226,65 @@ mod tests {
         )));
         assert!(!prior_grounding_has_hits(Some("not json")));
         assert!(!prior_grounding_has_hits(None));
+    }
+
+    /// THE CAPTURE SHAPE (abstention → proposal): the unanswered
+    /// question rides the candidate content, the session topic rides
+    /// beside it, the grounding query is the source prompt, and every
+    /// field sits inside the proposal seam's ceilings — `create_proposal`
+    /// must never refuse on length.
+    #[test]
+    fn abstention_capture_carries_question_topic_and_query_within_bounds() {
+        let req = abstention_capture(
+            "What are the benefits?",
+            Some("what is Vitamin D?"),
+            "what is Vitamin D? What are the benefits?",
+        );
+        assert!(req.content.contains("What are the benefits?"));
+        assert!(req.content.contains("what is Vitamin D?"));
+        assert_eq!(req.kind, "fact");
+        assert_eq!(req.source.as_deref(), Some("chat-abstention"));
+        assert_eq!(
+            req.source_prompt.as_deref(),
+            Some("what is Vitamin D? What are the benefits?")
+        );
+        assert_eq!(req.title.as_deref(), Some("What are the benefits?"));
+        // Long inputs are cut inside the seam's ceilings, never refused.
+        let long = "z".repeat(50_000);
+        let req = abstention_capture(&long, Some(&long), &long);
+        assert!(req.content.chars().count() <= crate::handlers::MAX_PROPOSAL_CONTENT);
+        assert!(req.title.as_ref().unwrap().chars().count() <= crate::handlers::MAX_TITLE);
+        assert!(req.source_prompt.as_ref().unwrap().len() <= crate::handlers::MAX_SOURCE_PROMPT);
+        // No topic: the content still names the question alone.
+        let req = abstention_capture("anyone there?", None, "anyone there?");
+        assert!(req.content.contains("anyone there?"));
+    }
+
+    /// EXACTLY ONE FILING SITE (abstention → proposal): the proposal
+    /// core is called from precisely one place in this handler — the
+    /// abstain branch. A second call site (or none) reds.
+    #[test]
+    fn the_capture_proposal_has_exactly_one_call_site() {
+        let src = include_str!("chat.rs");
+        // The needle is assembled so THIS test's own text never matches
+        // the scan (the file's own pin pattern).
+        let needle = concat!("create_", "proposal(");
+        let count = src.matches(needle).count();
+        assert_eq!(
+            count, 1,
+            "the abstain branch is the ONLY filing site: no proposal without abstention"
+        );
+        let guard = src
+            .find("if abstains_without_bridge(")
+            .expect("the abstain gate guards the turn path");
+        let call = src.find(needle).expect("the filing call");
+        let bridge_call = src
+            .find("bridge\n        .turn(BridgeTurn {")
+            .expect("the bridge turn call");
+        assert!(
+            guard < call && call < bridge_call,
+            "the filing lives inside the abstain branch, ahead of the bridge call"
+        );
     }
 
     /// THE PAIR PERSISTS AT THE FINAL, and a Failed turn persists nothing —
