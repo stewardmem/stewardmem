@@ -27,6 +27,7 @@ pub(crate) mod agreement;
 pub(crate) mod attestations;
 pub mod calibration;
 pub(crate) mod case_status;
+pub(crate) mod certainty;
 pub(crate) mod channel;
 pub mod channels;
 pub(crate) mod complaint;
