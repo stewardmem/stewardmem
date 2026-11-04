@@ -262,6 +262,22 @@ fn is_direct(case: &GdlCase, needles: &[String]) -> bool {
         .any(|n| evidence.iter().any(|e| e.contains(n.as_str())))
 }
 
+#[allow(clippy::derivable_impls)]
+impl Default for CertaintyGrade {
+    fn default() -> Self {
+        CertaintyGrade {
+            bias: Vec::new(),
+            directness: Directness::Direct,
+            imprecision: Imprecision {
+                n_rows: 0,
+                n_measured: 0,
+            },
+            consistency: Consistency::Agree,
+            overall: Overall::High,
+        } // CG-01 DAMAGE: a synthesized grade
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -647,7 +663,7 @@ mod tests {
     /// grade reuses the citation floor, not a new one).
     #[test]
     fn p4_ticket_locators_honor_the_floor() {
-        let mut case = GdlCase::fresh("a vd5 rebuild on node-042");
+        let case = GdlCase::fresh("a vd5 rebuild on node-042");
         let needles = ticket_locators(&case);
         assert!(
             needles.contains(&"vd5".to_string()),

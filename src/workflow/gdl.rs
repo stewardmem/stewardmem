@@ -1026,6 +1026,15 @@ pub(crate) struct GdlCase {
     /// gated artifacts, and `apply` never touches this field.
     #[serde(default)]
     pub triage_search: Vec<KbHit>,
+    /// The evidence-quality grade over the committed evidence set (CG-01,
+    /// SPEC_ADDENDUM Gap 3) — computed ONCE per `apply`, the only point
+    /// committed evidence changes. ADVISORY by construction (the
+    /// `Hypothesis.confidence` law): no gate reads it, no threshold binds
+    /// it, no routing consumes it until a lane names the consumer. Old
+    /// states without the key parse to `None` — absence reports as no
+    /// data, never as a synthetic score.
+    #[serde(default)]
+    pub certainty: Option<super::certainty::CertaintyGrade>,
 }
 
 impl GdlCase {
@@ -1045,6 +1054,7 @@ impl GdlCase {
             closure: None,
             back_referral: None,
             triage_search: Vec::new(),
+            certainty: None,
         }
     }
 
@@ -2313,6 +2323,10 @@ fn typed_json<T: serde::Serialize + serde::de::DeserializeOwned>(
 }
 
 /// Apply a passed artifact to the case (pure; the driver persists).
+/// This is the ONE point committed evidence changes, so the case's
+/// evidence-quality grade recomputes here (`certainty::for_case`, the
+/// only call site outside its module) — readers deserialize the stored
+/// grade, they never recompute at read time.
 pub(crate) fn apply(case: &mut GdlCase, phase: GdlPhase, artifact_json: &str) {
     match phase {
         GdlPhase::Intake => {
@@ -2355,6 +2369,11 @@ pub(crate) fn apply(case: &mut GdlCase, phase: GdlPhase, artifact_json: &str) {
             }
         }
     }
+    // The grade lands after the artifact does, for every phase: an
+    // artifact that failed to parse changed nothing, so the recompute is
+    // the identity — deterministic and total over all callers.
+    let grade = super::certainty::for_case(case);
+    case.certainty = Some(grade);
 }
 
 /// A hypothesis's arbiter-computed status: ≥2 sources of DISTINCT
@@ -13078,5 +13097,66 @@ mod eval_run1 {
         assert!(on_rejects >= 3, "the B1 refusal rides the gate records");
         assert_eq!(off_label, "Routed", "the B1 seam backstops the ablation");
         assert!(!off_resolved, "no contract, no completion — even ungated");
+    }
+
+    // ── CG-01: the certainty grade's compat proofs (P-4b, P-6 typed) ─────
+
+    /// P-4b: a PRE-grade `state_json` literal (no `certainty` key — the
+    /// shape every checkpoint written before CG-01 carries) parses with
+    /// `certainty: None`. Absence is no data, never a synthetic score.
+    /// Proof by damage: remove `#[serde(default)]` from the field and
+    /// this parse reds ("missing field `certainty`").
+    #[test]
+    fn cg01_pre_grade_state_parses_with_certainty_none() {
+        let pre = r#"{"phase":"Intake","ticket":"vd5 stuck rebuild"}"#;
+        let case: GdlCase = serde_json::from_str(pre).expect("a pre-grade state must parse");
+        assert!(case.certainty.is_none(), "absence grades as None");
+    }
+
+    /// P-6 typed half: a graded case serializes into `state_json` bytes,
+    /// parses back, and the stored grade is Eq to the computed one —
+    /// readers deserialize, they never recompute at read time.
+    #[test]
+    fn cg01_wire_round_trip_preserves_the_grade() {
+        let mut case = GdlCase::fresh("vd5 stuck rebuild on node-042");
+        let triage = r#"{
+            "verdict": "accept",
+            "confirmed_matches": ["kb:1 raid rebuild playbook"],
+            "red_flag": {"worst_case": "data loss", "ruled_out": true,
+                         "rule_out_basis": ["verify:sel://events clean"]}
+        }"#;
+        apply(&mut case, GdlPhase::Triage, triage);
+        let stored = case.certainty.clone().expect("apply graded the case");
+        let bytes = serde_json::to_string(&case).unwrap();
+        assert!(
+            bytes.contains(r#""certainty""#),
+            "the grade rides the state bytes"
+        );
+        let back: GdlCase = serde_json::from_str(&bytes).unwrap();
+        assert_eq!(back.certainty, Some(stored.clone()));
+        // And the stored grade is Eq to a fresh compute over the same
+        // committed evidence (the recompute-only-in-apply law's other
+        // face: nothing drifts between the chain and the reader).
+        assert_eq!(crate::workflow::certainty::for_case(&back), stored);
+    }
+
+    /// P-6's apply-point law: grading happens in `apply`, so a case that
+    /// never passed an artifact carries `None` even when its fields are
+    /// populated by hand (scratch/driver-seeded state), and one `apply`
+    /// of ANY phase grades the case.
+    #[test]
+    fn cg01_only_apply_grades_the_case() {
+        let mut case = GdlCase::fresh("vd5 stuck rebuild");
+        case.verify = Some(
+            serde_json::from_str(r#"{"re_run": "r", "pass_condition": "c", "pass": true}"#)
+                .unwrap(),
+        );
+        assert!(case.certainty.is_none(), "no apply, no grade");
+        apply(
+            &mut case,
+            GdlPhase::Verify,
+            r#"{"re_run":"r","pass_condition":"c","pass":true}"#,
+        );
+        assert!(case.certainty.is_some(), "one apply grades the whole case");
     }
 }
