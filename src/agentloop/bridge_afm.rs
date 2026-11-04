@@ -271,6 +271,63 @@ impl AfmBridge {
         Ok((id, rx))
     }
 
+    /// Warm a session's model before its first turn: `session.prewarm(
+    /// promptPrefix:)` on the child. The instructions ride the request so
+    /// the prewarm ALSO creates the session under the instructions law (a
+    /// later turn with changed instructions is still refused by name).
+    /// Fire-and-await: the child answers `ok` once the prefix is loaded.
+    pub async fn prewarm(
+        &self,
+        session: &str,
+        instructions: Option<&str>,
+    ) -> Result<bool, BridgeError> {
+        let id = uuid::Uuid::new_v4().to_string();
+        let (tx, mut rx) = mpsc::channel::<BridgeEvent>(16);
+        self.pending
+            .lock()
+            .expect("bridge pending lock")
+            .insert(id.clone(), tx);
+        let mut body = json!({
+            "id": id,
+            "op": "prewarm",
+            "session": session,
+        });
+        if let Some(instructions) = instructions {
+            body["instructions"] = json!(instructions);
+        }
+        if let Err(e) = self.write_line(&body) {
+            self.pending
+                .lock()
+                .expect("bridge pending lock")
+                .remove(&id);
+            return Err(e);
+        }
+        while let Some(event) = rx.recv().await {
+            match event {
+                BridgeEvent::Failed { code, message, .. } => {
+                    self.pending
+                        .lock()
+                        .expect("bridge pending lock")
+                        .remove(&id);
+                    return Err(BridgeError::Protocol(format!(
+                        "prewarm failed: {code} {message:?}"
+                    )));
+                }
+                BridgeEvent::Delta { .. } => continue,
+                BridgeEvent::Final { .. } => {
+                    self.pending
+                        .lock()
+                        .expect("bridge pending lock")
+                        .remove(&id);
+                    return Ok(true);
+                }
+            }
+        }
+        Err(BridgeError::Unavailable(
+            "the bridge closed before answering prewarm".into(),
+        ))
+    }
+
     /// Cancel an in-flight turn by its SSE-facing request id. The bridge
     /// treats an unknown id as a no-op ("already done" == "never existed").
     pub fn cancel(&self, bridge_id: &str) {
@@ -604,6 +661,51 @@ mod tests {
                 && child.contains("\"claims\": typed.claims"),
             "the child's final event must carry the typed fields verbatim"
         );
+    }
+
+    /// PREWARM ROUND-TRIP (T-1): the `prewarm` op warms the session's
+    /// model before its first turn, and an unknown op is refused BY NAME
+    /// (the child's own default arm — the refusal is the contract).
+    #[tokio::test]
+    async fn the_real_bridge_answers_prewarm_and_refuses_unknown_ops_by_name() {
+        let candidates = bridge_path_candidates();
+        let Some(binary) = candidates.iter().find(|p| p.is_file()) else {
+            eprintln!(
+                "brain-afm not built; run `swift build` in shell-macos — SKIPPING (owned by the Swift suite)"
+            );
+            return;
+        };
+        let bridge = AfmBridge::spawn(binary).expect("spawn the real bridge");
+        bridge.capabilities().await.expect("capabilities first");
+        let warmed = bridge
+            .prewarm("pw-session", Some("You are a memory-grounded assistant."))
+            .await
+            .expect("prewarm round-trips");
+        assert!(warmed, "the prewarm op answers ok");
+        // The unknown-op refusal is named by the child's default arm.
+        let (tx, mut rx) = mpsc::channel::<BridgeEvent>(16);
+        let id = "unknown-op-probe".to_string();
+        bridge
+            .pending
+            .lock()
+            .expect("bridge pending lock")
+            .insert(id.clone(), tx);
+        bridge
+            .write_line(&json!({ "id": id, "op": "frobnicate" }))
+            .expect("write the unknown op");
+        match rx.recv().await {
+            Some(BridgeEvent::Failed { code, message, .. }) => {
+                assert_eq!(code, "bad_request", "the refusal is named");
+                assert!(
+                    message
+                        .as_deref()
+                        .unwrap_or_default()
+                        .contains("unknown op frobnicate"),
+                    "the refusal names the op: {message:?}"
+                );
+            }
+            other => panic!("expected the named refusal, got {other:?}"),
+        }
     }
 
     /// One `event: final` JSON line through the real parser path.

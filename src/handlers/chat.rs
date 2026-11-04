@@ -369,6 +369,15 @@ pub async fn chat_turn(
         .into_response();
     }
 
+    // PREWARM (before grounding, so the warm overlaps the recall window —
+    // the ≥1 s signal Apple requires): the session's model loads its
+    // prefix while the deterministic recall runs below. A failed prewarm
+    // is logged and never fails the turn — the turn itself materializes
+    // the same session, just cold.
+    if let Err(e) = bridge.prewarm(&session, Some(CHAT_INSTRUCTIONS)).await {
+        tracing::warn!("chat prewarm failed (turn proceeds cold): {e}");
+    }
+
     // Grounding: the SAME deterministic recall core, submodularly packed.
     // A refusal/absence here does not fail the chat — the model answers and
     // SAYS there was no memory, which is the honest behavior the plugin's
@@ -1284,6 +1293,34 @@ mod tests {
         assert!(
             guard < call && call < bridge_call,
             "the filing lives inside the abstain branch, ahead of the bridge call"
+        );
+    }
+
+    /// PREWARM SITS BEFORE GROUNDING (tuning): the turn path warms the
+    /// session before the recall resolves — the warm overlaps the
+    /// grounding window by construction. Source scan over the handler.
+    /// The scan strips comment lines first, so a commented-out call
+    /// cannot satisfy it (the vacuous-pass class); the needles are
+    /// assembled so this test's own text never matches the scan.
+    #[test]
+    fn prewarm_runs_before_the_grounding_recall() {
+        let src = include_str!("chat.rs");
+        let live: String = src
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let prewarm_needle = concat!("bridge.prewarm(&session, Some(", "CHAT_INSTRUCTIONS))");
+        let recall_needle = concat!("let grounding = ", "run_recall(");
+        let prewarm = live
+            .find(prewarm_needle)
+            .expect("the turn path prewarms the session (live call, not a comment)");
+        let recall = live
+            .find(recall_needle)
+            .expect("the grounding recall runs in the turn path");
+        assert!(
+            prewarm < recall,
+            "prewarm must resolve before the grounding recall so the warm overlaps it"
         );
     }
 

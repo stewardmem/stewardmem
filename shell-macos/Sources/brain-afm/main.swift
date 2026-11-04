@@ -24,6 +24,13 @@
 //
 //   {"id":"x1","op":"cancel","target":"t1"}   → abandons that turn's task
 //
+//   {"id":"p1","op":"prewarm","session":"s1","instructions":"…"(optional)}
+//     → creates the session under the instructions law and warms the model
+//       via `session.prewarm(promptPrefix:)` — the kernel calls this before
+//       the first turn so the cold load overlaps the grounding window.
+//     → {"id":"p1","ok":true} once the prefix is loaded; named error codes
+//       (instructions_locked, model_unavailable, bad_request) otherwise.
+//
 // WHY SESSIONS LIVE HERE. The conversation's accumulated transcript — the
 // thing HistoryBudget trims — can only exist inside a live
 // `LanguageModelSession` (macOS 27 additionally allows seeding one from
@@ -535,6 +542,61 @@ struct BrainAfmBridge {
                 }
                 inflight.register(id, task)
                 await task.value
+
+            case "prewarm":
+                guard let session = object["session"] as? String else {
+                    out.send([
+                        "id": id, "event": "error", "code": "bad_request",
+                        "message": "prewarm requires session"
+                    ])
+                    continue
+                }
+                let instructions = object["instructions"] as? String
+                do {
+                    guard capabilities != nil else {
+                        throw BridgeError.badRequest(
+                            "capabilities must be requested before the first turn"
+                        )
+                    }
+                    // The instructions law is a PROTOCOL decision: resolve
+                    // the slot first (refusals precede any model work),
+                    // then materialize and warm inside the session gate so
+                    // a racing turn never observes a half-warmed session.
+                    let slot = try sessions.resolve(
+                        id: session, instructions: instructions
+                    )
+                    guard let budget = await BudgetCache.shared.measured() else {
+                        throw BridgeError.modelUnavailable(
+                            "the on-device budget could not be measured"
+                        )
+                    }
+                    let bridgeSession = try sessions.materialize(
+                        slot, budget: budget,
+                        escalationPermitted: capabilities?.escalationPermitted ?? false
+                    )
+                    let prefix = Prompt(slot.instructions ?? "")
+                    try await slot.gate.run {
+                        bridgeSession.session.prewarm(promptPrefix: prefix)
+                    }
+                    out.send(["id": id, "ok": true])
+                } catch let error as BridgeError {
+                    var event: [String: Any] = [
+                        "id": id, "event": "error", "code": error.code
+                    ]
+                    if case let .modelUnavailable(message) = error {
+                        event["message"] = message
+                    }
+                    if case let .badRequest(message) = error {
+                        event["message"] = message
+                    }
+                    out.send(event)
+                } catch {
+                    out.send([
+                        "id": id, "event": "error",
+                        "code": "generation_failed",
+                        "message": String(String(describing: error).prefix(300))
+                    ])
+                }
 
             case "cancel":
                 if let target = object["target"] as? String {
