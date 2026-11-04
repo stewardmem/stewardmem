@@ -1012,7 +1012,7 @@ pub(crate) fn article_worklist(
                   WHERE f.claim = 'kcs_flag' AND f.evidence = 'article:' || k.id) AS open_flags,
                 k.pii
          FROM knowledge k
-         WHERE k.kcs_state != 'none'",
+         WHERE (k.kcs_state != 'none' OR k.freshness_review_due IS NOT NULL)",
     );
     // The empty permit is `1 = 0`, never `IN ()` (a SQLite syntax error).
     if let Some(sc) = access_scopes {
@@ -1783,6 +1783,62 @@ mod tests {
                 .unwrap()
                 .is_empty(),
             "the empty permit fails closed"
+        );
+    }
+}
+
+#[cfg(test)]
+mod freshness_worklist_tests {
+    use super::*;
+    use crate::migration::run_migration;
+    use crate::register_sqlite_vec::register_sqlite_vec;
+
+    fn db() -> Connection {
+        register_sqlite_vec();
+        let mut conn = Connection::open_in_memory().expect("open");
+        run_migration(&mut conn, 1).expect("migration");
+        conn
+    }
+
+    /// F-5: the widened worklist admits a freshness-due `none` row AND
+    /// the record-gate predicates (`access_scope`/`owner` deny-by-default,
+    /// `1 = 0` empty permit) survive verbatim — a foreign owner's due row
+    /// must NOT surface.
+    #[test]
+    fn f5_freshness_due_raw_rows_surface_but_the_gate_holds() {
+        let conn = db();
+        // Row 1: ana's raw memory, freshness-due (the contradicted consumer's
+        // pull). Row 2: bob's raw memory, also due — but bob is not in ana's
+        // permit, so the gate must hide it. Row 3: ana's raw memory, NOT due
+        // — the widened predicate must not admit it.
+        conn.execute(
+            "INSERT INTO knowledge(id, title, content, content_hash, source, domain, owner,
+                                    access_scope, kcs_state, freshness_review_due)
+             VALUES(1, 't1', 'body 1', 'h1', 'manual', 'global', 'ana', 'private', 'none', 100),
+                   (2, 't2', 'body 2', 'h2', 'manual', 'global', 'bob', 'private', 'none', 100),
+                   (3, 't3', 'body 3', 'h3', 'manual', 'global', 'ana', 'private', 'none', NULL)",
+            [],
+        )
+        .unwrap();
+        let owners = vec!["ana".to_string()];
+        let ids = |rows: Vec<WorklistRow>| rows.iter().map(|r| r.0).collect::<Vec<i64>>();
+        assert_eq!(
+            ids(article_worklist(&conn, Some(&["private".to_string()]), Some(&owners)).unwrap()),
+            vec![1],
+            "ana's due raw row surfaces; bob's due row is gate-hidden; the not-due row stays out"
+        );
+        // The empty permit still fails closed over the widened predicate.
+        assert!(
+            article_worklist(&conn, Some(&[]), Some(&owners))
+                .unwrap()
+                .is_empty(),
+            "an empty access_scope permit matches nothing, even freshness-due rows"
+        );
+        // Unrestricted (admin/loopback) sees both due rows.
+        assert_eq!(
+            ids(article_worklist(&conn, None, None).unwrap()),
+            vec![2, 1],
+            "unrestricted sees every freshness-due row"
         );
     }
 }

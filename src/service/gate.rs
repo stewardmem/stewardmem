@@ -79,6 +79,25 @@ pub(crate) fn kcs_state_cas(
     })
 }
 
+/// A contradicted feedback act pulls the row's freshness review earlier —
+/// MONOTONE: it can set `freshness_review_due = now` when absent or in the
+/// future, never push a due date later, and is idempotent under replay.
+/// Advisory content-health input (the kcs.rs improve-flag law): edits stay
+/// HITL — this only schedules the review, it never changes content.
+/// Returns whether the pull fired.
+pub(crate) fn freshness_pull_earlier(
+    conn: &Connection,
+    id: i64,
+    now: i64,
+) -> rusqlite::Result<bool> {
+    let n = conn.execute(
+        "UPDATE knowledge SET freshness_review_due = ?1
+          WHERE id = ?2 AND (freshness_review_due IS NULL OR freshness_review_due > ?1)",
+        rusqlite::params![now, id],
+    )?;
+    Ok(n > 0)
+}
+
 /// The KCS capture-kind draft insert: a knowledge row born in
 /// `kcs_state='draft'` (the four-fixed-section body is the caller's; the
 /// title is the symptom-phrase heading). Returns the new row id. The vec

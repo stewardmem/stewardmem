@@ -227,6 +227,12 @@ const SUBCOMMANDS: &[Subcommand] = &[
         usage: "brain suggest-metrics [--session S] [--since DATE]",
     },
     Subcommand {
+        name: "kcs-stale",
+        json: true,
+        run: cmd_kcs_stale,
+        usage: "brain kcs-stale [--domain D]",
+    },
+    Subcommand {
         name: "retention",
         json: true,
         run: cmd_retention,
@@ -2133,6 +2139,59 @@ fn cmd_suggest_metrics(args: &[String]) -> Result<(), String> {
         let since = w.get("since").and_then(|s| s.as_str()).unwrap_or("-");
         let session = w.get("session").and_then(|s| s.as_str()).unwrap_or("-");
         println!("  window              : since={since} session={session}");
+    }
+    Ok(())
+}
+
+/// `brain kcs-stale [--domain D]`: the freshness worklist — memories whose
+/// review is due (flagged or past `freshness_review_due`), oldest review
+/// first. Reads the existing `GET /kcs/articles?stale=1` surface over HTTP
+/// (the CLI is an HTTP client; no direct DB verb). `--json` emits the
+/// server's rows verbatim.
+fn cmd_kcs_stale(args: &[String]) -> Result<(), String> {
+    let (_positionals, flags) = parse_flags(args)?;
+    let mut query: Vec<(String, String)> = vec![("stale".into(), "1".into())];
+    if let Some(d) = flags.get("domain").and_then(|o| o.clone()) {
+        query.push(("domain".into(), d));
+    }
+    let resp = get(
+        &base_url(),
+        "/kcs/articles",
+        &query,
+        auth_token().as_deref(),
+    )?;
+    if resp.status != 200 {
+        return Err(format!(
+            "server returned status {}: {}",
+            resp.status,
+            truncate(&resp.body, 200)
+        ));
+    }
+    let v: serde_json::Value =
+        serde_json::from_str(&resp.body).map_err(|e| format!("non-JSON response: {e}"))?;
+    if json_mode() {
+        return emit_json_ok("kcs-stale", v);
+    }
+    let rows = v.as_array().cloned().unwrap_or_default();
+    if rows.is_empty() {
+        println!("no stale memories — nothing is waiting for review");
+        return Ok(());
+    }
+    println!(
+        "{} stale memor{}:",
+        rows.len(),
+        if rows.len() == 1 { "y" } else { "ies" }
+    );
+    for row in &rows {
+        let id = row["id"].as_i64().unwrap_or(0);
+        let title = row["title"].as_str().unwrap_or("(untitled)");
+        let state = row["kcs_state"].as_str().unwrap_or("?");
+        let flags = row["open_flags"].as_i64().unwrap_or(0);
+        let due = row["freshness_review_due"]
+            .as_i64()
+            .map(|d| d.to_string())
+            .unwrap_or_else(|| "-".to_string());
+        println!("  #{id} [{state}] flags={flags} due={due} {title}");
     }
     Ok(())
 }
@@ -8859,5 +8918,42 @@ fn at_rest_doctor_distinguishes_detected_missing_and_unknown_encryption() {
         [&filevault, &off, &luks, &unknown, &overlay, &plain_device].map(at_rest_status_text)
     {
         assert!(line.contains("SQLite DB/WAL/SHM are plaintext while mounted"));
+    }
+}
+
+#[cfg(test)]
+mod kcs_stale_tests {
+    use super::*;
+
+    /// F-7: `brain kcs-stale` is one flat SUBCOMMANDS row (not a two-token
+    /// family), marked `--json`, and its usage line rides the generated
+    /// help. The doc row is held by the spire pin
+    /// (`cli_reference_covers_subcommands`).
+    #[test]
+    fn f7_kcs_stale_is_one_flat_json_row() {
+        let row = SUBCOMMANDS
+            .iter()
+            .find(|s| s.name == "kcs-stale")
+            .expect("kcs-stale must be a SUBCOMMANDS row");
+        assert!(row.json, "kcs-stale must be a --json data command");
+        assert!(
+            row.usage.contains("brain kcs-stale"),
+            "the usage line must name the verb: {}",
+            row.usage
+        );
+        let text = usage_text();
+        assert!(
+            text.contains("  brain kcs-stale"),
+            "the generated help must carry the verb"
+        );
+        // One flat row — no two-token family for a single verb.
+        assert_eq!(
+            SUBCOMMANDS
+                .iter()
+                .filter(|s| s.name.starts_with("kcs"))
+                .count(),
+            1,
+            "kcs-stale is one flat row, not a family"
+        );
     }
 }

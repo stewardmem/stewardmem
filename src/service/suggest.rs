@@ -89,7 +89,13 @@ pub(crate) fn record_feedback(
     if !exists {
         return Err(FeedbackError::NoSuchChunk(chunk_id));
     }
-    conn.execute(
+    // One transaction: the upsert and the contradicted consumer's freshness
+    // pull commit or roll back together — a CAS failure fails the whole
+    // feedback act, never a silent half-consumer.
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| FeedbackError::Database(format!("feedback tx begin failed: {e}")))?;
+    tx.execute(
         "INSERT INTO suggest_feedback(chunk_id, feedback, reason_hash, ts, session, tenant_id, ump_outcome, owner)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
          ON CONFLICT(chunk_id, COALESCE(session, '')) DO UPDATE SET
@@ -101,6 +107,17 @@ pub(crate) fn record_feedback(
         params![chunk_id, feedback, reason_hash, ts, session, tenant, ump_outcome, owner],
     )
     .map_err(|e| FeedbackError::Database(format!("feedback insert failed: {e}")))?;
+    // The feedback consumer (blind-spot 8): ONLY the granular
+    // `"contradicted"` outcome touches memory state — the `/suggest/feedback`
+    // surface passes `ump_outcome = None` and never fires. The record gate
+    // (`row_access_meta`/`authorize_target_row`) ran BEFORE this in the
+    // handler, so a foreign private row cannot be freshness-touched.
+    if ump_outcome == Some("contradicted") {
+        crate::service::gate::freshness_pull_earlier(&tx, chunk_id, ts)
+            .map_err(|e| FeedbackError::Database(format!("freshness pull failed: {e}")))?;
+    }
+    tx.commit()
+        .map_err(|e| FeedbackError::Database(format!("feedback commit failed: {e}")))?;
     Ok(())
 }
 
@@ -219,5 +236,226 @@ mod tests {
             )
             .unwrap();
         assert_eq!(owner, None, "an opaque replay overwrites the evidence");
+    }
+}
+
+#[cfg(test)]
+mod feedback_consumer_tests {
+    use super::*;
+    use crate::migration::run_migration;
+    use crate::register_sqlite_vec::register_sqlite_vec;
+
+    fn seed() -> Connection {
+        register_sqlite_vec();
+        let mut conn = Connection::open_in_memory().unwrap();
+        run_migration(&mut conn, 1).unwrap();
+        conn.execute(
+            "INSERT INTO knowledge (content, content_hash, node_kind) \
+             VALUES ('consumer memory', 'h-consumer', 'fact')",
+            [],
+        )
+        .unwrap();
+        conn
+    }
+
+    fn chunk_id(conn: &Connection) -> i64 {
+        conn.query_row("SELECT id FROM knowledge", [], |r| r.get(0))
+            .unwrap()
+    }
+
+    fn due(conn: &Connection, id: i64) -> Option<i64> {
+        conn.query_row(
+            "SELECT freshness_review_due FROM knowledge WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        )
+        .unwrap()
+    }
+
+    /// F-1: contradicted feedback on a known chunk pulls
+    /// `freshness_review_due` to `ts`; the row surfaces in
+    /// `article_worklist` output (the widened predicate admits a
+    /// freshness-due `none` row).
+    #[test]
+    fn f1_contradicted_pulls_freshness_and_surfaces_in_the_worklist() {
+        let conn = seed();
+        let id = chunk_id(&conn);
+        assert_eq!(due(&conn, id), None, "precondition: no due date");
+        record_feedback(
+            &conn,
+            id,
+            "dismiss",
+            None,
+            1_700_000_000,
+            Some("s1".into()),
+            "default",
+            Some("contradicted"),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            due(&conn, id),
+            Some(1_700_000_000),
+            "contradicted feedback must pull the review to its ts"
+        );
+        let rows = crate::workflow::kcs::article_worklist(&conn, None, None).unwrap();
+        assert!(
+            rows.iter().any(|r| r.0 == id),
+            "the freshness-due raw row must surface in the worklist"
+        );
+    }
+
+    /// F-2: monotone + idempotent — a second contradicted act does not
+    /// move an earlier due date; a future-due date is pulled earlier,
+    /// never pushed later.
+    #[test]
+    fn f2_the_pull_is_monotone_and_idempotent() {
+        let conn = seed();
+        let id = chunk_id(&conn);
+        // Future-due: pulled earlier to the act's ts.
+        conn.execute(
+            "UPDATE knowledge SET freshness_review_due = 9_999_999_999 WHERE id = ?1",
+            params![id],
+        )
+        .unwrap();
+        record_feedback(
+            &conn,
+            id,
+            "dismiss",
+            None,
+            1_700_000_000,
+            Some("s1".into()),
+            "default",
+            Some("contradicted"),
+            None,
+        )
+        .unwrap();
+        assert_eq!(due(&conn, id), Some(1_700_000_000));
+        // A later act must NOT push the due date later.
+        record_feedback(
+            &conn,
+            id,
+            "dismiss",
+            None,
+            1_800_000_000,
+            Some("s1".into()),
+            "default",
+            Some("contradicted"),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            due(&conn, id),
+            Some(1_700_000_000),
+            "a later contradicted act must not push the review later"
+        );
+        // An earlier act pulls it earlier still.
+        record_feedback(
+            &conn,
+            id,
+            "dismiss",
+            None,
+            1_600_000_000,
+            Some("s1".into()),
+            "default",
+            Some("contradicted"),
+            None,
+        )
+        .unwrap();
+        assert_eq!(due(&conn, id), Some(1_600_000_000));
+    }
+
+    /// F-3: only `"contradicted"` fires — followed/overridden/ignored
+    /// (and `ump_outcome = None`) never touch freshness.
+    #[test]
+    fn f3_only_contradicted_fires() {
+        for outcome in [Some("followed"), Some("overridden"), Some("ignored"), None] {
+            let conn = seed();
+            let id = chunk_id(&conn);
+            record_feedback(
+                &conn,
+                id,
+                "dismiss",
+                None,
+                1_700_000_000,
+                Some("s1".into()),
+                "default",
+                outcome,
+                None,
+            )
+            .unwrap();
+            assert_eq!(
+                due(&conn, id),
+                None,
+                "outcome {outcome:?} must never touch freshness"
+            );
+        }
+    }
+
+    /// F-4: the `/suggest/feedback` surface passes `ump_outcome = None` —
+    /// it can never fire the consumer. Structural: the suggest handler's
+    /// `record_feedback` call site names `None` for the outcome.
+    #[test]
+    fn f4_the_suggest_surface_passes_no_outcome() {
+        let src = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/handlers/suggest.rs"
+        ))
+        .expect("handlers/suggest.rs must be readable from the test");
+        assert!(
+            src.contains("record_feedback"),
+            "the suggest handler must call record_feedback"
+        );
+        // The call site's ump_outcome argument is None — the consumer can
+        // only fire on the granular "contradicted" string from /ump/feedback.
+        let call_at = src.find("record_feedback").unwrap();
+        let window = &src[call_at..(call_at + 600).min(src.len())];
+        assert!(
+            window.contains("None"),
+            "the suggest surface must pass ump_outcome = None: {window}"
+        );
+        assert!(
+            !window.contains("\"contradicted\""),
+            "the suggest surface must never name the contradicted outcome"
+        );
+    }
+
+    /// F-6: atomicity — the feedback upsert + the CAS are one transaction.
+    /// A CAS failure (the column dropped in this fixture) fails the whole
+    /// act: no feedback row survives.
+    #[test]
+    fn f6_a_cas_failure_rolls_back_the_upsert() {
+        let conn = seed();
+        let id = chunk_id(&conn);
+        // Break ONLY the CAS: the row still exists (the EXISTS probe
+        // passes), but the freshness column is gone, so the UPDATE fails.
+        conn.execute_batch("ALTER TABLE knowledge DROP COLUMN freshness_review_due")
+            .unwrap();
+        let err = record_feedback(
+            &conn,
+            id,
+            "dismiss",
+            None,
+            1_700_000_000,
+            Some("s1".into()),
+            "default",
+            Some("contradicted"),
+            None,
+        );
+        assert!(
+            err.is_err(),
+            "a CAS failure must fail the whole feedback act"
+        );
+        let n: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM suggest_feedback WHERE chunk_id = ?1",
+                params![id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            n, 0,
+            "the upsert must roll back with the failed CAS — no half-consumer"
+        );
     }
 }

@@ -31,6 +31,7 @@ on the HTTP API or the client console.
 | `brain suggest "<context>"` `[--exclude id[,id...]]` `[--k N]` `[--session S]` `[--domain D]` | Opt-in anticipation pull |
 | `brain suggest-feedback <id> accept\|dismiss` `[--reason "..."]` `[--session S]` | Record a suggestion outcome |
 | `brain suggest-metrics` `[--session S]` `[--since DATE]` | False-positive rate over the feedback ledger |
+| `brain kcs-stale` `[--domain D]` | The freshness worklist: memories whose review is due (flagged or past `freshness_review_due`) |
 
 ## Ingest & sources
 

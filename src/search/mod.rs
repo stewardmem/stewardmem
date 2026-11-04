@@ -2598,3 +2598,89 @@ pub mod graph_ppr;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod trust_scope_tests {
+    /// Extract a struct/fn body: from `needle` to the first `\n}` after it.
+    fn body_of(src: &str, needle: &str) -> String {
+        let at = src
+            .find(needle)
+            .unwrap_or_else(|| panic!("{needle} must exist in the scanned source"));
+        let rest = &src[at..];
+        let end = rest.find("\n}").unwrap_or(rest.len());
+        rest[..end].to_string()
+    }
+
+    /// S-a: no authz code reads `TrustTier` — zero references in
+    /// `route_guards.rs`, `authz/**`, and the `authorize*` functions in
+    /// `handlers/mod.rs`. (The `RecallHit.trust` output field in that
+    /// file is the wire, not a gate — the pin scopes to the gates.)
+    #[test]
+    fn s_a_no_authz_code_reads_the_tier() {
+        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
+        let mut offenders: Vec<String> = Vec::new();
+        let mut files = vec![format!("{root}/server/router/route_guards.rs")];
+        let authz_dir = format!("{root}/authz");
+        if let Ok(entries) = std::fs::read_dir(&authz_dir) {
+            for e in entries.flatten() {
+                let p = e.path();
+                if p.extension().is_some_and(|x| x == "rs") {
+                    files.push(p.to_string_lossy().to_string());
+                }
+            }
+        }
+        for path in &files {
+            let src = std::fs::read_to_string(path)
+                .unwrap_or_else(|_| panic!("{path} must be readable from the test"));
+            if src.contains("TrustTier") || src.contains("trust_tier") {
+                offenders.push(path.clone());
+            }
+        }
+        let handlers = std::fs::read_to_string(format!("{root}/handlers/mod.rs"))
+            .expect("handlers/mod.rs must be readable from the test");
+        for gate in [
+            "pub fn authorize(",
+            "pub fn authorize_tool(",
+            "pub fn authorize_role(",
+        ] {
+            let body = body_of(&handlers, gate);
+            if body.contains("TrustTier") || body.contains("trust_tier") {
+                offenders.push(format!("handlers/mod.rs::{gate}"));
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "no authz code may read the tier — found in {offenders:?}"
+        );
+    }
+
+    /// S-b: no client input — `QueryDoc`/`RecallRequest`/`SearchFilters`
+    /// carry zero trust fields. A caller cannot filter or spoof the tier.
+    #[test]
+    fn s_b_no_client_input_carries_the_tier() {
+        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
+        for (path, needle) in [
+            (format!("{root}/search/query.rs"), "pub struct QueryDoc"),
+            (
+                format!("{root}/handlers/recall.rs"),
+                "pub struct RecallRequest",
+            ),
+            (format!("{root}/search/mod.rs"), "pub struct SearchFilters"),
+        ] {
+            let src = std::fs::read_to_string(&path)
+                .unwrap_or_else(|_| panic!("{path} must be readable from the test"));
+            let body = body_of(&src, needle);
+            // A trust FIELD declaration (not the substring — "unrestricted"
+            // contains it): a line whose trimmed form starts with `trust:`
+            // or `pub trust`.
+            let has_field = body.lines().any(|l| {
+                let t = l.trim();
+                t.starts_with("trust:") || t.starts_with("pub trust")
+            });
+            assert!(
+                !has_field,
+                "{needle} in {path} must carry no trust field: {body}"
+            );
+        }
+    }
+}
