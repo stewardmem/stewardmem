@@ -136,17 +136,28 @@ test('prewarm_is_either_wired_to_a_session_that_exists_or_recorded_unreachable',
 		false
 	);
 
-	// ---- STEP 3: NO PREWARM IS WIRED AGAINST NOTHING ----
+	// ---- STEP 3: NO PREWARM IS WIRED AGAINST NOTHING (in the shell app) ----
 	//
 	// The prompt's reason for not wiring: "a call to a session that does not
 	// exist is a no-op that reads as done". So there must be no prewarm symbol
-	// anywhere in the shell's own code. This is the arm that would catch the
-	// plausible future edit — someone adding a `prewarm()` call that quietly
-	// does nothing while reading as delivered.
+	// anywhere in the SHELL APP's own code. This is the arm that would catch
+	// the plausible future edit — someone adding a `prewarm()` call that
+	// quietly does nothing while reading as delivered.
+	//
+	// Scope note (CG-09, 2026-11-05): the KERNEL's bridge child
+	// (`shell-macos/Sources/brain-afm`) DOES wire a prewarm — against real
+	// `LanguageModelSession`s it owns, behind the kernel's chat spine, with
+	// its round-trip pinned kernel-side. That wiring is measured, not a
+	// no-op, and it is OUTSIDE this pin's world: the derivation above counts
+	// the shipped app's `KernelRecallTransport` conformers, and the bridge
+	// child is not one. The scan below therefore covers the shell-app roots
+	// only; `shell-macos/Sources` is excluded ON PURPOSE, and the kernel
+	// wiring is pinned in its own lane — never let this scan grow back over
+	// Swift: a vacuous "no prewarm anywhere" would forbid the one measured
+	// wiring this round delivered.
 	const shellRoots = [
 		join(shellRoot, 'src'),
-		join(kernelRepo, 'shell', 'src-tauri', 'src'),
-		swiftSources
+		join(kernelRepo, 'shell', 'src-tauri', 'src')
 	];
 	for (const root of shellRoots) {
 		for (const file of filesUnder(root, /\.(ts|svelte|rs|swift)$/)) {
