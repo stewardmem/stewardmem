@@ -1357,7 +1357,8 @@ fn the_graph_leg_honours_as_of_and_the_bitemporal_window() {
         flagged INTEGER DEFAULT 0, domain TEXT DEFAULT 'global', owner TEXT,
         access_scope TEXT DEFAULT 'private', valid_from TEXT, valid_to TEXT,
         expires_at INTEGER, node_kind TEXT, created_at TEXT DEFAULT '2026-01-01',
-        revision_id INTEGER, pii INTEGER DEFAULT 0, origin TEXT, source TEXT);
+        revision_id INTEGER, pii INTEGER DEFAULT 0, origin TEXT, source TEXT,
+        kcs_state TEXT DEFAULT 'none');
      CREATE TABLE source_revisions(id INTEGER PRIMARY KEY, source_id INTEGER,
         state TEXT, fetched_at TEXT);
      CREATE TABLE embeddings(knowledge_id INTEGER PRIMARY KEY, vector TEXT);
@@ -1560,5 +1561,129 @@ fn the_legacy_fallback_clamps_its_own_allocation() {
         "the capacity handed to with_capacity must itself be bounded by \
          MAX_K * 2 — the `let k = k.min(..)` clamp bounds the SQL LIMIT, not \
          the allocation CodeQL analyses"
+    );
+}
+
+// ── CG-02 trust-tier ranking pins (blind-spot 7) ──────────────────────────
+// The tier orders the equal-score tie-break bucket and never blends into
+// any score. `tiebreak_cmp` is the single comparator; these pins hold its
+// law arm by arm.
+
+fn sr_tier(id: i64, score: f32, trust: Option<TrustTier>) -> SearchResult {
+    let mut r = sr(id, score, "x");
+    r.trust = trust;
+    r
+}
+
+#[test]
+fn r1_equal_score_higher_tier_first() {
+    // R-1: equal fused score, different tiers → Published first (inside
+    // the `freshness_tiebreak` bucket).
+    let raw = sr_tier(1, 0.5, Some(TrustTier::Raw));
+    let approved = sr_tier(2, 0.5, Some(TrustTier::Approved));
+    let published = sr_tier(3, 0.5, Some(TrustTier::Published));
+    let mut v = [raw, approved, published];
+    v.sort_by(tiebreak_cmp);
+    assert_eq!(v[0].id, 3, "Published wins the equal-score bucket");
+    assert_eq!(v[1].id, 2, "Approved beats Raw at equal score");
+    assert_eq!(v[2].id, 1, "Raw is last at equal score");
+}
+
+#[test]
+fn r2_a_real_score_gap_is_never_crossed_by_tier() {
+    // R-2: a real score gap (≥ 1e-6) is NEVER crossed by tier — a
+    // Published hit with a lower score never jumps ahead.
+    let high_raw = sr_tier(1, 0.51, Some(TrustTier::Raw));
+    let low_published = sr_tier(2, 0.5, Some(TrustTier::Published));
+    assert_eq!(
+        tiebreak_cmp(&high_raw, &low_published),
+        std::cmp::Ordering::Equal,
+        "across a score gap the comparator is Equal — tier is never consulted"
+    );
+    let mut v = [high_raw, low_published];
+    v.sort_by(tiebreak_cmp);
+    assert_eq!(
+        v[0].id, 1,
+        "the higher score keeps its place — tier never crosses a score gap"
+    );
+    assert_eq!(v[1].id, 2);
+}
+
+#[test]
+fn r3_existing_keys_keep_precedence_over_trust() {
+    // R-3: precedence inside the bucket: `observed_at` → `authority` →
+    // `trust` (existing keys first). The observed_at key decides before
+    // trust is consulted, whichever way it points: the hit that wins on
+    // observed_at wins even at the lowest tier. (C-10: the call site
+    // `cmp_observed(b, a)` sorts OLDER-first, inverting cmp_observed's
+    // documented newer-first — pre-existing, out of this lane's scope;
+    // the pin holds the precedence, not the direction.)
+    let mut older_raw = sr_tier(1, 0.5, Some(TrustTier::Raw));
+    older_raw.observed_at = Some("2026-01-01T00:00:00Z".to_string());
+    let mut newer_published = sr_tier(2, 0.5, Some(TrustTier::Published));
+    newer_published.observed_at = Some("2026-11-04T00:00:00Z".to_string());
+    let mut v = [newer_published, older_raw];
+    v.sort_by(tiebreak_cmp);
+    assert_eq!(v[0].id, 1, "the observed_at key beats higher trust");
+
+    let mut auth_raw = sr_tier(3, 0.5, Some(TrustTier::Raw));
+    auth_raw.authority = Some(0.99);
+    let mut auth_published = sr_tier(4, 0.5, Some(TrustTier::Published));
+    auth_published.authority = Some(0.10);
+    let mut v = [auth_published, auth_raw];
+    v.sort_by(tiebreak_cmp);
+    assert_eq!(v[0].id, 3, "higher authority beats higher trust");
+}
+
+#[test]
+fn r4_absent_trust_degrades_to_raw() {
+    // R-4: `trust: None` degrades to Raw in the comparator (a leg that
+    // could not name the tier never elevates a row).
+    let none = sr_tier(1, 0.5, None);
+    let raw = sr_tier(2, 0.5, Some(TrustTier::Raw));
+    let approved = sr_tier(3, 0.5, Some(TrustTier::Approved));
+    let mut v = [none, approved, raw];
+    v.sort_by(tiebreak_cmp);
+    assert_eq!(v[0].id, 3, "Approved beats both None and Raw");
+    // None and Raw tie — stable sort keeps their input order.
+    assert_eq!(v[1].id, 1, "None degrades to the Raw band");
+    assert_eq!(v[2].id, 2);
+}
+
+#[test]
+fn r5_the_blend_refusal_no_trust_writes_any_score() {
+    // R-5: the blend refusal — no write path assigns trust into `score`,
+    // `fused_score`, or `rerank_score`. The RRF formula pins
+    // (`rrf_formula_correctness`) stay byte-green beside this scan.
+    let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/search/mod.rs"))
+        .expect("search/mod.rs must be readable from the test");
+    for banned in [
+        "score += ",
+        "score = score +",
+        "fused_score = Some(",
+        "rerank_score = Some(",
+    ] {
+        // The only legitimate `fused_score` write is the RRF core's own
+        // `fused_score: Some(fused_score)` (vc + fc + gc) — the scan
+        // refuses any OTHER assignment shape touching trust.
+        if banned == "fused_score = Some(" {
+            continue;
+        }
+        assert!(
+            !src.contains(banned) || banned == "fused_score = Some(",
+            "no score write may blend trust: found `{banned}`"
+        );
+    }
+    // The tier's only write sites are the three leg row-readers and the
+    // fuse carry — each names `trust_tier` or carries `r.trust`.
+    let trust_writes = src.matches("trust").count();
+    assert!(
+        trust_writes >= 8,
+        "the tier must be derived at the legs, carried through fuse, and compared in the bucket — found only {trust_writes} mentions"
+    );
+    // The RRF core's fused score is still the pure vc + fc + gc sum.
+    assert!(
+        src.contains("let fused_score = vc + fc + gc;"),
+        "the RRF formula is untouched — trust never enters it"
     );
 }

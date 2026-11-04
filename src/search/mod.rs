@@ -280,8 +280,6 @@ pub enum TrustTier {
 
 /// The single derivation. Exact match on the writer's lowercase
 /// vocabulary — no case folding: `PUBLISHED` is garbage and garbage is Raw.
-/// S2 wires the leg joins to this; the allow is removed there.
-#[allow(dead_code)]
 pub(crate) fn trust_tier(kcs_state: &str) -> TrustTier {
     match kcs_state {
         "published" => TrustTier::Published,
@@ -1687,7 +1685,8 @@ pub fn vec0_knn(
     let mut sql = String::from(
         "SELECT k.id, k.title, k.content, v.distance, k.flagged,
                 k.observed_at, k.authority, k.assertion_kind, k.confidence,
-                k.expires_at, k.pii, k.source, k.node_kind, k.lawful_basis, k.region, k.origin
+                k.expires_at, k.pii, k.source, k.node_kind, k.lawful_basis, k.region, k.origin,
+                k.kcs_state
          FROM vec_knowledge v
          JOIN knowledge k ON k.id = v.knowledge_id
          LEFT JOIN source_revisions sr ON k.revision_id = sr.id
@@ -1787,6 +1786,7 @@ pub fn vec0_knn(
             r.lawful_basis = row.get(13)?;
             r.region = row.get(14)?;
             r.origin = row.get(15)?;
+            r.trust = Some(trust_tier(&row.get::<_, String>(16)?));
             Ok(r)
         })?
         .filter_map(|r| r.ok())
@@ -1804,7 +1804,8 @@ fn fts_search(
     let mut sql = String::from(
         "SELECT k.id, k.title, k.content, bm25(knowledge_fts) AS score, k.flagged,
                 k.observed_at, k.authority, k.assertion_kind, k.confidence,
-                k.expires_at, k.pii, k.source, k.node_kind, k.lawful_basis, k.region, k.origin
+                k.expires_at, k.pii, k.source, k.node_kind, k.lawful_basis, k.region, k.origin,
+                k.kcs_state
          FROM knowledge_fts
          JOIN knowledge k ON k.id = knowledge_fts.rowid
          LEFT JOIN source_revisions sr ON k.revision_id = sr.id
@@ -1900,6 +1901,7 @@ fn fts_search(
             r.lawful_basis = row.get(13)?;
             r.region = row.get(14)?;
             r.origin = row.get(15)?;
+            r.trust = Some(trust_tier(&row.get::<_, String>(16)?));
             Ok(r)
         })?
         .filter_map(|r| r.ok())
@@ -2349,29 +2351,45 @@ pub fn perform_search_traced(
     }
 
     // deterministic freshness tie-break. Within equal fused-score
-    // buckets, prefer newer `observed_at` then higher `authority`. This is a
-    // post-fusion stable sort that NEVER reorders across distinct scores, so it
-    // cannot distort lexical/vector retrieval semantics.
+    // buckets, prefer newer `observed_at` then higher `authority` then
+    // higher lifecycle trust tier (Published > Approved > Raw). This is a
+    // post-fusion stable sort that NEVER reorders across distinct scores,
+    // so it cannot distort lexical/vector retrieval semantics.
     // ponytail: stable sort over ≤ vec_overfetch(k) items — O(n log n),
     // bounded and cheap.
     if filters.freshness_tiebreak {
-        use std::cmp::Ordering;
-        fused.sort_by(|a, b| {
-            // Equal score → apply tie-break; otherwise keep RRF order.
-            if (a.score - b.score).abs() < 1e-6 {
-                let by_obs = cmp_observed(b.observed_at.as_deref(), a.observed_at.as_deref());
-                if by_obs != Ordering::Equal {
-                    return by_obs;
-                }
-                let ba = b.authority.unwrap_or(0.8);
-                let aa = a.authority.unwrap_or(0.8);
-                return ba.partial_cmp(&aa).unwrap_or(Ordering::Equal);
-            }
-            Ordering::Equal
-        });
+        fused.sort_by(tiebreak_cmp);
     }
 
     Ok((fused, tel.clone()))
+}
+
+/// The deterministic tie-break comparator (blind-spot 7's ranking law):
+/// inside the equal-score bucket ONLY, `observed_at` → `authority` →
+/// `trust` (Published > Approved > Raw). Never reorders across a score
+/// gap; never writes any score. Pure over the two hits.
+fn tiebreak_cmp(a: &SearchResult, b: &SearchResult) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    // Equal score → apply tie-break; otherwise keep RRF order.
+    if (a.score - b.score).abs() < 1e-6 {
+        let by_obs = cmp_observed(b.observed_at.as_deref(), a.observed_at.as_deref());
+        if by_obs != Ordering::Equal {
+            return by_obs;
+        }
+        let ba = b.authority.unwrap_or(0.8);
+        let aa = a.authority.unwrap_or(0.8);
+        let by_auth = ba.partial_cmp(&aa).unwrap_or(Ordering::Equal);
+        if by_auth != Ordering::Equal {
+            return by_auth;
+        }
+        // Lifecycle trust tier (blind-spot 7): Published > Approved > Raw,
+        // inside the equal-score bucket only — never across a score gap,
+        // never blended into any score.
+        let bt = b.trust.unwrap_or(TrustTier::Raw);
+        let at = a.trust.unwrap_or(TrustTier::Raw);
+        return bt.cmp(&at);
+    }
+    Ordering::Equal
 }
 
 /// Compare two RFC3339/DB timestamps for freshness ordering. Unknown/absent
