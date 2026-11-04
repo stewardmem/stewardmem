@@ -31,41 +31,47 @@ use std::path::Path;
 ///
 /// Re-derive with `sed -n '<line>p' <file>` — never from memory. A line that
 /// moved is this pin's whole job.
+///
+/// CG-01 (2026-11-04) re-derived the six gdl.rs anchors after the
+/// `GdlCase.certainty` field + the `apply()` grade compute landed above them
+/// (+10 between the two insertion points, +19 after the second). Needles
+/// unchanged — a plausible wrong line is the failure mode, so only the
+/// numbers moved.
 const ANCHORS: &[(&str, &str, usize, &str)] = &[
     (
         "F15 — the main phase exchange",
         "src/workflow/gdl.rs",
-        3371,
+        3390,
         "run_turns_owned",
     ),
     (
         "F15 — the adversarial re-check delegation",
         "src/workflow/gdl.rs",
-        3126,
+        3145,
         "delegate_owned_budgeted",
     ),
     (
         "F15 — the second-verification confirmation",
         "src/workflow/gdl.rs",
-        3671,
+        3690,
         "run_turns_owned",
     ),
     (
         "F8 — accept requires a SERVER hit",
         "src/workflow/gdl.rs",
-        1255,
+        1265,
         "no server knowledge hits",
     ),
     (
         "F8 — a cited id must be one the server returned",
         "src/workflow/gdl.rs",
-        1272,
+        1282,
         "unknown knowledge id",
     ),
     (
         "F9 — locator resolution",
         "src/workflow/gdl.rs",
-        1597,
+        1607,
         "fn locator_resolves",
     ),
     (
