@@ -292,6 +292,45 @@ pub fn list_turns(
     Ok((rows, total))
 }
 
+/// The transcript a fresh bridge session seeds from (transcript seeding):
+/// the FIRST user message (the topic anchor) plus the LAST exchange (the
+/// last user message and its assistant answer, when it exists) — the
+/// first + last shape Apple's recovery guidance names. At most three
+/// entries, oldest first, deduped by seq (a one-pair session seeds two).
+/// An unknown or foreign session seeds nothing (no existence oracle);
+/// a storage failure seeds nothing too — the caller degrades to an
+/// unseeded fresh session rather than failing the turn.
+pub fn seed_entries(
+    conn: &Connection,
+    scope: &OwnerScope,
+    session_key: &str,
+) -> Vec<(String, String)> {
+    let Ok((first_page, total)) = list_turns(conn, scope, session_key, 2, 0) else {
+        return Vec::new();
+    };
+    if total == 0 {
+        return Vec::new();
+    }
+    // The last exchange lives in the final page; reuse the first page
+    // when it already covers the tail (the common small-session case).
+    let last_page = if total <= 2 {
+        first_page.clone()
+    } else {
+        match list_turns(conn, scope, session_key, 2, total - 2) {
+            Ok((rows, _)) => rows,
+            Err(_) => return Vec::new(),
+        }
+    };
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for turn in first_page.iter().chain(last_page.iter()) {
+        if seen.insert(turn.seq) {
+            out.push((turn.role.to_owned(), turn.content.clone()));
+        }
+    }
+    out
+}
+
 /// Map the stored role text back onto the wire vocabulary. The CHECK
 /// constraint admits only the two values; an unreadable value is storage
 /// damage and refuses rather than inventing a third role.
@@ -943,6 +982,66 @@ mod tests {
         assert!(matches!(refused, Err(ChatSessionError::Storage(_))));
         let (_, total) = list_turns(&conn, &OwnerScope::unrestricted(), "s-flag", 50, 0).unwrap();
         assert_eq!(total, 6, "the refused write persisted nothing");
+    }
+
+    /// SEED SELECTION (transcript seeding): first exchange + last
+    /// exchange, oldest first, deduped; a one-pair session seeds two; an
+    /// unknown key seeds nothing.
+    #[test]
+    fn seed_entries_take_the_first_and_last_exchanges() {
+        let mut conn = db();
+        assert!(
+            seed_entries(&conn, &OwnerScope::unrestricted(), "s-seed").is_empty(),
+            "an unknown session seeds nothing"
+        );
+        persist_turn_pair(&mut conn, "s-seed", OWNER, "q1", "a1", None, None, None, T0).unwrap();
+        assert_eq!(
+            seed_entries(&conn, &OwnerScope::unrestricted(), "s-seed"),
+            vec![
+                ("user".to_owned(), "q1".to_owned()),
+                ("assistant".to_owned(), "a1".to_owned())
+            ],
+            "a one-pair session seeds its two rows, oldest first"
+        );
+        persist_turn_pair(
+            &mut conn,
+            "s-seed",
+            OWNER,
+            "q2",
+            "a2",
+            None,
+            None,
+            None,
+            T0 + 1,
+        )
+        .unwrap();
+        persist_turn_pair(
+            &mut conn,
+            "s-seed",
+            OWNER,
+            "q3",
+            "a3",
+            None,
+            None,
+            None,
+            T0 + 2,
+        )
+        .unwrap();
+        assert_eq!(
+            seed_entries(&conn, &OwnerScope::unrestricted(), "s-seed"),
+            vec![
+                ("user".to_owned(), "q1".to_owned()),
+                ("assistant".to_owned(), "a1".to_owned()),
+                ("user".to_owned(), "q3".to_owned()),
+                ("assistant".to_owned(), "a3".to_owned()),
+            ],
+            "middle exchanges never seed: first + last only"
+        );
+        // A foreign key seeds nothing, like an unknown one.
+        assert!(
+            seed_entries(&conn, &narrowed(OTHER), "s-seed").is_empty(),
+            "no existence oracle on the seed either"
+        );
     }
 
     /// THE KEY FENCE at the storage boundary: the shape `/chat/turns`

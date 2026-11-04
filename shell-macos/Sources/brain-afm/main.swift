@@ -24,6 +24,11 @@
 //
 //   {"id":"x1","op":"cancel","target":"t1"}   → abandons that turn's task
 //
+//   {"id":"p1","op":"prewarm","session":"s1","instructions":"…"(optional),
+//    "history":[{"role":"user","text":"…"},{"role":"assistant","text":"…"}]}
+//     → on a FRESH session the history seeds it (measured against the
+//       budget; history_unseedable by name when it cannot fit) —
+//       ignored when the session already lives in this process.
 //   {"id":"p1","op":"prewarm","session":"s1","instructions":"…"(optional)}
 //     → creates the session under the instructions law and warms the model
 //       via `session.prewarm(promptPrefix:)` — the kernel calls this before
@@ -139,6 +144,11 @@ enum BridgeError: Error {
     case generationFailed(String)
     case instructionsLocked
     case badRequest(String)
+    /// A fresh session's seeded history cannot fit the measured budget.
+    /// Named, never silent amnesia: the turn is refused BEFORE the
+    /// session materializes, so the transcript that failed seeding is
+    /// unchanged and the next turn lands on the same terms.
+    case historyUnseedable(shortfall: Int)
 
     var code: String {
         switch self {
@@ -147,6 +157,7 @@ enum BridgeError: Error {
         case .generationFailed: "generation_failed"
         case .instructionsLocked: "instructions_locked"
         case .badRequest: "bad_request"
+        case .historyUnseedable: "history_unseedable"
         }
     }
 }
@@ -297,7 +308,10 @@ final class BridgeSession: @unchecked Sendable {
     /// planner would decide against a budget nothing enforces). The budget
     /// is handed in (measured on the async side, cached process-wide) so
     /// session construction stays sync under the sessions lock.
-    init(instructions: String?, budget: Int, escalationPermitted: Bool) throws {
+    init(
+        instructions: String?, budget: Int, escalationPermitted: Bool,
+        history: [Transcript.Entry] = []
+    ) throws {
         let model = SystemLanguageModel.default
         guard case .available = model.availability else {
             throw BridgeError.modelUnavailable(
@@ -322,10 +336,15 @@ final class BridgeSession: @unchecked Sendable {
         let base = instructions.map { text in
             LanguageModelSession.Profile { Instructions(text) }
         } ?? LanguageModelSession.Profile {}
+        // A fresh session may SEED from history (the kernel's persisted
+        // transcript after a restart or a bridge kill). An empty history
+        // is the ordinary live path. The trimmer still rides the profile,
+        // so seeded entries are budgeted like any other transcript.
         self.session = LanguageModelSession(
             profile: base
                 .model(model)
-                .historyTransform(controller.transform)
+                .historyTransform(controller.transform),
+            history: history
         )
 
         self.planner = ChatTurnPlanner(
@@ -386,13 +405,14 @@ final class Sessions: @unchecked Sendable {
     /// may answer `model_unavailable`; the slot it attaches to already
     /// carries the session's identity and its instructions lock.
     func materialize(
-        _ slot: Slot, budget: Int, escalationPermitted: Bool
+        _ slot: Slot, budget: Int, escalationPermitted: Bool,
+        history: [Transcript.Entry] = []
     ) throws -> BridgeSession {
         try lock.withLock {
             if let bridge = slot.bridge { return bridge }
             let fresh = try BridgeSession(
                 instructions: slot.instructions, budget: budget,
-                escalationPermitted: escalationPermitted
+                escalationPermitted: escalationPermitted, history: history
             )
             slot.bridge = fresh
             return fresh
@@ -477,6 +497,33 @@ struct BrainAfmBridge {
                 let instructions = object["instructions"] as? String
                 let maxResponse = object["maxResponseTokens"] as? Int
                 let requestCap = min(max(maxResponse ?? 512, 16), 1024)
+                // Seeded history (transcript continuity): first + last
+                // entries from the kernel's persisted transcript. Used
+                // ONLY when this request creates the session; an existing
+                // live session's transcript is authoritative and the
+                // field is ignored. Parsed BEFORE the Task (entries are
+                // Sendable; the raw dictionaries are not) — malformed
+                // seed is a named refusal, never a skip.
+                let rawHistory = object["history"] as? [[String: Any]]
+                let seedEntries: [Transcript.Entry]
+                do {
+                    seedEntries = try Self.parseSeedHistory(rawHistory)
+                } catch let error as BridgeError {
+                    var event: [String: Any] = [
+                        "id": id, "event": "error", "code": error.code
+                    ]
+                    if case let .badRequest(message) = error {
+                        event["message"] = message
+                    }
+                    out.send(event)
+                    continue
+                } catch {
+                    out.send([
+                        "id": id, "event": "error", "code": "bad_request",
+                        "message": "history entries are malformed"
+                    ])
+                    continue
+                }
 
                 let task = Task {
                     defer { inflight.finish(id) }
@@ -502,9 +549,10 @@ struct BrainAfmBridge {
                                 "the on-device budget could not be measured"
                             )
                         }
-                        let bridgeSession = try sessions.materialize(
-                            slot, budget: budget,
-                            escalationPermitted: caps.escalationPermitted
+                        let bridgeSession = try await Self.seededBridgeSession(
+                            sessions: sessions, slot: slot, budget: budget,
+                            escalationPermitted: caps.escalationPermitted,
+                            seedEntries: seedEntries
                         )
                         try await slot.gate.run {
                             let turnNo = bridgeSession.nextTurn()
@@ -520,6 +568,9 @@ struct BrainAfmBridge {
                             "id": id, "event": "error", "code": error.code
                         ]
                         if case let .conversationDoesNotFit(shortfall) = error {
+                            event["shortfallTokens"] = shortfall
+                        }
+                        if case let .historyUnseedable(shortfall) = error {
                             event["shortfallTokens"] = shortfall
                         }
                         if case let .generationFailed(message) = error {
@@ -552,6 +603,7 @@ struct BrainAfmBridge {
                     continue
                 }
                 let instructions = object["instructions"] as? String
+                let rawHistory = object["history"] as? [[String: Any]]
                 do {
                     guard capabilities != nil else {
                         throw BridgeError.badRequest(
@@ -570,12 +622,16 @@ struct BrainAfmBridge {
                             "the on-device budget could not be measured"
                         )
                     }
-                    let bridgeSession = try sessions.materialize(
-                        slot, budget: budget,
-                        escalationPermitted: capabilities?.escalationPermitted ?? false
+                    // The seed rides the prewarm too: a prewarm that
+                    // materializes without it would poison seeding.
+                    let seedEntries = try Self.parseSeedHistory(rawHistory)
+                    let bridgeSession = try await Self.seededBridgeSession(
+                        sessions: sessions, slot: slot, budget: budget,
+                        escalationPermitted: capabilities?.escalationPermitted ?? false,
+                        seedEntries: seedEntries
                     )
                     let prefix = Prompt(slot.instructions ?? "")
-                    try await slot.gate.run {
+                    await slot.gate.run {
                         bridgeSession.session.prewarm(promptPrefix: prefix)
                     }
                     out.send(["id": id, "ok": true])
@@ -583,6 +639,9 @@ struct BrainAfmBridge {
                     var event: [String: Any] = [
                         "id": id, "event": "error", "code": error.code
                     ]
+                    if case let .historyUnseedable(shortfall) = error {
+                        event["shortfallTokens"] = shortfall
+                    }
                     if case let .modelUnavailable(message) = error {
                         event["message"] = message
                     }
@@ -625,6 +684,78 @@ struct BrainAfmBridge {
     }
 
     #if canImport(FoundationModels)
+    /// The ONE seeded-materialization path, shared by `turn` and
+    /// `prewarm`: a live session's transcript is authoritative (the
+    /// seed is ignored); a session this request creates measures the
+    /// seed against the budget and refuses BY NAME when unseedable —
+    /// before materializing, so the transcript is unchanged.
+    @available(macOS 26.0, *)
+    static func seededBridgeSession(
+        sessions: Sessions, slot: Sessions.Slot, budget: Int,
+        escalationPermitted: Bool, seedEntries: [Transcript.Entry]
+    ) async throws -> BridgeSession {
+        var creatingHistory: [Transcript.Entry] = []
+        if slot.bridge == nil && !seedEntries.isEmpty {
+            guard #available(macOS 26.4, *) else {
+                throw BridgeError.modelUnavailable(
+                    "seed measurement requires macOS 26.4 (tokenCount)"
+                )
+            }
+            let seedTokens = try await SystemLanguageModel.default.tokenCount(for: seedEntries)
+            if seedTokens > budget {
+                throw BridgeError.historyUnseedable(
+                    shortfall: seedTokens - budget
+                )
+            }
+            creatingHistory = seedEntries
+        }
+        return try sessions.materialize(
+            slot, budget: budget,
+            escalationPermitted: escalationPermitted, history: creatingHistory
+        )
+    }
+
+    /// Parse the kernel's seeded history field into transcript entries.
+    /// A missing/empty field is no seed; anything malformed (missing
+    /// role/text, or a role neither side names) is `bad_request` — the
+    /// whole field is refused, never partially applied.
+    @available(macOS 26.0, *)
+    static func parseSeedHistory(
+        _ raw: [[String: Any]]?
+    ) throws -> [Transcript.Entry] {
+        guard let raw, !raw.isEmpty else { return [] }
+        guard #available(macOS 27.0, *) else {
+            throw BridgeError.modelUnavailable(
+                "transcript seeding requires macOS 27 (segment construction)"
+            )
+        }
+        var out: [Transcript.Entry] = []
+        for item in raw {
+            guard let role = item["role"] as? String,
+                  let text = item["text"] as? String
+            else {
+                throw BridgeError.badRequest(
+                    "history entries need a role and text"
+                )
+            }
+            switch role {
+            case "user":
+                out.append(.prompt(
+                    Transcript.Prompt(segments: [.text(Transcript.TextSegment(content: text))])
+                ))
+            case "assistant":
+                out.append(.response(
+                    Transcript.Response(segments: [.text(Transcript.TextSegment(content: text))])
+                ))
+            default:
+                throw BridgeError.badRequest(
+                    "history role must be user or assistant"
+                )
+            }
+        }
+        return out
+    }
+
     /// One turn on an existing session: plan (which may refuse BEFORE the
     /// request leaves), stream snapshots as incremental deltas, emit exactly
     /// one terminal event. Runs inside the session's gate — serialized by

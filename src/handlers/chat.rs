@@ -369,15 +369,6 @@ pub async fn chat_turn(
         .into_response();
     }
 
-    // PREWARM (before grounding, so the warm overlaps the recall window —
-    // the ≥1 s signal Apple requires): the session's model loads its
-    // prefix while the deterministic recall runs below. A failed prewarm
-    // is logged and never fails the turn — the turn itself materializes
-    // the same session, just cold.
-    if let Err(e) = bridge.prewarm(&session, Some(CHAT_INSTRUCTIONS)).await {
-        tracing::warn!("chat prewarm failed (turn proceeds cold): {e}");
-    }
-
     // Grounding: the SAME deterministic recall core, submodularly packed.
     // A refusal/absence here does not fail the chat — the model answers and
     // SAYS there was no memory, which is the honest behavior the plugin's
@@ -399,14 +390,48 @@ pub async fn chat_turn(
         )
     };
     let grounding_session = session.clone();
-    let prior = tokio::task::spawn_blocking(move || {
-        grounding_pool
-            .get()
-            .ok()
-            .and_then(|conn| prior_turn(&conn, &grounding_scope, &grounding_session))
+    let (prior, seed_entries) = tokio::task::spawn_blocking(move || {
+        let Some(conn) = grounding_pool.get().ok() else {
+            return (None, Vec::new());
+        };
+        let prior = prior_turn(&conn, &grounding_scope, &grounding_session);
+        let seed = crate::service::chat_sessions::seed_entries(
+            &conn,
+            &grounding_scope,
+            &grounding_session,
+        );
+        (prior, seed)
     })
     .await
-    .unwrap_or(None);
+    .unwrap_or((None, Vec::new()));
+    // SEEDING (transcript continuity): the persisted first + last
+    // exchanges ride the turn request. A session the child already holds
+    // ignores them (its live transcript is authoritative); a session the
+    // child must create — first turn after a restart or a bridge kill —
+    // seeds from them, tokenCount-checked against the measured budget,
+    // refused by NAME when unseedable (never silent amnesia). An empty
+    // seed (first turn, unknown/foreign session) sends nothing.
+    let seed_history: Option<Vec<bridge_afm::BridgeHistoryEntry>> = (!seed_entries.is_empty())
+        .then(|| {
+            seed_entries
+                .into_iter()
+                .map(|(role, text)| bridge_afm::BridgeHistoryEntry { role, text })
+                .collect()
+        });
+
+    // PREWARM (with the seed, before the recall — so the warm overlaps
+    // the grounding window, the ≥1 s signal Apple requires): the
+    // session's model loads its prefix while the deterministic recall
+    // runs below. The seed rides the prewarm because materializing
+    // without it would poison seeding. A failed prewarm is logged and
+    // never fails the turn — the turn itself materializes the same
+    // session, just cold.
+    if let Err(e) = bridge
+        .prewarm(&session, Some(CHAT_INSTRUCTIONS), seed_history.as_deref())
+        .await
+    {
+        tracing::warn!("chat prewarm failed (turn proceeds cold): {e}");
+    }
     if prior.is_none() {
         tracing::debug!(
             session = %crate::server::router::memory::LogValue::new(&session),
@@ -720,6 +745,7 @@ pub async fn chat_turn(
             prompt,
             instructions: Some(CHAT_INSTRUCTIONS.to_owned()),
             max_response_tokens: Some(max_response_tokens),
+            history: seed_history,
         })
         .await
     {
@@ -1310,7 +1336,10 @@ mod tests {
             .filter(|line| !line.trim_start().starts_with("//"))
             .collect::<Vec<_>>()
             .join("\n");
-        let prewarm_needle = concat!("bridge.prewarm(&session, Some(", "CHAT_INSTRUCTIONS))");
+        let prewarm_needle = concat!(
+            ".prewarm(&session, Some(CHAT_INSTRUCTIONS), ",
+            "seed_history.as_deref())"
+        );
         let recall_needle = concat!("let grounding = ", "run_recall(");
         let prewarm = live
             .find(prewarm_needle)

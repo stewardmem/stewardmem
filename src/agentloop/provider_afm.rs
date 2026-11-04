@@ -174,6 +174,10 @@ impl LlmProvider for AfmBridgeProvider {
                 prompt,
                 instructions: Some(req.system_prompt),
                 max_response_tokens: Some(AFM_RESPONSE_TOKEN_CAP),
+                // GDL exchanges are stateless by law: no transcript
+                // seeding — a seeded case session would carry one case's
+                // memory into the next exchange.
+                history: None,
             };
             let (bridge_id, mut bridge_rx) = match bridge.turn(turn).await {
                 Ok(pair) => pair,

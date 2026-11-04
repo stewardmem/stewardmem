@@ -97,15 +97,27 @@ pub struct BridgeCapabilities {
     pub escalation_permitted: bool,
 }
 
+/// One seeded transcript entry: the persisted transcript the bridge
+/// seeds a FRESH session from (first + last entries, kernel-built).
+#[derive(Debug, Clone)]
+pub struct BridgeHistoryEntry {
+    pub role: String,
+    pub text: String,
+}
+
 /// One turn request. `instructions` reaches the bridge only on a session's
 /// FIRST turn (the bridge refuses a changed instruction later — a prefix
 /// cache is invalidated by an instruction change, so merging would be a lie).
+/// `history` seeds a session the child must CREATE (after a restart or
+/// kill); an existing live session ignores it — its live transcript is
+/// authoritative. Additive-optional: an old bridge ignores unknown fields.
 #[derive(Debug, Clone)]
 pub struct BridgeTurn {
     pub session: String,
     pub prompt: String,
     pub instructions: Option<String>,
     pub max_response_tokens: Option<i64>,
+    pub history: Option<Vec<BridgeHistoryEntry>>,
 }
 
 /// Client-side failure taxonomy: transport-shaped, never the bridge's named
@@ -259,6 +271,14 @@ impl AfmBridge {
         if let Some(cap) = request.max_response_tokens {
             body["maxResponseTokens"] = json!(cap);
         }
+        if let Some(history) = &request.history {
+            body["history"] = json!(
+                history
+                    .iter()
+                    .map(|e| json!({ "role": e.role, "text": e.text }))
+                    .collect::<Vec<_>>()
+            );
+        }
         if self.write_line(&body).is_err() {
             self.pending
                 .lock()
@@ -275,11 +295,15 @@ impl AfmBridge {
     /// promptPrefix:)` on the child. The instructions ride the request so
     /// the prewarm ALSO creates the session under the instructions law (a
     /// later turn with changed instructions is still refused by name).
-    /// Fire-and-await: the child answers `ok` once the prefix is loaded.
+    /// The seeded history rides too — a prewarm that materializes the
+    /// session WITHOUT the seed would poison seeding (the turn's later
+    /// seed is ignored once the session lives). Fire-and-await: the child
+    /// answers `ok` once the prefix is loaded.
     pub async fn prewarm(
         &self,
         session: &str,
         instructions: Option<&str>,
+        history: Option<&[BridgeHistoryEntry]>,
     ) -> Result<bool, BridgeError> {
         let id = uuid::Uuid::new_v4().to_string();
         let (tx, mut rx) = mpsc::channel::<BridgeEvent>(16);
@@ -294,6 +318,14 @@ impl AfmBridge {
         });
         if let Some(instructions) = instructions {
             body["instructions"] = json!(instructions);
+        }
+        if let Some(history) = history {
+            body["history"] = json!(
+                history
+                    .iter()
+                    .map(|e| json!({ "role": e.role, "text": e.text }))
+                    .collect::<Vec<_>>()
+            );
         }
         if let Err(e) = self.write_line(&body) {
             self.pending
@@ -486,28 +518,42 @@ pub(crate) fn bridge_path_candidates() -> Vec<std::path::PathBuf> {
     ]
 }
 
-/// The process-wide chat bridge, spawned once from the configured path.
-/// `None` means "no bridge binary here" — the chat route's named refusal,
-/// never a crash: every other surface of the server is unaffected.
-static CHAT_BRIDGE: OnceLock<Option<Arc<AfmBridge>>> = OnceLock::new();
+/// The process-wide chat bridge, spawned from the configured path and
+/// RESPAWNED when the child dies: a killed `brain-afm` must not 503 the
+/// rest of the conversation — the next turn lands on a fresh child and
+/// re-seeds its session from the persisted transcript. `None` means "no
+/// bridge binary here" — the chat route's named refusal, never a crash:
+/// every other surface of the server is unaffected.
+static CHAT_BRIDGE: std::sync::RwLock<Option<Arc<AfmBridge>>> = std::sync::RwLock::new(None);
 
 pub fn chat_bridge() -> Option<Arc<AfmBridge>> {
-    CHAT_BRIDGE
-        .get_or_init(|| match crate::config::afm_bridge_path() {
-            Some(path) if path.is_file() => AfmBridge::spawn(&path)
-                .map_err(|e| {
-                    tracing::warn!(
-                        "chat bridge spawn failed ({e}); chat turns will refuse by name"
-                    );
-                    e
-                })
-                .ok(),
-            _ => {
-                tracing::info!("no AFM bridge binary; chat turns answer chat_bridge_unavailable");
-                None
-            }
-        })
-        .clone()
+    if let Some(bridge) = CHAT_BRIDGE.read().expect("chat bridge lock").clone()
+        && bridge.alive()
+    {
+        return Some(bridge);
+    }
+    // The write lock serializes respawns: two racing turns spawn at most
+    // one replacement child (the loser re-checks under the lock).
+    let mut guard = CHAT_BRIDGE.write().expect("chat bridge lock");
+    if let Some(bridge) = guard.clone()
+        && bridge.alive()
+    {
+        return Some(bridge);
+    }
+    let fresh = match crate::config::afm_bridge_path() {
+        Some(path) if path.is_file() => AfmBridge::spawn(&path)
+            .map_err(|e| {
+                tracing::warn!("chat bridge spawn failed ({e}); chat turns will refuse by name");
+                e
+            })
+            .ok(),
+        _ => {
+            tracing::info!("no AFM bridge binary; chat turns answer chat_bridge_unavailable");
+            None
+        }
+    };
+    *guard = fresh.clone();
+    fresh
 }
 
 #[cfg(test)]
@@ -547,6 +593,7 @@ mod tests {
                 prompt: "hi".into(),
                 instructions: None,
                 max_response_tokens: None,
+                history: None,
             })
             .await
             .expect("turn begins");
@@ -678,7 +725,11 @@ mod tests {
         let bridge = AfmBridge::spawn(binary).expect("spawn the real bridge");
         bridge.capabilities().await.expect("capabilities first");
         let warmed = bridge
-            .prewarm("pw-session", Some("You are a memory-grounded assistant."))
+            .prewarm(
+                "pw-session",
+                Some("You are a memory-grounded assistant."),
+                None,
+            )
             .await
             .expect("prewarm round-trips");
         assert!(warmed, "the prewarm op answers ok");
@@ -706,6 +757,73 @@ mod tests {
             }
             other => panic!("expected the named refusal, got {other:?}"),
         }
+    }
+
+    /// UNSEEDABLE HISTORY IS REFUSED BY NAME (T-3): a fresh session whose
+    /// seeded history cannot fit the measured budget never starts — the
+    /// refusal is named (`history_unseedable`), and the transcript is
+    /// unchanged (the session still answers a normal turn afterwards).
+    #[tokio::test]
+    async fn the_real_bridge_refuses_unseedable_history_by_name() {
+        let candidates = bridge_path_candidates();
+        let Some(binary) = candidates.iter().find(|p| p.is_file()) else {
+            eprintln!(
+                "brain-afm not built; run `swift build` in shell-macos — SKIPPING (owned by the Swift suite)"
+            );
+            return;
+        };
+        let bridge = AfmBridge::spawn(binary).expect("spawn the real bridge");
+        bridge.capabilities().await.expect("capabilities first");
+        // A fresh session seeded with far more transcript than the 2,710
+        // budget can hold: the child must refuse by name, not truncate
+        // silently into amnesia.
+        let huge = "x".repeat(40_000);
+        let (tx, mut rx) = mpsc::channel::<BridgeEvent>(64);
+        let id = "oversize-seed-probe".to_string();
+        bridge
+            .pending
+            .lock()
+            .expect("bridge pending lock")
+            .insert(id.clone(), tx);
+        bridge
+            .write_line(&json!({
+                "id": id,
+                "op": "turn",
+                "session": "seed-too-big",
+                "prompt": "hello",
+                "instructions": "You are a memory-grounded assistant.",
+                "history": [{"role": "user", "text": huge}],
+            }))
+            .expect("write the oversize turn");
+        match rx.recv().await {
+            Some(BridgeEvent::Failed { code, .. }) => {
+                assert_eq!(
+                    code, "history_unseedable",
+                    "the oversize seed is refused by name"
+                );
+            }
+            other => panic!("expected the named refusal, got {other:?}"),
+        }
+        // Transcript unchanged: the same session key still serves a
+        // normal turn (the refusal poisoned nothing).
+        let (_bridge_id, mut rx2) = bridge
+            .turn(BridgeTurn {
+                session: "seed-too-big".into(),
+                prompt: "Green tea is rich in EGCG. What is green tea?".into(),
+                instructions: Some("You are a memory-grounded assistant.".into()),
+                max_response_tokens: Some(64),
+                history: None,
+            })
+            .await
+            .expect("turn begins");
+        let mut saw_final = false;
+        while let Some(ev) = rx2.recv().await {
+            if matches!(ev, BridgeEvent::Final { .. }) {
+                saw_final = true;
+                break;
+            }
+        }
+        assert!(saw_final, "the refused seed left the session usable");
     }
 
     /// One `event: final` JSON line through the real parser path.
