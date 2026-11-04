@@ -65,7 +65,7 @@ impl From<rusqlite::Error> for FeedbackError {
 /// the same `.unwrap_or(false)` the handler had.
 #[allow(clippy::too_many_arguments)] // 9 positional params, 2 call sites; a struct would be ceremony for a private fn
 pub(crate) fn record_feedback(
-    conn: &Connection,
+    conn: &mut Connection,
     chunk_id: i64,
     feedback: &str,
     reason_hash: Option<String>,
@@ -91,9 +91,11 @@ pub(crate) fn record_feedback(
     }
     // One transaction: the upsert and the contradicted consumer's freshness
     // pull commit or roll back together — a CAS failure fails the whole
-    // feedback act, never a silent half-consumer.
+    // feedback act, never a silent half-consumer. BEGIN IMMEDIATE per the
+    // write-discipline law (a read-modify-write transition, not a deferred
+    // seam).
     let tx = conn
-        .unchecked_transaction()
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
         .map_err(|e| FeedbackError::Database(format!("feedback tx begin failed: {e}")))?;
     tx.execute(
         "INSERT INTO suggest_feedback(chunk_id, feedback, reason_hash, ts, session, tenant_id, ump_outcome, owner)
@@ -186,12 +188,12 @@ mod tests {
     /// no-principal call stores NULL — the disclosed ceiling.
     #[test]
     fn feedback_owner_captured_from_principal() {
-        let conn = seed();
+        let mut conn = seed();
         let chunk_id: i64 = conn
             .query_row("SELECT id FROM knowledge", [], |r| r.get(0))
             .unwrap();
         record_feedback(
-            &conn,
+            &mut conn,
             chunk_id,
             "dismiss",
             None,
@@ -217,7 +219,7 @@ mod tests {
         // Last-wins replay from a different principal REPLACES the owner
         // (the row's evidence reflects who spoke last).
         record_feedback(
-            &conn,
+            &mut conn,
             chunk_id,
             "accept",
             None,
@@ -278,11 +280,11 @@ mod feedback_consumer_tests {
     /// freshness-due `none` row).
     #[test]
     fn f1_contradicted_pulls_freshness_and_surfaces_in_the_worklist() {
-        let conn = seed();
+        let mut conn = seed();
         let id = chunk_id(&conn);
         assert_eq!(due(&conn, id), None, "precondition: no due date");
         record_feedback(
-            &conn,
+            &mut conn,
             id,
             "dismiss",
             None,
@@ -310,7 +312,7 @@ mod feedback_consumer_tests {
     /// never pushed later.
     #[test]
     fn f2_the_pull_is_monotone_and_idempotent() {
-        let conn = seed();
+        let mut conn = seed();
         let id = chunk_id(&conn);
         // Future-due: pulled earlier to the act's ts.
         conn.execute(
@@ -319,7 +321,7 @@ mod feedback_consumer_tests {
         )
         .unwrap();
         record_feedback(
-            &conn,
+            &mut conn,
             id,
             "dismiss",
             None,
@@ -333,7 +335,7 @@ mod feedback_consumer_tests {
         assert_eq!(due(&conn, id), Some(1_700_000_000));
         // A later act must NOT push the due date later.
         record_feedback(
-            &conn,
+            &mut conn,
             id,
             "dismiss",
             None,
@@ -351,7 +353,7 @@ mod feedback_consumer_tests {
         );
         // An earlier act pulls it earlier still.
         record_feedback(
-            &conn,
+            &mut conn,
             id,
             "dismiss",
             None,
@@ -370,10 +372,10 @@ mod feedback_consumer_tests {
     #[test]
     fn f3_only_contradicted_fires() {
         for outcome in [Some("followed"), Some("overridden"), Some("ignored"), None] {
-            let conn = seed();
+            let mut conn = seed();
             let id = chunk_id(&conn);
             record_feedback(
-                &conn,
+                &mut conn,
                 id,
                 "dismiss",
                 None,
@@ -425,14 +427,14 @@ mod feedback_consumer_tests {
     /// act: no feedback row survives.
     #[test]
     fn f6_a_cas_failure_rolls_back_the_upsert() {
-        let conn = seed();
+        let mut conn = seed();
         let id = chunk_id(&conn);
         // Break ONLY the CAS: the row still exists (the EXISTS probe
         // passes), but the freshness column is gone, so the UPDATE fails.
         conn.execute_batch("ALTER TABLE knowledge DROP COLUMN freshness_review_due")
             .unwrap();
         let err = record_feedback(
-            &conn,
+            &mut conn,
             id,
             "dismiss",
             None,

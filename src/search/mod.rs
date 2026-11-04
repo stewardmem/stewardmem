@@ -269,7 +269,7 @@ mod rerank_top_n_tests {
 /// future-unknown string can never elevate a row.
 /// ADVISORY BY RANKING-ONLY CONSTRUCTION: the tier orders the equal-score
 /// tie-break bucket and renders on the wire; it never blends into any
-/// score, never touches authz, and never gates a route (pins S-a, R-5).
+/// score, never touches authz, and never gates a route.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TrustTier {
