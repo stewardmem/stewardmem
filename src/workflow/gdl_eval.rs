@@ -191,6 +191,14 @@ pub(crate) struct EvalRow {
     /// The run's recorded repeat-contact census (the SDK derivation).
     #[serde(default)]
     pub(crate) repeat_contact: bool,
+    /// The CG-01 evidence-quality grade's overall, as its
+    /// closed-vocabulary string ("high" | "moderate" | "low"). Read off
+    /// the persisted case — never recomputed here — and ADVISORY: an eval
+    /// column, not a gate. Pre-grade traces carry no key; serde-default
+    /// continuity (this struct's own precedent) reports absence as no
+    /// data, never as a score.
+    #[serde(default)]
+    pub(crate) certainty_overall: Option<String>,
 }
 
 #[cfg(test)]
@@ -373,7 +381,9 @@ pub(crate) mod runner {
             })
             .count();
         let escalations_honored = escalations;
-        let repeat_contact = {
+        // The run's final case, read once off the persisted state: the
+        // repeat-contact census and the CG-01 grade both come from it.
+        let final_case: crate::workflow::gdl::GdlCase = {
             let state_json: String = conn
                 .query_row(
                     "SELECT state_json FROM workflow_runs WHERE id = 1",
@@ -381,10 +391,18 @@ pub(crate) mod runner {
                     |r| r.get(0),
                 )
                 .unwrap();
-            let case: crate::workflow::gdl::GdlCase = serde_json::from_str(&state_json)
-                .unwrap_or_else(|_| crate::workflow::gdl::GdlCase::fresh(""));
-            crate::workflow::gdl::run_artifacts_of(&case, true, 0).repeat_contact
+            serde_json::from_str(&state_json)
+                .unwrap_or_else(|_| crate::workflow::gdl::GdlCase::fresh(""))
         };
+        let repeat_contact =
+            crate::workflow::gdl::run_artifacts_of(&final_case, true, 0).repeat_contact;
+        // The grade's overall as its closed-vocabulary string; absence
+        // (a case that never applied an artifact) is no data, not a score.
+        let certainty_overall = final_case
+            .certainty
+            .as_ref()
+            .and_then(|g| serde_json::to_value(g.overall).ok())
+            .and_then(|v| v.as_str().map(str::to_string));
         EvalRow {
             suite: SUITE.to_string(),
             task_id: task_id.to_string(),
@@ -409,6 +427,7 @@ pub(crate) mod runner {
             escalations,
             escalations_honored,
             repeat_contact,
+            certainty_overall,
         }
     }
 
@@ -1302,6 +1321,7 @@ never rewritten).\n",
             escalations: if resolved { 0 } else { 1 },
             escalations_honored: if resolved { 0 } else { 1 },
             repeat_contact: false,
+            certainty_overall: None,
         };
         let rows = vec![
             mk_row("B", 0, true),

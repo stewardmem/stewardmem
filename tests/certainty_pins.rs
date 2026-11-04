@@ -201,15 +201,15 @@ fn p8_persist_path_is_grade_blind() {
     }
 }
 
-/// P-9: the advisory law, pinned by scan. Across `gdl.rs` code the token
-/// `certainty` appears on exactly TWO lines — the additive field and the
-/// `apply` compute point — and no gate/verdict function reads it. The
-/// CLASS-policy lanes (the NOT-this boundary: model-confidence →
-/// human-deferral is a different question over a different input) never
-/// reference the grade at all.
+/// P-9: the advisory law, pinned by scan. Across `gdl.rs` production code
+/// the token `certainty` appears on exactly the FOUR structural lines —
+/// the additive field, fresh()'s None init, and apply()'s compute+store —
+/// and no gate/verdict function reads it. The CLASS-policy lanes (the
+/// NOT-this boundary: model-confidence → human-deferral is a different
+/// question over a different input) never reference the grade at all.
 ///
 /// Proof by damage: plant `let _ = &case.certainty;` inside any gate
-/// function in `gdl.rs` and the two-line pin reds by name.
+/// function in `gdl.rs` and the four-line pin reds by name.
 #[test]
 fn p9_no_gate_reads_the_grade() {
     let gdl = prod_code("src/workflow/gdl.rs");
@@ -242,6 +242,66 @@ fn p9_no_gate_reads_the_grade() {
             "{lane} must not reference the grade — the CLASS policy and the \
              evidence grade are different questions (the CG-01 NOT-this \
              boundary); wiring them together needs its own named lane"
+        );
+    }
+}
+
+/// P-10: the wire's additive-bytes contract. The two state routes'
+/// SCHEMA KEYS are unchanged — `certainty` rides inside the opaque
+/// `state_json` string, so it appears in `openapi.yaml` ONLY as
+/// description prose (the C-7 finding: descriptions embed as `@
+/// description` comments in the generated d.ts), never as a schema key,
+/// and the generated TS surface carries the grade nowhere except those
+/// comments. A schema edit (a `certainty:` property key, a new field on
+/// the run row) reds this scan; the regen's own no-op beyond the two
+/// sentences is witnessed in the round's verify-after transcript
+/// (byte-identical hash across consecutive regens).
+///
+/// Proof by damage: add `certainty: { type: string }` to either route's
+/// response schema in `openapi.yaml` and this reds by name.
+#[test]
+fn p10_wire_schema_keys_unchanged_grade_rides_opaque_state() {
+    let spec = read("openapi.yaml");
+    // The run-row response keeps its exact key set — additive bytes ride
+    // INSIDE state_json, never beside it.
+    let run_row_keys = [
+        "id: { type: integer }",
+        "domain: { type: string }",
+        "kind: { type: string }",
+        "status: { type: string }",
+        "state_json: { type: string }",
+        "created_at: { type: integer }",
+        "updated_at: { type: integer }",
+    ];
+    for key in run_row_keys {
+        assert!(
+            spec.contains(key),
+            "the run-row schema key `{key}` must stay exactly as it is — \
+             CG-01 is additive inside state_json, not a schema change"
+        );
+    }
+    // No schema key named certainty anywhere in the spec: prose only.
+    for line in spec.lines().filter(|l| l.contains("certainty")) {
+        assert!(
+            !line.trim_start().starts_with("certainty:"),
+            "a `certainty:` SCHEMA KEY appeared in openapi.yaml — the grade \
+             rides the opaque state_json string; a typed schema key is a \
+             wire change this lane refused (P-10)"
+        );
+        assert!(
+            line.trim().starts_with("For `troubleshoot` runs") || !line.contains(": {"),
+            "certainty must appear in the spec as description prose only, \
+             found: {line}"
+        );
+    }
+    // The generated TS surface: every certainty mention is a comment.
+    let dts = read("shell/src/lib/api/schema.d.ts");
+    for line in dts.lines().filter(|l| l.contains("certainty")) {
+        assert!(
+            line.trim_start().starts_with('*'),
+            "schema.d.ts must carry `certainty` only inside @description \
+             comments — a typed field leaked into the generated surface: \
+             {line}"
         );
     }
 }

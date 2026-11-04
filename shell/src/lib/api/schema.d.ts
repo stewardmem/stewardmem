@@ -2657,7 +2657,7 @@ export interface paths {
         };
         /**
          * Fetch one workflow run (Read on the run's domain)
-         * @description Returns the run row (id, domain, kind, status, state_json, created_at, updated_at). The `state_json` body is routed through the shared read seam (`sanitize_read`) like every other stored-text surface. 404 when the run does not exist.
+         * @description Returns the run row (id, domain, kind, status, state_json, created_at, updated_at). The `state_json` body is routed through the shared read seam (`sanitize_read`) like every other stored-text surface. For `troubleshoot` runs the state may carry an advisory `certainty` grade over the case's committed evidence (CG-01) — read-only; no gate or route consumes it. 404 when the run does not exist.
          */
         get: operations["getWorkflowRun"];
         put?: never;
@@ -2734,7 +2734,7 @@ export interface paths {
         };
         /**
          * Engine-exact run state `{state_json, revision}` (Read + workflow role gate)
-         * @description The MACHINE round-trip view. Deliberately NOT sanitized at the read seam (engines CAS against the exact stored bytes); the human view is `GET /workflow/runs/{id}`. The read is audited on the workflow chain.
+         * @description The MACHINE round-trip view. Deliberately NOT sanitized at the read seam (engines CAS against the exact stored bytes); the human view is `GET /workflow/runs/{id}`. For `troubleshoot` runs the state may carry an advisory `certainty` grade over the case's committed evidence (CG-01) — read-only; no gate or route consumes it. The read is audited on the workflow chain.
          */
         get: operations["getWorkflowRunState"];
         /** CAS-advance a run's state (Write + workflow role gate) */
