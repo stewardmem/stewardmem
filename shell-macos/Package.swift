@@ -47,7 +47,11 @@ let package = Package(
             // it next to the test. Declaring it a resource would copy it into
             // the bundle and make the reviewed copy and the compared copy
             // different artifacts.
-            exclude: ["apple-verified-quotes.txt"],
+            exclude: [
+                "apple-verified-quotes.txt",
+                "golden-vitamin-d.json",
+                "golden-green-tea.json"
+            ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
     ]

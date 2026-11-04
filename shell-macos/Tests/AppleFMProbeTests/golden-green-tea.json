@@ -1,0 +1,20 @@
+{
+  "id": "green-tea",
+  "prompt_version": "chat-27v1",
+  "model": "afm3 (SystemLanguageModel.default, macOS 27)",
+  "recorded": "2026-11-04 (operator live-kernel control session; re-recorded 2026-11-05 on the CG-08 scratch branch binary)",
+  "memory": "Green tea is a tea made from Camellia sinensis leaves that are steamed and dried without oxidation. It is rich in catechins, especially EGCG, which are natural antioxidants, and contains moderate caffeine plus L-theanine, linked to calm focused alertness.",
+  "turns": [
+    {
+      "session": "tea",
+      "message": "benefits of green tea",
+      "expect": { "decision": "ok", "top_hit_topic": "green-tea", "abstain": false }
+    },
+    {
+      "session": "tea",
+      "message": "more information about green tea",
+      "expect": { "decision": "ok", "top_hit_topic": "green-tea", "abstain": false }
+    }
+  ],
+  "notes": "Retrieval goldens (decision + top-hit topic), not prose. The control sequence: topic term present in every turn, grounded answers. Any prompt edit bumps PROMPT_VERSION and re-records these files together (docs pin)."
+}
