@@ -15,7 +15,7 @@ use crate::search::query::LegFilter;
 use anyhow::{Context, Result};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use rusqlite::{Connection, ToSql};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
@@ -261,6 +261,91 @@ mod rerank_top_n_tests {
     }
 }
 
+/// The lifecycle trust tier a recall hit rides (blind-spot 7). Derived
+/// READ-ONLY from `knowledge.kcs_state` at the legs' existing joins —
+/// never stored, never a column, never client input. Ord is the ranking
+/// law: Raw < Approved < Published (declaration order). Fail-closed:
+/// any state the vocabulary does not name grades Raw — a corrupted or
+/// future-unknown string can never elevate a row.
+/// ADVISORY BY RANKING-ONLY CONSTRUCTION: the tier orders the equal-score
+/// tie-break bucket and renders on the wire; it never blends into any
+/// score, never touches authz, and never gates a route (pins S-a, R-5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TrustTier {
+    Raw,
+    Approved,
+    Published,
+}
+
+/// The single derivation. Exact match on the writer's lowercase
+/// vocabulary — no case folding: `PUBLISHED` is garbage and garbage is Raw.
+/// S2 wires the leg joins to this; the allow is removed there.
+#[allow(dead_code)]
+pub(crate) fn trust_tier(kcs_state: &str) -> TrustTier {
+    match kcs_state {
+        "published" => TrustTier::Published,
+        "approved" => TrustTier::Approved,
+        _ => TrustTier::Raw,
+    }
+}
+
+#[cfg(test)]
+mod trust_tier_tests {
+    use super::{TrustTier, trust_tier};
+
+    /// T-1: the derivation table — the two named states grade up, every
+    /// other string (including case variants and garbage) grades Raw.
+    #[test]
+    fn the_derivation_table_is_fail_closed() {
+        assert_eq!(trust_tier("published"), TrustTier::Published);
+        assert_eq!(trust_tier("approved"), TrustTier::Approved);
+        for garbage in [
+            "none",
+            "draft",
+            "PUBLISHED",
+            "Approved",
+            "archived",
+            "",
+            " published",
+        ] {
+            assert_eq!(
+                trust_tier(garbage),
+                TrustTier::Raw,
+                "{garbage:?} is not the writer's vocabulary and must grade Raw"
+            );
+        }
+    }
+
+    /// T-2: Ord is the ranking law — Published > Approved > Raw by
+    /// declaration order, so the comparator's `cmp` derives from it.
+    #[test]
+    fn ord_is_the_ranking_law() {
+        assert!(TrustTier::Published > TrustTier::Approved);
+        assert!(TrustTier::Approved > TrustTier::Raw);
+        assert!(TrustTier::Published > TrustTier::Raw);
+        assert_eq!(
+            TrustTier::Raw.cmp(&TrustTier::Raw),
+            std::cmp::Ordering::Equal
+        );
+    }
+
+    /// T-3: purity — the derivation is a pure match over the input string:
+    /// no I/O, no DB, no model, no global state. The crate-level
+    /// `deny(unsafe_code)` (lib.rs) is the language's own stronger guard
+    /// against the unsafe class; this pin holds the rest by construction
+    /// (the fn body is the match above and nothing else).
+    #[test]
+    fn the_derivation_is_a_pure_match() {
+        // Determinism: same input, same output, every call.
+        for _ in 0..3 {
+            assert_eq!(trust_tier("published"), TrustTier::Published);
+            assert_eq!(trust_tier("approved"), TrustTier::Approved);
+            assert_eq!(trust_tier("none"), TrustTier::Raw);
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct SearchResult {
     pub id: i64,
@@ -291,6 +376,12 @@ pub struct SearchResult {
     /// a provenance label the consumer can weigh; ranking never writes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub authority: Option<f32>,
+    /// The lifecycle trust tier, derived from `kcs_state` at the leg joins.
+    /// `None` = the leg could not name it (fail-closed: the tie-break and
+    /// the wire treat absence as the Raw band, but the wire reports nothing
+    /// rather than a claim the row did not make).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trust: Option<TrustTier>,
     /// who produced this memory (`human` / `model` / `agent` /
     /// `operator` / `imported`) — the write-side taint label. Serialized
     /// (Boundary); labels only, no enforcement here.
@@ -371,6 +462,7 @@ impl SearchResult {
             evidence: None,
             observed_at: None,
             authority: None,
+            trust: None,
             origin: None,
             assertion_kind: None,
             confidence: None,
@@ -539,6 +631,7 @@ impl SearchResult {
                     evidence: None,
                     observed_at: None,
                     authority: None,
+                    trust: None,
                     origin: None,
                     assertion_kind: None,
                     confidence: None,
@@ -1049,6 +1142,7 @@ pub fn rrf_fuse(
             evidence: None,
             observed_at: r.observed_at.clone(),
             authority: r.authority,
+            trust: r.trust,
             origin: r.origin.clone(),
             assertion_kind: r.assertion_kind.clone(),
             confidence: r.confidence,
