@@ -4,7 +4,7 @@ import { describe, expect, test } from 'vitest';
 import { shellRoot } from './fixtures';
 import type { Passage, RecallOutcome } from '../src/lib/api/recall';
 import { isAnswerLike, renderTurn, renderingToken } from '../src/lib/chat/turn';
-import { replayTurns } from '../src/lib/chat/replay.js';
+import { groundingHits, hitToPassage, replayTurns } from '../src/lib/chat/replay.js';
 import {
 	confidenceWord,
 	isHistorical,
@@ -37,6 +37,7 @@ function passage(over: Partial<Passage> = {}): Passage {
 		ingest_kind: null,
 		memory_kind: null,
 		authority: null,
+		trust: null,
 		...over
 	};
 }
@@ -328,5 +329,39 @@ describe('M3-c replay maps the stored turn page purely', () => {
 			pair(2, 'assistant', 'a', { hits: 'not-an-array' }, null)
 		]);
 		expect(turns[0]!.passages).toEqual([]);
+	});
+});
+
+describe('CG-02 W-4 — the trust tier rides the citation chain', () => {
+	test('a_passage_with_trust_maps_it_onto_the_citation', () => {
+		const block = provenanceBlock([passage({ trust: 'published' })], 0.82, NOW);
+		expect(block.citations[0]!.trust).toBe('published');
+	});
+
+	test('absent_trust_stays_null_never_a_claim', () => {
+		const block = provenanceBlock([passage({ trust: null })], 0.82, NOW);
+		expect(block.citations[0]!.trust).toBeNull();
+	});
+
+	test('the_grounding_event_chain_carries_trust_end_to_end', () => {
+		// The kernel's grounding event json → groundingHits → hitToPassage →
+		// provenanceBlock: the tier survives every hop, and a garbage value
+		// degrades to absence rather than a claim.
+		const grounding = {
+			decision: 'ok',
+			hits: [
+				{ id: 7, title: 'Retention policy', score: 0.82, domain: 'infra', flagged: false, trust: 'approved' },
+				{ id: 8, title: 'Audit runbook', score: 0.7, domain: 'infra', flagged: false, trust: 'spoofed' }
+			]
+		};
+		const hits = groundingHits(grounding);
+		expect(hits).toHaveLength(2);
+		expect(hits[0]!.trust).toBe('approved');
+		expect(hits[1]!.trust).toBeNull();
+		const passages = hits.map(hitToPassage);
+		expect(passages[0]!.trust).toBe('approved');
+		const block = provenanceBlock(passages, 0.82, NOW);
+		expect(block.citations[0]!.trust).toBe('approved');
+		expect(block.citations[1]!.trust).toBeNull();
 	});
 });

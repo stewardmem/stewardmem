@@ -50,6 +50,16 @@ export interface AuthorizedRecall {
 	query_bytes: number;
 }
 
+/** The lifecycle trust tier (CG-02, blind-spot 7), as the kernel sends it:
+ * derived from the row's `kcs_state` (published > approved > raw). */
+export type TrustTier = 'published' | 'approved' | 'raw';
+
+/** Validate a wire value into the tier vocabulary — anything else is
+ * absence, never a claim the row did not make. */
+export function parseTrust(value: unknown): TrustTier | null {
+	return value === 'published' || value === 'approved' || value === 'raw' ? value : null;
+}
+
 /** One passage as the core projects it. `valid_to` is a first-class field, not
  * something a renderer has to dig out of an evidence object — presenting an
  * expired fact as current is the failure this kernel exists to prevent. */
@@ -66,6 +76,7 @@ export interface Passage {
 	ingest_kind: string | null;
 	memory_kind: string | null;
 	authority: number | null;
+	trust: TrustTier | null;
 }
 
 export interface Searched {
@@ -197,7 +208,8 @@ function webParseHit(value: unknown): Passage | null {
 		flagged: value['flagged'] === true,
 		ingest_kind: typeof value['ingest_kind'] === 'string' ? value['ingest_kind'] : null,
 		memory_kind: typeof value['memory_kind'] === 'string' ? value['memory_kind'] : null,
-		authority: typeof value['authority'] === 'number' ? value['authority'] : null
+		authority: typeof value['authority'] === 'number' ? value['authority'] : null,
+		trust: parseTrust(value['trust'])
 	};
 }
 

@@ -41,6 +41,7 @@
 	import { Card } from '#lib/components/ui/card/index.js';
 	import { Alert } from '#lib/components/ui/alert/index.js';
 	import { Badge } from '#lib/components/ui/badge/index.js';
+	import type { TrustTier } from '#lib/api/recall.js';
 
 	type RecallHitItem = {
 		id: number;
@@ -56,6 +57,7 @@
 		origin?: string | null;
 		flagged?: boolean;
 		authority?: number | null;
+		trust?: TrustTier | null;
 		evidence?: { valid_from?: string | null; valid_to?: string | null } | null;
 	};
 
@@ -146,7 +148,8 @@
 			flagged: hit.flagged === true,
 			ingest_kind: hit.ingest_kind ?? null,
 			memory_kind: hit.memory_kind ?? null,
-			authority: hit.authority ?? null
+			authority: hit.authority ?? null,
+			trust: hit.trust ?? null
 		};
 	}
 

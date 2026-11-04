@@ -233,6 +233,7 @@ pub async fn chat_turn(
                         "score": hit.score,
                         "domain": domain,
                         "flagged": hit.flagged,
+                        "trust": hit.trust,
                     })
                 })
                 .collect();

@@ -41,7 +41,8 @@ function passage(id: number, text: string): Passage {
 		flagged: false,
 		ingest_kind: 'markdown',
 		memory_kind: 'fact',
-		authority: null
+		authority: null,
+		trust: null
 	};
 }
 

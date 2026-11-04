@@ -66,6 +66,7 @@
 import { apiBase } from '../api/client.js';
 import { authHeaders } from '../api/token.js';
 import { bootstrapToken } from '../api/bootstrap.js';
+import { parseTrust, type TrustTier } from '../api/recall.js';
 
 // ── the events (parsed, never trusted) ───────────────────────────────────
 
@@ -76,6 +77,7 @@ export interface SpineHit {
 	readonly score: number;
 	readonly domain: string | null;
 	readonly flagged: boolean;
+	readonly trust: TrustTier | null;
 }
 
 /** One sentence-level claim from the typed final: the model's sentence and
@@ -149,7 +151,8 @@ function parseHit(value: unknown): SpineHit | null {
 		score,
 		title: typeof title === 'string' ? title : null,
 		domain: typeof domain === 'string' ? domain : null,
-		flagged: record['flagged'] === true
+		flagged: record['flagged'] === true,
+		trust: parseTrust(record['trust'])
 	};
 }
 

@@ -105,7 +105,8 @@ test('the_chat_surface_reads_through_the_core_and_never_opens_its_own_wire', asy
 				flagged: false,
 				ingest_kind: null,
 				memory_kind: null,
-				authority: null
+				authority: null,
+				trust: null
 			}
 		],
 		confidence: 0.82,

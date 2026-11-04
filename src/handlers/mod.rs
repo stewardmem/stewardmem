@@ -196,6 +196,13 @@ pub struct RecallHit {
     /// source-authority tie-breaker (0..1), surfaced as a provenance label.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub authority: Option<f32>,
+    /// The lifecycle trust tier (blind-spot 7), derived from the row's
+    /// `kcs_state` at the search legs' joins (published > approved > raw).
+    /// Ranking-only: it orders the equal-score tie-break bucket and
+    /// renders here; it never blends into any score and never gates
+    /// access. Absent when the leg could not name it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trust: Option<crate::search::TrustTier>,
 }
 
 /// calibrated abstention. When the existing

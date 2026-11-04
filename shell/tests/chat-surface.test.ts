@@ -356,3 +356,53 @@ describe('II-7 accessibility', () => {
 		expect(code).toContain('data-historical');
 	});
 });
+describe('CG-02 W-4 — the chip renders the tier word', () => {
+	const TRUSTED = {
+		state: 'answered',
+		decision: 'ok',
+		passages: [
+			{
+				id: 7,
+				title: 'Retention policy',
+				text: 'Audit rows are retained for 400 days by default.',
+				snippet: null,
+				domain: 'infra',
+				score: 0.82,
+				valid_from: '2026-03-02',
+				valid_to: null,
+				flagged: false,
+				ingest_kind: null,
+				memory_kind: null,
+				authority: null,
+				trust: 'published'
+			}
+		],
+		confidence: 0.82,
+		searched: { query: 'retention', domain: null, limit: 5, domains_searched: [], included_global: null }
+	};
+
+	test('a_published_citation_renders_its_tier_in_the_dom', async () => {
+		await renderChat(TRUSTED);
+		await sendQuery();
+		await openEvidence();
+		await waitFor(() => expect(screen.getAllByTestId('chat-turn').length).toBe(1));
+
+		// The tier word is a lifecycle fact with its own stable token — not
+		// copy, so the assertion survives translation.
+		const tier = document.querySelector('[data-trust="published"]');
+		expect(tier, 'a published citation must render its tier word in the DOM').toBeTruthy();
+		expect(tier!.textContent!.length).toBeGreaterThan(0);
+	});
+
+	test('an_untrusted_citation_renders_no_tier_line', async () => {
+		await renderChat(ANSWERED);
+		await sendQuery();
+		await openEvidence();
+		await waitFor(() => expect(screen.getAllByTestId('chat-turn').length).toBe(1));
+
+		expect(
+			document.querySelector('[data-trust]'),
+			'a citation with no tier must render no tier line — never an empty claim'
+		).toBeNull();
+	});
+});

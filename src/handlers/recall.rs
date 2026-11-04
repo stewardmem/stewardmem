@@ -963,6 +963,7 @@ fn results_to_hits(
                 origin: crate::gate::sanitize_read_opt(r.origin.take(), pii, principal),
                 flagged: r.flagged,
                 authority: r.authority,
+                trust: r.trust,
             }
         })
         .collect()
@@ -1700,5 +1701,99 @@ mod tests {
             }
         }
         (inside, lines.len())
+    }
+}
+
+#[cfg(test)]
+mod trust_wire_tests {
+    use super::*;
+    use crate::SearchResult;
+    use crate::search::TrustTier;
+
+    /// W-1: wire round-trip — a `RecallHit` with `trust: Some(Published)`
+    /// serializes `"trust":"published"`; `None` omits the key entirely
+    /// (no synthesized claim the row did not make).
+    #[test]
+    fn w1_trust_serializes_and_omits() {
+        let results = vec![
+            SearchResult {
+                id: 1,
+                score: 0.9,
+                title: None,
+                content: "c1".into(),
+                source: None,
+                provenance: Default::default(),
+                flagged: false,
+                untrusted: true,
+                snippet: None,
+                evidence: None,
+                trust: Some(TrustTier::Published),
+                ..Default::default()
+            },
+            SearchResult {
+                id: 2,
+                score: 0.5,
+                title: None,
+                content: "c2".into(),
+                source: None,
+                provenance: Default::default(),
+                flagged: false,
+                untrusted: true,
+                snippet: None,
+                evidence: None,
+                trust: None,
+                ..Default::default()
+            },
+        ];
+        let hits = results_to_hits(
+            results
+                .into_iter()
+                .map(|r| (r, "global".to_string()))
+                .collect(),
+            false,
+            false,
+            &None,
+        );
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].trust, Some(TrustTier::Published));
+        assert_eq!(hits[1].trust, None);
+        let json = serde_json::to_value(&hits[0]).unwrap();
+        assert_eq!(json["trust"], "published");
+        let json_none = serde_json::to_value(&hits[1]).unwrap();
+        assert!(
+            json_none.get("trust").is_none(),
+            "absent trust must omit the key, not emit null: {json_none}"
+        );
+    }
+
+    /// W-3: scope — `trust` appears in openapi ONLY on `SearchResult` +
+    /// `RecallHit`. No QueryDoc/recall-request/trust-filter key anywhere:
+    /// a caller cannot filter or spoof the tier.
+    #[test]
+    fn w3_trust_appears_only_on_the_two_hit_schemas() {
+        let yaml = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/openapi.yaml"))
+            .expect("openapi.yaml must be readable from the test");
+        // Every `trust:` key occurrence must sit inside the SearchResult or
+        // RecallHit schema block. The blocks run from their `    Name:` line
+        // to the next `    Name:` line at the same indent.
+        let lines: Vec<&str> = yaml.lines().collect();
+        let mut block: Option<String> = None;
+        let mut trust_blocks: Vec<String> = Vec::new();
+        for line in &lines {
+            if line.starts_with("    ")
+                && line.trim_end().ends_with(':')
+                && !line.starts_with("      ")
+            {
+                block = Some(line.trim().trim_end_matches(':').to_string());
+            }
+            if line.trim_start().starts_with("trust:") {
+                trust_blocks.push(block.clone().unwrap_or_default());
+            }
+        }
+        assert_eq!(
+            trust_blocks,
+            vec!["SearchResult".to_string(), "RecallHit".to_string()],
+            "trust must appear exactly on SearchResult + RecallHit — found in {trust_blocks:?}"
+        );
     }
 }

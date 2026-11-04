@@ -34,7 +34,7 @@
  * producers, and the live streaming consumer (M3-d) becomes the fourth.
  */
 
-import type { Passage } from '../api/recall';
+import { parseTrust, type Passage, type TrustTier } from '../api/recall';
 import type { StoredTurn } from '../shell/sessions.svelte.js';
 import { parseSupportLabel } from './turn.js';
 
@@ -45,6 +45,7 @@ interface GroundingHit {
 	score: number;
 	domain: string | null;
 	flagged: boolean;
+	trust: TrustTier | null;
 }
 
 /** Pull the hits array out of a stored grounding event. Malformed events
@@ -69,7 +70,8 @@ export function groundingHits(grounding: Record<string, unknown> | null): Ground
 			score,
 			title: typeof title === 'string' ? title : null,
 			domain: typeof domain === 'string' ? domain : null,
-			flagged: rec['flagged'] === true
+			flagged: rec['flagged'] === true,
+			trust: parseTrust(rec['trust'])
 		});
 	}
 	return hits;
@@ -93,7 +95,8 @@ export function hitToPassage(hit: GroundingHit): Passage {
 		flagged: hit.flagged,
 		ingest_kind: null,
 		memory_kind: null,
-		authority: null
+		authority: null,
+		trust: hit.trust
 	};
 }
 

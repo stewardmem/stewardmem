@@ -27,6 +27,7 @@
 	} from '#lib/api/recall.js';
 	import { renderTurn, renderingToken, streamFailureToken, generatedFromFinal, streamingTurn, streamFailedTurn, withSupportLabel, type TurnRendering, type SupportLabel } from '#lib/chat/turn.js';
 	import { provenanceBlock, type ProvenanceBlock } from '#lib/chat/provenance.js';
+	import type { TrustTier } from '#lib/api/recall.js';
 	import { hitToPassage } from '#lib/chat/replay.js';
 	import { splitSentences, mapClaimsToSentences, citeTitles, type SentenceRender } from '#lib/chat/claims.js';
 	import {
@@ -397,6 +398,19 @@
 				return m['chat.support.abstained']();
 			case 'degraded':
 				return m['chat.support.degraded']();
+		}
+	}
+
+	/** The tier's sentence (CG-02): the lifecycle word, mapped by the type's
+	 * own vocabulary — same discipline as `supportSentence`. */
+	function trustSentence(tier: TrustTier): string {
+		switch (tier) {
+			case 'published':
+				return m['chat.trust.published']();
+			case 'approved':
+				return m['chat.trust.approved']();
+			case 'raw':
+				return m['chat.trust.raw']();
 		}
 	}
 
@@ -831,6 +845,11 @@
 									>
 										{citation.validity.summary}
 									</span>
+									{#if citation.trust !== null}
+										<span data-trust={citation.trust} class="text-xs text-muted-foreground"
+											>{trustSentence(citation.trust)}</span
+										>
+									{/if}
 									{#if citation.flagged}
 										<span class="text-xs text-destructive">{m['chat.quarantined']()}</span>
 									{/if}
@@ -1135,6 +1154,11 @@
 					>
 						{citation.validity.summary}
 					</span>
+					{#if citation.trust !== null}
+						<span data-trust={citation.trust} class="text-xs text-muted-foreground"
+							>{trustSentence(citation.trust)}</span
+						>
+					{/if}
 					{#if citation.flagged}
 						<span class="text-xs text-destructive">{m['chat.quarantined']()}</span>
 					{/if}

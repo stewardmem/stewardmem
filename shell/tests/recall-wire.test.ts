@@ -66,7 +66,8 @@ const answered: RecallOutcome = {
 			flagged: false,
 			ingest_kind: 'markdown',
 			memory_kind: 'fact',
-			authority: 0.5
+			authority: 0.5,
+			trust: null
 		}
 	],
 	confidence: 0.9,

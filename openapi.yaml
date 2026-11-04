@@ -10790,6 +10790,11 @@ components:
             rerank_score: { type: number, nullable: true }
             rerank_truncated: { type: boolean }
             prf_expanded: { type: boolean }
+        trust:
+          type: string
+          enum: [raw, approved, published]
+          nullable: true
+          description: "CG-02: the lifecycle trust tier derived from the row's kcs_state (published > approved > raw); it orders the equal-score tie-break bucket only and never blends into any score."
     RecallHit:
       type: object
       properties:
@@ -10853,6 +10858,11 @@ components:
           type: number
           nullable: true
           description: "v1.28.11 \"Boundary\": source-authority tie-breaker (0..1), surfaced as a provenance label."
+        trust:
+          type: string
+          enum: [raw, approved, published]
+          nullable: true
+          description: "CG-02: the lifecycle trust tier derived from the row's kcs_state (published > approved > raw); it orders the equal-score tie-break bucket only and never blends into any score."
     Chunk:
       type: object
       properties:

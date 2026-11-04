@@ -5200,6 +5200,11 @@ export interface components {
                 rerank_truncated?: boolean;
                 prf_expanded?: boolean;
             } | null;
+            /**
+             * @description CG-02: the lifecycle trust tier derived from the row's kcs_state (published > approved > raw); it orders the equal-score tie-break bucket only and never blends into any score.
+             * @enum {string|null}
+             */
+            trust?: "raw" | "approved" | "published" | null;
         };
         RecallHit: {
             id?: number;
@@ -5238,6 +5243,11 @@ export interface components {
             flagged?: boolean;
             /** @description v1.28.11 "Boundary": source-authority tie-breaker (0..1), surfaced as a provenance label. */
             authority?: number | null;
+            /**
+             * @description CG-02: the lifecycle trust tier derived from the row's kcs_state (published > approved > raw); it orders the equal-score tie-break bucket only and never blends into any score.
+             * @enum {string|null}
+             */
+            trust?: "raw" | "approved" | "published" | null;
         };
         Chunk: {
             id?: number;

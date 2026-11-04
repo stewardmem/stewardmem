@@ -32,7 +32,7 @@
  * absent fact for an empty one.
  */
 
-import type { Passage } from '../api/recall';
+import type { Passage, TrustTier } from '../api/recall';
 
 /**
  * One field the kernel did not send, named rather than blanked.
@@ -164,6 +164,9 @@ export interface Citation {
 	readonly confidence: Confidence;
 	readonly score: number;
 	readonly flagged: boolean;
+	/** The lifecycle trust tier (CG-02): a lifecycle fact, never a taint
+	 * marker — `null` when the kernel did not name one. */
+	readonly trust: TrustTier | null;
 }
 
 /** The two fields Plan 06 §1 names that `/recall` does not carry. */
@@ -194,7 +197,8 @@ export function citationFor(passage: Passage, confidence: number | null, nowMs: 
 		validity: validityOf(passage, nowMs),
 		confidence: confidenceWord(confidence),
 		score: passage.score,
-		flagged: passage.flagged
+		flagged: passage.flagged,
+		trust: passage.trust ?? null
 	};
 }
 
