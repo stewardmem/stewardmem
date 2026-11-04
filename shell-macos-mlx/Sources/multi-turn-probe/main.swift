@@ -114,8 +114,12 @@ func run() async throws {
     // tokenizer-loader problem entirely: every `loadModelContainer` overload
     // wants those, and ChatSession.swift:129 documents an `id:` overload that
     // does not exist.
+    // E1 gate (CG-10): model selectable by env, default = pinned 9B weights.
+    let modelID = ProcessInfo.processInfo.environment["PROBE_MODEL_ID"] ?? MODEL_ID
+    let configuration = ModelConfiguration(id: modelID)
+    print("model: \(modelID)")
     let adapter = try await MLXFMProbe.model(
-        configuration: MLXFMProbe.ciModel,
+        configuration: configuration,
         capabilities: [.toolCalling, .guidedGeneration, .reasoning])
     let container = try await adapter.loadContainer()
     let params = GenerateParameters(maxTokens: 200, temperature: 0)
@@ -132,6 +136,45 @@ func run() async throws {
         let t2 = await askChat(session, "What was the number I asked you to remember? Numbers only.")
         print("  turn 2: \(t2)")
         warmAnswer = t2
+    }
+
+    // ── ARM D: tool-result continuation (PR #472's exact scenario) ────────
+    // A tool call whose result continues the SAME session: the template
+    // receives the tool result as a user-role message, so without the
+    // full-conversation fix this is where "No user query found" fires.
+    print("\n=== ARM D: tool-result continuation ===")
+    do {
+        let toolSession = ChatSession(container, generateParameters: params)
+        toolSession.tools = [[
+            "type": "function",
+            "function": [
+                "name": "lookup_secret",
+                "description": "Look up the secret number.",
+                "parameters": [
+                    "type": "object",
+                    "properties": [:],
+                    "required": []
+                ]
+            ]
+        ]]
+        toolSession.toolDispatch = { _ in secret }
+        var toolOut = ""
+        do {
+            for try await g in toolSession.streamDetails(
+                to: "Use the lookup_secret tool, then tell me the number. Numbers only.",
+                images: [], videos: []
+            ) {
+                toolOut += text(of: g)
+            }
+        } catch {
+            toolOut = "THREW: \(error)"
+        }
+        print("  tool turn: \(toolOut)")
+        if toolOut.contains(secret) && !toolOut.hasPrefix("THREW") {
+            print("  -> TOOL CONTINUATION WORKS on Qwen3.5 via ChatSession.")
+        } else {
+            print("  -> TOOL CONTINUATION FAILED (record as .unreachable).")
+        }
     }
 
     // ── ARM C: memory or compliance ────────────────────────────────────────
