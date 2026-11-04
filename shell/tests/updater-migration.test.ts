@@ -293,7 +293,7 @@ test('the_cli_fires_through_a_symlinked_path_measured_silent_noop_2026_11_03', a
 	// A server that answers NOTHING useful: the fix must make the CLI run
 	// (reach the fetch), not silently vanish — the empty reply refuses
 	// loudly, which is itself the proof the entry fired.
-	const server = createServer((request, response) => {
+	const server = createServer((_request, response) => {
 		response.writeHead(500).end('the entry must fire for this pin to get here');
 	});
 	await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));

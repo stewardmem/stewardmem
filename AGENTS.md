@@ -1,5 +1,61 @@
 # Agent Execution Log — StewardMem
 
+> **R151 "The first offered update" (2026-11-03/04): THE CUT IS DONE —
+> the stapled Tools DMG landed on the page, the sums are green over the
+> final published set, the staple is verified from the internet — and
+> the machine act met SILENCE, so the app update stays OWED and nothing
+> touched the machine.** The Tools leg (the one piece run #2 died
+> owing) took THREE LANE RUNS, each death named: (3) the DMG
+> notarization hung 50+ minutes at "initiating connection" — the VPN
+> tunnel to Apple flapped mid-run (the endpoint is
+> `appstoreconnect.apple.com/notary/v2/`, extracted from the binary;
+> the guessed notarytool.apple.com names do not resolve in ANY
+> resolver), notarytool's connect has NO timeout, zero sockets, zero
+> CPU — killed by hand and the script died BY ITS OWN LAW ("the Notary
+> service REJECTED the submission — a named failure with its log above;
+> fix and re-submit, never skip"); (4) died mid-Tools-step at the first
+> `gh run download` with NO named error — THE MACHINE SLEPT OVERNIGHT
+> (the session spans 2026-11-03 → 04; the task's stdout file was
+> cleaned with the session temp, the exit code unrecoverable) — after
+> the FULL first-install through-pass had succeeded (app notarized,
+> stapled, spctl green; DMG signed 21:32, notarized, stapled; the
+> round trip verified; the chain re-published with the six-deep
+> migration table); (5) the SUCCESS, warm-target, wrapped in
+> `caffeinate -is` so the sleep class cannot interrupt: exit 0 — both
+> artifact legs CRC-verified (the exact step run #4 died in), 16
+> binaries + `stewardmem-detect` signed with timestamps, the selective
+> pkg cut (Developer ID Installer), notarized (ecd9ad88) + stapled +
+> smoke green (`brain --version → 1.29.42`), the DMG notarized
+> (3980a40f, Accepted) + stapled, uploaded, and the page SHA256SUMS
+> regenerated over the FINAL set. THE INDEPENDENT VERIFICATION carried
+> two of the verifier's own stumbles, both named and corrected: a curl
+> download TRUNCATED the DMG (13.3 of 40.1 MB — a 120 s timeout on the
+> measured-slow tunnel; the gh-truncation class the lane's leg-2 CRC
+> check exists for), and `spctl --type open` is the wrong policy for a
+> pkg-carrying DMG — the corrected check on full gh-transported bytes:
+> **7/7 SHA256SUMS OK, `stapler validate` green, `spctl --type install`
+> exit 0.** The lane's staging ran under a home-dir TMPDIR override
+> (the /tmp-wipe class that killed run #2 — though the pkg builder's
+> outer mktemp still lands in /var/folders, the OS per-user temp, noted
+> honestly). The ASK (§0.6, the manual 1.29.42 bootstrap install +
+> relaunch) went out in full WITH the receipt and met SILENCE — the
+> update stays OWED; the final witness: kernel still 1.29.41 on 8765,
+> /Applications still the official 1.29.41 bundle (mtime unchanged),
+> no install performed. The floor is taken and unused
+> (`~/round-scripts/wi-update-1.29.42/target-floor.db`, a read-only
+> `.backup` of the served store taken AFTER the day's second kernel
+> restart, sha256 a4bbbd61…699db945, integrity ok — the served store
+> IS the workspace store on this deployment, one floor covering source
+> and target). THE CLOSING DRY-RUN: 37 lanes, **35 PASS** —
+> lipstyk-gate REFUSED to pass vacuously (no changed lines under the
+> watched dirs vs `ea2301b5`: main is records-only since the tag —
+> the gate's designed refusal, not a code red) and shell-check red on
+> the R150-round fixture's unused `request` param
+> (updater-migration.test.ts:296, svelte-check noUnusedParameters) —
+> THE ROUND'S GATE CATCHING ITS OWN ROUND'S CODE AGAIN: fixed in place
+> (`_request`), the lane re-run GREEN solo (svelte-check 0 errors).
+> Both the fix and the R151 entry await the operator's commit.
+
 > **R150 "The first real import" (2026-11-03): the pre-flight caught
 > THREE REAL DEFECTS before any act — the import stays OWED, the
 > operator's stores were never written, and the round's deliverable is
