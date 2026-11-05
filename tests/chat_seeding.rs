@@ -82,6 +82,9 @@ fn final_of(events: &[(String, serde_json::Value)]) -> serde_json::Value {
         .unwrap_or(serde_json::Value::Null)
 }
 
+#[allow(dead_code)] // the stripper is inert here; the tier seam is what we use
+mod common;
+
 #[tokio::test]
 async fn killing_the_bridge_mid_chat_loses_no_in_context_answer() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -96,6 +99,11 @@ async fn killing_the_bridge_mid_chat_loses_no_in_context_answer() {
         return;
     };
     unsafe { std::env::set_var("BRAIN_AFM_BRIDGE", bridge_binary) };
+    // THE TIER POSTURE, held for the whole body: this pin asserts
+    // `on_device` finals, so the chat tier is pinned to the AFM default
+    // under the shared lock (an MLX-tier test setting BRAIN_CHAT_MODEL
+    // concurrently would be a scheduling flake, not a red).
+    let (_tier_lock, _tier_env) = common::chat_tier::set_chat_model(None);
 
     let dir = tempfile::TempDir::new().expect("temp dir");
     let db_path = dir.path().join("brain.db");

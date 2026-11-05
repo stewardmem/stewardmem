@@ -146,3 +146,70 @@ pub fn code_only(src: &str) -> String {
     }
     out
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// The chat-tier env seam (CG-10 E4)
+// ─────────────────────────────────────────────────────────────────────────
+
+/// The chat tier (`BRAIN_CHAT_MODEL`) is read PER REQUEST by the chat spine,
+/// and cargo runs a crate's tests concurrently — an MLX-tier test that set
+/// the key while an AFM-tier test asserted `on_device` would be a
+/// scheduling flake, not a pin. Every test that asserts on the tier holds
+/// the lock for its whole body; the guard restores whatever the process had
+/// on drop, so a panic cannot leak the key into later tests (the posture
+/// `case_run.rs`'s ProfileEnvRestore established, now shared across the
+/// chat test crates).
+#[allow(dead_code)] // used by the chat-tier crates; inert elsewhere
+pub mod chat_tier {
+    use std::sync::{Mutex, MutexGuard, OnceLock};
+
+    pub const CHAT_MODEL_KEY: &str = "BRAIN_CHAT_MODEL";
+
+    fn lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    /// Acquire the tier lock and set `BRAIN_CHAT_MODEL` to `model` (None
+    /// removes the key). The returned guard restores the previous value —
+    /// or the key's absence — on drop, releasing the lock at the same
+    /// moment: the env window is exactly the critical section.
+    pub fn set_chat_model(model: Option<&str>) -> (MutexGuard<'static, ()>, ChatModelEnv) {
+        let guard = lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let saved = std::env::var(CHAT_MODEL_KEY).ok();
+        match model {
+            Some(value) => unsafe { std::env::set_var(CHAT_MODEL_KEY, value) },
+            None => unsafe { std::env::remove_var(CHAT_MODEL_KEY) },
+        }
+        (guard, ChatModelEnv { saved })
+    }
+
+    /// Restores the pre-test value of `BRAIN_CHAT_MODEL` on drop.
+    pub struct ChatModelEnv {
+        saved: Option<String>,
+    }
+
+    impl Drop for ChatModelEnv {
+        fn drop(&mut self) {
+            match &self.saved {
+                Some(value) => unsafe { std::env::set_var(CHAT_MODEL_KEY, value) },
+                None => unsafe { std::env::remove_var(CHAT_MODEL_KEY) },
+            }
+        }
+    }
+}
+
+/// Locate the built `brain-afm` the way every live chat pin does: the
+/// suite's own Swift build output. `None` means the macOS lane owns the
+/// binary and the calling crate SKIPS with a stated reason.
+#[allow(dead_code)] // used by the chat-tier crates; inert elsewhere
+pub fn bridge_binary() -> Option<std::path::PathBuf> {
+    let manifest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let candidates = [
+        manifest.join("shell-macos/.build/out/Products/Debug/brain-afm"),
+        manifest.join("shell-macos/.build/arm64-apple-darwin/debug/brain-afm"),
+    ];
+    candidates.iter().find(|p| p.is_file()).cloned()
+}

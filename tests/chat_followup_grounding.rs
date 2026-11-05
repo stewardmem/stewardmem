@@ -124,6 +124,9 @@ fn hit_ids(grounding: &serde_json::Value) -> Option<Vec<i64>> {
         .map(|hits| hits.iter().filter_map(|h| h["id"].as_i64()).collect())
 }
 
+#[allow(dead_code)] // the stripper is inert here; the tier seam is what we use
+mod common;
+
 #[tokio::test]
 async fn the_followup_grounds_to_the_prior_turns_topic_not_the_corpus_generic() {
     // The bridge binary is a macOS artifact; when it is not built this test
@@ -140,6 +143,10 @@ async fn the_followup_grounds_to_the_prior_turns_topic_not_the_corpus_generic() 
         return;
     };
     unsafe { std::env::set_var("BRAIN_AFM_BRIDGE", bridge_binary) };
+    // THE TIER POSTURE, held for the whole body: this pin asserts
+    // `on_device` finals, so the chat tier is pinned to the AFM default
+    // under the shared lock (tests/common — the scheduling-flake guard).
+    let (_tier_lock, _tier_env) = common::chat_tier::set_chat_model(None);
 
     // ── the server over its own database (the loopback fixture shape) ──
     let dir = tempfile::TempDir::new().expect("temp dir");
@@ -307,6 +314,10 @@ async fn an_abstaining_turn_files_exactly_one_capture_proposal_and_no_knowledge(
         return;
     };
     unsafe { std::env::set_var("BRAIN_AFM_BRIDGE", bridge_binary) };
+    // THE TIER POSTURE, held for the whole body: this pin asserts
+    // `on_device` finals, so the chat tier is pinned to the AFM default
+    // under the shared lock (tests/common — the scheduling-flake guard).
+    let (_tier_lock, _tier_env) = common::chat_tier::set_chat_model(None);
 
     let dir = tempfile::TempDir::new().expect("temp dir");
     let db_path = dir.path().join("brain.db");
