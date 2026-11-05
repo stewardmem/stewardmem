@@ -1,24 +1,36 @@
 {
   "id": "vitamin-d",
-  "prompt_version": "chat-27v1",
+  "prompt_version": "chat-27v2",
   "model": "afm3 (SystemLanguageModel.default, macOS 27)",
-  "recorded": "2026-11-04 (operator live-kernel session; re-recorded 2026-11-05 on the CG-08 scratch branch binary)",
+  "recorded": "2026-11-04 (operator live-kernel session; re-recorded 2026-11-05 on the CG-08 scratch branch binary); prompt v2 (CG-09 S4 few-shot) 2026-11-05 — retrieval decisions re-witnessed at lane-close acceptance",
   "memory": "Vitamin D is a fat-soluble vitamin essential for calcium absorption, bone health, and immune function. It is produced in skin exposed to sunlight and obtained from fatty fish and fortified foods. Regular adequate intake strengthens bones, supports immune response, and reduces the risk of deficiency-related illness.",
   "turns": [
     {
       "session": "vitd",
       "message": "what is Vitamin D?",
-      "expect": { "decision": "ok", "top_hit_topic": "vitamin-d", "abstain": false }
+      "expect": {
+        "decision": "ok",
+        "top_hit_topic": "vitamin-d",
+        "abstain": false
+      }
     },
     {
       "session": "vitd",
       "message": "What are the benefits?",
-      "expect": { "decision": "ok", "top_hit_topic": "vitamin-d", "abstain": false }
+      "expect": {
+        "decision": "ok",
+        "top_hit_topic": "vitamin-d",
+        "abstain": false
+      }
     },
     {
       "session": "vitd",
       "message": "benefits of Vitamin D?",
-      "expect": { "decision": "ok", "top_hit_topic": "vitamin-d", "abstain": false }
+      "expect": {
+        "decision": "ok",
+        "top_hit_topic": "vitamin-d",
+        "abstain": false
+      }
     }
   ],
   "notes": "Retrieval goldens (decision + top-hit topic), not prose: generation text varies by model. Turn 2 has no topic term of its own — it grounds to vitamin-d ONLY via the prior turn's topic (follow-up grounding). The kernel's abstain notice for this sequence on the operator corpus is recorded in CG08 evidence §5."

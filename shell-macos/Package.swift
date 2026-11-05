@@ -50,7 +50,8 @@ let package = Package(
             exclude: [
                 "apple-verified-quotes.txt",
                 "golden-vitamin-d.json",
-                "golden-green-tea.json"
+                "golden-green-tea.json",
+                "abstain-battery.json"
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
