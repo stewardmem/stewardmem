@@ -1468,7 +1468,7 @@ mod tests {
             v["instructions"].as_str(),
             Some(CHAT_INSTRUCTIONS_V1),
             "the battery fixture's instructions diverged from the compiled constant — \
-             update BOTH in one commit (the S3 versioning law)"
+             land BOTH sides in one commit (the S3 versioning law)"
         );
         assert_eq!(
             v["prompt_version"].as_str(),
