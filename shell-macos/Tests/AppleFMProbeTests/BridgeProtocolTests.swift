@@ -424,4 +424,50 @@ struct BrainAfmBridgeTests {
             "an unknown label counts correct for NOTHING — fail closed"
         )
     }
+
+    // ── CG-09 T-6 — the greedy determinism lock ──────────────────────────
+
+    /// EVERY `GenerationOptions(` construction in the bridge sources samples
+    /// `.greedy` — same evidence, same verdict, reproducible across runs
+    /// (CG-01 P-7's source-scan pattern, on the Swift side). The scan reads
+    /// the real tree at `#filePath`: every construction site is checked for
+    /// the greedy mode within its own statement, and the probabilistic
+    /// vocabulary (`.probabilistic`, `.temperature`) is refused ANYWHERE in
+    /// `Sources/` — a knob that does not exist cannot be tuned into drift.
+    @Test("every GenerationOptions site samples greedy; no probabilistic knob exists")
+    func everyGenerationSiteIsGreedy() throws {
+        let here = URL(fileURLWithPath: #filePath, isDirectory: false)
+        let packageRoot = here
+            .deletingLastPathComponent()  // Tests/AppleFMProbeTests
+            .deletingLastPathComponent()  // Tests
+            .deletingLastPathComponent()  // package root
+        let sourcesRoot = packageRoot.appendingPathComponent("Sources")
+        let files = try FileManager.default.subpathsOfDirectory(
+            atPath: sourcesRoot.path
+        )
+        .filter { $0.hasSuffix(".swift") }
+        #expect(!files.isEmpty, "the scan must have seen the real tree")
+
+        var sites = 0
+        for relative in files {
+            let text = try String(
+                contentsOf: sourcesRoot.appendingPathComponent(relative),
+                encoding: .utf8
+            )
+            #expect(
+                !text.contains(".probabilistic") && !text.contains(".temperature"),
+                "\(relative) carries a probabilistic sampling knob — the greedy lock refuses it"
+            )
+            let chunks = text.components(separatedBy: "GenerationOptions(")
+            sites += chunks.count - 1
+            for tail in chunks.dropFirst() {
+                let statement = tail.prefix(160)
+                #expect(
+                    statement.contains("samplingMode: .greedy"),
+                    "\(relative): a GenerationOptions construction without `samplingMode: .greedy` — \(statement)"
+                )
+            }
+        }
+        #expect(sites >= 2, "the probe warm + the turn path both construct options (found \(sites))")
+    }
 }
