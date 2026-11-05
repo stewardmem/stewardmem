@@ -249,13 +249,25 @@ func run() async throws {
     } else {
         print("kvScheme: nil (full precision baseline)")
     }
+    // E2: PROBE_SPEC_DECODE=1 admits the drafter for this run — the
+    // acceptance rides the .info telemetry the measure plumbing already
+    // captures (TurnMeasure.acceptanceRate); tok/s compares against the
+    // same tier's E1 numbers.
+    var speculative: SpeculativeDecodingConfig?
+    if ProcessInfo.processInfo.environment["PROBE_SPEC_DECODE"] == "1" {
+        let draft = try await MLXBridge.draftContainer()
+        speculative = SpeculativeDecodingConfig(draftModel: draft, numDraftTokens: 5)
+        print("spec decode: ON (Qwen3-0.6B-4bit drafter, numDraftTokens=5)")
+    } else {
+        print("spec decode: off")
+    }
     let secret = SECRET
 
     // ── ARM B: ChatSession carries the conversation ───────────────────────
     print("\n=== ARM B: ChatSession (conversation-aware) ===")
     var warmAnswer = ""
     do {
-        let session = ChatSession(container, generateParameters: params)
+        let session = ChatSession(container, speculativeDecoding: speculative, generateParameters: params)
         let t1 = await askChat(session, "Remember this number for later: \(secret). Reply only 'ok'.")
         print("  turn 1 [\(t1.line)]: \(t1.text.prefix(60))")
         if t1.text.hasPrefix("THREW") { print("  turn 1 THREW — the session shape itself is wrong") }
@@ -271,7 +283,7 @@ func run() async throws {
     // full-conversation fix this is where "No user query found" fires.
     print("\n=== ARM D: tool-result continuation ===")
     do {
-        let toolSession = ChatSession(container, generateParameters: params)
+        let toolSession = ChatSession(container, speculativeDecoding: speculative, generateParameters: params)
         toolSession.tools = [[
             "type": "function",
             "function": [
@@ -298,7 +310,7 @@ func run() async throws {
 
     // ── ARM C: memory or compliance ────────────────────────────────────────
     print("\n=== ARM C: memory vs compliance ===")
-    let coldSession = ChatSession(container, generateParameters: params)
+    let coldSession = ChatSession(container, speculativeDecoding: speculative, generateParameters: params)
     let cold = await askChat(coldSession, "What was the number I asked you to remember? Numbers only.")
     let coldHas = cold.text.contains(secret)
     let warmHas = warmAnswer.contains(secret)
@@ -347,7 +359,7 @@ func run() async throws {
                 + "\n\nWhat is the registration code for the old lighthouse? Code only."
         let tokens = await container.encode(question).count
         print("  fence tokens: \(tokens)")
-        let longSession = ChatSession(container, generateParameters: params)
+        let longSession = ChatSession(container, speculativeDecoding: speculative, generateParameters: params)
         let longTurn = await askChat(longSession, question)
         let hit = longTurn.text.contains("LX-4471")
         print("  long [\(longTurn.line)]: \(longTurn.text.prefix(160).replacingOccurrences(of: "\n", with: " "))")

@@ -539,6 +539,10 @@ final class MLXContainers: @unchecked Sendable {
     private let lock = NSLock()
     private var containers: [MLXChatTier: ModelContainer] = [:]
     private var loads: [MLXChatTier: Task<ModelContainer, Error>] = [:]
+    /// The E2 drafter's slot — ONE checkpoint for every tier, cached beside
+    /// the targets, loaded only when a tier's spec-decode posture (or the
+    /// measurement override) admits speculation.
+    private var draftContainer: Task<ModelContainer, Error>?
 
     @available(macOS 27.0, *)
     func container(for tier: MLXChatTier) async throws -> ModelContainer {
@@ -559,6 +563,20 @@ final class MLXContainers: @unchecked Sendable {
             loads[tier] = nil
         }
         return container
+    }
+
+    /// The E2 drafter (Qwen3-0.6B-4bit), load-once and coalesced like the
+    /// tiers. Only `MLXBridge.resolvedSpecDecode` calls this, and only when
+    /// speculation is admitted — an OFF posture never pays the load.
+    @available(macOS 27.0, *)
+    func draft() async throws -> ModelContainer {
+        let existing: Task<ModelContainer, Error>? = lock.withLock {
+            if let draft = draftContainer { return draft }
+            let draft = Task { try await MLXBridge.draftContainer() }
+            draftContainer = draft
+            return draft
+        }
+        return try await existing!.value
     }
 }
 
@@ -1082,12 +1100,21 @@ struct BrainAfmBridge {
                 throw BridgeError.historyUnseedable(shortfall: seedTokens - ceiling)
             }
         }
+        // E2: the spec-decode config resolves ONCE per session, beside the
+        // KV scheme — `resolvedSpecDecode` returns nil (the OFF posture)
+        // unless the tier's evidenced posture or the measurement override
+        // admits it, and only then pays the drafter load (cached in
+        // MLXContainers beside the targets).
+        let speculative = try await MLXBridge.resolvedSpecDecode(tier: tier) {
+            try await MLXContainers.shared.draft()
+        }
         let built = MLXBridge.makeSession(
             container: container,
             tier: tier,
             instructions: slot.instructions,
             seed: conversation,
-            maxTokens: 1024
+            maxTokens: 1024,
+            speculative: speculative
         )
         let live = MLXLive(session: built.session, store: built.store)
         return sessions.materializeMLX(slot, live: live)

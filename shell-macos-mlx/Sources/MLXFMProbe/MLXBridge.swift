@@ -69,6 +69,53 @@ public enum MLXBridge {
         kvSchemeOverride ?? tier.kvScheme
     }
 
+    /// E2: the spec-decode OVERRIDE for measurement runs — the probe's
+    /// `PROBE_SPEC_DECODE` counterpart on the serving path. The tier's
+    /// evidenced posture stays in `MLXChatTier.specDecode` (off everywhere
+    /// until the acceptance table moves it); the override is how the
+    /// acceptance arms run WITHOUT editing the roster.
+    public static let specDecodeOverride: Bool =
+        ProcessInfo.processInfo.environment["BRAIN_MLX_SPEC_DECODE"] == "1"
+
+    /// P-3's gate, as a NAMED function so the threshold is pinned, not
+    /// inlined: spec decode nobody accepts is pure overhead — a drafter
+    /// loaded beside the target costs its own memory and its own calls, and
+    /// under ~40% acceptance that cost is not paid back. The E2 acceptance
+    /// table measures `SpeculativeDecodingTelemetry.acceptanceRate` (the
+    /// draft-model path's native telemetry — the MTP-only
+    /// `acceptedDraftTokens` field stays nil on this path, C-1); a tier
+    /// whose measured rate sits below the gate stays disabled, and that is
+    /// a recorded decision, not a failure.
+    public static func specDecodeEvidenced(acceptanceRate: Double) -> Bool {
+        acceptanceRate >= 0.40
+    }
+
+    /// The resolved spec-decode config for a tier: enabled only when the
+    /// measurement override or the tier's evidenced posture admits it, and
+    /// the drafter loads ONLY then (through the caller's process-lifetime
+    /// cache — never per session). `nil` is the OFF posture: the session
+    /// runs plain generation and nothing draft-shaped exists.
+    public static func resolvedSpecDecode(
+        tier: MLXChatTier,
+        loadDraft: @escaping @Sendable () async throws -> ModelContainer
+    ) async throws -> SpeculativeDecodingConfig? {
+        guard specDecodeOverride || tier.specDecode else { return nil }
+        let draft = try await loadDraft()
+        return SpeculativeDecodingConfig(draftModel: draft, numDraftTokens: 5)
+    }
+
+    /// The E2 drafter: Qwen3-0.6B-4bit, the CG-10 probe's CI model — cached
+    /// locally, proven multi-turn, and the only drafter this lane admits
+    /// (MTP sidecars are refused: unverified double-recurrence, upstream
+    /// issue #753). The SAME LLM-factory text-tower path as every tier —
+    /// the drafter is a small LLM, not a different kind of thing.
+    public static func draftContainer() async throws -> ModelContainer {
+        try await LLMModelFactory.shared.loadContainer(
+            from: #hubDownloader(),
+            using: #huggingFaceTokenizerLoader(),
+            configuration: ModelConfiguration(id: "mlx-community/Qwen3-0.6B-4bit"))
+    }
+
     /// Build the session a turn runs on: the store's render (system + full
     /// ordered transcript — the M-1 contract) seeds the `ChatSession`'s
     /// conversation ledger ("Prompt Re-hydration", the history-init the
@@ -83,18 +130,23 @@ public enum MLXBridge {
     ///     wire law). Empty is the ordinary first turn.
     ///   - maxTokens: the wire's response clamp (16…1024), the same number
     ///     the AFM arm feeds `maximumResponseTokens`.
+    ///   - speculative: the resolved spec-decode config (`resolvedSpecDecode`)
+    ///     or nil — the OFF posture. Session-stable like the KV scheme: the
+    ///     config rides the session's construction, never a per-turn flip.
     public static func makeSession(
         container: ModelContainer,
         tier: MLXChatTier,
         instructions: String?,
         seed: [ConversationMessage],
-        maxTokens: Int
+        maxTokens: Int,
+        speculative: SpeculativeDecodingConfig? = nil
     ) -> (session: ChatSession, store: ConversationStore) {
         let store = ConversationStore(entries: seed)
         let session = ChatSession(
             container,
             instructions: nil,
             history: store.chatMessages(instructions: instructions),
+            speculativeDecoding: speculative,
             generateParameters: GenerateParameters(
                 maxTokens: maxTokens,
                 kvScheme: resolvedKVScheme(for: tier),

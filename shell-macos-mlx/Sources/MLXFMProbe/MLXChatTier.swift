@@ -145,4 +145,16 @@ public enum MLXChatTier: Sendable, Equatable {
     public var kvScheme: String? {
         nil
     }
+
+    /// E2: the tier's evidenced spec-decode posture — OFF everywhere until
+    /// the acceptance table moves it. The gate is
+    /// `MLXBridge.specDecodeEvidenced` (≥ 40% acceptance, measured off the
+    /// draft-model path's native `SpeculativeDecodingTelemetry`); a tier
+    /// whose measured rate sits below the gate stays `false` here and that
+    /// disable is a recorded decision, not a failure. Measurement runs use
+    /// `MLXBridge.specDecodeOverride` (BRAIN_MLX_SPEC_DECODE) instead of
+    /// editing this property.
+    public var specDecode: Bool {
+        false
+    }
 }
