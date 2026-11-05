@@ -142,10 +142,12 @@ struct BrainAfmBridgeTests {
 
     /// The model field is additive-optional and the CHILD owns the gate.
     /// An unknown id refuses `bad_request` naming the id; the excluded 9B
-    /// refuses `model_excluded` carrying its CAUSE (the MLXVLM load gap —
-    /// the cause text is the one place the exclusion is explained on the
-    /// wire). Both refuse at parse time: no slot, no model work, so the pin
-    /// is machine-independent. (Red-proof: damage the child's
+    /// repo refuses `model_excluded` carrying its CAUSE (not among the
+    /// measured-green tiers; the cause text is the one place the exclusion
+    /// is explained on the wire — this assert tracks the corrected E1a/E1c
+    /// facts, and a future cause rewrite must update this needle in the
+    /// same commit). Both refuse at parse time: no slot, no model work, so
+    /// the pin is machine-independent. (Red-proof: damage the child's
     /// `resolveWireModel` to pass unknown ids through → this pin reds;
     /// revert → green.)
     @Test("the model field refuses unknown and excluded ids by name")
@@ -176,8 +178,12 @@ struct BrainAfmBridgeTests {
         #expect(excluded?["code"] as? String == "model_excluded")
         let saidExcluded = excluded?["message"] as? String ?? ""
         #expect(
-            saidExcluded.contains("MLXVLM"),
-            "the refusal must carry the load-gap cause, got: \(saidExcluded)"
+            saidExcluded.contains("measured-green tiers"),
+            "the refusal must carry the roster cause, got: \(saidExcluded)"
+        )
+        #expect(
+            saidExcluded.contains("swift-jinja 1.3.0"),
+            "the refusal must carry the engine-floor cause, got: \(saidExcluded)"
         )
     }
 

@@ -42,6 +42,11 @@ import Foundation
 import MLXFMProbe
 import MLXLMCommon
 import MLXFoundationModels
+import MLXHuggingFace
+import MLXVLM
+import MLXLLM
+import Tokenizers
+import HuggingFace
 import FoundationModels
 
 // MULTI-TURN MEMORY: can Qwen3.5 carry context across turns?
@@ -87,6 +92,33 @@ import FoundationModels
 let MODEL_ID = "mlx-community/Qwen3.5-9B-4bit"
 let SECRET = "184/97"
 
+// E1a (CG-10): the Qwen3.5 mlx-community quants ship the broken
+// `tokenizer_class: "TokenizersBackend"` (measured 2026-11-05 on BOTH the 4B
+// repos: mlx-community/Qwen3.5-4B-MLX-4bit and avan-ag/Qwen3.5-4B-Uncensored-MLX-4bit),
+// so a bare `ModelConfiguration(id:)` throws `.unsupportedTokenizer` exactly as
+// the 9B did. The fix is the reasoningQwen pattern generalized: weights from the
+// quant repo, tokenizer from the OFFICIAL repo, the family's empty-string EOT,
+// and thinking tags. Non-Qwen3.5 ids load bare.
+func probeConfiguration(_ id: String) -> ModelConfiguration {
+    let mode = ProcessInfo.processInfo.environment["PROBE_CONFIG"] ?? "full"
+    guard let range = id.range(of: #"Qwen3\.5-\d+(\.\d+)?B"#, options: .regularExpression) else {
+        return ModelConfiguration(id: id)
+    }
+    let official = "Qwen/" + id[range]
+    print("  tokenizer source override: \(official) (weights still from \(id)) | config mode: \(mode)")
+    switch mode {
+    case "tokenizer":
+        // override ONLY — isolates whether extraEOSTokens/thinking cause the throw
+        return ModelConfiguration(id: id, tokenizerSource: .id(official))
+    case "registryEOT":
+        // the LLM registry's own qwen3_5_2b_4bit style: im_end EOT, no thinking
+        return ModelConfiguration(id: id, tokenizerSource: .id(official), extraEOSTokens: ["<|im_end|>"])
+    default:
+        // full: the reasoningQwen pattern (empty-string EOT + thinking tags)
+        return ModelConfiguration(id: id, tokenizerSource: .id(official), extraEOSTokens: [""], reasoningConfig: .thinkTagsWithEnableThinking)
+    }
+}
+
 func text(of generation: Generation) -> String {
     if case .chunk(let c) = generation { return c }
     return ""
@@ -107,21 +139,36 @@ func askChat(_ session: ChatSession, _ prompt: String) async -> String {
 
 @available(macOS 27.0, *)
 func run() async throws {
-    // `MLXLanguageModel.loadContainer()` (MLXFoundationModels:110) is PUBLIC and
-    // "reuses the adapter cache", so the model loads ONCE through the same path
-    // the working banner experiment used, and the resulting ModelContainer is
-    // handed to the mlx-native ChatSession. That sidesteps the downloader /
-    // tokenizer-loader problem entirely: every `loadModelContainer` overload
-    // wants those, and ChatSession.swift:129 documents an `id:` overload that
-    // does not exist.
     // E1 gate (CG-10): model selectable by env, default = pinned 9B weights.
+    // E1a (CG-10): the load goes through `#huggingFaceLoadModelContainer`, whose
+    // expansion is the FREE registry-routed `loadModelContainer(from:using:)` —
+    // the registry probes MLXVLM's trampoline FIRST (ModelFactory.swift:492),
+    // so the VLM-family Qwen3.5 quants construct through the same call the text
+    // models always used. The adapter path is gone: it was only ever the
+    // loadContainer vehicle, and no live arm reads it (A is unimplemented).
     let modelID = ProcessInfo.processInfo.environment["PROBE_MODEL_ID"] ?? MODEL_ID
-    let configuration = ModelConfiguration(id: modelID)
     print("model: \(modelID)")
-    let adapter = try await MLXFMProbe.model(
-        configuration: configuration,
-        capabilities: [.toolCalling, .guidedGeneration, .reasoning])
-    let container = try await adapter.loadContainer()
+    let configuration = probeConfiguration(modelID)
+    // E1b (CG-10): PROBE_TEXT_ONLY=1 loads through the LLM factory DIRECTLY —
+    // bypassing the ModelFactoryRegistry, whose first trampoline is the VLM
+    // factory. The LLM factory's `qwen3_5` handler builds ONLY the text tower
+    // (Qwen35.swift:1232 — `Qwen35TextModel(args.textConfig)`), so the VL-family
+    // repos run text-only, no MLXVLM, and — decisive for this lane — the
+    // continuation render goes through the plain tokenizer chat template (the
+    // surface PR #472 fixed) instead of the VLM processor's own prepare path,
+    // which is where the 4B's turn-2 throw was witnessed live.
+    let textOnly = ProcessInfo.processInfo.environment["PROBE_TEXT_ONLY"] == "1"
+    let container: ModelContainer
+    if textOnly {
+        print("load path: LLM factory (text tower only)")
+        container = try await LLMModelFactory.shared.loadContainer(
+            from: #hubDownloader(),
+            using: #huggingFaceTokenizerLoader(),
+            configuration: configuration)
+    } else {
+        print("load path: registry (VLM factory first)")
+        container = try await #huggingFaceLoadModelContainer(configuration: configuration)
+    }
     let params = GenerateParameters(maxTokens: 200, temperature: 0)
     let secret = SECRET
 

@@ -1609,13 +1609,18 @@ struct SwitchModifier: LanguageModelSession.DynamicProfileModifier {
 
 // THE EXCLUSION IS A PIN, NOT A CONVENTION.
 //
-// Qwen3.5-9B cannot serve chat. The originally measured cause — a turn-2
-// `runtime("No user query found in messages.")` throw on BOTH session types —
-// was settled by CG-10: the Qwen Jinja template's own conversation-aware
-// contract, upstream-fixed (mlx-swift-lm PR #472) and verified live on the
-// text family (Qwen3-8B, arms B/C/D green). The 9B's STANDING reason is the
-// LOAD failure (`unsupportedTokenizer` — a VLM architecture needing the
-// MLXVLM stack), not the throw.
+// THIS SPECIFIC REPO (`mlx-community/Qwen3.5-9B-4bit`) cannot serve chat.
+// The originally measured cause — a turn-2 `No user query found` throw on
+// BOTH session types — was settled by CG-10 E1a: the swift-jinja 1.3.0
+// slice bug (implicit-range slices with a step evaluate EMPTY; Qwen3.5's
+// template reverse-scans through exactly that construct), upstream-fixed
+// in swift-jinja 3.0.0 (the engine floor the mlx package now pins). The
+// earlier "VLM architecture / MLXVLM" attribution was WRONG and is
+// retracted — MLXLLM's `qwen3_5` handler builds only the text tower, so
+// the whole family runs TEXT-ONLY. The STANDING reason this repo stays
+// refused: it is not among the measured-green tiers (E1c verified the 2B
+// and the operator's pipenetwork 9B quant, never this repo), and it ships
+// the broken `tokenizer_class: "TokenizersBackend"`.
 //
 // The DIAGNOSIS lives in exactly one place — the `ChatModelId` doc comment in
 // `ChatModelLayer.swift` — and is deliberately not restated here, because it was
@@ -1625,7 +1630,7 @@ struct SwitchModifier: LanguageModelSession.DynamicProfileModifier {
 // never goes through a `LanguageModelExecutor`, so it cannot be the common
 // factor.
 //
-// What this pin holds is narrower and does not depend on the loader question:
+// What this pin holds is narrower and does not depend on settling the cause:
 // the id is REFUSED.
 //
 // "Simply not wired up" is not an exclusion. It re-enters the first time
@@ -1635,12 +1640,12 @@ struct SwitchModifier: LanguageModelSession.DynamicProfileModifier {
 //
 // The pin enumerates `allCases` rather than naming the one bad id, so a model
 // added LATER is covered by the same rule without this file being edited.
-@Test("Qwen3.5 cannot enter a chat path — the id is refused, not merely unused")
+@Test("mlx-community/Qwen3.5-9B-4bit cannot enter a chat path — the id is refused, not merely unused")
 func qwen35CannotEnterAChatPath() {
     // The named case, stated plainly so a reader does not have to infer it.
     #expect(
         !ChatModelId.qwen3_5.mayServeChat,
-        "Qwen3.5 is marked chat-capable again — it does not load through MLXLLM (VLM architecture; the MLXVLM follow-on lane owns its return)"
+        "mlx-community/Qwen3.5-9B-4bit is marked chat-capable again — it is not among the measured-green tiers (the measured 9B is the operator's pipenetwork quant)"
     )
     #expect(
         ChatModelId.qwen3_5.chatRefusalReason?.isEmpty == false,

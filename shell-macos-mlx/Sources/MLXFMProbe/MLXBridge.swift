@@ -1,5 +1,9 @@
 import Foundation
+import HuggingFace
+import MLXHuggingFace
+import MLXLLM
 import MLXLMCommon
+import Tokenizers
 
 /// The bridge-facing MLX chat path (CG-10 E3): container load, seeded
 /// session construction, and the per-turn stream, in ONE place — the MLX
@@ -26,11 +30,22 @@ public enum MLXBridge {
     /// and metal compile all happen here, once; the caller caches the result
     /// for the process lifetime (the MLX counterpart of the shell's
     /// `BudgetCache`).
+    ///
+    /// The factory is `LLMModelFactory` DIRECTLY, not the
+    /// ModelFactoryRegistry: the registry probes the VLM factory first, and
+    /// the VLM processor's own prepare path is where the Qwen3.5 turn-2
+    /// throw was witnessed live (E1a). The LLM factory's `qwen3_5` handler
+    /// builds only the text tower, so every tier — including the
+    /// VLM-shell-architected Qwen3.5 family — runs TEXT-ONLY, and the
+    /// continuation render stays on the plain tokenizer chat template, the
+    /// surface PR #472 fixed. This also drops the adapter hop (`MLXFMProbe.
+    /// model` → `loadContainer`): it was only ever the load vehicle, and no
+    /// live arm reads the adapter.
     public static func loadContainer(tier: MLXChatTier) async throws -> ModelContainer {
-        let adapter = try await MLXFMProbe.model(
-            configuration: tier.configuration,
-            capabilities: [.toolCalling, .guidedGeneration, .reasoning])
-        return try await adapter.loadContainer()
+        try await LLMModelFactory.shared.loadContainer(
+            from: #hubDownloader(),
+            using: #huggingFaceTokenizerLoader(),
+            configuration: tier.configuration)
     }
 
     /// Build the session a turn runs on: the store's render (system + full
@@ -97,18 +112,28 @@ public enum MLXBridge {
     ///
     /// The deltas and the settled text are the filter's CLEAN output — the
     /// measured witness (CG-10 E3, the live multi-turn exchange) showed the
-    /// raw stream carrying `<think>…</think>` on this path, so the filter's
+    /// raw stream carrying reasoning text on this path, so the filter's
     /// suppression is what makes the answer the answer.
+    ///
+    /// - Parameter primedThinkBlock: TRUE for tiers whose chat template
+    ///   OPENS the think block in the prompt render (Qwen3.5 — the
+    ///   template-debug A1 tail ends `<|im_start|>assistant\n<think>`), so
+    ///   the generated stream starts INSIDE the reasoning: it begins with
+    ///   scratchpad text and only `</think>` marks the answer (found live
+    ///   on the heretic 9B — its reasoning arrived with no opening tag).
+    ///   FALSE for tiers where the model emits the opening tag itself
+    ///   (Qwen3 — the 8B's stream carried literal `<think>` chunks).
     public static func streamTurn(
         session: ChatSession,
         prompt: String,
         maxTokens: Int,
+        primedThinkBlock: Bool,
         onDelta: @Sendable (String) -> Void
     ) async throws -> (text: String, inputTokens: Int, outputTokens: Int) {
         // The per-turn parameters are constructed HERE for the same reason
         // `makeSession`'s are: one sampling site, one law (see the type doc).
         let parameters = GenerateParameters(maxTokens: maxTokens, temperature: 0)
-        var filter = ThinkFilter()
+        var filter = ThinkFilter(primedThinkBlock: primedThinkBlock)
         var inputTokens = 0
         var outputTokens = 0
         for try await generation in session.streamDetails(
@@ -141,14 +166,26 @@ public enum MLXBridge {
 /// upstream `ReasoningTokenCollector` splits reasoning only inside the
 /// MLXFoundationModels adapter machinery (`MLXLanguageModel.swift:1854`),
 /// never in `ChatSession.streamDetails` (verified in-tree at the pinned
-/// revision, `3b339ad6`; the live multi-turn witness carried the think
-/// text verbatim in both deltas and final). The bridge's answer is the
-/// ANSWER, not the scratchpad, so the filter suppresses everything inside
-/// an open `<think>` block — streamed, not post-hoc: deltas are the clean
-/// text as it arrives.
+/// revision, `3b339ad6`; the live multi-turn witness carried the reasoning
+/// verbatim in both deltas and final). The bridge's answer is the ANSWER,
+/// not the scratchpad, so the filter suppresses everything inside a think
+/// block — streamed, not post-hoc: deltas are the clean text as it
+/// arrives.
+///
+/// ## THE PRIMED CASE (Qwen3.5)
+///
+/// Qwen3.5's chat template OPENS the think block in the prompt itself —
+/// the template-debug A1 render ends `<|im_start|>assistant\n<think>` — so
+/// the generated stream starts INSIDE the reasoning and only `</think>`
+/// marks the answer (found live on the heretic 9B: scratchpad prose with no
+/// opening tag, then the tag, then the answer). For those tiers pass
+/// `primedThinkBlock: true` and the filter STARTS in the suppressed phase:
+/// everything until `</think>` is scratchpad, by the template's own
+/// contract. Qwen3 tiers emit the opening tag themselves; they run
+/// unprimed and the tag drives the state machine.
 ///
 /// LAWS: deterministic string processing only (no model in the gate — the
-/// filter judges delimiters, never content); an unclosed `<think>` at
+/// filter judges delimiters, never content); an unclosed think block at
 /// stream end suppresses to the end (a truncated think block is not
 /// answer); text outside any block passes through byte-identical. Tag
 /// fragments spanning chunk boundaries are held back and resolved on the
@@ -160,14 +197,19 @@ public struct ThinkFilter: Sendable {
         case thinking
     }
 
-    private var phase: Phase = .answer
+    private var phase: Phase
     /// Text seen but not yet classified — a possible partial delimiter at
     /// the tail. Emitted (or dropped) at the next ingest or at `finish`.
     private var carry: String = ""
     /// The clean answer accumulated across the whole stream.
     private var clean = ""
 
-    public init() {}
+    /// - Parameter primedThinkBlock: the template opens the think block in
+    ///   the prompt (Qwen3.5), so the stream starts in the suppressed
+    ///   phase. See the type doc.
+    public init(primedThinkBlock: Bool = false) {
+        phase = primedThinkBlock ? .thinking : .answer
+    }
 
     /// Ingest one raw fragment; return the clean text it makes visible.
     public mutating func ingest(_ fragment: String) -> String {

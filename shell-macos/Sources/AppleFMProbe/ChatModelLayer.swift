@@ -24,25 +24,40 @@ import FoundationModels
 /// `ChatSession`. Qwen3-0.6B-4bit passed the same multi-turn probe with a
 /// cold control.
 ///
-/// **Established (the cause, CG-10 2026-11-04/05).** The throw was the Qwen
-/// Jinja template's own contract: conversation-aware, it raises when the
-/// rendered list carries no non-tool user message — the original query must
-/// be IN the list, not in the KV cache. Upstream fixed the session side
-/// (mlx-swift-lm PR #472: the full conversation renders on every
-/// continuation), and the fix is verified live on the text family: the
-/// multi-turn probe on `mlx-community/Qwen3-8B-4bit` runs turn 2 (recall
-/// witnessed), the tool-result continuation, and the cold control — all
-/// green, re-verified on the CG-10 branch after its rebase. That verified
-/// tier is the `qwen3_8b_4bit` case below.
+/// **Established (the cause, CG-10 E1a 2026-11-05).** TWO stacked defects,
+/// neither in the weights and neither VLM-shaped (the earlier "VLM
+/// architecture / MLXVLM stack" attribution here was WRONG and is
+/// retracted — MLXLLM's `qwen3_5` handler builds only the text tower, so
+/// the whole Qwen3.5 family runs TEXT-ONLY):
 ///
-/// **Measured (why qwen3_5 is STILL refused, 2026-11-04).** The 9B cannot
-/// reach the template at all: `mlx-community/Qwen3.5-9B-4bit` fails to load
-/// through the MLXLLM stack (`unsupportedTokenizer` — it is a VLM
-/// architecture and needs the MLXVLM stack). That is a loader-tier gap with
-/// its own follow-on lane; the template fix does not transfer until the
-/// model loads. So the exclusion's reason is now the load failure, not the
-/// throw, and it stays attached to the case rather than to a comment a
-/// refactor can leave behind.
+/// 1. **The engine.** swift-jinja 1.3.0 (what `swift-transformers 0.1.x`
+///    resolved) returns EMPTY for any implicit-range slice with a step —
+///    `messages[::-1]` on a 2+ element list — and Qwen3.5's template
+///    reverse-scans the conversation through exactly that construct. Every
+///    turn after the first raised, regardless of factory path or config.
+///    Qwen3's template carries the same scan but NO raise, so the older
+///    family silently no-op'd its scan and "worked" — the October
+///    "Qwen3.5-specific" attribution was the engine, not the family.
+///    Reproduced OUTSIDE the model stack by the `template-debug` bisect
+///    (pure Swift Jinja throws on `[user, assistant, user]` while python
+///    jinja2 renders the identical input byte-green). Upstream fixed it in
+///    swift-jinja #99 + #101 + the Jinja2 conformance suite #95 —
+///    **swift-jinja 3.0.0**, reached by OUR bump (swift-transformers
+///    0.1.0 → 1.4.0) in `shell-macos-mlx/Package.swift`. The engine floor
+///    is a pin, not a preference.
+/// 2. **The tokenizer config.** The mlx-community Qwen3.5 quants ship
+///    `tokenizer_class: "TokenizersBackend"` (both 4B repos re-confirmed;
+///    the pipenetwork quant too), which throws `.unsupportedTokenizer`
+///    exactly as measured. Load-bearing fix: the official-repo
+///    `tokenizerSource` override (weights from the quant, tokenizer from
+///    `Qwen/Qwen3.5-<size>`).
+///
+/// With both fixed, E1c witnessed end-to-end on the FIXED engine: the 2B
+/// text tower all green, and the operator's
+/// `pipenetwork/Qwen3.5-9B-…-Heretic-MLX-5bit` — `MULTI-TURN MEMORY WORKS
+/// on Qwen3.5 via ChatSession`. The measured-green roster is the MLX tier
+/// set below; `qwen3_5` (the mlx-community 9B repo) stays excluded only
+/// because it is not among the verified candidates.
 public enum ChatModelId: String, Sendable, Equatable, CaseIterable {
     /// The measured tier. 4,096 combined tokens, and the only one that has
     /// completed a turn on the development machine.
@@ -56,20 +71,46 @@ public enum ChatModelId: String, Sendable, Equatable, CaseIterable {
     /// appears. Deleting it would make the exclusion unenforceable and leave
     /// only the memory of it.
     ///
-    /// The reason is no longer the turn-2 throw (that was the template's own
-    /// contract, upstream-fixed and verified on the text family — see the
-    /// header): the 9B fails to LOAD through MLXLLM
-    /// (`unsupportedTokenizer`; VLM architecture, MLXVLM stack needed). It
-    /// returns through that follow-on lane or not at all.
+    /// The CURRENT reason (both earlier attributions retired): this specific
+    /// repo is not among the measured-green tiers. E1c verified the 2B and
+    /// the operator's pipenetwork 9B quant end-to-end on the fixed engine —
+    /// never this repo. It also ships the broken
+    /// `tokenizer_class: "TokenizersBackend"` (needs the official-repo
+    /// `tokenizerSource` override), and its multi-turn raise was the
+    /// swift-jinja 1.3.0 slice bug, upstream-fixed in 3.0.0 (the engine
+    /// floor `shell-macos-mlx` now pins). It can be measured in like any
+    /// other candidate; until then it stays refused.
     case qwen3_5 = "qwen3.5-9b-4bit"
 
     /// The MLX text tier the CG-10 probe verified live: weights
     /// `mlx-community/Qwen3-8B-4bit` (text architecture, supported
-    /// tokenizer), arms B/C/D green — turn 2 recalls, the tool-result
-    /// continuation answers, the cold control fails to recall. Serves chat
+    /// tokenizer), arms B/C/D green on the OLD engine — its template lacks
+    /// the raise, so it never depended on the slice. Serves chat
     /// through the native `ChatSession` path (`.mlx` below), never through
     /// the AFM `LanguageModelSession`.
     case qwen3_8b_4bit = "qwen3-8b-4bit"
+
+    /// `mlx-community/Qwen3.5-2B-4bit` — Qwen3.5 text tower, E1c green on
+    /// the FIXED engine (swift-jinja 3.0.0): turn 2 answers "184/97", the
+    /// tool continuation answers, the cold control honestly declines.
+    /// Requires the official-repo tokenizer override (broken
+    /// `TokenizersBackend` in the quant's own config).
+    case qwen3_5_2b = "qwen3.5-2b-4bit"
+
+    /// `pipenetwork/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-MLX-5bit`
+    /// — the OPERATOR'S named pick for the agentic tier (7.07 GB, 5-bit,
+    /// 3-link provenance Qwen → nightmedia DS9 → pipenetwork). E1c green:
+    /// `MULTI-TURN MEMORY WORKS on Qwen3.5 via ChatSession` — turn 2
+    /// traces the turn-1 utterance and recalls the secret; the tool arm
+    /// uses the dispatched result; the cold control does not emit it.
+    ///
+    /// POSTURE NOTE (a named operator act, recorded 2026-11-05): the
+    /// earlier "uncensored refused (governed production)" refusal governed
+    /// the PRODUCT tier roster, and the operator accepted this tier's
+    /// provenance and fine-tune posture for the LOCAL, self-hosted MLX
+    /// path. The refusal law is unchanged for anything kernel- or
+    /// cloud-side.
+    case qwen3_5_9b_heretic = "qwen3.5-9b-heretic-5bit"
 
     /// Whether this model may serve a CHAT path — a multi-turn conversation
     /// with history carried across turns.
@@ -77,20 +118,21 @@ public enum ChatModelId: String, Sendable, Equatable, CaseIterable {
         switch self {
         case .onDeviceAFM: true
         case .qwen3_5: false
-        case .qwen3_8b_4bit: true
+        case .qwen3_8b_4bit, .qwen3_5_2b, .qwen3_5_9b_heretic: true
         }
     }
 
     /// Why not, for the error a caller gets.
     public var chatRefusalReason: String? {
         switch self {
-        case .onDeviceAFM, .qwen3_8b_4bit: nil
+        case .onDeviceAFM, .qwen3_8b_4bit, .qwen3_5_2b, .qwen3_5_9b_heretic: nil
         case .qwen3_5:
-            "Qwen3.5-9B does not load through the MLXLLM stack (unsupportedTokenizer "
-                + "— it is a VLM architecture needing the MLXVLM stack, measured 2026-11-04). "
-                + "Its Jinja-template throw is upstream-fixed (mlx-swift-lm PR #472) and "
-                + "verified on the text family; the 9B returns through the MLXVLM follow-on "
-                + "lane. See ChatModelId for the evidence."
+            "mlx-community/Qwen3.5-9B-4bit is not among the measured-green tiers: its "
+                + "turn-2 raise was the swift-jinja 1.3.0 slice bug (fixed in 3.0.0, the "
+                + "engine floor), the repo ships the broken tokenizer_class "
+                + "'TokenizersBackend' (needs the official-repo tokenizerSource override), "
+                + "and it was never verified end-to-end — the measured-green 9B is the "
+                + "operator's pipenetwork heretic quant. See ChatModelId for the roster."
         }
     }
 
@@ -121,7 +163,7 @@ public enum ChatModelId: String, Sendable, Equatable, CaseIterable {
     public var sessionKind: ChatSessionKind {
         switch self {
         case .onDeviceAFM: .afm
-        case .qwen3_5, .qwen3_8b_4bit: .mlx
+        case .qwen3_5, .qwen3_8b_4bit, .qwen3_5_2b, .qwen3_5_9b_heretic: .mlx
         }
     }
 }

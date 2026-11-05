@@ -72,8 +72,22 @@ let package = Package(
         // fails with `cannot find 'HuggingFace' in scope` — a diagnostic that
         // reads like a missing package rather than a missing import, which is
         // why it is recorded here rather than rediscovered.
-        .package(url: "https://github.com/huggingface/swift-huggingface", from: "0.1.0"),
-        .package(url: "https://github.com/huggingface/swift-transformers", from: "0.1.0"),
+        // swift-transformers 1.4.0 requires swift-huggingface >= 0.8.1.
+    .package(url: "https://github.com/huggingface/swift-huggingface", from: "0.8.1"),
+        // CG-10 fix (2026-11-05): 0.1.x resolved swift-jinja 1.3.0, whose slice
+    // evaluation returns EMPTY for implicit-range slices with a step
+    // (`messages[::-1]` on any 2+ element list) — measured by the template-debug
+    // bisect. Qwen3.5's chat template reverse-scans the conversation through
+    // exactly that construct, so EVERY turn after the first raised
+    // "No user query found in messages." Upstream fixed it: swift-jinja #99
+    // ("Distribute and fill slices as Jinja2 does", in 3.0.0) + the Jinja2
+    // conformance suite #95. swift-transformers 1.4.0's range
+    // (swift-jinja 2.4.2..<4.0.0) reaches the fixed engine.
+    .package(url: "https://github.com/huggingface/swift-transformers", from: "1.4.0"),
+        // CG-10 diagnostic import: the chat-template engine itself, declared so
+        // template-debug can import it. This repo is the RENAMED upstream of the
+        // old johnmai-dev/Jinja pin — declaring both collides on module "Jinja".
+        .package(url: "https://github.com/huggingface/swift-jinja.git", from: "3.0.0"),
     ],
     targets: [
         .target(
@@ -123,7 +137,44 @@ let package = Package(
         // correct for a paired A/B and the wrong shape for chat).
         .executableTarget(
             name: "multi-turn-probe",
-            dependencies: ["MLXFMProbe"],
+            dependencies: [
+                "MLXFMProbe",
+                // E1b: the direct text-tower load names LLMModelFactory.
+                .product(name: "MLXLLM", package: "mlx-swift-lm"),
+                // E1a (CG-10): the Qwen3.5-4B tier model is a VLM architecture
+                // (`Qwen3_5ForConditionalGeneration`), so its container must come
+                // from the VLM factory. The ModelFactoryRegistry discovers
+                // `MLXVLM.TrampolineModelFactory` by RUNTIME class lookup
+                // (MLXLMCommon/ModelFactory.swift:492) — the class exists in the
+                // binary only when this target LINKS the product, so the
+                // dependency is declared without importing its symbols.
+                .product(name: "MLXVLM", package: "mlx-swift-lm"),
+                // The load itself goes through `#huggingFaceLoadModelContainer` —
+                // the macro expands to the FREE registry-routed
+                // `loadModelContainer(from:using:configuration:)`, so one call
+                // serves both the LLM and the VLM path, whichever factory can
+                // construct the config.
+                .product(name: "MLXHuggingFace", package: "mlx-swift-lm"),
+                // The tokenizer-loader macro expansion references the `Tokenizers`
+                // module directly; the consumer target must import it (same
+                // reason as MLXFMProbe's own dependency above).
+                .product(name: "Transformers", package: "swift-transformers"),
+                // The downloader macro expansion names `HubClient`/`HubCache`
+                // (module `HuggingFace`) — MLXFMProbe carries the identical
+                // dependency for the identical reason.
+                .product(name: "HuggingFace", package: "swift-huggingface"),
+            ],
+            swiftSettings: [.swiftLanguageMode(.v5)],
+        ),
+        // CG-10 diagnostic: bisects the Qwen3.5 turn-2 raise through the real
+        // Jinja engine (swift-transformers -> johnmai-dev/Jinja). A measurement
+        // instrument like the probes — invoked deliberately, never in CI.
+        .executableTarget(
+            name: "template-debug",
+            dependencies: [
+                .product(name: "Transformers", package: "swift-transformers"),
+                .product(name: "Jinja", package: "swift-jinja"),
+            ],
             swiftSettings: [.swiftLanguageMode(.v5)],
         ),
         .testTarget(name: "MLXFMProbeTests", dependencies: ["MLXFMProbe"]),

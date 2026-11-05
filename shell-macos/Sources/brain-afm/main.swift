@@ -1120,11 +1120,13 @@ struct BrainAfmBridge {
         let answer: String
         let inputTokens: Int
         let outputTokens: Int
+        let tier = try Self.mlxTier(for: slot.model)
         do {
             let result = try await MLXBridge.streamTurn(
                 session: live.session,
                 prompt: prompt,
                 maxTokens: cap,
+                primedThinkBlock: tier.primesThinkBlock,
                 onDelta: { fragment in
                     out.send(["id": id, "event": "delta", "text": fragment])
                 }
