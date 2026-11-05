@@ -735,7 +735,11 @@ mod tests {
         }
 
         // The excluded id: model_excluded, with the CAUSE as the message —
-        // the 9B's load gap, not the retired template throw.
+        // the roster cause (corrected by E1a/E1c: not among the
+        // measured-green tiers; the engine floor), not the retired
+        // template throw and not the retracted VLM claim. This needle
+        // tracks the corrected cause; a future rewrite updates it in the
+        // same commit.
         let (_id2, mut rx2) = bridge
             .turn(BridgeTurn {
                 session: "cg10-excluded-model".into(),
@@ -752,8 +756,8 @@ mod tests {
                 assert_eq!(code, "model_excluded", "the excluded id refuses by name");
                 let said = message.unwrap_or_default();
                 assert!(
-                    said.contains("MLXVLM"),
-                    "the refusal must carry the load-gap cause, got: {said}"
+                    said.contains("measured-green tiers") && said.contains("swift-jinja 1.3.0"),
+                    "the refusal must carry the corrected roster + engine-floor cause, got: {said}"
                 );
             }
             other => panic!("expected the named refusal, got {other:?}"),
