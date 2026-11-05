@@ -9,7 +9,8 @@
 //        "pccGeneration":"refused","escalationPermitted":false}
 //
 //   {"id":"t1","op":"turn","session":"s1","prompt":"…",
-//    "instructions":"…"(first turn of a session only),"maxResponseTokens":512}
+//    "instructions":"…"(first turn of a session only),"maxResponseTokens":512,
+//    "model":"qwen3-8b-4bit"(optional — CG-10; absent = afm3-core)}
 //     → zero or more {"id":"t1","event":"delta","text":"…"}
 //       then exactly one terminal event:
 //       {"id":"t1","event":"final","text":"…","abstain":false,
@@ -22,10 +23,27 @@
 // then the sentence-level claims with the hit indices they assert. The
 // kernel, not this process, judges those indices (no model in the gate).
 //
+// THE MODEL FIELD (CG-10 E3): additive-optional, like `history`. Absent →
+// the AFM tier (`onDeviceAFM`), byte-identical to every caller that shipped
+// before the field existed (the GDL propose loop among them — it never
+// sends `model`, so its sessions stay AFM by construction). Present → the
+// id is resolved through `ChatModelId` and gated through `forChat` BEFORE
+// any registry or model work: an unknown id is `bad_request`, an excluded
+// one (`qwen3.5-9b-4bit`) is `model_excluded` with its cause. A session's
+// model is locked at first use — the conversation lives in ONE ledger
+// (LanguageModelSession or ChatSession), and a mid-session tier flip would
+// silently strand it — so a mismatching later request is `model_locked`.
+// The `.mlx` kind runs the native `ChatSession` path (MLXFMProbe/MLXBridge):
+// the store renders system + full transcript, the seeded history hydrates
+// the conversation, deltas stream as raw fragments, and the final carries
+// the same keys with `abstain:false, claims:[]` (the additive defaults —
+// the MLX tier has no guided-generation schema yet) and `tier:"mlx_native"`.
+//
 //   {"id":"x1","op":"cancel","target":"t1"}   → abandons that turn's task
 //
 //   {"id":"p1","op":"prewarm","session":"s1","instructions":"…"(optional),
-//    "history":[{"role":"user","text":"…"},{"role":"assistant","text":"…"}]}
+//    "history":[{"role":"user","text":"…"},{"role":"assistant","text":"…"}],
+//    "model":"…"(optional, same law as turn)}
 //     → on a FRESH session the history seeds it (measured against the
 //       budget; history_unseedable by name when it cannot fit) —
 //       ignored when the session already lives in this process.
@@ -33,8 +51,12 @@
 //     → creates the session under the instructions law and warms the model
 //       via `session.prewarm(promptPrefix:)` — the kernel calls this before
 //       the first turn so the cold load overlaps the grounding window.
+//     → on the MLX kind the warm IS the materialization: the container
+//       load (weights mmap + metal compile) is the cold cost, and it is
+//       cached for the process lifetime after the first prewarm.
 //     → {"id":"p1","ok":true} once the prefix is loaded; named error codes
-//       (instructions_locked, model_unavailable, bad_request) otherwise.
+//       (instructions_locked, model_unavailable, bad_request, model_excluded,
+//       model_locked) otherwise.
 //
 // WHY SESSIONS LIVE HERE. The conversation's accumulated transcript — the
 // thing HistoryBudget trims — can only exist inside a live
@@ -76,6 +98,8 @@ import FoundationModels
 #endif
 
 import AppleFMProbe
+import MLXFMProbe
+import MLXLMCommon
 
 // ─────────────────────────────────────────────────────────────────────────
 // Output
@@ -149,6 +173,12 @@ enum BridgeError: Error {
     /// session materializes, so the transcript that failed seeding is
     /// unchanged and the next turn lands on the same terms.
     case historyUnseedable(shortfall: Int)
+    /// A model id that `ChatModelId.forChat` refuses — the exclusion's
+    /// cause crosses as the message (CG-10: the 9B's MLXVLM load gap).
+    case modelExcluded(String)
+    /// A session's model is locked at first use (the conversation lives in
+    /// ONE ledger); a mismatching later request refuses rather than flips.
+    case modelLocked(wanted: String, has: String)
 
     var code: String {
         switch self {
@@ -158,6 +188,22 @@ enum BridgeError: Error {
         case .instructionsLocked: "instructions_locked"
         case .badRequest: "bad_request"
         case .historyUnseedable: "history_unseedable"
+        case .modelExcluded: "model_excluded"
+        case .modelLocked: "model_locked"
+        }
+    }
+
+    /// The human-readable part of the error event, for the codes that
+    /// carry one.
+    var message: String? {
+        switch self {
+        case .modelUnavailable(let m), .generationFailed(let m), .badRequest(let m),
+            .modelExcluded(let m):
+            m
+        case .modelLocked(let wanted, let has):
+            "session is locked to \(has); refusing \(wanted)"
+        case .conversationDoesNotFit, .instructionsLocked, .historyUnseedable:
+            nil
         }
     }
 }
@@ -368,34 +414,57 @@ final class BridgeSession: @unchecked Sendable {
 @available(macOS 26.0, *)
 final class Sessions: @unchecked Sendable {
     /// A session's PROTOCOL identity, distinct from its model-backed half:
-    /// the instructions and the turn gate exist the moment the id is first
-    /// used, whether or not a `BridgeSession` can be built on this machine.
-    /// The instructions law lives on the slot, so the lock refuses a changed
-    /// instruction even where no model can ever answer.
-    final class Slot {
+    /// the instructions, the MODEL, and the turn gate exist the moment the
+    /// id is first used, whether or not a session can be built on this
+    /// machine. The instructions law lives on the slot, so the lock refuses a
+    /// changed instruction even where no model can ever answer; the model
+    /// law lives beside it (CG-10 E3) — the conversation lives in ONE ledger
+    /// (`LanguageModelSession` or `ChatSession`), so a mid-session tier flip
+    /// is refused, not merged.
+    /// `@unchecked Sendable` with a stated invariant, the same shape as
+    /// `BridgeSession`: the mutable fields (`bridge`, `mlx`) are written
+    /// ONLY under the registry's lock (via `materialize`/`materializeMLX`)
+    /// and every turn runs INSIDE the slot's `TurnGate`, which serializes
+    /// them. Nothing else mutates.
+    final class Slot: @unchecked Sendable {
         let instructions: String?
+        let model: ChatModelId
         let gate = TurnGate()
         var bridge: BridgeSession?
-        init(instructions: String?) { self.instructions = instructions }
+        /// The `.mlx` kind's live half (CG-10): the `ChatSession` and the
+        /// store it was rendered from. Nil until first materialization,
+        /// exactly like `bridge` for the AFM kind.
+        var mlx: MLXLive?
+        init(instructions: String?, model: ChatModelId) {
+            self.instructions = instructions
+            self.model = model
+        }
     }
 
     private let lock = NSLock()
     private var slots: [String: Slot] = [:]
 
     /// The one place a session id is created, and the one place the
-    /// instructions law is decided: changing instructions later invalidates
-    /// the entire cached prefix (Apple's own contract), so a later
-    /// instruction is REFUSED, not merged. Pure registry work — no model,
-    /// no budget — so a refusal's ORDER does not depend on the machine.
-    func resolve(id: String, instructions: String?) throws -> Slot {
+    /// instructions law and the model law are decided: changing
+    /// instructions later invalidates the entire cached prefix (Apple's own
+    /// contract), and flipping a session's model would strand its ledger —
+    /// so a later mismatch is REFUSED, not merged. Pure registry work — no
+    /// model, no budget — so a refusal's ORDER does not depend on the
+    /// machine.
+    func resolve(id: String, instructions: String?, model: ChatModelId) throws -> Slot {
         try lock.withLock {
             if let slot = slots[id] {
                 if let wanted = instructions, wanted != slot.instructions {
                     throw BridgeError.instructionsLocked
                 }
+                if model != slot.model {
+                    throw BridgeError.modelLocked(
+                        wanted: model.rawValue, has: slot.model.rawValue
+                    )
+                }
                 return slot
             }
-            let slot = Slot(instructions: instructions)
+            let slot = Slot(instructions: instructions, model: model)
             slots[id] = slot
             return slot
         }
@@ -417,6 +486,79 @@ final class Sessions: @unchecked Sendable {
             slot.bridge = fresh
             return fresh
         }
+    }
+
+    /// The `.mlx` kind's materialization — attach-once under the same lock,
+    /// the same law as `materialize`; the attached live half returns (the
+    /// winner's, if a concurrent materialization got there first). The seed
+    /// is validated BEFORE this call (the tier's context ceiling), so an
+    /// unseedable history never attaches; what attaches carries the full
+    /// rendered conversation.
+    func materializeMLX(_ slot: Slot, live: MLXLive) -> MLXLive {
+        lock.withLock {
+            if let existing = slot.mlx { return existing }
+            slot.mlx = live
+            return live
+        }
+    }
+}
+
+/// The MLX kind's live half: the `ChatSession` a turn runs on, and the
+/// store it was rendered from — appended at each FINAL (the append law:
+/// a cancelled or failed turn adds nothing, mirroring the session's own
+/// record behavior, so store and session cannot disagree about whether a
+/// turn happened).
+@available(macOS 26.0, *)
+final class MLXLive {
+    let session: ChatSession
+    /// Var because the append law mutates it at each FINAL — and only
+    /// there: every mutation happens inside the slot's gate (see the
+    /// invariant on `Sessions.Slot`).
+    var store: ConversationStore
+    /// The 1-based turn counter — mutated only inside the slot's gate (the
+    /// same invariant `BridgeSession.turn` states), so no lock is needed.
+    private(set) var turn = 0
+
+    init(session: ChatSession, store: ConversationStore) {
+        self.session = session
+        self.store = store
+    }
+
+    func nextTurn() -> Int {
+        turn += 1
+        return turn
+    }
+}
+
+/// The process-lifetime MLX container cache — the tier's weights load ONCE
+/// (the cold mmap + metal compile is exactly the cost the bridge's prewarm
+/// op exists to overlap with the grounding window). Keyed by tier, guarded,
+/// load-once; the AFM counterpart is `BudgetCache`.
+final class MLXContainers: @unchecked Sendable {
+    static let shared = MLXContainers()
+    private let lock = NSLock()
+    private var containers: [MLXChatTier: ModelContainer] = [:]
+    private var loads: [MLXChatTier: Task<ModelContainer, Error>] = [:]
+
+    @available(macOS 27.0, *)
+    func container(for tier: MLXChatTier) async throws -> ModelContainer {
+        if let cached = lock.withLock({ containers[tier] }) {
+            return cached
+        }
+        // Coalesce concurrent first loads: a turn and its prewarm arriving
+        // together must not compile the weights twice.
+        let existing: Task<ModelContainer, Error>? = lock.withLock {
+            if let load = loads[tier] { return load }
+            let load = Task { try await MLXBridge.loadContainer(tier: tier) }
+            loads[tier] = load
+            return load
+        }
+        let container = try await existing!.value
+        lock.withLock {
+            containers[tier] = container
+            loads[tier] = nil
+        }
+        return container
     }
 }
 
@@ -497,22 +639,22 @@ struct BrainAfmBridge {
                 let instructions = object["instructions"] as? String
                 let maxResponse = object["maxResponseTokens"] as? Int
                 let requestCap = min(max(maxResponse ?? 512, 16), 1024)
-                // Seeded history (transcript continuity): first + last
-                // entries from the kernel's persisted transcript. Used
-                // ONLY when this request creates the session; an existing
-                // live session's transcript is authoritative and the
-                // field is ignored. Parsed BEFORE the Task (entries are
-                // Sendable; the raw dictionaries are not) — malformed
-                // seed is a named refusal, never a skip.
+                // THE MODEL FIELD (CG-10 E3): additive-optional; absent is
+                // the AFM tier. Resolved and gated through `forChat` HERE —
+                // parse time, before the Task, so an unknown or excluded id
+                // refuses by name without touching the registry or any
+                // model, exactly like a malformed seed.
                 let rawHistory = object["history"] as? [[String: Any]]
-                let seedEntries: [Transcript.Entry]
+                let model: ChatModelId
+                let conversation: [ConversationMessage]
                 do {
-                    seedEntries = try Self.parseSeedHistory(rawHistory)
+                    model = try Self.resolveWireModel(object)
+                    conversation = try Self.parseWireHistory(rawHistory)
                 } catch let error as BridgeError {
                     var event: [String: Any] = [
                         "id": id, "event": "error", "code": error.code
                     ]
-                    if case let .badRequest(message) = error {
+                    if let message = error.message {
                         event["message"] = message
                     }
                     out.send(event)
@@ -524,6 +666,13 @@ struct BrainAfmBridge {
                     ])
                     continue
                 }
+                // Seeded history (transcript continuity): first + last
+                // entries from the kernel's persisted transcript. Used
+                // ONLY when this request creates the session; an existing
+                // live session's transcript is authoritative and the
+                // field is ignored. Parsed BEFORE the Task (entries are
+                // Sendable; the raw dictionaries are not) — malformed
+                // seed is a named refusal, never a skip.
 
                 let task = Task {
                     defer { inflight.finish(id) }
@@ -545,30 +694,62 @@ struct BrainAfmBridge {
                         // on a machine without the model. A refusal whose
                         // ORDER depends on the machine's posture is not a
                         // contract; resolve() decides the instructions law
-                        // against the registry alone, and materialize() is
-                        // the only step that needs the model.
+                        // and the model law against the registry alone, and
+                        // materialization is the only step that needs a
+                        // model.
                         let slot = try sessions.resolve(
-                            id: session, instructions: instructions
+                            id: session, instructions: instructions, model: model
                         )
-                        guard let budget = await BudgetCache.shared.measured() else {
-                            throw BridgeError.modelUnavailable(
-                                "the on-device budget could not be measured"
+                        // SESSION-TYPE ROUTING (CG-10): a VALUE off the id,
+                        // not a branch someone forgot. The two kinds share
+                        // the slot registry, the gate, and the wire; they
+                        // differ in the ledger that holds the conversation.
+                        switch slot.model.sessionKind {
+                        case .afm:
+                            guard let budget = await BudgetCache.shared.measured() else {
+                                throw BridgeError.modelUnavailable(
+                                    "the on-device budget could not be measured"
+                                )
+                            }
+                            let seedEntries = try Self.transcriptEntries(from: conversation)
+                            let bridgeSession = try await Self.seededBridgeSession(
+                                sessions: sessions, slot: slot, budget: budget,
+                                escalationPermitted: caps.escalationPermitted,
+                                seedEntries: seedEntries
                             )
-                        }
-                        let bridgeSession = try await Self.seededBridgeSession(
-                            sessions: sessions, slot: slot, budget: budget,
-                            escalationPermitted: caps.escalationPermitted,
-                            seedEntries: seedEntries
-                        )
-                        liveSession = bridgeSession.session
-                        try await slot.gate.run {
-                            let turnNo = bridgeSession.nextTurn()
-                            try await Self.runTurn(
-                                id: id, prompt: prompt, turnNo: turnNo,
-                                cap: requestCap,
-                                bridgeSession: bridgeSession,
-                                out: out
-                            )
+                            liveSession = bridgeSession.session
+                            try await slot.gate.run {
+                                let turnNo = bridgeSession.nextTurn()
+                                try await Self.runTurn(
+                                    id: id, prompt: prompt, turnNo: turnNo,
+                                    cap: requestCap,
+                                    bridgeSession: bridgeSession,
+                                    out: out
+                                )
+                            }
+                        case .mlx:
+                            // The adapter surface (MLXFMProbe.model and the
+                            // capability vocabulary) is 27-gated; a pre-27
+                            // host refuses BY NAME rather than failing
+                            // mid-tier.
+                            guard #available(macOS 27.0, *) else {
+                                throw BridgeError.modelUnavailable(
+                                    "the MLX chat tier requires macOS 27 (the adapter surface is 27-gated)"
+                                )
+                            }
+                            try await slot.gate.run {
+                                let live = try await Self.seededMLXSession(
+                                    sessions: sessions, slot: slot,
+                                    conversation: conversation
+                                )
+                                let turnNo = live.nextTurn()
+                                try await Self.runMLXTurn(
+                                    id: id, prompt: prompt, turnNo: turnNo,
+                                    cap: requestCap,
+                                    slot: slot, live: live,
+                                    out: out
+                                )
+                            }
                         }
                     } catch let error as BridgeError {
                         var event: [String: Any] = [
@@ -581,13 +762,19 @@ struct BrainAfmBridge {
                             event["shortfallTokens"] = shortfall
                         }
                         if case let .generationFailed(message) = error {
-                            event["message"] = String(message.prefix(300))
+                            event["message"] = message
                         }
                         if case let .modelUnavailable(message) = error {
                             event["message"] = message
                         }
                         if case let .badRequest(message) = error {
                             event["message"] = message
+                        }
+                        if case let .modelExcluded(reason) = error {
+                            event["message"] = reason
+                        }
+                        if case .modelLocked = error {
+                            event["message"] = error.message
                         }
                         // THE FEEDBACK ATTACHMENT (CG-09 S6): a failed
                         // generation or a conversation that cannot fit
@@ -638,34 +825,57 @@ struct BrainAfmBridge {
                 let instructions = object["instructions"] as? String
                 let rawHistory = object["history"] as? [[String: Any]]
                 do {
+                    // The model field follows the same parse-time law as on
+                    // `turn`: an unknown or excluded id refuses HERE, before
+                    // the registry and any model work.
+                    let model = try Self.resolveWireModel(object)
                     guard capabilities != nil else {
                         throw BridgeError.badRequest(
                             "capabilities must be requested before the first turn"
                         )
                     }
-                    // The instructions law is a PROTOCOL decision: resolve
-                    // the slot first (refusals precede any model work),
-                    // then materialize and warm inside the session gate so
-                    // a racing turn never observes a half-warmed session.
+                    // The instructions law and the model law are PROTOCOL
+                    // decisions: resolve the slot first (refusals precede
+                    // any model work), then materialize and warm inside the
+                    // session gate so a racing turn never observes a
+                    // half-warmed session.
                     let slot = try sessions.resolve(
-                        id: session, instructions: instructions
+                        id: session, instructions: instructions, model: model
                     )
-                    guard let budget = await BudgetCache.shared.measured() else {
-                        throw BridgeError.modelUnavailable(
-                            "the on-device budget could not be measured"
-                        )
-                    }
                     // The seed rides the prewarm too: a prewarm that
                     // materializes without it would poison seeding.
-                    let seedEntries = try Self.parseSeedHistory(rawHistory)
-                    let bridgeSession = try await Self.seededBridgeSession(
-                        sessions: sessions, slot: slot, budget: budget,
-                        escalationPermitted: capabilities?.escalationPermitted ?? false,
-                        seedEntries: seedEntries
-                    )
-                    let prefix = Prompt(slot.instructions ?? "")
-                    await slot.gate.run {
-                        bridgeSession.session.prewarm(promptPrefix: prefix)
+                    let conversation = try Self.parseWireHistory(rawHistory)
+                    // SESSION-TYPE ROUTING (CG-10): the AFM kind warms via
+                    // the session's own `prewarm(promptPrefix:)`; the MLX
+                    // kind's warm IS the materialization — the container
+                    // load is the cold cost, cached process-wide by
+                    // MLXContainers after the first prewarm.
+                    switch slot.model.sessionKind {
+                    case .afm:
+                        guard let budget = await BudgetCache.shared.measured() else {
+                            throw BridgeError.modelUnavailable(
+                                "the on-device budget could not be measured"
+                            )
+                        }
+                        let seedEntries = try Self.transcriptEntries(from: conversation)
+                        let bridgeSession = try await Self.seededBridgeSession(
+                            sessions: sessions, slot: slot, budget: budget,
+                            escalationPermitted: capabilities?.escalationPermitted ?? false,
+                            seedEntries: seedEntries
+                        )
+                        let prefix = Prompt(slot.instructions ?? "")
+                        await slot.gate.run {
+                            bridgeSession.session.prewarm(promptPrefix: prefix)
+                        }
+                    case .mlx:
+                        guard #available(macOS 27.0, *) else {
+                            throw BridgeError.modelUnavailable(
+                                "the MLX chat tier requires macOS 27 (the adapter surface is 27-gated)"
+                            )
+                        }
+                        _ = try await Self.seededMLXSession(
+                            sessions: sessions, slot: slot, conversation: conversation
+                        )
                     }
                     out.send(["id": id, "ok": true])
                 } catch let error as BridgeError {
@@ -680,6 +890,12 @@ struct BrainAfmBridge {
                     }
                     if case let .badRequest(message) = error {
                         event["message"] = message
+                    }
+                    if case let .modelExcluded(reason) = error {
+                        event["message"] = reason
+                    }
+                    if case .modelLocked = error {
+                        event["message"] = error.message
                     }
                     out.send(event)
                 } catch {
@@ -748,21 +964,42 @@ struct BrainAfmBridge {
         )
     }
 
-    /// Parse the kernel's seeded history field into transcript entries.
-    /// A missing/empty field is no seed; anything malformed (missing
-    /// role/text, or a role neither side names) is `bad_request` — the
-    /// whole field is refused, never partially applied.
-    @available(macOS 26.0, *)
-    static func parseSeedHistory(
-        _ raw: [[String: Any]]?
-    ) throws -> [Transcript.Entry] {
-        guard let raw, !raw.isEmpty else { return [] }
-        guard #available(macOS 27.0, *) else {
-            throw BridgeError.modelUnavailable(
-                "transcript seeding requires macOS 27 (segment construction)"
+    /// THE MODEL FIELD (CG-10 E3): resolve the optional `model` id through
+    /// `ChatModelId` and gate it through `forChat`. Absent is the AFM tier.
+    /// Parse-time law: an unknown id is `bad_request`, an excluded one is
+    /// `model_excluded` WITH ITS CAUSE — both refuse here, before the
+    /// registry or any model work, exactly like a malformed seed.
+    static func resolveWireModel(_ object: [String: Any]) throws -> ChatModelId {
+        guard let raw = object["model"] as? String else {
+            return .onDeviceAFM
+        }
+        guard let id = ChatModelId(rawValue: raw) else {
+            throw BridgeError.badRequest(
+                "unknown model \(raw) — the bridge serves \(ChatModelId.allCases.map(\.rawValue).joined(separator: ", "))"
             )
         }
-        var out: [Transcript.Entry] = []
+        do {
+            return try ChatModelId.forChat(id)
+        } catch let error as ChatModelError {
+            if case let .excludedFromChat(_, reason) = error {
+                throw BridgeError.modelExcluded(reason)
+            }
+            throw BridgeError.modelExcluded("the model is excluded from chat")
+        }
+    }
+
+    /// Parse the kernel's seeded history field into the WIRE shape (the
+    /// conversation cache both session kinds consume). A missing/empty field
+    /// is no seed; anything malformed (missing role/text, or a role neither
+    /// side names) is `bad_request` — the whole field is refused, never
+    /// partially applied. The role law is the WIRE's and predates the kind
+    /// split: `user` or `assistant`; the kernel's transcript carries nothing
+    /// else.
+    static func parseWireHistory(
+        _ raw: [[String: Any]]?
+    ) throws -> [ConversationMessage] {
+        guard let raw, !raw.isEmpty else { return [] }
+        var out: [ConversationMessage] = []
         for item in raw {
             guard let role = item["role"] as? String,
                   let text = item["text"] as? String
@@ -773,13 +1010,9 @@ struct BrainAfmBridge {
             }
             switch role {
             case "user":
-                out.append(.prompt(
-                    Transcript.Prompt(segments: [.text(Transcript.TextSegment(content: text))])
-                ))
+                out.append(ConversationMessage(role: .user, text: text))
             case "assistant":
-                out.append(.response(
-                    Transcript.Response(segments: [.text(Transcript.TextSegment(content: text))])
-                ))
+                out.append(ConversationMessage(role: .assistant, text: text))
             default:
                 throw BridgeError.badRequest(
                     "history role must be user or assistant"
@@ -787,6 +1020,148 @@ struct BrainAfmBridge {
             }
         }
         return out
+    }
+
+    /// The AFM kind's conversion of the wire conversation into transcript
+    /// entries — the segment construction this file's macOS 27 note records.
+    @available(macOS 26.0, *)
+    static func transcriptEntries(
+        from conversation: [ConversationMessage]
+    ) throws -> [Transcript.Entry] {
+        guard !conversation.isEmpty else { return [] }
+        guard #available(macOS 27.0, *) else {
+            throw BridgeError.modelUnavailable(
+                "transcript seeding requires macOS 27 (segment construction)"
+            )
+        }
+        var out: [Transcript.Entry] = []
+        out.reserveCapacity(conversation.count)
+        for entry in conversation {
+            switch entry.role {
+            case .user:
+                out.append(.prompt(
+                    Transcript.Prompt(
+                        segments: [.text(Transcript.TextSegment(content: entry.text))])
+                ))
+            case .assistant:
+                out.append(.response(
+                    Transcript.Response(
+                        segments: [.text(Transcript.TextSegment(content: entry.text))])
+                ))
+            case .tool:
+                // Unreachable through the wire law above; the compiler
+                // demands the case and the render contract (M-1) names the
+                // role — a tool entry on the AFM seed refuses rather than
+                // guessing a transcript shape.
+                throw BridgeError.badRequest(
+                    "the AFM seed does not carry tool entries"
+                )
+            }
+        }
+        return out
+    }
+
+    /// The MLX kind's seeded materialization (CG-10 E3): the tier's
+    /// container loads once per process (the prewarm overlap), the seed is
+    /// measured against the TIER's own context — the MLX counterpart of the
+    /// AFM arm's budget law, refusing `history_unseedable` BY NAME before a
+    /// session carries it — and the store's render hydrates the
+    /// conversation. A live session ignores the seed (its ledger is
+    /// authoritative), exactly the law the AFM arm states.
+    @available(macOS 27.0, *)
+    static func seededMLXSession(
+        sessions: Sessions, slot: Sessions.Slot, conversation: [ConversationMessage]
+    ) async throws -> MLXLive {
+        if let live = slot.mlx { return live }
+        let tier = try Self.mlxTier(for: slot.model)
+        let container = try await MLXContainers.shared.container(for: tier)
+        if !conversation.isEmpty {
+            let seedTokens = await MLXBridge.seedTokenCount(conversation, container: container)
+            let ceiling = tier.contextTokens - tier.contextTokens / 10
+            if seedTokens > ceiling {
+                throw BridgeError.historyUnseedable(shortfall: seedTokens - ceiling)
+            }
+        }
+        let built = MLXBridge.makeSession(
+            container: container,
+            instructions: slot.instructions,
+            seed: conversation,
+            maxTokens: 1024
+        )
+        let live = MLXLive(session: built.session, store: built.store)
+        return sessions.materializeMLX(slot, live: live)
+    }
+
+    /// The `.mlx` tier behind a resolved `ChatModelId` — unreachable for an
+    /// AFM id (the caller dispatches on `sessionKind` first); a named trap
+    /// rather than a silent fallback if the routing ever drifts.
+    @available(macOS 26.0, *)
+    static func mlxTier(for model: ChatModelId) throws -> MLXChatTier {
+        guard let tier = MLXChatTier.tier(modelId: model.rawValue) else {
+            throw BridgeError.modelUnavailable(
+                "no MLX configuration for \(model.rawValue) — see MLXChatTier"
+            )
+        }
+        return tier
+    }
+
+    /// One MLX turn inside the slot's gate: stream fragments as deltas,
+    /// emit exactly one terminal event, append the pair to the store at the
+    /// FINAL (the append law — a cancelled or failed turn adds nothing).
+    /// The MLX tier has no guided-generation schema, so the final's
+    /// `abstain`/`claims` ride the wire's additive defaults (false/empty)
+    /// and the kernel's own zero-hit abstain gate still runs upstream of
+    /// this process — the honest boundary, named here rather than faked.
+    @available(macOS 27.0, *)
+    static func runMLXTurn(
+        id: String, prompt: String, turnNo: Int, cap: Int,
+        slot: Sessions.Slot, live: MLXLive, out: LineOut
+    ) async throws {
+        let answer: String
+        let inputTokens: Int
+        let outputTokens: Int
+        do {
+            let result = try await MLXBridge.streamTurn(
+                session: live.session,
+                prompt: prompt,
+                maxTokens: cap,
+                onDelta: { fragment in
+                    out.send(["id": id, "event": "delta", "text": fragment])
+                }
+            )
+            answer = result.text
+            inputTokens = result.inputTokens
+            outputTokens = result.outputTokens
+        } catch let error as BridgeError {
+            throw error
+        } catch {
+            throw BridgeError.generationFailed(String(describing: error))
+        }
+
+        if Task.isCancelled {
+            // The reader is gone; the terminal event goes nowhere, but the
+            // session stays usable — cancel kills the TURN, not the
+            // conversation. Nothing is appended (the append law).
+            return
+        }
+
+        // The append law: the store gains exactly what the session gained,
+        // at the final.
+        live.store.append(user: prompt, assistant: answer)
+
+        // An MLX stream that produced no text at all is STILL an empty
+        // answer on this tier — silence is forwarded as silence (the
+        // kernel's deterministic abstain gate has already run upstream;
+        // faking an abstain flag the tier does not compute would be a
+        // lie on the wire). Named in the audit by the tier field.
+        out.send([
+            "id": id, "event": "final", "text": answer,
+            "abstain": false,
+            "claims": [] as [[String: Any]],
+            "inputTokens": inputTokens, "outputTokens": outputTokens,
+            "tier": "mlx_native", "turn": turnNo,
+            "escalationRefused": false
+        ])
     }
 
     /// One turn on an existing session: plan (which may refuse BEFORE the

@@ -2061,6 +2061,23 @@ pub fn afm_bridge_path() -> Option<std::path::PathBuf> {
     exe.parent().map(|dir| dir.join("brain-afm"))
 }
 
+/// The chat tier the spine requests, verbatim, as the bridge wire's
+/// additive-optional `model` field (CG-10 E4). `BRAIN_CHAT_MODEL` names it;
+/// unset/empty is `None` — the field is OMITTED from the wire, which every
+/// bridge revision parses as the AFM tier, so the default changes nothing
+/// byte-for-byte. The kernel does NOT validate the value: the child owns
+/// the vocabulary (`ChatModelId` + `forChat`), and a typo refuses loudly at
+/// the first turn with the child's own named error — transport here,
+/// decision there.
+pub fn chat_model_id() -> Option<String> {
+    let value = std::env::var("BRAIN_CHAT_MODEL").ok()?;
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(trimmed.to_owned())
+}
+
 /// Resolve the embedding model id for the active profile. `compact` (formerly
 /// `multilingual` — an English model, mislabeled) swaps in the smallest static
 /// model; `enterprise`/`desktop` select the neural tiers (feature-gated — they

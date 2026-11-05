@@ -22,6 +22,13 @@ let package = Package(
         .library(name: "AppleFMProbe", targets: ["AppleFMProbe"]),
         .executable(name: "brain-afm", targets: ["brain-afm"])
     ],
+    dependencies: [
+        // The MLX tier (CG-10): the bridge child's `.mlx` session kind
+        // constructs `ChatSession`s through this package — whose own pinned
+        // `mlx-swift-lm` (`from: 3.32.3`) is the dependency this lane did NOT
+        // add a new version of. Local path, not a registry fetch.
+        .package(path: "../shell-macos-mlx"),
+    ],
     targets: [
         .target(
             name: "AppleFMProbe",
@@ -35,7 +42,10 @@ let package = Package(
         // and reaches no network except Apple's own framework (PCC).
         .executableTarget(
             name: "brain-afm",
-            dependencies: ["AppleFMProbe"],
+            dependencies: [
+                "AppleFMProbe",
+                .product(name: "MLXFMProbe", package: "shell-macos-mlx"),
+            ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(

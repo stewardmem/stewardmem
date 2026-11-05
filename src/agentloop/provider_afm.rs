@@ -178,6 +178,11 @@ impl LlmProvider for AfmBridgeProvider {
                 // seeding — a seeded case session would carry one case's
                 // memory into the next exchange.
                 history: None,
+                // And no model field: absent = the AFM tier, so the case
+                // machine's verdicts stay on the tier they were measured
+                // on regardless of the chat tier's configuration (CG-10
+                // E5's zero-gate-verdict law; pinned by M-4's scan).
+                model: None,
             };
             let (bridge_id, mut bridge_rx) = match bridge.turn(turn).await {
                 Ok(pair) => pair,
@@ -408,12 +413,59 @@ mod tests {
             "model_unavailable",
             "generation_failed",
             "bad_request",
+            // CG-10 E3: the model field's vocabulary — the wire parse and
+            // the two named refusals the turn handler can emit. A Swift
+            // rename of any of them reds THIS pin, in THIS lane.
+            "object[\"model\"]",
+            "model_locked",
+            "model_excluded",
         ] {
             assert!(
                 child.contains(fact),
                 "the child's protocol drifted from the adapter: missing `{fact}`"
             );
         }
+    }
+
+    /// CG-10 M-4 (structural): the GDL propose construction stays
+    /// stateless AFM — a FRESH `gdl-` session id per exchange, no
+    /// transcript seeding, and NO model field. The chat tier's
+    /// configuration must not leak into the case machine: its verdicts
+    /// were measured on the AFM tier, and a propose call that inherited
+    /// the chat tier would re-baseline every gate verdict silently. The
+    /// scan is comment-stripped (the S1 vacuity lesson) and reads the
+    /// construction body, not the whole file, so a second unrelated
+    /// `model:` mention cannot satisfy it. (Red-proof: set the
+    /// construction's `model` to `chat_model_id()` → this pin reds;
+    /// revert → green.)
+    #[test]
+    fn gdl_propose_is_fresh_session_stateless_afm() {
+        let source = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/agentloop/provider_afm.rs"
+        ))
+        .expect("this module is in the tree");
+        let code: String = source
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let start = code
+            .find("let turn = BridgeTurn {")
+            .expect("the propose construction exists (live, not a comment)");
+        let body = &code[start..start + 900.min(code.len() - start)];
+        assert!(
+            body.contains("gdl-"),
+            "the propose session id is the fresh gdl- prefix (never a chat session id)"
+        );
+        assert!(
+            body.contains("history: None"),
+            "GDL carries no transcript seeding — the law is in the construction, not a comment"
+        );
+        assert!(
+            body.contains("model: None"),
+            "GDL never sends the model field — absent is the AFM tier, by construction"
+        );
     }
 
     /// THE REAL-CHILD PIN (behavioral, the C2 rules-door posture): the

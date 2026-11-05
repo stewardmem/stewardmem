@@ -116,7 +116,12 @@ pub struct BridgeHistoryEntry {
 /// cache is invalidated by an instruction change, so merging would be a lie).
 /// `history` seeds a session the child must CREATE (after a restart or
 /// kill); an existing live session ignores it — its live transcript is
-/// authoritative. Additive-optional: an old bridge ignores unknown fields.
+/// authoritative. `model` names the chat tier (CG-10 E3): absent = the AFM
+/// tier, byte-identical to every caller that shipped before the field
+/// existed — the GDL propose loop never sends it, so its sessions stay AFM
+/// by construction. The CHILD owns the vocabulary (`ChatModelId` + `forChat`);
+/// the kernel transports the configured string verbatim. Additive-optional:
+/// an old bridge ignores unknown fields.
 #[derive(Debug, Clone)]
 pub struct BridgeTurn {
     pub session: String,
@@ -124,6 +129,7 @@ pub struct BridgeTurn {
     pub instructions: Option<String>,
     pub max_response_tokens: Option<i64>,
     pub history: Option<Vec<BridgeHistoryEntry>>,
+    pub model: Option<String>,
 }
 
 /// Client-side failure taxonomy: transport-shaped, never the bridge's named
@@ -285,6 +291,9 @@ impl AfmBridge {
                     .collect::<Vec<_>>()
             );
         }
+        if let Some(model) = &request.model {
+            body["model"] = json!(model);
+        }
         if self.write_line(&body).is_err() {
             self.pending
                 .lock()
@@ -310,6 +319,7 @@ impl AfmBridge {
         session: &str,
         instructions: Option<&str>,
         history: Option<&[BridgeHistoryEntry]>,
+        model: Option<&str>,
     ) -> Result<bool, BridgeError> {
         let id = uuid::Uuid::new_v4().to_string();
         let (tx, mut rx) = mpsc::channel::<BridgeEvent>(16);
@@ -332,6 +342,9 @@ impl AfmBridge {
                     .map(|e| json!({ "role": e.role, "text": e.text }))
                     .collect::<Vec<_>>()
             );
+        }
+        if let Some(model) = model {
+            body["model"] = json!(model);
         }
         if let Err(e) = self.write_line(&body) {
             self.pending
@@ -605,6 +618,7 @@ mod tests {
                 instructions: None,
                 max_response_tokens: None,
                 history: None,
+                model: None,
             })
             .await
             .expect("turn begins");
@@ -676,6 +690,131 @@ mod tests {
         assert!(claims.is_empty(), "absent claims default empty");
     }
 
+    /// CG-10 E3, the model field's behavioral half: the field is
+    /// additive-optional on the wire and the CHILD owns the gate. An unknown
+    /// id is `bad_request` naming the id; an excluded one (`qwen3.5-9b-4bit`)
+    /// is `model_excluded` carrying its cause. Both refuse at PARSE time —
+    /// no registry slot, no model work, no capabilities needed beyond the
+    /// ordering law — so this pin is machine-independent. (Red-proof:
+    /// damage the child's `resolveWireModel` to pass unknown ids through →
+    /// this pin reds; revert → green.)
+    #[tokio::test]
+    async fn the_model_field_refuses_unknown_and_excluded_ids_by_name() {
+        let candidates = bridge_path_candidates();
+        let Some(binary) = candidates.iter().find(|p| p.is_file()) else {
+            eprintln!(
+                "brain-afm not built; run `swift build` in shell-macos — SKIPPING (owned by the Swift suite)"
+            );
+            return;
+        };
+        let bridge = AfmBridge::spawn(binary).expect("spawn the real bridge");
+        bridge.capabilities().await.expect("capabilities first");
+
+        // An unknown id: bad_request, and the refusal NAMES the id.
+        let (_id, mut rx) = bridge
+            .turn(BridgeTurn {
+                session: "cg10-unknown-model".into(),
+                prompt: "hi".into(),
+                instructions: None,
+                max_response_tokens: None,
+                history: None,
+                model: Some("no-such-model".into()),
+            })
+            .await
+            .expect("turn begins");
+        match rx.recv().await {
+            Some(BridgeEvent::Failed { code, message, .. }) => {
+                assert_eq!(code, "bad_request", "an unknown model refuses by name");
+                let said = message.unwrap_or_default();
+                assert!(
+                    said.contains("no-such-model"),
+                    "the refusal must name the offending id, got: {said}"
+                );
+            }
+            other => panic!("expected the named refusal, got {other:?}"),
+        }
+
+        // The excluded id: model_excluded, with the CAUSE as the message —
+        // the 9B's load gap, not the retired template throw.
+        let (_id2, mut rx2) = bridge
+            .turn(BridgeTurn {
+                session: "cg10-excluded-model".into(),
+                prompt: "hi".into(),
+                instructions: None,
+                max_response_tokens: None,
+                history: None,
+                model: Some("qwen3.5-9b-4bit".into()),
+            })
+            .await
+            .expect("turn begins");
+        match rx2.recv().await {
+            Some(BridgeEvent::Failed { code, message, .. }) => {
+                assert_eq!(code, "model_excluded", "the excluded id refuses by name");
+                let said = message.unwrap_or_default();
+                assert!(
+                    said.contains("MLXVLM"),
+                    "the refusal must carry the load-gap cause, got: {said}"
+                );
+            }
+            other => panic!("expected the named refusal, got {other:?}"),
+        }
+    }
+
+    /// CG-10 E3, the model lock: a session's model is fixed at first use —
+    /// the conversation lives in ONE ledger — and a mismatching later
+    /// request refuses `model_locked` as a REGISTRY decision (machine
+    /// posture cannot reorder it: the lock is decided before any
+    /// materialization, so it holds even where the first tier could not
+    /// materialize at all). (Red-proof: damage the lock comparison in the
+    /// child's resolve → this pin reds; revert → green.)
+    #[tokio::test]
+    async fn a_session_model_is_locked_at_first_use() {
+        let candidates = bridge_path_candidates();
+        let Some(binary) = candidates.iter().find(|p| p.is_file()) else {
+            eprintln!(
+                "brain-afm not built; run `swift build` in shell-macos — SKIPPING (owned by the Swift suite)"
+            );
+            return;
+        };
+        let bridge = AfmBridge::spawn(binary).expect("spawn the real bridge");
+        bridge.capabilities().await.expect("capabilities first");
+
+        // First use WITHOUT the field: the AFM slot is born here (the
+        // prewarm may answer ok or model_unavailable — machine posture —
+        // but the SLOT exists either way, which is the registry-first law).
+        let _ = bridge
+            .prewarm(
+                "cg10-locked-session",
+                Some("You ground answers."),
+                None,
+                None,
+            )
+            .await;
+
+        // The mismatching tier refuses, named, with BOTH ids.
+        let locked = bridge
+            .prewarm(
+                "cg10-locked-session",
+                Some("You ground answers."),
+                None,
+                Some("qwen3-8b-4bit"),
+            )
+            .await;
+        match locked {
+            Err(BridgeError::Protocol(text)) => {
+                assert!(
+                    text.contains("model_locked"),
+                    "the mismatch refuses by name, got: {text}"
+                );
+                assert!(
+                    text.contains("qwen3-8b-4bit") && text.contains("afm3-core"),
+                    "the refusal names both sides of the mismatch, got: {text}"
+                );
+            }
+            other => panic!("expected the model_locked refusal, got {other:?}"),
+        }
+    }
+
     /// THE CROSS-SURFACE DRIFT PIN: the Rust mirror (`BridgeClaim`,
     /// `BridgeEvent::Final`) and the Swift child's schema must name the
     /// SAME wire vocabulary. The Swift file is not compiled in this lane,
@@ -739,6 +878,7 @@ mod tests {
             .prewarm(
                 "pw-session",
                 Some("You are a memory-grounded assistant."),
+                None,
                 None,
             )
             .await
@@ -824,6 +964,7 @@ mod tests {
                 instructions: Some("You are a memory-grounded assistant.".into()),
                 max_response_tokens: Some(64),
                 history: None,
+                model: None,
             })
             .await
             .expect("turn begins");

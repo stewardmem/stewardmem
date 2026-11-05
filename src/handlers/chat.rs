@@ -459,6 +459,7 @@ pub async fn chat_turn(
             &session,
             Some(CHAT_INSTRUCTIONS_V1),
             seed_history.as_deref(),
+            crate::config::chat_model_id().as_deref(),
         )
         .await
     {
@@ -777,6 +778,9 @@ pub async fn chat_turn(
             instructions: Some(CHAT_INSTRUCTIONS_V1.to_owned()),
             max_response_tokens: Some(max_response_tokens),
             history: seed_history,
+            // CG-10 E4: the configured chat tier (None = the field is
+            // omitted and every bridge parses it as the AFM tier).
+            model: crate::config::chat_model_id(),
         })
         .await
     {
@@ -1392,6 +1396,26 @@ mod tests {
         assert!(
             prewarm < recall,
             "prewarm must resolve before the grounding recall so the warm overlaps it"
+        );
+
+        // CG-10 E4: the tier rides BOTH bridge calls, from ONE source. A
+        // prewarm that materialized the AFM slot while the turn asked for
+        // the MLX tier would answer model_locked at every first turn — the
+        // split would be a misconfiguration nobody could see. The needles
+        // are assembled so this test's own text never matches the scan.
+        let tier_arg = concat!("crate::config::", "chat_model_id().as_deref(),");
+        let prewarm_tier = live[prewarm..]
+            .find(tier_arg)
+            .expect("the prewarm call carries the configured tier");
+        let turn = live
+            .find(concat!("bridge\n        .turn(", "BridgeTurn {"))
+            .expect("the bridge turn call");
+        live[turn..]
+            .find(concat!("model: crate::config::", "chat_model_id(),"))
+            .expect("the turn request carries the configured tier");
+        assert!(
+            prewarm + prewarm_tier < turn,
+            "the prewarm's tier arg precedes the turn call — one tier source, warm first"
         );
     }
 

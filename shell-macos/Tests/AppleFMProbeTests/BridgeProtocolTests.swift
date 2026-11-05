@@ -138,6 +138,79 @@ struct BrainAfmBridgeTests {
         #expect(terminal?["code"] as? String == "instructions_locked")
     }
 
+    // ── CG-10 E3 — the model field ───────────────────────────────────────
+
+    /// The model field is additive-optional and the CHILD owns the gate.
+    /// An unknown id refuses `bad_request` naming the id; the excluded 9B
+    /// refuses `model_excluded` carrying its CAUSE (the MLXVLM load gap —
+    /// the cause text is the one place the exclusion is explained on the
+    /// wire). Both refuse at parse time: no slot, no model work, so the pin
+    /// is machine-independent. (Red-proof: damage the child's
+    /// `resolveWireModel` to pass unknown ids through → this pin reds;
+    /// revert → green.)
+    @Test("the model field refuses unknown and excluded ids by name")
+    func modelFieldRefusesUnknownAndExcludedIds() throws {
+        let replies = try Self.drive([
+            ["id": "c1", "op": "capabilities"],
+            [
+                "id": "t1", "op": "turn", "session": "cg10-unknown",
+                "prompt": "hi", "model": "no-such-model",
+            ],
+            [
+                "id": "t2", "op": "turn", "session": "cg10-excluded",
+                "prompt": "hi", "model": "qwen3.5-9b-4bit",
+            ],
+        ])
+        #expect(replies.count == 3, "capabilities plus two named refusals")
+        let unknown = replies.first { $0["id"] as? String == "t1" }
+        #expect(unknown?["event"] as? String == "error")
+        #expect(unknown?["code"] as? String == "bad_request")
+        let saidUnknown = unknown?["message"] as? String ?? ""
+        #expect(
+            saidUnknown.contains("no-such-model"),
+            "the refusal must name the offending id, got: \(saidUnknown)"
+        )
+
+        let excluded = replies.first { $0["id"] as? String == "t2" }
+        #expect(excluded?["event"] as? String == "error")
+        #expect(excluded?["code"] as? String == "model_excluded")
+        let saidExcluded = excluded?["message"] as? String ?? ""
+        #expect(
+            saidExcluded.contains("MLXVLM"),
+            "the refusal must carry the load-gap cause, got: \(saidExcluded)"
+        )
+    }
+
+    /// A session's model is fixed at first use — the conversation lives in
+    /// ONE ledger — and the lock is a REGISTRY decision, decided before any
+    /// materialization: it holds even where the first tier could not
+    /// materialize, so the pin is machine-independent (the first prewarm's
+    /// outcome is ignored; the second must refuse by name, naming BOTH
+    /// ids). (Red-proof: damage the lock comparison in `resolve` → this pin
+    /// reds; revert → green.)
+    @Test("a session's model is locked at first use")
+    func sessionModelIsLockedAtFirstUse() throws {
+        let replies = try Self.drive([
+            ["id": "c1", "op": "capabilities"],
+            [
+                "id": "p1", "op": "prewarm", "session": "cg10-locked",
+                "instructions": "You ground answers.",
+            ],
+            [
+                "id": "p2", "op": "prewarm", "session": "cg10-locked",
+                "instructions": "You ground answers.", "model": "qwen3-8b-4bit",
+            ],
+        ])
+        let locked = replies.first { $0["id"] as? String == "p2" }
+        #expect(locked?["event"] as? String == "error")
+        #expect(locked?["code"] as? String == "model_locked")
+        let said = locked?["message"] as? String ?? ""
+        #expect(
+            said.contains("qwen3-8b-4bit") && said.contains("afm3-core"),
+            "the refusal names both sides of the mismatch, got: \(said)"
+        )
+    }
+
     @Test("a malformed line is one error event, and the loop survives it")
     func malformedLineSurvives() throws {
         let url = try Self.bridgeURL()
