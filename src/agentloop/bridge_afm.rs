@@ -60,10 +60,16 @@ pub enum BridgeEvent {
     },
     /// The turn's terminal failure, by the bridge's named code
     /// (`conversation_does_not_fit` carries `shortfall_tokens`).
+    /// `feedback` carries the S6 capture marker: the bridge attached a
+    /// Feedback Assistant artifact for this failure (held LOCALLY by the
+    /// framework until the operator exports it). ADDITIVE (LL-04 §1.1):
+    /// absent on an old bridge → `None`, never a parse error — the kernel
+    /// must be able to run against any bridge revision it shipped with.
     Failed {
         code: String,
         message: Option<String>,
         shortfall_tokens: Option<i64>,
+        feedback: Option<String>,
     },
 }
 
@@ -475,6 +481,10 @@ fn route_line(
                     .and_then(|v| v.as_str())
                     .map(str::to_owned),
                 shortfall_tokens: value.get("shortfallTokens").and_then(|v| v.as_i64()),
+                feedback: value
+                    .get("feedback")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_owned),
             },
             _ => return,
         }
@@ -502,6 +512,7 @@ fn fail_all_pending(
             code: code.to_owned(),
             message: Some(message.to_owned()),
             shortfall_tokens: None,
+            feedback: None,
         });
     }
 }
@@ -842,5 +853,49 @@ mod tests {
             Ok(event) => event,
             Err(e) => panic!("the parser dropped the final line: {e}"),
         }
+    }
+
+    /// THE S6 MARKER CROSSES THE BOUNDARY (the drift the live run caught):
+    /// an error line carrying `feedback:"attached"` parses with the marker
+    /// INTACT — the kernel's audit copy sees the attachment, not a silently
+    /// dropped field. An error line WITHOUT the field (an old bridge)
+    /// parses `None` — the additive law, never a parse error.
+    #[test]
+    fn failed_events_carry_the_feedback_marker_and_default_to_none() {
+        let with = parse_final_line(serde_json::json!({
+            "id": "e1", "event": "error", "code": "generation_failed",
+            "message": "May contain sensitive content", "shortfallTokens": null,
+            "feedback": "attached"
+        }));
+        let BridgeEvent::Failed {
+            code,
+            feedback,
+            shortfall_tokens,
+            ..
+        } = with
+        else {
+            panic!("an error line must parse as Failed");
+        };
+        assert_eq!(code, "generation_failed");
+        assert_eq!(feedback.as_deref(), Some("attached"));
+        assert_eq!(shortfall_tokens, None);
+
+        let without = parse_final_line(serde_json::json!({
+            "id": "e2", "event": "error", "code": "conversation_does_not_fit",
+            "shortfallTokens": 1234
+        }));
+        let BridgeEvent::Failed {
+            feedback,
+            shortfall_tokens,
+            ..
+        } = without
+        else {
+            panic!("the legacy error line must parse as Failed");
+        };
+        assert_eq!(
+            feedback, None,
+            "an old bridge carries no marker — additive default"
+        );
+        assert_eq!(shortfall_tokens, Some(1234));
     }
 }

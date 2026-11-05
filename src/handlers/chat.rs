@@ -941,14 +941,25 @@ pub async fn chat_turn(
                     code,
                     message,
                     shortfall_tokens,
-                } => Event::default()
-                    .event("error")
-                    .json_data(json!({
+                    feedback,
+                } => {
+                    // The S6 capture marker rides the wire ONLY when the
+                    // bridge attached a Feedback Assistant artifact — an
+                    // absent key is the additive law (the shell's contract
+                    // test asserts the exact body without it).
+                    let mut body = json!({
                         "code": code,
                         "message": message,
                         "shortfallTokens": shortfall_tokens,
-                    }))
-                    .unwrap_or_default(),
+                    });
+                    if let Some(marker) = feedback {
+                        body["feedback"] = json!(marker);
+                    }
+                    Event::default()
+                        .event("error")
+                        .json_data(body)
+                        .unwrap_or_default()
+                }
             };
             if !send(sse).await {
                 bridge.cancel(&bridge_id);
