@@ -1609,9 +1609,13 @@ struct SwitchModifier: LanguageModelSession.DynamicProfileModifier {
 
 // THE EXCLUSION IS A PIN, NOT A CONVENTION.
 //
-// Qwen3.5-9B throws `runtime("No user query found in messages.")` on turn 2 of
-// any conversation, on BOTH `LanguageModelSession` and the mlx-native
-// `ChatSession`.
+// Qwen3.5-9B cannot serve chat. The originally measured cause — a turn-2
+// `runtime("No user query found in messages.")` throw on BOTH session types —
+// was settled by CG-10: the Qwen Jinja template's own conversation-aware
+// contract, upstream-fixed (mlx-swift-lm PR #472) and verified live on the
+// text family (Qwen3-8B, arms B/C/D green). The 9B's STANDING reason is the
+// LOAD failure (`unsupportedTokenizer` — a VLM architecture needing the
+// MLXVLM stack), not the throw.
 //
 // The DIAGNOSIS lives in exactly one place — the `ChatModelId` doc comment in
 // `ChatModelLayer.swift` — and is deliberately not restated here, because it was
@@ -1619,9 +1623,9 @@ struct SwitchModifier: LanguageModelSession.DynamicProfileModifier {
 // that symmetry "the diagnosis" and concluded the MLX executor's prefix
 // matching, which the same symmetry does not license: mlx-native `ChatSession`
 // never goes through a `LanguageModelExecutor`, so it cannot be the common
-// factor. Weights are not implicated; the cause is not established.
+// factor.
 //
-// What this pin holds is narrower and does not depend on settling the cause:
+// What this pin holds is narrower and does not depend on the loader question:
 // the id is REFUSED.
 //
 // "Simply not wired up" is not an exclusion. It re-enters the first time
@@ -1636,7 +1640,7 @@ func qwen35CannotEnterAChatPath() {
     // The named case, stated plainly so a reader does not have to infer it.
     #expect(
         !ChatModelId.qwen3_5.mayServeChat,
-        "Qwen3.5 is marked chat-capable again — it throws on turn 2 of every conversation"
+        "Qwen3.5 is marked chat-capable again — it does not load through MLXLLM (VLM architecture; the MLXVLM follow-on lane owns its return)"
     )
     #expect(
         ChatModelId.qwen3_5.chatRefusalReason?.isEmpty == false,

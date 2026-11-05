@@ -14,29 +14,35 @@ import FoundationModels
 /// chased as one. So the exclusion is a value, a check, and a pin, rather than a
 /// convention.
 ///
-/// ## THE ONE PLACE QWEN3.5'S CAUSE IS STATED.
+/// ## THE ONE PLACE THE MLX TIERS' CAUSES ARE STATED.
 ///
 /// Everything else in the repo refers here rather than restating it.
 ///
-/// **Measured.** Qwen3.5-9B-4bit throws `runtime("No user query found in
-/// messages.")` on turn 2 of any conversation, on BOTH `LanguageModelSession`
-/// and the mlx-native `ChatSession`. Qwen3-0.6B-4bit passes the same
-/// multi-turn probe with a cold control.
+/// **Measured (the throw, 2026-10-18).** Qwen3.5-9B-4bit threw
+/// `runtime("No user query found in messages.")` on turn 2 of any
+/// conversation, on BOTH `LanguageModelSession` and the mlx-native
+/// `ChatSession`. Qwen3-0.6B-4bit passed the same multi-turn probe with a
+/// cold control.
 ///
-/// **Hypothesis, and previously overstated.** An earlier version of this comment
-/// asserted the defect "is in the MLX executor's prefix matching, not the
-/// weights", reasoning that the identical failure across two session types
-/// rules out a call-shape problem. The symmetry is real; the conclusion drawn
-/// from it was not licensed. mlx-native `ChatSession` does not go through a
-/// `LanguageModelExecutor` at all, so a defect in that executor cannot explain a
-/// throw on BOTH surfaces — the common factor is the chat-template path they
-/// share, which is also where upstream's own note about conversation-aware Qwen
-/// templates points.
+/// **Established (the cause, CG-10 2026-11-04/05).** The throw was the Qwen
+/// Jinja template's own contract: conversation-aware, it raises when the
+/// rendered list carries no non-tool user message — the original query must
+/// be IN the list, not in the KV cache. Upstream fixed the session side
+/// (mlx-swift-lm PR #472: the full conversation renders on every
+/// continuation), and the fix is verified live on the text family: the
+/// multi-turn probe on `mlx-community/Qwen3-8B-4bit` runs turn 2 (recall
+/// witnessed), the tool-result continuation, and the cold control — all
+/// green, re-verified on the CG-10 branch after its rebase. That verified
+/// tier is the `qwen3_8b_4bit` case below.
 ///
-/// So: the weights are not implicated, and the cause is **not established**.
-/// It is a rendering/template-layer question, and whether it is fixable locally
-/// is open. What is NOT open is that the model cannot serve chat today, which
-/// is what this enum actually enforces.
+/// **Measured (why qwen3_5 is STILL refused, 2026-11-04).** The 9B cannot
+/// reach the template at all: `mlx-community/Qwen3.5-9B-4bit` fails to load
+/// through the MLXLLM stack (`unsupportedTokenizer` — it is a VLM
+/// architecture and needs the MLXVLM stack). That is a loader-tier gap with
+/// its own follow-on lane; the template fix does not transfer until the
+/// model loads. So the exclusion's reason is now the load failure, not the
+/// throw, and it stays attached to the case rather than to a comment a
+/// refactor can leave behind.
 public enum ChatModelId: String, Sendable, Equatable, CaseIterable {
     /// The measured tier. 4,096 combined tokens, and the only one that has
     /// completed a turn on the development machine.
@@ -49,7 +55,21 @@ public enum ChatModelId: String, Sendable, Equatable, CaseIterable {
     /// enumerate the whole set and fail if an id that is not allowed ever
     /// appears. Deleting it would make the exclusion unenforceable and leave
     /// only the memory of it.
+    ///
+    /// The reason is no longer the turn-2 throw (that was the template's own
+    /// contract, upstream-fixed and verified on the text family — see the
+    /// header): the 9B fails to LOAD through MLXLLM
+    /// (`unsupportedTokenizer`; VLM architecture, MLXVLM stack needed). It
+    /// returns through that follow-on lane or not at all.
     case qwen3_5 = "qwen3.5-9b-4bit"
+
+    /// The MLX text tier the CG-10 probe verified live: weights
+    /// `mlx-community/Qwen3-8B-4bit` (text architecture, supported
+    /// tokenizer), arms B/C/D green — turn 2 recalls, the tool-result
+    /// continuation answers, the cold control fails to recall. Serves chat
+    /// through the native `ChatSession` path (`.mlx` below), never through
+    /// the AFM `LanguageModelSession`.
+    case qwen3_8b_4bit = "qwen3-8b-4bit"
 
     /// Whether this model may serve a CHAT path — a multi-turn conversation
     /// with history carried across turns.
@@ -57,18 +77,20 @@ public enum ChatModelId: String, Sendable, Equatable, CaseIterable {
         switch self {
         case .onDeviceAFM: true
         case .qwen3_5: false
+        case .qwen3_8b_4bit: true
         }
     }
 
     /// Why not, for the error a caller gets.
     public var chatRefusalReason: String? {
         switch self {
-        case .onDeviceAFM: nil
+        case .onDeviceAFM, .qwen3_8b_4bit: nil
         case .qwen3_5:
-            "Qwen3.5 throws \"No user query found in messages.\" on turn 2 of any "
-                + "conversation, on both LanguageModelSession and mlx-native ChatSession. The "
-                + "weights are not implicated and the cause is not established — see ChatModelId "
-                + "for the evidence and the two hypotheses."
+            "Qwen3.5-9B does not load through the MLXLLM stack (unsupportedTokenizer "
+                + "— it is a VLM architecture needing the MLXVLM stack, measured 2026-11-04). "
+                + "Its Jinja-template throw is upstream-fixed (mlx-swift-lm PR #472) and "
+                + "verified on the text family; the 9B returns through the MLXVLM follow-on "
+                + "lane. See ChatModelId for the evidence."
         }
     }
 
@@ -83,6 +105,37 @@ public enum ChatModelId: String, Sendable, Equatable, CaseIterable {
         }
         return id
     }
+
+    /// Which session implementation serves this model — a VALUE, not a branch
+    /// at call sites (CG-10 design layer 2). The session type is not a detail
+    /// of the caller that happens to construct it: the AFM tier is stateful
+    /// through `LanguageModelSession` (its `historyTransform` trimming and
+    /// guided generation live there), while the MLX tier is stateful through
+    /// the native `ChatSession` conversation ledger (full-conversation
+    /// rendering per turn, KV prefix compare — the PR #472 behavior the
+    /// multi-turn probe verified). A call site that picked by `if` could
+    /// route a new case to the wrong ledger and the failure would surface as
+    /// a mid-conversation throw; a value routes by construction, and the
+    /// exhaustive switch is compile-checked over `allCases` (pinned by the
+    /// routing test, which also holds the named tiers).
+    public var sessionKind: ChatSessionKind {
+        switch self {
+        case .onDeviceAFM: .afm
+        case .qwen3_5, .qwen3_8b_4bit: .mlx
+        }
+    }
+}
+
+/// The session implementation behind a [`ChatModelId`], and the contract
+/// each half owes the bridge protocol.
+public enum ChatSessionKind: Sendable, Equatable {
+    /// Apple FoundationModels: a stateful `LanguageModelSession` —
+    /// `historyTransform` trimming, guided generation (`GroundedAnswer`).
+    case afm
+    /// Native MLX: a `ChatSession` conversation ledger, constructed from the
+    /// bridge's `ConversationStore` render (the template contract's
+    /// unreachability lives there).
+    case mlx
 }
 
 /// A model that cannot serve a chat path. Small on purpose: one case, and it
