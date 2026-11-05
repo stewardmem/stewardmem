@@ -1084,6 +1084,7 @@ struct BrainAfmBridge {
         }
         let built = MLXBridge.makeSession(
             container: container,
+            tier: tier,
             instructions: slot.instructions,
             seed: conversation,
             maxTokens: 1024

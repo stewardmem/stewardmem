@@ -40,6 +40,15 @@
 // Until the cause is settled, Qwen3.5 is excluded from any chat path by a pin,
 // not by convention.
 //
+// RESOLVED (CG-10, 2026-11-05 — this header's history is kept, its conclusion
+// is not): the cause was the ENGINE, not the family — swift-jinja 1.3.0's
+// slice evaluation returned EMPTY for implicit-range slices with a step, and
+// Qwen3.5's template reverse-scans through exactly that construct (Qwen3
+// carried the same scan without the raise). The dependency bump below
+// (swift-jinja 3.0.0) is the fix, the multi-turn probe is green on the Qwen3.5
+// tiers, and MLXChatTier is the measured-green roster. The negative claim
+// above is retired everywhere; `ChatModelLayer` carries the pointer.
+//
 // UPSTREAM, recorded rather than patched here: `ChatSession.swift:129` in
 // mlx-swift-lm documents a `loadModelContainer(id:)` overload that does not
 // exist. That is upstream's file to fix, so it is a note and not a local edit.
@@ -177,6 +186,19 @@ let package = Package(
             ],
             swiftSettings: [.swiftLanguageMode(.v5)],
         ),
-        .testTarget(name: "MLXFMProbeTests", dependencies: ["MLXFMProbe"]),
+        .testTarget(name: "MLXFMProbeTests", dependencies: [
+            "MLXFMProbe",
+            // CG-11 (E1/E4): the env-gated live pins load the CI model
+            // (Qwen3-0.6B-4bit) through the SAME macro path the probe uses —
+            // `#hubDownloader()`/`#huggingFaceTokenizerLoader()` expand to code
+            // naming `MLXLMCommon.Downloader`, `AutoTokenizer` (Tokenizers) and
+            // `HubClient`/`HubCache` (HuggingFace), and the P-1/P-5 pins read
+            // them through `MLXLLM`'s `LLMModelFactory` text-tower path. Same
+            // dependencies, same reasons, as the multi-turn-probe target above.
+            .product(name: "MLXLLM", package: "mlx-swift-lm"),
+            .product(name: "MLXHuggingFace", package: "mlx-swift-lm"),
+            .product(name: "Transformers", package: "swift-transformers"),
+            .product(name: "HuggingFace", package: "swift-huggingface"),
+        ]),
     ]
 )

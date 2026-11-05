@@ -125,4 +125,24 @@ public enum MLXChatTier: Sendable, Equatable {
         case .qwen3_5_2b_4bit, .qwen3_5_9b_heretic_5bit: true
         }
     }
+
+    /// E1 (CG-11): the tier's EVIDENCED KV compression scheme, or nil for
+    /// full precision — the TurboQuant ratchet's landing spot. The default
+    /// moves ONLY on the evidence file's per-scheme table (the probe
+    /// battery + the answer-quality arms, run per scheme per tier): a
+    /// scheme that never measured green stays nil here, and a scheme this
+    /// table moves ON must have its row in that table. Measurement runs
+    /// use `MLXBridge.kvSchemeOverride` (BRAIN_MLX_KV_SCHEME) instead of
+    /// editing this property — the override is the instrument, this is the
+    /// posture.
+    ///
+    /// Session-stable BY CONSTRUCTION: the scheme resolves once, at
+    /// `makeSession`, and never varies across a session's turns — the
+    /// package's ChatSession rebuilds the KV cache from the retained
+    /// transcript whenever the resolved cache plan changes
+    /// (`stored.main.plan != kvCachePlan`), so a mid-session scheme change
+    /// would silently discard the prefix cache E4 pins.
+    public var kvScheme: String? {
+        nil
+    }
 }

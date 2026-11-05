@@ -48,6 +48,27 @@ public enum MLXBridge {
             configuration: tier.configuration)
     }
 
+    /// E1 (CG-11): the KV-scheme OVERRIDE for measurement runs — the probe's
+    /// `PROBE_KV_SCHEME` counterpart on the serving path, read ONCE per
+    /// process so a mid-process change cannot rebuild sessions' caches. The
+    /// tier's evidenced posture stays in `MLXChatTier.kvScheme`; the
+    /// override is how the per-scheme arms run WITHOUT editing the roster.
+    /// An unrecognized string is not validated here on purpose: it reaches
+    /// the engine and fails closed at generation start
+    /// (`unsupportedLegacyScheme`, P-1's pinned upstream gate) — a typo in
+    /// the environment refuses the turn BY NAME, never a silent fall-back
+    /// to full precision.
+    public static let kvSchemeOverride: String? =
+        ProcessInfo.processInfo.environment["BRAIN_MLX_KV_SCHEME"]
+
+    /// The resolved KV scheme for a tier: the measurement override first,
+    /// then the tier's evidenced posture. The ONE resolution site — the
+    /// sampling law of this file covers the KV posture the same way it
+    /// covers `temperature`.
+    public static func resolvedKVScheme(for tier: MLXChatTier) -> String? {
+        kvSchemeOverride ?? tier.kvScheme
+    }
+
     /// Build the session a turn runs on: the store's render (system + full
     /// ordered transcript — the M-1 contract) seeds the `ChatSession`'s
     /// conversation ledger ("Prompt Re-hydration", the history-init the
@@ -56,12 +77,15 @@ public enum MLXBridge {
     /// a second system-prompt channel would be two places to drift.
     ///
     /// - Parameters:
+    ///   - tier: the session's chat tier — the KV posture's owner
+    ///     (`resolvedKVScheme(for:)`) and, with E2, the spec-decode roster.
     ///   - seed: the wire's conversation (already validated by the child's
     ///     wire law). Empty is the ordinary first turn.
     ///   - maxTokens: the wire's response clamp (16…1024), the same number
     ///     the AFM arm feeds `maximumResponseTokens`.
     public static func makeSession(
         container: ModelContainer,
+        tier: MLXChatTier,
         instructions: String?,
         seed: [ConversationMessage],
         maxTokens: Int
@@ -71,7 +95,10 @@ public enum MLXBridge {
             container,
             instructions: nil,
             history: store.chatMessages(instructions: instructions),
-            generateParameters: GenerateParameters(maxTokens: maxTokens, temperature: 0))
+            generateParameters: GenerateParameters(
+                maxTokens: maxTokens,
+                kvScheme: resolvedKVScheme(for: tier),
+                temperature: 0))
         return (session, store)
     }
 
@@ -130,9 +157,26 @@ public enum MLXBridge {
         primedThinkBlock: Bool,
         onDelta: @Sendable (String) -> Void
     ) async throws -> (text: String, inputTokens: Int, outputTokens: Int) {
-        // The per-turn parameters are constructed HERE for the same reason
-        // `makeSession`'s are: one sampling site, one law (see the type doc).
-        let parameters = GenerateParameters(maxTokens: maxTokens, temperature: 0)
+        // The per-turn clamp is constructed HERE for the same reason
+        // `makeSession`'s parameters are: one sampling site, one law (see
+        // the type doc). It REPLACES the session's maxTokens only — the KV
+        // posture (`kvScheme`) rides the session's own parameters untouched,
+        // and maxTokens is NOT part of the resolved KV plan (the plan reads
+        // maxKVSize/kvBits/kvScheme/kvGroupSize/quantizedKVStart —
+        // KVCachePlan.swift), so this mutation can never rebuild the
+        // session's cache mid-conversation.
+        //
+        // FOUND IN CG-11 E1 GROUND: the landed shape constructed these
+        // per-turn parameters and never passed them anywhere —
+        // `ChatSession.streamDetails` takes no parameters and reads the
+        // SESSION's `generateParameters` — so the wire's response clamp was
+        // silently inert on this tier (the AFM arm honors the same number at
+        // `maximumResponseTokens:`). The assignment below makes the clamp
+        // real: the dead local is gone, the documented 16…1024 contract
+        // holds on both tiers.
+        var parameters = session.generateParameters
+        parameters.maxTokens = maxTokens
+        session.generateParameters = parameters
         var filter = ThinkFilter(primedThinkBlock: primedThinkBlock)
         var inputTokens = 0
         var outputTokens = 0
