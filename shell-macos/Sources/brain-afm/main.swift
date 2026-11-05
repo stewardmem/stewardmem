@@ -527,6 +527,12 @@ struct BrainAfmBridge {
 
                 let task = Task {
                     defer { inflight.finish(id) }
+                    // The session handle, hoisted so the error arms can
+                    // reach it: a failure that happens AFTER the session
+                    // exists attaches its feedback through the session; a
+                    // failure before it (bad request, no capabilities,
+                    // unmeasured budget) has nothing to attach through.
+                    var liveSession: LanguageModelSession?
                     do {
                         guard let caps = capabilities else {
                             throw BridgeError.badRequest(
@@ -554,6 +560,7 @@ struct BrainAfmBridge {
                             escalationPermitted: caps.escalationPermitted,
                             seedEntries: seedEntries
                         )
+                        liveSession = bridgeSession.session
                         try await slot.gate.run {
                             let turnNo = bridgeSession.nextTurn()
                             try await Self.runTurn(
@@ -581,6 +588,32 @@ struct BrainAfmBridge {
                         }
                         if case let .badRequest(message) = error {
                             event["message"] = message
+                        }
+                        // THE FEEDBACK ATTACHMENT (CG-09 S6): a failed
+                        // generation or a conversation that cannot fit
+                        // attaches the turn's prompt + the desired-output
+                        // slot through the session's own Feedback
+                        // Assistant API. The attachment is held LOCALLY by
+                        // the framework until the operator exports it
+                        // through Apple's UI — nothing here sends, and a
+                        // successful turn attaches nothing. The error
+                        // event carries the marker so the kernel's audit
+                        // copy sees the attachment happen (the parseable
+                        // artifact the T-7 pin reads).
+                        switch error {
+                        case .generationFailed, .conversationDoesNotFit:
+                            if let live = liveSession {
+                                _ = live.logFeedbackAttachment(
+                                    sentiment: .negative,
+                                    issues: [],
+                                    desiredResponseText: String(
+                                        "a grounded, cited answer to: \(prompt)".prefix(2000)
+                                    )
+                                )
+                                event["feedback"] = "attached"
+                            }
+                        default:
+                            break
                         }
                         out.send(event)
                     } catch {

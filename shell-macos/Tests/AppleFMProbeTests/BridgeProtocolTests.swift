@@ -470,4 +470,71 @@ struct BrainAfmBridgeTests {
         }
         #expect(sites >= 2, "the probe warm + the turn path both construct options (found \(sites))")
     }
+
+    // ── CG-09 T-7 — the feedback attachment: local only, named arms ──────
+
+    /// The feedback capture is ONE call site, guarded to exactly the two
+    /// failure arms the lane names (`generation_failed`,
+    /// `conversation_does_not_fit`), and it goes NOWHERE: Apple's
+    /// `logFeedbackAttachment` holds the artifact on-device until the
+    /// operator exports it, and the bridge sources carry no network
+    /// vocabulary at all — a knob that does not exist cannot phone home.
+    /// The error event's `feedback` marker is the parseable artifact the
+    /// kernel's audit copy sees. Damage = remove the call → the count arm
+    /// reds; damage = add an egress → the vocabulary arm reds.
+    @Test("the feedback attachment is one local call site on the named failure arms")
+    func feedbackAttachmentIsLocalAndNamed() throws {
+        let here = URL(fileURLWithPath: #filePath, isDirectory: false)
+        let packageRoot = here
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let raw = try String(
+            contentsOf: packageRoot.appendingPathComponent("Sources/brain-afm/main.swift"),
+            encoding: .utf8
+        )
+        // COMMENT-STRIP before scanning (the S1 vacuity lesson): a commented
+        // call still contains its needle, and a scan that counts it would
+        // pass a disabled call site. Only live lines count.
+        let main = raw
+            .components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        let sites = main.components(separatedBy: "logFeedbackAttachment(").count - 1
+        #expect(
+            sites == 1,
+            "exactly ONE LIVE attachment call site (found \(sites)) — a second site is an unreviewed egress shape, a zero means the capture was disabled"
+        )
+        let callAt = try #require(main.range(of: "logFeedbackAttachment("))
+        let guardWindow = main[..<callAt.lowerBound].suffix(600)
+        #expect(
+            guardWindow.contains(".generationFailed, .conversationDoesNotFit"),
+            "the attachment is guarded to the two named failure arms: \(guardWindow)"
+        )
+        #expect(
+            main.contains("event[\"feedback\"] = \"attached\""),
+            "the error event carries the feedback marker — the kernel's parseable artifact"
+        )
+        // THE EGRESS LAW: no network vocabulary in the BRIDGE target — the
+        // attachment is local by Apple's contract; this scan keeps the
+        // bridge's sources local by ours. (The probe library's
+        // `KernelRecallTransport` is the webview's loopback wire to the
+        // local kernel — a different, separately-pinned surface; a doc
+        // comment there mentioning URLSession is not a bridge egress.)
+        let bridgeRoot = packageRoot.appendingPathComponent("Sources/brain-afm")
+        let files = try FileManager.default.subpathsOfDirectory(atPath: bridgeRoot.path)
+            .filter { $0.hasSuffix(".swift") }
+        for relative in files {
+            let text = try String(
+                contentsOf: bridgeRoot.appendingPathComponent(relative),
+                encoding: .utf8
+            )
+            for banned in ["URLSession", "upload", "URLRequest"] {
+                #expect(
+                    !text.contains(banned),
+                    "\(relative) carries `\(banned)` — the bridge has no network surface"
+                )
+            }
+        }
+    }
 }
