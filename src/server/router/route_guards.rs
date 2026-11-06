@@ -359,6 +359,9 @@ pub const OPENAPI_ROUTES: &[&str] = &[
     // The operator case-launch boundary: agents are refused at the
     // handler (agents do not self-launch cases).
     "/workflow/cases/{id}/gdl",
+    // The hand-down act: Admin-only, behind the conformance
+    // precondition.
+    "/workflow/hand-down",
     "/parcels",
     "/parcels/export",
     "/parcels/import",
@@ -630,6 +633,8 @@ pub const AUTHZ_GATES: &[(&str, &str)] = &[
     // The case-launch boundary is a workflow Write on the run's
     // domain; the operator/agent split is enforced at the handler.
     ("/workflow/cases/{id}/gdl", "Write"),
+    // The hand-down act is Admin (the authorize call at the handler).
+    ("/workflow/hand-down", "Admin"),
     ("/workflow/runs/{id}/handoff", "Read"),
     // The derived context window — a Read on the run's
     // domain (pure derivation over the lineage the events read serves).

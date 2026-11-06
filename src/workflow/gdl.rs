@@ -1176,6 +1176,13 @@ pub(crate) struct GdlCase {
     /// siblings without scanning other runs.
     #[serde(default)]
     pub sibling_ids: Vec<i64>,
+    /// The hand-down mark, when the intake matcher rode a sealed
+    /// procedure. Additive state_json (no SQL column, no migration);
+    /// `skip_serializing_if` keeps the unmarked persisted case
+    /// byte-identical to the pre-lane shape; old states parse to
+    /// `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hand_down: Option<super::hand_down::HandDownMark>,
 }
 
 impl GdlCase {
@@ -1202,6 +1209,7 @@ impl GdlCase {
             children: Vec::new(),
             parent_case_id: None,
             sibling_ids: Vec::new(),
+            hand_down: None,
         }
     }
 
