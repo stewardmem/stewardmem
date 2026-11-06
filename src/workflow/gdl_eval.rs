@@ -214,6 +214,25 @@ pub(crate) struct EvalRow {
     /// never 0-as-data (a recorded 0 IS data; absence is `None`).
     #[serde(default)]
     pub(crate) split_child_count: Option<u32>,
+    /// Whether the run rode a sealed procedure (the intake match),
+    /// read off the persisted case (`GdlCase.hand_down`). ADVISORY:
+    /// an eval column, not a gate. Pre-hand-down traces parse to
+    /// `None` — no data, never 0-as-data (a recorded `false` IS
+    /// data).
+    #[serde(default)]
+    pub(crate) hand_down_matched: Option<bool>,
+    /// The run's hand-down deviation count, counted from the
+    /// persisted gate records (errors naming the deviation). The
+    /// metric the NEXT hand-down preregistration reads. ADVISORY:
+    /// an eval column, not a gate. Pre-hand-down traces parse to
+    /// `None`.
+    #[serde(default)]
+    pub(crate) hand_down_deviations: Option<u32>,
+    /// The conformance run id the run rode, read off the persisted
+    /// mark. `None` when the run rode no procedure — absence
+    /// reports as no data, never as an empty run id.
+    #[serde(default)]
+    pub(crate) hand_down_conformance_run: Option<String>,
 }
 
 #[cfg(test)]
@@ -424,6 +443,28 @@ pub(crate) mod runner {
         // CG-05: the split child count off persisted state (the parent's
         // `children` length; a recorded 0 IS data).
         let split_child_count = Some(final_case.children.len() as u32);
+        // The hand-down match off persisted state, the deviation
+        // count off the persisted gate records, and the conformance
+        // run off the persisted mark (advisory columns, never gates).
+        let hand_down_matched = Some(final_case.hand_down.is_some());
+        let hand_down_deviations = Some(
+            gate_records
+                .iter()
+                .flat_map(|v| {
+                    v["errors"]
+                        .as_array()
+                        .cloned()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .filter_map(|e| e.as_str().map(str::to_string))
+                })
+                .filter(|e| e.contains("hand-down deviation"))
+                .count() as u32,
+        );
+        let hand_down_conformance_run = final_case
+            .hand_down
+            .as_ref()
+            .map(|m| m.conformance.run_id.clone());
         EvalRow {
             suite: SUITE.to_string(),
             task_id: task_id.to_string(),
@@ -451,6 +492,9 @@ pub(crate) mod runner {
             certainty_overall,
             rehypothesis_count,
             split_child_count,
+            hand_down_matched,
+            hand_down_deviations,
+            hand_down_conformance_run,
         }
     }
 
@@ -1224,6 +1268,33 @@ handoff — measured on the gate records).\n"
             "- **repeat contact**: {repeats} of {rows_n} rows carry the recorded \
 repeat-contact census mark ({repeat_per_mille}\u{2030}).\n"
         ));
+        let hand_down_matched = rows
+            .iter()
+            .filter(|r| r.hand_down_matched == Some(true))
+            .count();
+        let hand_down_deviations: u32 = rows
+            .iter()
+            .map(|r| r.hand_down_deviations.unwrap_or(0))
+            .sum();
+        let hand_down_runs: std::collections::BTreeSet<&str> = rows
+            .iter()
+            .filter_map(|r| r.hand_down_conformance_run.as_deref())
+            .collect();
+        out.push_str(&format!(
+            "- **hand-down match**: {hand_down_matched} of {rows_n} rows rode a \
+sealed procedure (conformance runs: {}); deviations: {hand_down_deviations}. \
+At zero matched rows the match/deviation rates are unmeasurable (0/0), \
+never a number.\n",
+            if hand_down_runs.is_empty() {
+                "none".to_string()
+            } else {
+                hand_down_runs
+                    .iter()
+                    .copied()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            }
+        ));
         out.push_str(
             "- **Honest ceiling**: the weekly cadence and the monthly \
 human-signed recalibration are OPERATOR POLICY outside code — this section \
@@ -1347,6 +1418,9 @@ never rewritten).\n",
             certainty_overall: None,
             rehypothesis_count: None,
             split_child_count: None,
+            hand_down_matched: None,
+            hand_down_deviations: None,
+            hand_down_conformance_run: None,
         };
         let rows = vec![
             mk_row("B", 0, true),
@@ -1371,6 +1445,8 @@ never rewritten).\n",
         assert_eq!(report_a, report_b, "the report generator is deterministic");
         assert!(report_a.contains("## Continuity (recorded rows only)"));
         assert!(report_a.contains("justified handoff rate"));
+        assert!(report_a.contains("hand-down match"));
+        assert!(report_a.contains("unmeasurable (0/0)"));
         assert!(report_a.contains("nothing retrains, nothing schedules itself"));
         // Old traces without the continuity fields deserialize honestly:
         // serde defaults keep them readable and score NO data as no data.
@@ -1378,10 +1454,62 @@ never rewritten).\n",
         if let Some(obj) = legacy_value.as_object_mut() {
             obj.remove("soft_handoff_fired");
             obj.remove("soft_handoff_justified");
+            obj.remove("hand_down_matched");
+            obj.remove("hand_down_deviations");
+            obj.remove("hand_down_conformance_run");
         }
         let legacy: EvalRow = serde_json::from_value(legacy_value).unwrap();
         assert_eq!(legacy.soft_handoff_fired, 0);
         assert_eq!(legacy.soft_handoff_justified, 0);
+        assert_eq!(legacy.hand_down_matched, None);
+        assert_eq!(legacy.hand_down_deviations, None);
+        assert_eq!(legacy.hand_down_conformance_run, None);
+    }
+
+    #[test]
+    fn eval_row_hand_down_golden_serialization() {
+        let mut row = EvalRow {
+            suite: "gdl_structural_v1".into(),
+            task_id: "t".into(),
+            arm: "B".into(),
+            model: "loopback-scripted".into(),
+            temperature: None,
+            seed: 0,
+            steps: vec![1],
+            writes: vec![],
+            write_errors: vec![],
+            root_cause_hit: false,
+            handoff: false,
+            budget_exhausted: false,
+            wall_clock_ms: 1,
+            backend_ops: BackendOps::default(),
+            prompt_hashes: vec![],
+            soft_handoff_fired: 0,
+            soft_handoff_justified: 0,
+            escalations: 0,
+            escalations_honored: 0,
+            repeat_contact: false,
+            certainty_overall: None,
+            rehypothesis_count: None,
+            split_child_count: None,
+            hand_down_matched: Some(true),
+            hand_down_deviations: Some(1),
+            hand_down_conformance_run: Some("conf-1".into()),
+        };
+        let bytes = serde_json::to_string(&row).unwrap();
+        assert!(bytes.contains("\"hand_down_matched\":true"));
+        assert!(bytes.contains("\"hand_down_deviations\":1"));
+        assert!(bytes.contains("\"hand_down_conformance_run\":\"conf-1\""));
+        let back: EvalRow = serde_json::from_str(&bytes).unwrap();
+        assert_eq!(back.hand_down_matched, Some(true));
+        assert_eq!(back.hand_down_deviations, Some(1));
+        assert_eq!(back.hand_down_conformance_run.as_deref(), Some("conf-1"));
+        row.hand_down_matched = Some(false);
+        row.hand_down_deviations = Some(0);
+        row.hand_down_conformance_run = None;
+        let bytes = serde_json::to_string(&row).unwrap();
+        assert!(bytes.contains("\"hand_down_matched\":false"));
+        assert!(bytes.contains("\"hand_down_conformance_run\":null"));
     }
 }
 

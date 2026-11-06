@@ -390,6 +390,13 @@ fn rows() -> Vec<(&'static str, String, &'static str, &'static str)> {
                 "POST",
                 r#"{"ticket":"m","base_url":"https://provider.invalid/v1/stream","model":"m","secret_file":"/nonexistent-secret"}"#,
             ),
+            // The hand-down body is complete-shaped so the Json
+            // extractor clears and the Admin gate decides; the act
+            // itself refuses an absent source downstream.
+            "/workflow/hand-down" => (
+                "POST",
+                r#"{"procedure_id":1,"conformance":{"run_id":"m","pack_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","outputs_hash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","verdict":"pass","decided_at":1}}"#,
+            ),
             "/workflow/runs/{id}/rewind" => ("POST", r#"{"to_event_id":1,"reason":"m"}"#),
             "/workflow/runs/{id}/complaint/lifecycle" => ("POST", r#"{"to":"acked"}"#),
             "/workflow/runs/{id}/complaint/remedy" => (

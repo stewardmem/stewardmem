@@ -5844,6 +5844,57 @@ paths:
         "409": { description: run_not_fresh | gdl_provider_failed (the run is terminal after provider failure; no provider replay) }
         "422": { description: run_kind_invalid | provider_endpoint_refused | provider_refused }
         "503": { description: provider_unavailable | provider_response_invalid | provider_timeout | provider_cancelled | gdl_provider_failed | gdl_episode_unavailable -- no loopback fallback }
+  /workflow/hand-down:
+    post:
+      summary: Mark a resolved procedure executable by the lowest tier, behind the conformance precondition (Admin)
+      description: >
+        The hand-down act. Admin-only, audit-per-call. The body carries the
+        source run (`procedure_id`) and the conformance receipt (run id,
+        pack/output SHA-256 hashes, verdict, decided_at). A receipt whose
+        verdict is not pass, an unresolved or ineligible source, or a
+        second conformance run for the same procedure is refused by name
+        (`hand_down_refused`). A repeat of the same pair is the no-op
+        receipt (`created` false); the existing chain row is unchanged.
+      operationId: handDownProcedure
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [procedure_id, conformance]
+              properties:
+                procedure_id:
+                  type: integer
+                  description: The resolved source run id whose persisted plan is sealed.
+                conformance:
+                  type: object
+                  additionalProperties: false
+                  required: [run_id, pack_hash, outputs_hash, verdict, decided_at]
+                  properties:
+                    run_id: { type: string, maxLength: 64 }
+                    pack_hash: { type: string, description: SHA-256 of the gold pack (64 lowercase hex). }
+                    outputs_hash: { type: string, description: SHA-256 of the conformance outputs (64 lowercase hex). }
+                    verdict: { type: string, enum: [pass, fail, skip] }
+                    decided_at: { type: integer }
+      responses:
+        "200":
+          description: The mark landed (or the no-op receipt for a repeat pair)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  procedure_id: { type: integer }
+                  conformance_run_id: { type: string }
+                  snapshot_digest: { type: string }
+                  created: { type: boolean }
+        "400": { description: hand_down_refused (procedure_id must be positive) }
+        "401": { description: Not authenticated }
+        "403": { description: Not authorized (Admin) }
+        "422": { description: hand_down_refused (no passing receipt, ineligible source, or second conformance run for the same procedure) }
   /workflow/runs/{id}/complaint/lifecycle:
     post:
       summary: Advance the complaint lifecycle one legal step (Write on domain + workflow role)

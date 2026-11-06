@@ -223,6 +223,7 @@ pub(crate) mod frontdoor;
 pub(crate) mod gdl;
 #[cfg(test)]
 mod gdl_eval;
+pub(crate) mod hand_down;
 pub(crate) mod harness;
 pub mod host;
 pub(crate) mod hostcalls;

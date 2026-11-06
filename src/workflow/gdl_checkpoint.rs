@@ -2,9 +2,7 @@
 //! finished an exchange may explicitly pause. A crash retains its claim.
 //! rusqlite rollback-on-drop verified via Context7 2026-09-17 (upstream docs).
 
-use super::{
-    GdlCase, GdlOutcome, GdlPhase, LoopError, MAX_PHASE_ATTEMPTS, expected_phases, session_log,
-};
+use super::{GdlCase, GdlOutcome, GdlPhase, LoopError, MAX_PHASE_ATTEMPTS, session_log};
 use crate::workflow::{state, tx::WorkflowTx};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -69,16 +67,27 @@ impl Checkpoint {
         // bounds the loops. At count == 0 this is exactly today's
         // `phases == next_phase as u32`.
         let position = self.next_phase.map_or(7, |p| p as u32);
-        let loops = (self.phases as i64) - (position as i64);
+        // A handed-down case skips the two L3-owned phases, but only
+        // once it has left the second phase: before that jump its
+        // pass count is the legacy relation, and from the execute
+        // phase onward it runs two behind the position. At zero
+        // skipped phases this is exactly the legacy relation.
+        let skipped: i64 = if self.case.hand_down.is_some() && position >= 4 {
+            2
+        } else {
+            0
+        };
+        let loops = (self.phases as i64) + skipped - (position as i64);
         let consistent =
             loops >= 0 && loops % 4 == 0 && loops / 4 <= self.case.rehypothesis_count as i64;
+        let expected = super::expected_phases_for_case(&self.case);
         if self.version != 1
             || self.revision < 1
             || self.episode.is_empty()
             || self.episode.len() > 128
             || self.attempt > MAX_PHASE_ATTEMPTS
             || (self.terminal.is_none() && self.attempt == MAX_PHASE_ATTEMPTS)
-            || self.phases > expected_phases(self.case.rehypothesis_count)
+            || self.phases > expected
             || self.errors.len() > 64
             || self.errors.iter().any(|s| s.len() > 16_384)
             || (self.attempt == 0) != self.errors.is_empty()
@@ -99,7 +108,7 @@ impl Checkpoint {
                 verify,
                 capture,
             }) => {
-                let expected = expected_phases(self.case.rehypothesis_count);
+                let expected = super::expected_phases_for_case(&self.case);
                 *phases == expected
                     && self.phases == expected
                     && self.next_phase.is_none()
@@ -237,7 +246,22 @@ impl Checkpoint {
         // sets, so the derivation takes it from the gate, never
         // invents it.
         expected.children = gate.split_children.clone();
+        expected.hand_down = gate.hand_down.clone();
         let accepted = gate.verdict == "pass";
+        // The narrow-loop injection is the one other non-`apply`
+        // write: a passed second phase on a handed-down case carries
+        // the sealed plan. The derivation re-derives it from the
+        // source row through the mark; the digest must bind.
+        if accepted
+            && gate.phase == GdlPhase::Triage
+            && let Some(mark) = &gate.hand_down
+        {
+            let snapshot = crate::workflow::hand_down::load_snapshot(conn, mark)
+                .map_err(|e| persist_error(format!("hand-down snapshot: {e}")))?;
+            expected.plan = snapshot.plan.clone();
+            expected.verify_step = Some(snapshot.verify_step.clone());
+            expected.dead_end = Some(snapshot.dead_end.clone());
+        }
         // CG-04: `next_phase` is derived PHASE-BASED from the gate's
         // explicit target (the admitted `Verify → Hypothesize` edge, the
         // Handoff exit), not array-indexed from the pass count. A legacy
@@ -247,7 +271,7 @@ impl Checkpoint {
             match gate.next_phase {
                 Some(target) => Some(target),
                 None if gate.artifact.is_none() => prior.next_phase,
-                None => GdlPhase::ALL.get((prior.phases + 1) as usize).copied(),
+                None => super::forward_phase(gate.phase, expected.hand_down.is_some()),
             }
         } else {
             prior.next_phase
@@ -324,6 +348,14 @@ struct GateRecord {
     /// keeps old rows (written before this field) readable.
     #[serde(default)]
     usage: Option<(u64, u64)>,
+    /// The hand-down mark AFTER this transition. Additive — `default`
+    /// keeps old rows readable (`None` the only value the old code
+    /// could produce). The state-derivation law binds it: the
+    /// committed case re-derives `hand_down` from the gate row,
+    /// exactly as CG-04 binds the count and CG-05 binds the split
+    /// children.
+    #[serde(default)]
+    hand_down: Option<crate::workflow::hand_down::HandDownMark>,
 }
 
 // Local decoder for the existing identity journal contract; no SDK change.
@@ -782,7 +814,7 @@ fn advance_tx(
         next.phases += 1;
         next.next_phase = change
             .next_phase
-            .or_else(|| GdlPhase::ALL.get(next.phases as usize).copied());
+            .or_else(|| super::forward_phase(change.phase, next.case.hand_down.is_some()));
         next.case.rehypothesis_count = change.rehypothesis_count;
         next.attempt = 0;
         next.errors.clear();
@@ -855,6 +887,90 @@ fn advance_tx(
         }
         next.case.children = ids;
     }
+    // The intake match — a satellite of the Intake transition, in
+    // this transaction. Scans marked procedures in this run's
+    // domain, procedure ascending, capped at the scan horizon. A
+    // stale or corrupt candidate is skipped by name in the match
+    // row; a scan error refuses the advance (never a silent
+    // no-mark). The first containment match wins; the choice is
+    // recorded in one match row.
+    if change.phase == GdlPhase::Intake && change.verdict == "pass" && next.case.hand_down.is_none()
+    {
+        let marks = crate::workflow::hand_down::marked_procedures(tx.tx(), &next.domain)
+            .map_err(|e| persist_error(format!("hand-down scan: {e}")))?;
+        let mut skipped: Vec<i64> = Vec::new();
+        for (index, mark) in marks.iter().enumerate() {
+            let snapshot = match crate::workflow::hand_down::load_snapshot(tx.tx(), mark) {
+                Ok(s) => s,
+                Err(_) => {
+                    skipped.push(mark.procedure_id);
+                    continue;
+                }
+            };
+            if crate::workflow::hand_down::ticket_matches(&next.case.ticket, &snapshot.ticket) {
+                next.case.hand_down = Some(mark.clone());
+                let payload = crate::workflow::hand_down::HandDownMatchPayload {
+                    procedure_id: mark.procedure_id,
+                    conformance_run_id: mark.conformance.run_id.clone(),
+                    scan_position: index + 1,
+                    snapshot_digest: mark.snapshot_digest.clone(),
+                    skipped: skipped.clone(),
+                };
+                let payload_json = serde_json::to_string(&payload).map_err(persist_error)?;
+                session_log::append(
+                    tx.tx(),
+                    old.run,
+                    crate::workflow::hand_down::HAND_DOWN_MATCH_ROW_KIND,
+                    &payload_json,
+                    &format!("run{}:control:match:{}", old.run, mark.procedure_id),
+                    chrono::Utc::now().timestamp(),
+                )
+                .map_err(persist_error)?;
+                crate::workflow::audit_write(
+                    tx.tx(),
+                    old.run,
+                    &format!("hand_down_match:{}", mark.procedure_id),
+                    crate::audit::AuditStatus::Ok,
+                    &format!(
+                        "procedure={} conf={} scan_position={} digest={} skipped={:?}",
+                        mark.procedure_id,
+                        mark.conformance.run_id,
+                        index + 1,
+                        mark.snapshot_digest,
+                        skipped
+                    ),
+                );
+                break;
+            }
+        }
+        // Re-derive the forward target now that the mark is known.
+        if next.case.hand_down.is_some() && next.case.phase == GdlPhase::Intake {
+            next.next_phase = super::forward_phase(GdlPhase::Intake, next.case.hand_down.is_some());
+        }
+    }
+    // The narrow-loop injection — a satellite of the second-phase
+    // transition. The sealed steps become the plan; the differential
+    // stays empty because its owner phase never runs. The forward
+    // target jumps straight to the execute phase.
+    if change.phase == GdlPhase::Triage && change.verdict == "pass" && next.case.hand_down.is_some()
+    {
+        if !next.case.hypotheses.is_empty() {
+            return Err(persist_error(
+                "hand-down case carries hypotheses — the differential is never laundered",
+            ));
+        }
+        let mark = next
+            .case
+            .hand_down
+            .clone()
+            .ok_or_else(|| persist_error("hand-down mark absent"))?;
+        let snapshot = crate::workflow::hand_down::load_snapshot(tx.tx(), &mark)
+            .map_err(|e| persist_error(format!("hand-down snapshot: {e}")))?;
+        next.case.plan = snapshot.plan.clone();
+        next.case.verify_step = Some(snapshot.verify_step.clone());
+        next.case.dead_end = Some(snapshot.dead_end.clone());
+        next.next_phase = Some(GdlPhase::Act);
+    }
     if matches!(next.terminal, Some(GdlOutcome::Resolved { .. })) {
         next.status = "resolved".into();
     }
@@ -878,6 +994,7 @@ fn advance_tx(
             rehypothesis_count: next.case.rehypothesis_count,
             split_children: next.case.children.clone(),
             usage: change.usage,
+            hand_down: next.case.hand_down.clone(),
         })
         .map_err(persist_error)?,
         &format!("{}:gate", next.key()),

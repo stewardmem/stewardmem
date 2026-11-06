@@ -81,6 +81,41 @@ pub(crate) const fn expected_phases(rehypothesis_count: u32) -> u32 {
     7 + 4 * rehypothesis_count
 }
 
+/// The pass bound for one case: the legacy bound, less the two
+/// L3-owned phases a handed-down case never runs. At zero skipped
+/// phases this is exactly the legacy bound.
+pub(crate) fn expected_phases_for_case(case: &GdlCase) -> u32 {
+    let base = expected_phases(case.rehypothesis_count);
+    if case.hand_down.is_some() {
+        base.saturating_sub(2)
+    } else {
+        base
+    }
+}
+
+/// The phase-based forward target after a pass on `phase`. A
+/// handed-down case jumps from its second phase straight to the
+/// execute phase; every other step is the linear successor. An
+/// explicit target on the transition always wins over this
+/// derivation.
+pub(crate) fn forward_phase(phase: GdlPhase, hand_down: bool) -> Option<GdlPhase> {
+    match phase {
+        GdlPhase::Intake => Some(GdlPhase::Triage),
+        GdlPhase::Triage => {
+            if hand_down {
+                Some(GdlPhase::Act)
+            } else {
+                Some(GdlPhase::Hypothesize)
+            }
+        }
+        GdlPhase::Hypothesize => Some(GdlPhase::Plan),
+        GdlPhase::Plan => Some(GdlPhase::Act),
+        GdlPhase::Act => Some(GdlPhase::Verify),
+        GdlPhase::Verify => Some(GdlPhase::Handoff),
+        GdlPhase::Handoff => None,
+    }
+}
+
 /// The MEASURED provider-exchange cost of one Verify phase, by strategy —
 /// the number `docs/architecture.md` states and the doc-truth pin reads.
 ///
@@ -1176,6 +1211,13 @@ pub(crate) struct GdlCase {
     /// siblings without scanning other runs.
     #[serde(default)]
     pub sibling_ids: Vec<i64>,
+    /// The hand-down mark, when the intake matcher rode a sealed
+    /// procedure. Additive state_json (no SQL column, no migration);
+    /// `skip_serializing_if` keeps the unmarked persisted case
+    /// byte-identical to the pre-lane shape; old states parse to
+    /// `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hand_down: Option<super::hand_down::HandDownMark>,
 }
 
 impl GdlCase {
@@ -1202,6 +1244,7 @@ impl GdlCase {
             children: Vec::new(),
             parent_case_id: None,
             sibling_ids: Vec::new(),
+            hand_down: None,
         }
     }
 
@@ -2183,6 +2226,19 @@ fn plan_rank_errors(a: &PlanArtifact, case: &GdlCase) -> Vec<String> {
 /// and an evidence reference — unsupported evidence does not close.
 fn act_gate(a: &ActArtifact, case: &GdlCase) -> Vec<String> {
     let mut errors = Vec::new();
+    // A handed-down mark cannot float a case carrying an open flag:
+    // the flag lock holds on every handed-down case, no bypass.
+    if case.hand_down.is_some()
+        && case
+            .triage
+            .as_ref()
+            .is_some_and(|t| red_flag_is_open(&t.red_flag))
+    {
+        errors.push(err(
+            "T10",
+            "an open red-flag locks the loop escalate-first — a hand-down mark cannot float a case carrying an open flag",
+        ));
+    }
     // Resolution sets, built once: the triage-committed playbook
     // ids (the server-stamped record, not the model's claim) and the
     // committed-state citation universe. `case.test_log` holds PRIOR
@@ -2934,6 +2990,14 @@ pub(crate) fn plan_strip_with_law(case: &GdlCase, corroboration_ablated: bool) -
     // shell; the chip lands with the GDL-surface lane.
     if !case.children.is_empty() {
         lines.push(format!("split · {}", case.children.len()));
+    }
+    // The handed-down line, iff the mark is present; otherwise
+    // byte-identical. The renderer is the strip.
+    if let Some(mark) = &case.hand_down {
+        lines.push(format!(
+            "procedure: {} (handed down, conf {})",
+            mark.procedure_id, mark.conformance.run_id
+        ));
     }
     let executed: std::collections::HashSet<i64> = case.test_log.iter().map(|r| r.order).collect();
     for s in &case.plan {
@@ -3986,6 +4050,46 @@ impl GdlDriver {
                             gate = Gate::Fail(errors);
                         }
                     }
+                    if matches!(gate, Gate::Pass)
+                        && phase == GdlPhase::Act
+                        && case.hand_down.is_some()
+                    {
+                        // The oracle comparison, driver-side (the
+                        // authority pattern): the delivered rows must
+                        // equal the sealed rows byte-for-byte, or the
+                        // case routes to escalation at this phase. A
+                        // stale source is the same route, by name.
+                        let mark = case.hand_down.clone().expect("hand_down present");
+                        let mut delivered = case.test_log.clone();
+                        if let Ok(act) = serde_json::from_str::<ActArtifact>(
+                            artifact.as_deref().unwrap_or_default(),
+                        ) {
+                            delivered.extend(act.rows);
+                        }
+                        let pool = self.pool.clone();
+                        let snapshot_result = tokio::task::spawn_blocking(move || {
+                            let conn = pool.get().map_err(persist_error)?;
+                            super::hand_down::load_snapshot(&conn, &mark)
+                                .map_err(|e| persist_error(format!("hand-down snapshot: {e}")))
+                        })
+                        .await
+                        .map_err(persist_error)?;
+                        match snapshot_result {
+                            Ok(snapshot) => {
+                                if let Some(reason) = super::hand_down::harness_deviation(
+                                    &snapshot.test_log,
+                                    &delivered,
+                                ) {
+                                    gate = Gate::Route(reason);
+                                }
+                            }
+                            Err(e) => {
+                                gate = Gate::Route(format!(
+                                    "hand-down deviation at step 1: the harness left the record — escalate ({e})"
+                                ));
+                            }
+                        }
+                    }
                     if matches!(gate, Gate::Pass) && phase == GdlPhase::Triage {
                         // T7 — the domain's must-miss catalog: a ticket
                         // matching a catalog entry must name that worst
@@ -4357,6 +4461,18 @@ impl GdlDriver {
                                     artifact
                                 };
                                 change.artifact = Some(artifact);
+                                // The narrow-loop jump: a handed-down
+                                // case at the lowest tier leaves the
+                                // second phase straight for the execute
+                                // phase. No prompt for the skipped
+                                // phases ever runs; the sealed plan is
+                                // injected by the advance satellite.
+                                if phase == GdlPhase::Triage
+                                    && case.hand_down.is_some()
+                                    && self.proficiency == super::proficiency::Proficiency::L1
+                                {
+                                    change.next_phase = Some(GdlPhase::Act);
+                                }
                                 if phase == GdlPhase::Handoff {
                                     change.terminal = Some(GdlOutcome::Resolved {
                                         phases: cp.phases + 1,
@@ -10524,6 +10640,325 @@ mod tests {
         assert!(bytes.contains("\"children\":[2]"));
         let back: GdlCase = serde_json::from_str(&bytes).unwrap();
         assert_eq!(back, split);
+    }
+
+    fn hand_down_source_case() -> GdlCase {
+        let mut case = GdlCase::fresh("gradebook workbook fails to open");
+        case.phase = GdlPhase::Handoff;
+        case.intake = Some(serde_json::from_str(INTAKE_JSON).unwrap());
+        case.triage = Some(crate::workflow::gdl::TriageArtifact {
+            priority: "P2".to_string(),
+            stabilized: true,
+            search_hits: vec!["kb:1".to_string()],
+            verdict: "accept".to_string(),
+            acuity_band: Some("GREEN".to_string()),
+            esi_level: None,
+            resource_estimate: None,
+            care_setting: Some("self_care".to_string()),
+            modality_adequacy: None,
+            confirmed_matches: Some(vec!["kb:1".to_string()]),
+            red_flag: RedFlagArtifact {
+                worst_case: "data loss".to_string(),
+                ruled_out: serde_json::Value::Bool(true),
+                rule_out_basis: vec!["verification:gradebook".to_string()],
+                first_would_miss_impact: "loss".to_string(),
+            },
+        });
+        case.plan = vec![PlanStep {
+            order: 1,
+            kind: "check".to_string(),
+            skill_gate: "L1".to_string(),
+            description: "open the workbook".to_string(),
+            command: "open".to_string(),
+            expected: "opens".to_string(),
+            fail_action: None,
+            seam: None,
+            invasiveness: 0,
+            justification: None,
+        }];
+        case.verify_step = Some(VerifyStepSpec {
+            re_run: "open the workbook".to_string(),
+            pass_condition: "opens".to_string(),
+        });
+        case.dead_end = Some(DeadEnd {
+            escalate_to: "operator".to_string(),
+            required_evidence: vec![],
+        });
+        case.test_log = vec![TestLogRow {
+            order: 1,
+            kind: "check".to_string(),
+            description: "open the workbook".to_string(),
+            playbook_ref: Some("kb:1".to_string()),
+            variables: vec!["file".to_string()],
+            expected: "opens".to_string(),
+            actual: Some("opens".to_string()),
+            verdict: Verdict::Pass,
+            evidence_ref: Some("tsr://node-042".to_string()),
+            dtfvc: Dtfvc {
+                diagnose: "d".to_string(),
+                test: "t".to_string(),
+                fix: None,
+                verify: None,
+                capture: None,
+            },
+            invasiveness: 0,
+            justification: None,
+        }];
+        case.verify = Some(VerifyArtifact {
+            re_run: "open the workbook".to_string(),
+            pass_condition: "opens".to_string(),
+            pass: true,
+            stability_window_min: 5,
+            negative_check: true,
+            rehypothesis: None,
+        });
+        case.capture = Some(CaptureArtifact {
+            resolution: "fixed".to_string(),
+            bundle_hash: "h".to_string(),
+        });
+        case.closure = Some(ClosureArtifact {
+            decision: "fixed".to_string(),
+            communicated_to: vec!["teacher".to_string()],
+            shared_decision: true,
+            shared_decision_note: None,
+            warning_signs: vec!["fails again".to_string()],
+            escalation_path: "operator".to_string(),
+            follow_up: String::new(),
+            modality: ClosureModality {
+                telehealth: false,
+                modality_adequacy: None,
+            },
+            closure_means: "email".to_string(),
+        });
+        case
+    }
+
+    fn hand_down_receipt(run_id: &str) -> crate::workflow::hand_down::ConformanceReceipt {
+        crate::workflow::hand_down::ConformanceReceipt {
+            run_id: run_id.to_string(),
+            pack_hash: "a".repeat(64),
+            outputs_hash: "b".repeat(64),
+            verdict: "pass".to_string(),
+            decided_at: 1,
+        }
+    }
+
+    fn seed_hand_down_source(path: &std::path::Path, run_id: &str) -> i64 {
+        let conn = Connection::open(path).unwrap();
+        let source = hand_down_source_case();
+        conn.execute(
+            "INSERT INTO workflow_runs(domain, kind, state_json, state_revision, status, created_at, updated_at) VALUES ('acme', 'troubleshoot', ?1, 0, 'resolved', 1, 1)",
+            rusqlite::params![serde_json::to_string(&source).unwrap()],
+        )
+        .unwrap();
+        let id = conn.last_insert_rowid();
+        crate::workflow::hand_down::hand_down_in_tx(&conn, id, &hand_down_receipt(run_id)).unwrap();
+        id
+    }
+
+    fn fixture_l1(script: Vec<Vec<crate::agentloop::provider::StreamEvent>>) -> Fixture {
+        register_sqlite_vec();
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let mgr = crate::pool::SqliteConnectionManager::file(tmp.path());
+        let pool: Pool = r2d2::Pool::builder().max_size(4).build(mgr).unwrap();
+        run_migration(&mut pool.get().unwrap(), config::DB_MMAP_SIZE_MIB).unwrap();
+        pool.get()
+            .unwrap()
+            .execute(
+                "INSERT INTO workflow_runs(domain, kind, state_json, state_revision, status, created_at, updated_at) VALUES ('acme', 'troubleshoot', '{}', 0, 'active', 1, 1)",
+                [],
+            )
+            .unwrap();
+        let host = Arc::new(SqliteWorkflowHost::new(pool.clone()));
+        let provider = LoopbackProvider::new("loopback", script);
+        let driver = GdlDriver::new_with_proficiency(
+            pool,
+            host,
+            provider.clone(),
+            vec![],
+            ExecutionEnv {
+                fs: Arc::new(DenyAll),
+                read_only: true,
+                allow_process: false,
+                root: "/".into(),
+                allowed_commands: vec![],
+            },
+            LoopConfig::default(),
+            crate::workflow::proficiency::Proficiency::L1,
+        );
+        Fixture {
+            driver,
+            provider,
+            tmp,
+        }
+    }
+
+    fn hand_down_act_json(actual: &str) -> String {
+        format!(
+            r#"{{"rows":[{{"order":1,"kind":"check","description":"open the workbook","playbook_ref":"kb:1","variables":["file"],"expected":"opens","actual":"{actual}","verdict":"pass","evidence_ref":"tsr://node-042","dtfvc":{{"diagnose":"d","test":"t","fix":null,"verify":null,"capture":null}},"invasiveness":0,"justification":null}}],"complete":true}}"#
+        )
+    }
+
+    #[test]
+    fn hand_down_unmarked_case_is_byte_identical() {
+        let case = GdlCase::fresh("t");
+        let json = serde_json::to_string(&case).unwrap();
+        assert!(!json.contains("hand_down"), "unmarked bytes: {json}");
+        assert!(
+            !plan_strip(&case).contains("procedure:"),
+            "unmarked strip carries no procedure line"
+        );
+    }
+
+    #[test]
+    fn hand_down_matched_case_runs_sealed_plan_with_no_hypotheses() {
+        let f = fixture_l1(vec![scripted_text(INTAKE_JSON), scripted_text(TRIAGE_JSON)]);
+        seed_kb_for_ticket(&f, "RE: gradebook workbook fails to open today");
+        let source_id = seed_hand_down_source(f.tmp.path(), "conf-1");
+        let runtime = rt();
+        runtime
+            .block_on(f.driver.run_case_until(
+                1,
+                "RE: gradebook workbook fails to open today",
+                &CancellationToken::new(),
+                Some(2),
+                &EscapeFlag::new(),
+            ))
+            .unwrap();
+        let conn = Connection::open(f.tmp.path()).unwrap();
+        let state_json: String = conn
+            .query_row("SELECT state_json FROM workflow_runs WHERE id=1", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        let case: GdlCase = serde_json::from_str(&state_json).unwrap();
+        let mark = case.hand_down.clone().expect("matched");
+        assert_eq!(mark.procedure_id, source_id);
+        assert_eq!(mark.conformance.run_id, "conf-1");
+        assert!(
+            case.hypotheses.is_empty(),
+            "the handed-down case carries no hypotheses"
+        );
+        assert_eq!(case.plan.len(), 1, "the sealed plan became the plan");
+        assert_eq!(case.plan[0].description, "open the workbook");
+        assert!(case.verify_step.is_some());
+        assert!(case.dead_end.is_some());
+        assert!(
+            plan_strip(&case).contains(&format!(
+                "procedure: {} (handed down, conf conf-1)",
+                source_id
+            )),
+            "strip carries the procedure line: {}",
+            plan_strip(&case)
+        );
+        let match_payload: String = conn
+            .query_row(
+                "SELECT payload_json FROM agent_session_events WHERE run_id=1 AND kind='control:match'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let match_json: serde_json::Value = serde_json::from_str(&match_payload).unwrap();
+        assert_eq!(match_json["procedure_id"], source_id);
+        assert_eq!(match_json["scan_position"], 1);
+    }
+
+    #[test]
+    fn hand_down_clean_act_escalates_at_verify_for_the_higher_tier() {
+        let f = fixture_l1(vec![
+            scripted_text(INTAKE_JSON),
+            scripted_text(TRIAGE_JSON),
+            scripted_text(&hand_down_act_json("opens")),
+        ]);
+        seed_kb_for_ticket(&f, "RE: gradebook workbook fails to open today");
+        seed_hand_down_source(f.tmp.path(), "conf-1");
+        let runtime = rt();
+        let outcome = runtime
+            .block_on(f.driver.run_case(
+                1,
+                "RE: gradebook workbook fails to open today",
+                &CancellationToken::new(),
+            ))
+            .unwrap();
+        assert!(
+            matches!(
+                outcome,
+                GdlOutcome::Escalated {
+                    at: GdlPhase::Verify,
+                    ..
+                }
+            ),
+            "a clean handed-down act rises to the higher tier at verify: {outcome:?}"
+        );
+        let conn = Connection::open(f.tmp.path()).unwrap();
+        let state_json: String = conn
+            .query_row("SELECT state_json FROM workflow_runs WHERE id=1", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        let case: GdlCase = serde_json::from_str(&state_json).unwrap();
+        assert!(case.hypotheses.is_empty());
+        assert_eq!(case.test_log.len(), 1);
+    }
+
+    #[test]
+    fn hand_down_deviation_routes_to_escalated_act() {
+        let f = fixture_l1(vec![
+            scripted_text(INTAKE_JSON),
+            scripted_text(TRIAGE_JSON),
+            scripted_text(&hand_down_act_json("does not open")),
+        ]);
+        seed_kb_for_ticket(&f, "RE: gradebook workbook fails to open today");
+        seed_hand_down_source(f.tmp.path(), "conf-1");
+        let runtime = rt();
+        let outcome = runtime
+            .block_on(f.driver.run_case(
+                1,
+                "RE: gradebook workbook fails to open today",
+                &CancellationToken::new(),
+            ))
+            .unwrap();
+        assert!(
+            matches!(
+                outcome,
+                GdlOutcome::Escalated {
+                    at: GdlPhase::Act,
+                    ..
+                }
+            ),
+            "a step mismatch routes to escalation at act, never a retry: {outcome:?}"
+        );
+    }
+
+    #[test]
+    fn hand_down_match_is_deterministic_lowest_procedure_wins() {
+        let f = fixture_l1(vec![scripted_text(INTAKE_JSON), scripted_text(TRIAGE_JSON)]);
+        seed_kb_for_ticket(&f, "RE: gradebook workbook fails to open today");
+        let first = seed_hand_down_source(f.tmp.path(), "conf-1");
+        let second = seed_hand_down_source(f.tmp.path(), "conf-2");
+        assert!(first < second);
+        let runtime = rt();
+        runtime
+            .block_on(f.driver.run_case_until(
+                1,
+                "RE: gradebook workbook fails to open today",
+                &CancellationToken::new(),
+                Some(1),
+                &EscapeFlag::new(),
+            ))
+            .unwrap();
+        let conn = Connection::open(f.tmp.path()).unwrap();
+        let state_json: String = conn
+            .query_row("SELECT state_json FROM workflow_runs WHERE id=1", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        let case: GdlCase = serde_json::from_str(&state_json).unwrap();
+        assert_eq!(
+            case.hand_down.as_ref().map(|m| m.procedure_id),
+            Some(first),
+            "the lowest procedure id wins on collision"
+        );
     }
 
     /// CG-04 strip: the re-entry line renders once per count, no prose;

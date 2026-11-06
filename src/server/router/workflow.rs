@@ -168,6 +168,13 @@ pub(crate) fn router() -> Router<Arc<AppState>> {
             "/workflow/cases/{id}/gdl",
             post(handlers::case_run::run_gdl_case),
         )
+        // The hand-down act: Admin-only, behind the conformance
+        // precondition. The handler parses typed JSON only; the
+        // domain act seals and the chain row is the record.
+        .route(
+            "/workflow/hand-down",
+            post(handlers::hand_down::post_hand_down),
+        )
         .route(
             "/workflow/runs/{id}/state",
             get(handlers::workflow::get_run_state),
