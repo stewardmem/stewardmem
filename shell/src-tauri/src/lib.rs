@@ -58,6 +58,17 @@ pub mod heal;
 #[cfg(not(feature = "mas"))]
 pub mod import;
 
+// CG-12 — the rerank tier's WRITE path: the 0600 choice marker beside the
+// posture marker, the disclosed model staging, and the two owned postures'
+// restart flows. cfg(not(mas)) AS A WHOLE MODULE (the updater/service
+// excision posture): the store edition has no marker reader, no staging,
+// and no spawn-env extension — nothing can arm the tier there, so NO
+// reranker download can ever occur in MAS (P-4, by construction). The READ
+// path needs nothing from this module: the section's kernel facts ride the
+// typed wire (`kernel-facts.ts`).
+#[cfg(not(feature = "mas"))]
+pub mod rerank;
+
 mod token;
 
 #[cfg(all(test, not(feature = "mas")))]
@@ -70,6 +81,8 @@ mod heal_pins;
 mod import_pins;
 #[cfg(test)]
 mod recall_pins;
+#[cfg(all(test, not(feature = "mas")))]
+mod rerank_pins;
 #[cfg(all(test, not(feature = "mas")))]
 mod service_pins;
 #[cfg(test)]
@@ -447,6 +460,37 @@ async fn import_workspace_candidates(
         .map_err(|error| format!("import_workspace_candidates task failed: {error}"))?
 }
 
+/// CG-12 — the rerank choice's READING: the marker beside the posture
+/// marker, the staged reality beside it, and the posture the app would act
+/// on. Read-only; the kernel's live state comes over the typed wire
+/// (`fetchRerankState`), never through here.
+#[cfg(not(feature = "mas"))]
+#[tauri::command]
+async fn rerank_posture(app: tauri::AppHandle) -> Result<rerank::RerankDto, String> {
+    tauri::async_runtime::spawn_blocking(move || rerank::rerank_posture(&app))
+        .await
+        .map_err(|error| format!("rerank_posture task failed: {error}"))
+}
+
+/// CG-12 — the rerank CHOICE, made real: refuse an external posture (P-9),
+/// stage the disclosed model, write the 0600 marker, restart the owned
+/// kernel (A: stop+start; B: the `AlreadyInstalled` plist repair +
+/// kickstart). A refused or failed flow arms NOTHING — the marker is the
+/// CHOICE, and it is written only once the reality can hold it.
+#[cfg(not(feature = "mas"))]
+#[tauri::command]
+async fn rerank_set_enabled(
+    app: tauri::AppHandle,
+    enable: bool,
+) -> Result<rerank::RerankOutcomeDto, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<sidecar::KernelState>();
+        rerank::rerank_set_enabled(&app, state.inner(), enable)
+    })
+    .await
+    .map_err(|error| format!("rerank_set_enabled task failed: {error}"))
+}
+
 /// III-4 — the update CHECK. Read-only: it never installs and never writes.
 /// The answer is a DTO, never a thrown error, and `unreachable` is its own
 /// state — an endpoint that cannot be reached is never "you are up to date".
@@ -571,6 +615,10 @@ pub fn run() {
             import_revert,
             #[cfg(not(feature = "mas"))]
             import_workspace_candidates,
+            #[cfg(not(feature = "mas"))]
+            rerank_posture,
+            #[cfg(not(feature = "mas"))]
+            rerank_set_enabled,
             #[cfg(not(feature = "mas"))]
             update_check,
             #[cfg(not(feature = "mas"))]

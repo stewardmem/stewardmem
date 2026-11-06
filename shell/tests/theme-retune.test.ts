@@ -600,6 +600,11 @@ const TEXT_AUDIT: Readonly<Record<string, AuditRow>> = {
 	'settings.rerank.fallback_name': 'label',
 	'settings.rerank.hint': 'hint',
 	'settings.rerank.external_hint': 'hint',
+	'settings.rerank.action_enable': 'label',
+	'settings.rerank.action_disable': 'label',
+	'settings.rerank.disclose': 'hint',
+	'settings.rerank.applied': 'verdict',
+	'settings.rerank.failed_act': 'verdict',
 	// The wizard's Settings surface (the W-2 round): every transition's
 	// outcome sentence is a verdict, the actions are labels, and the
 	// uninstall's removal list + offered data path ride params.

@@ -1059,8 +1059,11 @@ describe('the envelope law', () => {
 		// AND AGAIN (2026-11-06, the CG-12 rerank round): the rerank tier's
 		// fact surface (the settings section + the /health/db echo read +
 		// 9 message keys × five locales) → 232,483 gzipped (+1,527): named
-		// act, midpoint moves, register carries it.
-		const R0_BASELINE = 232_483;
+		// act, midpoint moves, register carries it. AND AGAIN (2026-11-06,
+		// the CG-12 write round): the owned choice (the flip + the disclosed
+		// one-time download + 5 message keys × five locales) → 233,200
+		// gzipped (+717): named act, midpoint moves, register carries it.
+		const R0_BASELINE = 233_200;
 		const BAND = 512;
 		expect(
 			Math.abs(total - R0_BASELINE),

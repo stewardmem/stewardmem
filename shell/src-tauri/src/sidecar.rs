@@ -1349,7 +1349,8 @@ pub fn hex_32(bytes: &[u8; 32]) -> String {
 }
 
 /// The command allowlist. Args are empty by construction; the environment is
-/// exactly seven keys, and `BIND_HOST` is the loopback literal.
+/// exactly the historical eight keys, and `BIND_HOST` is the loopback
+/// literal. The rerank extension lives in [`command_spec_with_rerank`].
 pub fn command_spec(sidecar: &Path, data_root: &Path, auth_file: &Path) -> SidecarCommand {
     SidecarCommand {
         program: sidecar.display().to_string(),
@@ -1379,6 +1380,38 @@ pub fn command_spec(sidecar: &Path, data_root: &Path, auth_file: &Path) -> Sidec
             ("CORS_ORIGINS".to_string(), SPAWNED_CORS_ORIGINS.to_string()),
         ],
     }
+}
+
+/// CG-12: the rerank tier's spawn-env extension — IFF the choice marker says
+/// on, the spec carries EXACTLY two more keys appended after the historical
+/// eight (P-2); `None` is the historical shape, byte-identical (P-1). The
+/// extension stays on the ONE allowlist implementation: both consumers (the
+/// app-spawned child here, the service plist in `service.rs`) read the same
+/// marker and go through this one constructor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RerankEnv {
+    /// The ABSOLUTE model dir — the kernel refuses a CWD-relative dir (the
+    /// writable-CWD model-swap law), so this is always absolute by
+    /// construction (`rerank.rs` builds it from the data root).
+    pub model_dir: PathBuf,
+}
+
+pub fn command_spec_with_rerank(
+    sidecar: &Path,
+    data_root: &Path,
+    auth_file: &Path,
+    rerank: Option<&RerankEnv>,
+) -> SidecarCommand {
+    let mut spec = command_spec(sidecar, data_root, auth_file);
+    if let Some(env) = rerank {
+        spec.env
+            .push(("BRAIN_RERANK_ENABLED".to_string(), "1".to_string()));
+        spec.env.push((
+            "BRAIN_RERANK_MODEL_DIR".to_string(),
+            env.model_dir.display().to_string(),
+        ));
+    }
+    spec
 }
 
 /// Build the process from the allowlist: `env_clear` first, then exactly the
@@ -1653,7 +1686,21 @@ pub fn start_with_paths(
                 return StatusDto::refused(error, Some(paths), consent_granted(&paths.config_dir));
             }
         };
-        let spec = command_spec(&paths.sidecar, &paths.data_root, &auth_file);
+        // CG-12: the rerank choice rides the spawn IFF the choice marker says
+        // on. In the `mas` build no marker reader exists — `None` is the
+        // store edition's PERMANENT answer (the historical eight-key shape;
+        // nothing can arm the tier there, so no reranker download can ever
+        // occur in MAS — P-4 by construction).
+        #[cfg(feature = "mas")]
+        let rerank = None::<RerankEnv>;
+        #[cfg(not(feature = "mas"))]
+        let rerank = crate::rerank::spawn_env(&paths.config_dir, &paths.data_root);
+        let spec = command_spec_with_rerank(
+            &paths.sidecar,
+            &paths.data_root,
+            &auth_file,
+            rerank.as_ref(),
+        );
         let log = match open_log(&paths.data_root) {
             Ok(log) => log,
             Err(error) => {

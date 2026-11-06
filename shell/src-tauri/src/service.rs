@@ -496,6 +496,45 @@ pub fn service_command_spec(sidecar: &Path, service_root: &Path) -> SidecarComma
     )
 }
 
+/// CG-12: the rerank-aware variant — the plist is the spec's output
+/// byte-for-byte ON and OFF (P-3); the choice rides the SAME marker the
+/// app-spawned child reads. The whole service module is already
+/// `cfg(not(feature = "mas"))`, so the marker reader exists here by
+/// construction.
+pub fn service_command_spec_with_rerank(
+    sidecar: &Path,
+    service_root: &Path,
+    config_dir: &Path,
+) -> SidecarCommand {
+    let rerank = crate::rerank::spawn_env(config_dir, service_root);
+    sidecar::command_spec_with_rerank(
+        sidecar,
+        service_root,
+        &service_root.join(sidecar::AUTH_FILE),
+        rerank.as_ref(),
+    )
+}
+
+/// CG-12: restart the bootstrapped agent so it re-reads the (repaired)
+/// plist's environment — the enable flow is the `AlreadyInstalled` plist
+/// repair plus kickstart (R143's idempotency law, no new service API). The
+/// kill flag kills and restarts under the SAME label; the bootstrap verb
+/// set stays untouched.
+pub fn service_kickstart() -> Result<(), ServiceError> {
+    let uid = uid()?;
+    let args = vec![
+        "kickstart".to_string(),
+        "-k".to_string(),
+        format!("gui/{uid}/{SERVICE_LABEL}"),
+    ];
+    run_launchctl(&args)
+        .map(|_| ())
+        .map_err(|stderr| ServiceError::Launchctl {
+            verb: "kickstart".to_string(),
+            stderr,
+        })
+}
+
 // ── the launchd edge (thin; the pins record it) ────────────────────────────
 
 /// What a launchctl invocation returned: `ok` is the exit status, `stderr`
@@ -757,7 +796,8 @@ pub fn install_with_paths(
             reason: error.to_string(),
         });
     }
-    let spec = service_command_spec(&paths.sidecar, &paths.service_root);
+    let spec =
+        service_command_spec_with_rerank(&paths.sidecar, &paths.service_root, &paths.config_dir);
     let xml = plist_xml(SERVICE_LABEL, &paths.sidecar, &spec.env, &paths.log_path());
     let plist_path = paths.plist_path();
     if let Err(error) = write_plist_atomic(&plist_path, &xml) {

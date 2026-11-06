@@ -13,7 +13,8 @@ use std::time::Duration;
 use crate::service::{
     InstallDecision, InstallDto, LaunchctlResult, POSTURE_FILE, SERVICE_LABEL, ServiceError,
     ServicePaths, decide_install, enumerate_residue, install_with_paths, plist_xml,
-    remove_service_data, run_launchctl, save_posture, service_command_spec, uninstall_with_paths,
+    remove_service_data, run_launchctl, save_posture, service_command_spec,
+    service_command_spec_with_rerank, uninstall_with_paths,
 };
 use crate::sidecar::{
     self, AUTH_FILE, ContractError, KernelState, LOG_FILE, Probe, ProbeOutcome, WaitOutcome,
@@ -1202,4 +1203,59 @@ fn leg_three(home: &Path, uid: u32) {
 
     println!("WITNESS CLOSED — the machine is as found; every receipt is in the round record.");
     println!("(uid context for the operator's commands: gui/{uid})");
+}
+
+// ── CG-12: the rerank extension rides BOTH consumers (P-3) ────────────────
+
+/// P-3: the service plist's EnvironmentVariables is the spec's output
+/// byte-for-byte, ON and OFF — one allowlist, two consumers; the flip moves
+/// BOTH. The OFF leg also proves the repair path rewrites the plist with
+/// the historical shape (the `AlreadyInstalled` idempotency, R143).
+#[test]
+fn rerank_plist_environment_is_the_spec_output_on_and_off() {
+    let root = temp_root("rerank-env-parity");
+    let paths = pin_paths(&root);
+
+    // ON: the marker-aware spec (the same constructor the install edge
+    // calls), the rerank keys present in the plist with the spec's values.
+    let config_dir = root.join("config");
+    fs::create_dir_all(&config_dir).unwrap();
+    fs::write(config_dir.join("rerank-v1.json"), "{\"enabled\": true}").unwrap();
+    let spec = service_command_spec_with_rerank(&paths.sidecar, &paths.service_root, &config_dir);
+    assert_eq!(
+        spec.env.len(),
+        10,
+        "ON: the eight + exactly the two rerank keys"
+    );
+    let xml = plist_xml(SERVICE_LABEL, &paths.sidecar, &spec.env, &paths.log_path());
+    for (name, value) in &spec.env {
+        let pair = format!("<key>{name}</key>\n        <string>{value}</string>");
+        assert!(
+            xml.contains(&pair),
+            "the ON plist must carry {name} with the allowlist's value"
+        );
+    }
+
+    // OFF: no marker → the historical eight, byte-identical plist shape.
+    let off_dir = root.join("config-off");
+    fs::create_dir_all(&off_dir).unwrap();
+    let spec_off = service_command_spec_with_rerank(&paths.sidecar, &paths.service_root, &off_dir);
+    assert_eq!(spec_off.env.len(), 8, "OFF: the historical eight keys");
+    let historical = service_command_spec(&paths.sidecar, &paths.service_root);
+    assert_eq!(
+        spec_off.env, historical.env,
+        "OFF is byte-identical to the historical spec (one allowlist, two consumers)"
+    );
+    let xml_off = plist_xml(
+        SERVICE_LABEL,
+        &paths.sidecar,
+        &spec_off.env,
+        &paths.log_path(),
+    );
+    assert!(
+        !xml_off.contains("BRAIN_RERANK"),
+        "the OFF plist carries NO rerank key"
+    );
+
+    fs::remove_dir_all(&root).ok();
 }

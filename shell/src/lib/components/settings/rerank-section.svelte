@@ -1,21 +1,47 @@
 <script lang="ts">
-	// CG-12: the rerank tier's FACT surface. The kernel owns the truth (its
-	// `/health/db` echo is the honest snapshot of its boot/lazy load
-	// decision); this section renders it and names who owns a change —
-	// nothing here writes, ever, for a kernel the app does not manage
-	// (P-9). An older kernel that predates the echo reads `not-reported`
+	// CG-12: the rerank tier's fact surface + its OWNED choice. The kernel
+	// owns the truth (its `/health/db` echo is the honest snapshot of its
+	// boot/lazy load decision); this section renders it and names who owns a
+	// change. An older kernel that predates the echo reads `not-reported`
 	// and the section says so instead of guessing a state (P-10). The READ
 	// lives in `#lib/api/kernel-facts.ts` (the route-parity law); the poll
 	// runs ONLY while the state is `loading` — 1.5 s cadence, stopped at
 	// the terminal states — never a standing request.
+	//
+	// The WRITE (the choice): a 0600 marker beside the posture marker, the
+	// disclosed one-time model download, and a kernel restart — executed by
+	// `rerank_set_enabled` on the Rust side. It is offered ONLY for kernels
+	// the app OWNS: the direct channel (the store edition compiles the
+	// write commands out — nothing can arm the tier in MAS, P-4) and a
+	// non-external posture (an external kernel renders its facts read-only
+	// and names who owns the change — P-9).
 	import { m } from '$paraglide/messages.js';
 	import { fetchRerankState, type RerankStateRead } from '#lib/api/kernel-facts.js';
 	import { onMount } from 'svelte';
 
 	type Posture = 'app' | 'service' | 'external';
 
+	interface RerankPostureDto {
+		chosen: boolean;
+		staged: boolean;
+		total_bytes: number;
+		posture: Posture;
+	}
+
+	interface RerankOutcomeDto {
+		outcome: string;
+		detail?: string | null;
+		error?: string | null;
+	}
+
 	let read = $state<RerankStateRead>({ state: 'not-reported' });
 	let posture = $state<Posture | null>(null);
+	let chosen = $state(false);
+	let staged = $state(false);
+	let disclosedBytes = $state(0);
+	let canWrite = $state(false);
+	let busy = $state(false);
+	let outcome = $state<string | null>(null);
 	let mounted = $state(true);
 
 	onMount(() => {
@@ -26,25 +52,54 @@
 		};
 	});
 
-	// The posture read names who owns a change: `external` kernels are
-	// somebody else's — the section stays facts-only for them (best-effort:
-	// a refused posture read hides the ownership line, never the facts).
+	// The posture + choice read names who owns a change: `external` kernels
+	// are somebody else's — the section stays facts-only for them. The write
+	// affordance additionally requires the direct channel (the mas build's
+	// write commands do not exist — an invoke would be a refused call, so
+	// the affordance is gated on the channel, the run-mode section's own
+	// pattern).
 	onMount(async () => {
 		try {
 			const { invoke } = await import('@tauri-apps/api/core');
-			const dto = (await invoke('service_posture')) as { posture: Posture };
+			if ((await invoke('build_channel')) !== 'direct') return;
+			const dto = (await invoke('rerank_posture')) as RerankPostureDto;
 			posture = dto.posture;
+			chosen = dto.chosen;
+			staged = dto.staged;
+			disclosedBytes = dto.total_bytes;
+			canWrite = dto.posture !== 'external';
 		} catch {
-			posture = null;
+			posture = null; // an older core or no Tauri: facts only, never a guess
 		}
 	});
 
 	async function poll(): Promise<void> {
-		while (mounted && read.state === 'not-reported') {
+		while (mounted) {
 			const r = await fetchRerankState();
 			read = r;
 			if (r.state !== 'loading') return; // terminal state — the poll stops
 			await new Promise((res) => setTimeout(res, 1500));
+		}
+	}
+
+	async function setEnabled(enable: boolean): Promise<void> {
+		if (!canWrite || busy) return;
+		const { invoke } = await import('@tauri-apps/api/core');
+		busy = true;
+		outcome = null;
+		try {
+			const result = (await invoke('rerank_set_enabled', { enable })) as RerankOutcomeDto;
+			outcome = result.outcome;
+			// The facts re-read after the restart: the echo is the REALITY.
+			read = await fetchRerankState();
+			const { invoke: inv } = await import('@tauri-apps/api/core');
+			const dto = (await inv('rerank_posture')) as RerankPostureDto;
+			chosen = dto.chosen;
+			staged = dto.staged;
+		} catch {
+			outcome = 'failed';
+		} finally {
+			busy = false;
 		}
 	}
 </script>
@@ -76,5 +131,30 @@
 		<p class="text-xs text-muted-foreground" data-testid="settings-rerank-external">
 			{m['settings.rerank.external_hint']()}
 		</p>
+	{:else if canWrite}
+		<div class="grid gap-1" data-testid="settings-rerank-toggle">
+			<button
+				type="button"
+				class="justify-self-start rounded-md border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"
+				disabled={busy}
+				onclick={() => setEnabled(!chosen)}
+			>
+				{chosen
+					? m['settings.rerank.action_disable']()
+					: m['settings.rerank.action_enable']()}
+			</button>
+			{#if !chosen && !staged}
+				<p class="text-xs text-muted-foreground" data-testid="settings-rerank-disclose">
+					{m['settings.rerank.disclose']({ bytes: disclosedBytes })}
+				</p>
+			{/if}
+			{#if outcome}
+				<p class="text-xs text-muted-foreground" data-testid="settings-rerank-outcome">
+					{outcome === 'restarted'
+						? m['settings.rerank.applied']()
+						: m['settings.rerank.failed_act']()}
+				</p>
+			{/if}
+		</div>
 	{/if}
 </div>

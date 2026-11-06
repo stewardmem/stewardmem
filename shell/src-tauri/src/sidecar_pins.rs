@@ -1625,3 +1625,92 @@ fn the_mas_feature_excises_the_updater_at_every_registration_site() {
         "the channel + gateway-detect commands must be unconditional"
     );
 }
+
+// ── CG-12: the rerank spawn-env extension (P-1, P-2) ──────────────────────
+
+/// The pins' scratch root (no `tempfile` edge exists in this crate — the
+/// service_pins temp_root pattern).
+fn rerank_pin_scratch(tag: &str) -> std::path::PathBuf {
+    let dir =
+        std::env::temp_dir().join(format!("sidecar-pins-{}-rerank-{tag}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("scratch root");
+    dir
+}
+
+/// P-1: OFF = the historical eight keys, in the historical ORDER — the
+/// plist iterates the env in order, so "byte-identical" is an ordered law.
+/// RED against an always-carry mutant (damage-proofed in the evidence: the
+/// wrapper pushing the two keys unconditionally REDS here).
+#[test]
+fn rerank_off_spec_is_the_historical_eight_keys_in_order() {
+    let scratch = rerank_pin_scratch("off-shape");
+    let sidecar_path = scratch.join("Contents").join("MacOS").join("brain-server");
+    let data_root = scratch.join("kernel");
+    let auth_file = data_root.join(sidecar::AUTH_FILE);
+
+    let spec = sidecar::command_spec_with_rerank(&sidecar_path, &data_root, &auth_file, None);
+    let names: Vec<&str> = spec.env.iter().map(|(name, _)| name.as_str()).collect();
+    assert_eq!(
+        names,
+        vec![
+            "AUTH_TOKEN_FILE",
+            "BIND_HOST",
+            "BIND_PORT",
+            "BRAIN_DATA_ROOT",
+            "BRAIN_DB_PATH",
+            "BRAIN_REQUIRE_AUTH",
+            "RUST_LOG",
+            "CORS_ORIGINS",
+        ],
+        "OFF is the historical eight keys, byte-identical and in order"
+    );
+}
+
+/// P-2: ON = the eight + EXACTLY the two rerank keys, appended in the pinned
+/// order; the model dir value is ABSOLUTE (the kernel's writable-CWD refusal
+/// makes a relative dir a silent no-op — the env must never carry one).
+#[test]
+fn rerank_on_spec_is_eight_plus_exactly_two_keys_in_order() {
+    let scratch = rerank_pin_scratch("on-shape");
+    let sidecar_path = scratch.join("Contents").join("MacOS").join("brain-server");
+    let data_root = scratch.join("kernel");
+    let auth_file = data_root.join(sidecar::AUTH_FILE);
+    let env = sidecar::RerankEnv {
+        model_dir: data_root.join("models").join("mxbai-rerank-large-v1"),
+    };
+
+    let spec = sidecar::command_spec_with_rerank(&sidecar_path, &data_root, &auth_file, Some(&env));
+    let names: Vec<&str> = spec.env.iter().map(|(name, _)| name.as_str()).collect();
+    assert_eq!(
+        names,
+        vec![
+            "AUTH_TOKEN_FILE",
+            "BIND_HOST",
+            "BIND_PORT",
+            "BRAIN_DATA_ROOT",
+            "BRAIN_DB_PATH",
+            "BRAIN_REQUIRE_AUTH",
+            "RUST_LOG",
+            "CORS_ORIGINS",
+            "BRAIN_RERANK_ENABLED",
+            "BRAIN_RERANK_MODEL_DIR",
+        ],
+        "ON is the eight + exactly the two rerank keys, in the pinned order"
+    );
+    let values: std::collections::BTreeMap<String, String> = spec.env.into_iter().collect();
+    assert_eq!(values["BRAIN_RERANK_ENABLED"], "1");
+    let model_dir = &values["BRAIN_RERANK_MODEL_DIR"];
+    assert!(
+        std::path::Path::new(model_dir).is_absolute(),
+        "the model dir rides ABSOLUTE (the kernel refuses a CWD-relative dir): {model_dir}"
+    );
+    assert_eq!(
+        model_dir.as_str(),
+        data_root
+            .join("models")
+            .join("mxbai-rerank-large-v1")
+            .display()
+            .to_string()
+    );
+}
