@@ -1,6 +1,6 @@
 # Security Policy
 
-**Last reviewed:** 2026-10-12 (R115-R117: the class law's forgotten surfaces, taint carriage, and the approver-sees-the-digest round) against OWASP Top 10:**2025** + Cheat Sheet Series. The no-LLM boundary remains: memory operations (recall, search, ingest, approval) are deterministic and zero-token, and the one model-shaped capability is the OPTIONAL operator-launched GDL provider lane (`BRAIN_GDL_PROVIDER_*`), operator-launched, ticket-only, server-owned profile (R34), execution-integrity controls (R35), its output never auto-promoting — the human gate decides — and local-endpoint-capable so nothing need egress.
+**Last reviewed:** 2026-11-06 (GDL provider kinds `http`/`afm-stdio` + the Admin-only hand-down surface; previously 2026-10-12, R115-R117) against OWASP Top 10:**2025** + Cheat Sheet Series. The no-LLM boundary remains: memory operations (recall, search, ingest, approval) are deterministic and zero-token, and the one model-shaped capability is the OPTIONAL operator-launched GDL provider lane (`BRAIN_GDL_PROVIDER_*`), operator-launched, ticket-only, server-owned profile (R34), execution-integrity controls (R35), its output never auto-promoting — the human gate decides — and local-endpoint-capable so nothing need egress.
 **Stamp policy:** this "Last reviewed" line moves in the same commit as any security-relevant claim it covers — a stamp N releases behind HEAD is itself a finding.
 (Context7-verified), OWASP Multi-Tenant Security Cheat Sheet, OWASP JSON Web
 Token Cheat Sheet, OWASP Secrets Management Cheat Sheet, OWASP gRPC + Microservices
@@ -552,7 +552,22 @@ The GDL launch boundary constructs its provider from the server-owned profile;
 no provider client is retained in `AppState`. After the actual-domain `Write`
 check and the GDL-local `workflow` role check, endpoint shape is checked before
 the confined secret is read. The secret is never returned in a response,
-readiness body, audit detail, or log.
+readiness body, audit detail, or log. Two provider kinds exist
+(`BRAIN_GDL_PROVIDER_KIND`): `http` (endpoint/model/secret, HTTPS +
+DNS-pinned as described) and `afm-stdio` (the kernel's bridge egress to
+the on-device runtime — no HTTP endpoint, no secret, no network egress
+beyond the bridge's stdio).
+
+The hand-down act (`POST /workflow/hand-down`) is Admin-only and
+audit-per-call. Its precondition is an operator-asserted conformance
+receipt (run id + pack/output hashes + verdict): Admin is the trusted
+operator, so the receipt is an operator act, not a verified pack read —
+the kernel never reads the sibling pack. What the kernel DOES verify is
+the sealed source itself: the source case must be `resolved` with a
+passing verify, closure, and closed red-flag, the snapshot digest is
+re-derived and re-checked on every match and every narrow-loop injection,
+the mark is exactly-once per (procedure, conformance run), and a step
+that leaves the sealed record escalates instead of completing.
 
 Provider failures use a closed typed vocabulary and stable public codes. A
 failure after admission writes the exchange receipt, finishes the invocation,

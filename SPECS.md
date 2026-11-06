@@ -68,18 +68,18 @@ AI agent running on a Jetson Nano (4 GB RAM, ARM Cortex-A57).
 
 ## 2. Package & Dependencies
 
-From `Cargo.toml` (`name = "brain-server"`, `version = "1.28.92"`, `edition = "2024"`):
+From `Cargo.toml` (`name = "brain-server"`, `version = "1.29.42"`, `edition = "2024"`):
 
 | Purpose | Crate | Version |
 |---|---|---|
-| Embeddings (default) | `model2vec-rs` | `0.2` |
-| Embeddings (neural, optional) | `fastembed-rs` | optional — pulled only by `neural-embed` / `rerank-tier` |
-| DB | `rusqlite` (feature `bundled`) | `0.40.1` |
+| Embeddings (default) | `model2vec-rs` | `0.3` |
+| Embeddings (neural, optional) | `fastembed` | `7.1.0` optional — pulled only by `neural-embed` / `rerank-tier` |
+| DB | `rusqlite` (feature `bundled`) | `0.40.2` |
 | Pool | `r2d2` / `r2d2_sqlite` | `0.8.10` / `0.35.0` |
 | HTTP | `axum` | `0.8.9` |
 | CORS / middleware | `tower-http` (features `cors`, `limit`, `trace`, `timeout`, `catch-panic`, `compression-full`, `sensitive-headers`, `request-id`, `add-extension`, `set-header`, `fs`) | `0.7` |
-| Runtime | `tokio` (feature `full`) | `1.53.0` |
-| Serde | `serde` / `serde_json` | `1.0.229` / `1.0.150` |
+| Runtime | `tokio` (feature `full`) | `1.53.2` |
+| Serde | `serde` / `serde_json` | `1.0.229` / `1.0.151` |
 | Util | `anyhow`, `xxhash-rust` (`xxh3`), `sha2`, `chrono`, `dirs`, `sysinfo` | pinned in `Cargo.lock` |
 | Tracing | `tracing` / `tracing-subscriber` (`env-filter`) | `0.1` / `0.3` |
 | Dev | `tempfile` | `3` |
