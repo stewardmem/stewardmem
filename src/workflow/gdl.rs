@@ -703,6 +703,33 @@ pub(crate) struct ActArtifact {
     pub complete: bool,
 }
 
+/// One falsified prediction: the prediction text plus the evidence
+/// that killed it (a `kind:locator` over the hypothesis-source
+/// vocabulary — the same discipline its sources are held to).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct FalsifiedPrediction {
+    #[serde(default)]
+    pub prediction: String,
+    #[serde(default)]
+    pub evidence_ref: String,
+}
+
+/// The model's rehypothesis proposal, carried on a FAILED verify
+/// (never on a pass — a pass with a proposal is refused BY NAME).
+/// Built in Verify, validated by the verify gate, admitted to by the
+/// driver/checkpoint edge (§1.3 of the CG-04 execution prompt),
+/// consumed by the re-entered Hypothesize's ranker (falsified input).
+/// Advisory by ordering: it can only ever demote, never pass anything.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct RehypothesisArtifact {
+    #[serde(default)]
+    pub falsified: Vec<FalsifiedPrediction>,
+    #[serde(default)]
+    pub pivot: String,
+    #[serde(default)]
+    pub retained: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct VerifyArtifact {
     #[serde(default)]
@@ -729,6 +756,12 @@ pub(crate) struct VerifyArtifact {
     /// No collateral in SEL/logs post-fix (A6's negative check).
     #[serde(default)]
     pub negative_check: bool,
+    /// CG-04: the bounded re-hypothesis proposal (the `HandoffArtifact.
+    /// red_flag` precedent — a NEW record at close time). Additive;
+    /// `skip_serializing_if` keeps a no-proposal verify byte-identical
+    /// to the pre-lane shape (pin N-1). Allowed ONLY on `pass: false`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rehypothesis: Option<RehypothesisArtifact>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -2181,6 +2214,77 @@ fn verify_gate(a: &VerifyArtifact, case: &GdlCase) -> Vec<String> {
              part of verification",
         ));
     }
+    // CG-04 arms §1.1 (all refused BY NAME): a proposal may ride ONLY a
+    // failed verify, naming each falsified prediction with evidence
+    // that resolves into held evidence. No proposal on a fail is NOT an
+    // error — the terminal is exactly today's (pin N-1).
+    if a.pass && a.rehypothesis.is_some() {
+        errors.push(err(
+            "A3",
+            "rehypothesis on a passing verify is contradictory — a \
+             proposal may ride only pass:false; omit it on a pass",
+        ));
+    }
+    if let Some(r) = a.rehypothesis.as_ref() {
+        if r.falsified.is_empty() {
+            errors.push(err(
+                "A3",
+                "rehypothesis falsified empty — a proposal names at \
+                 least one failed prediction or it justifies nothing",
+            ));
+        }
+        if r.pivot.trim().is_empty() {
+            errors.push(err(
+                "A3",
+                "rehypothesis pivot empty — name why the next rank is \
+                 the right move",
+            ));
+        }
+        // The evidence_ref discipline mirrors the hypothesize law
+        // (kind-prefixed, then must resolve into held evidence) — a
+        // fabricated falsification names unknown evidence (L7).
+        let universe = citation_universe(case);
+        for (i, f) in r.falsified.iter().enumerate() {
+            if f.prediction.trim().is_empty() {
+                errors.push(err(
+                    "A3",
+                    &format!("rehypothesis falsified[{i}].prediction empty"),
+                ));
+            }
+            if kind_source(&f.evidence_ref).is_none() {
+                errors.push(err(
+                    "L7",
+                    &format!(
+                        "rehypothesis falsified[{i}] evidence_ref {:?} is \
+                         malformed — an evidence_ref is an independent \
+                         kind-prefixed locator (kind:locator over the \
+                         8-kind evidence vocabulary, locator 1..=96 chars)",
+                        f.evidence_ref
+                    ),
+                ));
+            }
+            let resolves = f
+                .evidence_ref
+                .split_once(':')
+                .is_some_and(|(_, locator)| locator_resolves(locator, &universe));
+            if !resolves {
+                errors.push(err(
+                    "L7",
+                    &format!(
+                        "rehypothesis falsified[{i}] evidence_ref {:?} \
+                         cites unknown evidence — a falsification locator \
+                         must resolve to case-held evidence",
+                        f.evidence_ref
+                    ),
+                ));
+            }
+        }
+        for (i, kept) in r.retained.iter().enumerate() {
+            if kept.trim().is_empty() {
+                errors.push(err("A3", &format!("rehypothesis retained[{i}] empty")));
+            }
+        }
+    }
     errors
 }
 
@@ -2664,7 +2768,9 @@ evidence_ref must resolve to held evidence"
             "Emit ONE JSON object: \
 {\"re_run\":\"the exact failing scenario from the plan\",\
 \"pass_condition\":\"the plan's pass_condition, restated VERBATIM\",\
-\"pass\":bool,\"stability_window_min\":15,\"negative_check\":bool}"
+\"pass\":bool,\"stability_window_min\":15,\"negative_check\":bool, on pass:false \
+you MAY carry rehypothesis — {falsified:[{prediction,evidence_ref}],pivot,retained} \
+— naming each failed prediction with its evidence and the pivot; on pass:true omit it}"
         }
         GdlPhase::Handoff => {
             "Emit ONE JSON object: \
@@ -8968,6 +9074,153 @@ mod tests {
         a.re_run = case.verify_step.clone().unwrap().re_run;
         a.stability_window_min = 5;
         assert!(verify_gate(&a, &case).iter().any(|e| e.starts_with("A6")));
+    }
+
+    // ── CG-04 S1: the rehypothesis proposal (§1.1) ─────────────────────
+    /// CG-04 E-1: a fabricated `evidence_ref` on a failed verify refuses
+    /// BY NAME (`L7`); a real Fail-row locator passes. The grounded
+    /// reading of "references a real failed Verify row" (there is no
+    /// per-Verify-row table): the locator must resolve into held evidence,
+    /// which on a failed verify includes the executed Fail rows.
+    #[test]
+    fn cg04_e1_fabricated_falsification_refuses_and_real_locator_passes() {
+        let mut case = GdlCase::fresh("rebuild rate VD 5");
+        let plan: PlanArtifact = serde_json::from_str(PLAN_JSON).unwrap();
+        case.verify_step = Some(plan.verify_step);
+        case.test_log = vec![TestLogRow {
+            order: 1,
+            kind: "check".into(),
+            description: "rebuild rate on VD 5 under the customer load".into(),
+            verdict: Verdict::Fail,
+            ..TestLogRow::default()
+        }];
+        let mut a: VerifyArtifact = serde_json::from_str(VERIFY_JSON).unwrap();
+        a.pass = false;
+        a.rehypothesis = Some(RehypothesisArtifact {
+            falsified: vec![FalsifiedPrediction {
+                prediction: "rebuild completes under load".into(),
+                evidence_ref: "test:sel evt 999 nowhere".into(),
+            }],
+            pivot: "test the cache path next".into(),
+            retained: vec![],
+        });
+        assert!(
+            verify_gate(&a, &case)
+                .iter()
+                .any(|e| e.starts_with("L7") && e.contains("unknown evidence")),
+            "fabricated falsification must refuse by name: {:?}",
+            verify_gate(&a, &case)
+        );
+        a.rehypothesis.as_mut().unwrap().falsified[0].evidence_ref =
+            "test:rebuild rate on VD 5".into();
+        assert!(
+            verify_gate(&a, &case).iter().all(|e| !e.starts_with("L7")),
+            "real Fail-row locator must pass: {:?}",
+            verify_gate(&a, &case)
+        );
+    }
+
+    /// CG-04 §1.1.1: a proposal on a PASSING verify is contradictory —
+    /// a gate failure by name (`A3`), never an ignored field.
+    #[test]
+    fn cg04_proposal_on_a_pass_refuses_by_name() {
+        let mut case = GdlCase::fresh("t");
+        let plan: PlanArtifact = serde_json::from_str(PLAN_JSON).unwrap();
+        case.verify_step = Some(plan.verify_step);
+        let mut a: VerifyArtifact = serde_json::from_str(VERIFY_JSON).unwrap();
+        assert!(a.pass);
+        a.rehypothesis = Some(RehypothesisArtifact {
+            falsified: vec![FalsifiedPrediction {
+                prediction: "p".into(),
+                evidence_ref: "test:t".into(),
+            }],
+            pivot: "pivot".into(),
+            retained: vec![],
+        });
+        assert!(
+            verify_gate(&a, &case)
+                .iter()
+                .any(|e| e.starts_with("A3") && e.contains("rehypothesis on a passing")),
+            "proposal-on-pass must refuse: {:?}",
+            verify_gate(&a, &case)
+        );
+    }
+
+    /// CG-04 §1.1.2: proposal shape — falsified/pivot non-empty, every
+    /// prediction non-empty, every retained entry non-empty (the list
+    /// itself may be empty).
+    #[test]
+    fn cg04_proposal_shape_errors_refuse_by_name() {
+        let mut case = GdlCase::fresh("rebuild rate VD 5");
+        let plan: PlanArtifact = serde_json::from_str(PLAN_JSON).unwrap();
+        case.verify_step = Some(plan.verify_step);
+        case.test_log = vec![TestLogRow {
+            order: 1,
+            kind: "check".into(),
+            description: "rebuild rate on VD 5 under the customer load".into(),
+            verdict: Verdict::Fail,
+            ..TestLogRow::default()
+        }];
+        let good = || RehypothesisArtifact {
+            falsified: vec![FalsifiedPrediction {
+                prediction: "rebuild completes under load".into(),
+                evidence_ref: "test:rebuild rate on VD 5".into(),
+            }],
+            pivot: "pivot".into(),
+            retained: vec![],
+        };
+        let mut a: VerifyArtifact = serde_json::from_str(VERIFY_JSON).unwrap();
+        a.pass = false;
+        a.rehypothesis = Some(RehypothesisArtifact {
+            falsified: vec![],
+            pivot: "pivot".into(),
+            retained: vec![],
+        });
+        assert!(
+            verify_gate(&a, &case)
+                .iter()
+                .any(|e| e.starts_with("A3") && e.contains("falsified empty")),
+            "empty falsified must refuse"
+        );
+        a.rehypothesis = Some(RehypothesisArtifact {
+            pivot: String::new(),
+            ..good()
+        });
+        assert!(
+            verify_gate(&a, &case)
+                .iter()
+                .any(|e| e.starts_with("A3") && e.contains("pivot empty")),
+            "empty pivot must refuse"
+        );
+        a.rehypothesis = Some(RehypothesisArtifact {
+            falsified: vec![FalsifiedPrediction {
+                prediction: String::new(),
+                evidence_ref: "test:rebuild rate on VD 5".into(),
+            }],
+            ..good()
+        });
+        assert!(
+            verify_gate(&a, &case)
+                .iter()
+                .any(|e| e.starts_with("A3") && e.contains("prediction empty")),
+            "empty prediction must refuse"
+        );
+        a.rehypothesis = Some(RehypothesisArtifact {
+            retained: vec![String::new()],
+            ..good()
+        });
+        assert!(
+            verify_gate(&a, &case)
+                .iter()
+                .any(|e| e.starts_with("A3") && e.contains("retained[0] empty")),
+            "empty retained entry must refuse"
+        );
+        a.rehypothesis = Some(good());
+        assert!(
+            verify_gate(&a, &case).is_empty(),
+            "the valid proposal passes with no errors: {:?}",
+            verify_gate(&a, &case)
+        );
     }
 
     // ── the declared-vs-enforced gaps ────────────────────────────────────
