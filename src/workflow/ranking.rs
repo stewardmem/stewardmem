@@ -77,23 +77,6 @@ pub(crate) fn ranked(case: &GdlCase) -> Vec<Hypothesis> {
         .collect()
 }
 
-/// Needles for the Plan gate's needle-order binding (S2): the content
-/// words a step tests by. Exposed so the gate and the ranker share one
-/// extraction discipline.
-pub(crate) fn plan_step_needles(step: &super::gdl::PlanStep) -> Vec<String> {
-    needles(&format!(
-        "{} {} {}",
-        step.description, step.command, step.expected
-    ))
-}
-
-/// Needles for one hypothesis (its statement + prediction) — the text
-/// the falsified/worst arms match on, and the text a Plan step must
-/// share a needle with to test it.
-pub(crate) fn hypothesis_needles(h: &Hypothesis) -> Vec<String> {
-    needles(&format!("{} {}", h.statement, h.prediction))
-}
-
 /// One hypothesis's integer score under the dominance weights.
 fn score_hypothesis(case: &GdlCase, h: &Hypothesis, universe: &[String]) -> i32 {
     let mut score: i32 = 0;
