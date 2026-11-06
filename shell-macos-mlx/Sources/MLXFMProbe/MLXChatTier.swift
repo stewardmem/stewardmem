@@ -94,11 +94,39 @@ public enum MLXChatTier: Sendable, Equatable {
     ///
     /// POSTURE NOTE (a named operator act, recorded 2026-11-06, the
     /// heretic's recorded shape): the "uncensored refused (governed
-    /// production)" refusal governs the PRODUCT tier roster, and the
+    /// production)" refusal governed the PRODUCT tier roster, and the
     /// operator accepted this tier's provenance and fine-tune posture for
     /// the LOCAL, self-hosted MLX path. The refusal law is unchanged for
     /// anything kernel- or cloud-side.
     case qwen3_5_4b_uncensored_4bit
+
+    /// `pipenetwork/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-MLX-4bit`
+    /// — ADMITTED 2026-11-06 (the operator's named request, the second
+    /// roster amendment): the 4-bit sibling of the admitted 5-bit heretic.
+    /// Probe battery all green on the fixed engine (memory, tool
+    /// continuation, honest cold, the needle at 3,098 tokens) — 25.2–26.3
+    /// tok/s, ~5.1–5.4 GiB: slightly FASTER and ~1 GiB lighter than the
+    /// 5-bit at the same battery. Same tokenizer override as every 9B
+    /// tier (`Qwen/Qwen3.5-9B`).
+    ///
+    /// POSTURE NOTE: the heretic family's recorded operator act applies —
+    /// provenance and fine-tune posture accepted for the LOCAL,
+    /// self-hosted MLX path; the refusal law unchanged kernel- or
+    /// cloud-side.
+    case qwen3_5_9b_heretic_4bit
+
+    /// `interimlabs/InterimLabs-Huihui-Qwen3.5-4B-abliterated-MLX-4bit` —
+    /// ADMITTED 2026-11-06 (the operator's named request: the "Fast Tier"
+    /// default). Probe battery all green on the fixed engine (turn 2
+    /// traces the turn-1 utterance and recalls the secret, tool
+    /// continuation, honest cold, the needle at 3,098 tokens) — 41–43.1
+    /// tok/s, ~2.5–2.8 GiB, the same speed class as the avan-ag 4B.
+    /// Tokenizer override `Qwen/Qwen3.5-4B`.
+    ///
+    /// POSTURE NOTE: the recorded operator act (the LOCAL, self-hosted
+    /// MLX path; the abliterated fine-tune's provenance accepted here;
+    /// the refusal law unchanged kernel- or cloud-side).
+    case qwen3_5_4b_huihui_4bit
 
     /// Maps a wire model id to its tier. Nil is a NAMED refusal upstream
     /// (`bad_request` naming the id) — never a fallback.
@@ -109,6 +137,8 @@ public enum MLXChatTier: Sendable, Equatable {
         case "qwen3.5-9b-heretic-5bit": .qwen3_5_9b_heretic_5bit
         case "qwen3.5-9b-4bit": .qwen3_5_9b_4bit
         case "qwen3.5-4b-uncensored-4bit": .qwen3_5_4b_uncensored_4bit
+        case "qwen3.5-9b-heretic-4bit": .qwen3_5_9b_heretic_4bit
+        case "qwen3.5-4b-huihui-4bit": .qwen3_5_4b_huihui_4bit
         default: nil
         }
     }
@@ -125,17 +155,33 @@ public enum MLXChatTier: Sendable, Equatable {
                 tokenizerSource: .id("Qwen/Qwen3.5-2B"),
                 extraEOSTokens: [""],
                 reasoningConfig: .thinkTagsWithEnableThinking)
-        case .qwen3_5_9b_heretic_5bit, .qwen3_5_9b_4bit:
+        case .qwen3_5_9b_heretic_5bit:
             ModelConfiguration(
-                id: self == .qwen3_5_9b_heretic_5bit
-                    ? "pipenetwork/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-MLX-5bit"
-                    : "mlx-community/Qwen3.5-9B-4bit",
+                id: "pipenetwork/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-MLX-5bit",
+                tokenizerSource: .id("Qwen/Qwen3.5-9B"),
+                extraEOSTokens: [""],
+                reasoningConfig: .thinkTagsWithEnableThinking)
+        case .qwen3_5_9b_heretic_4bit:
+            ModelConfiguration(
+                id: "pipenetwork/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-MLX-4bit",
+                tokenizerSource: .id("Qwen/Qwen3.5-9B"),
+                extraEOSTokens: [""],
+                reasoningConfig: .thinkTagsWithEnableThinking)
+        case .qwen3_5_9b_4bit:
+            ModelConfiguration(
+                id: "mlx-community/Qwen3.5-9B-4bit",
                 tokenizerSource: .id("Qwen/Qwen3.5-9B"),
                 extraEOSTokens: [""],
                 reasoningConfig: .thinkTagsWithEnableThinking)
         case .qwen3_5_4b_uncensored_4bit:
             ModelConfiguration(
                 id: "avan-ag/Qwen3.5-4B-Uncensored-MLX-4bit",
+                tokenizerSource: .id("Qwen/Qwen3.5-4B"),
+                extraEOSTokens: [""],
+                reasoningConfig: .thinkTagsWithEnableThinking)
+        case .qwen3_5_4b_huihui_4bit:
+            ModelConfiguration(
+                id: "interimlabs/InterimLabs-Huihui-Qwen3.5-4B-abliterated-MLX-4bit",
                 tokenizerSource: .id("Qwen/Qwen3.5-4B"),
                 extraEOSTokens: [""],
                 reasoningConfig: .thinkTagsWithEnableThinking)
@@ -149,7 +195,8 @@ public enum MLXChatTier: Sendable, Equatable {
         switch self {
         case .qwen3_8b_4bit: 40_960
         case .qwen3_5_2b_4bit, .qwen3_5_9b_heretic_5bit, .qwen3_5_9b_4bit,
-            .qwen3_5_4b_uncensored_4bit:
+            .qwen3_5_4b_uncensored_4bit, .qwen3_5_9b_heretic_4bit,
+            .qwen3_5_4b_huihui_4bit:
             262_144
         }
     }
@@ -165,7 +212,8 @@ public enum MLXChatTier: Sendable, Equatable {
         switch self {
         case .qwen3_8b_4bit: false
         case .qwen3_5_2b_4bit, .qwen3_5_9b_heretic_5bit, .qwen3_5_9b_4bit,
-            .qwen3_5_4b_uncensored_4bit:
+            .qwen3_5_4b_uncensored_4bit, .qwen3_5_9b_heretic_4bit,
+            .qwen3_5_4b_huihui_4bit:
             true
         }
     }

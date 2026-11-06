@@ -46,6 +46,14 @@ struct ChatSessionRoutingPins {
             ChatModelId.qwen3_5_4b_uncensored.sessionKind == .mlx,
             "the operator-named 4B uncensored must ride the native ChatSession path"
         )
+        #expect(
+            ChatModelId.qwen3_5_9b_heretic_4bit.sessionKind == .mlx,
+            "the 4-bit heretic sibling must ride the native ChatSession path"
+        )
+        #expect(
+            ChatModelId.qwen3_5_4b_huihui.sessionKind == .mlx,
+            "the operator-named Huihui 4B must ride the native ChatSession path"
+        )
     }
 
     /// The earned flips, held so they cannot silently revert: the
@@ -56,7 +64,8 @@ struct ChatSessionRoutingPins {
     @Test("the measured-green MLX tiers are admitted through forChat")
     func verifiedMLXTiersServeChat() {
         for id in [ChatModelId.qwen3_8b_4bit, .qwen3_5_2b, .qwen3_5_9b_heretic,
-                   .qwen3_5_9b_4bit, .qwen3_5_4b_uncensored] {
+                   .qwen3_5_9b_4bit, .qwen3_5_4b_uncensored,
+                   .qwen3_5_9b_heretic_4bit, .qwen3_5_4b_huihui] {
             #expect(
                 id.mayServeChat,
                 "\(id.rawValue) is probe-verified — reverting its flip re-excludes a measured model"

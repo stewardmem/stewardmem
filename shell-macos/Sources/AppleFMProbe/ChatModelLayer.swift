@@ -133,17 +133,36 @@ public enum ChatModelId: String, Sendable, Equatable, CaseIterable {
     /// anything kernel- or cloud-side.
     case qwen3_5_4b_uncensored = "qwen3.5-4b-uncensored-4bit"
 
+    /// `pipenetwork/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-MLX-4bit`
+    /// — ADMITTED 2026-11-06 (the operator's named request, the second
+    /// roster amendment): the 4-bit sibling of the 5-bit heretic, probe
+    /// battery all green + the real kernel battery 3/3 — 25.2–26.3 tok/s,
+    /// ~5.1–5.4 GiB (slightly faster and ~1 GiB lighter than the 5-bit).
+    /// POSTURE NOTE: the heretic family's recorded operator act applies
+    /// (the LOCAL, self-hosted path; the refusal law unchanged elsewhere).
+    case qwen3_5_9b_heretic_4bit = "qwen3.5-9b-heretic-4bit"
+
+    /// `interimlabs/InterimLabs-Huihui-Qwen3.5-4B-abliterated-MLX-4bit` —
+    /// ADMITTED 2026-11-06 (the operator's named request: the "Fast Tier"
+    /// default): probe battery all green (turn 2 traces the turn-1
+    /// utterance, tool continuation, honest cold, the needle at 3,098
+    /// tokens) — 41–43.1 tok/s, ~2.5–2.8 GiB. Tokenizer override
+    /// `Qwen/Qwen3.5-4B`. POSTURE NOTE: the recorded operator act (the
+    /// LOCAL path; the refusal law unchanged elsewhere).
+    case qwen3_5_4b_huihui = "qwen3.5-4b-huihui-4bit"
+
     /// Whether this model may serve a CHAT path — a multi-turn conversation
     /// with history carried across turns. TRUE for the whole roster today:
-    /// the CG-11 amendment admitted the last excluded id, so the guard
-    /// below is VACUOUS over `allCases` — kept as the STRUCTURE any future
-    /// exclusion must flow through (a value, a throwing entry point, and
-    /// the allCases pins that fail when an id is neither usable nor
-    /// explained), per this file's own header law.
+    /// the CG-11 amendments admitted every measured-green candidate, so
+    /// the guard below is VACUOUS over `allCases` — kept as the STRUCTURE
+    /// any future exclusion must flow through (a value, a throwing entry
+    /// point, and the allCases pins that fail when an id is neither usable
+    /// nor explained), per this file's own header law.
     public var mayServeChat: Bool {
         switch self {
         case .onDeviceAFM, .qwen3_8b_4bit, .qwen3_5_2b, .qwen3_5_9b_heretic,
-            .qwen3_5_9b_4bit, .qwen3_5_4b_uncensored:
+            .qwen3_5_9b_4bit, .qwen3_5_4b_uncensored, .qwen3_5_9b_heretic_4bit,
+            .qwen3_5_4b_huihui:
             true
         }
     }
@@ -154,7 +173,8 @@ public enum ChatModelId: String, Sendable, Equatable, CaseIterable {
     public var chatRefusalReason: String? {
         switch self {
         case .onDeviceAFM, .qwen3_8b_4bit, .qwen3_5_2b, .qwen3_5_9b_heretic,
-            .qwen3_5_9b_4bit, .qwen3_5_4b_uncensored:
+            .qwen3_5_9b_4bit, .qwen3_5_4b_uncensored, .qwen3_5_9b_heretic_4bit,
+            .qwen3_5_4b_huihui:
             nil
         }
     }
@@ -187,7 +207,7 @@ public enum ChatModelId: String, Sendable, Equatable, CaseIterable {
         switch self {
         case .onDeviceAFM: .afm
         case .qwen3_8b_4bit, .qwen3_5_2b, .qwen3_5_9b_heretic, .qwen3_5_9b_4bit,
-            .qwen3_5_4b_uncensored:
+            .qwen3_5_4b_uncensored, .qwen3_5_9b_heretic_4bit, .qwen3_5_4b_huihui:
             .mlx
         }
     }

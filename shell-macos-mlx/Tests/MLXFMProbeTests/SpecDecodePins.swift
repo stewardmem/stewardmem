@@ -33,9 +33,11 @@ struct SpecDecodePins {
 
     @Test("every roster tier's spec-decode posture is OFF by default")
     func tierPosturesOffByDefault() {
-        // The FULL roster (the CG-11 amendment added the last two).
+        // The FULL roster (the CG-11 amendments brought it to seven MLX
+        // tiers).
         for modelId in ["qwen3-8b-4bit", "qwen3.5-2b-4bit", "qwen3.5-9b-heretic-5bit",
-                        "qwen3.5-9b-4bit", "qwen3.5-4b-uncensored-4bit"] {
+                        "qwen3.5-9b-4bit", "qwen3.5-4b-uncensored-4bit",
+                        "qwen3.5-9b-heretic-4bit", "qwen3.5-4b-huihui-4bit"] {
             guard let tier = MLXChatTier.tier(modelId: modelId) else {
                 Issue.record("roster id \(modelId) does not map to a tier")
                 continue
