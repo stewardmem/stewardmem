@@ -115,6 +115,62 @@ pub fn warmup() {
     LazyLock::force(&RERANKER);
 }
 
+/// One cross-encoder verdict: the window index it scored and the score it gave.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct ScoredIndex {
+    pub index: usize,
+    pub score: f32,
+}
+
+/// The pure reorder law (CG-12 E2's derivation, pinned without ONNX in the
+/// module tests below): given the incoming window — RRF fusion order, already
+/// freshness-tie-broken (`observed_at` → `authority` → trust) — and the
+/// cross-encoder's verdicts, return the window reordered so that
+///
+/// 1. the rerank score strictly orders the window: for reranked candidates
+///    the reranker REPLACES the candidate order (the CG-02 tie-break law
+///    ordered EQUAL FUSED scores; that order has done its job by the time the
+///    window is scored — it decided which candidates made the window);
+/// 2. EQUAL rerank scores defer to the incoming order: the total sort key is
+///    (score DESC, index ASC), so a tie is deterministic instead of depending
+///    on the ONNX session's emission order — the trust tier stays a LABEL
+///    riding provenance, never a post-rerank ordering force;
+/// 3. a hit carries `rerank_score` IFF the rerank placed it (P-8's honesty
+///    law), and `rerank_truncated` rides exactly the scored window;
+/// 4. a candidate the scorer didn't return keeps its incoming order with no
+///    rerank score — nothing silently dropped (the placed-guard law).
+pub(crate) fn apply_rerank_order(
+    window: Vec<SearchResult>,
+    scored: Vec<ScoredIndex>,
+    truncated: bool,
+) -> Vec<SearchResult> {
+    let n = window.len();
+    let mut scored = scored;
+    scored.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.index.cmp(&b.index))
+    });
+    let mut placed = vec![false; n];
+    let mut reordered: Vec<SearchResult> = Vec::with_capacity(n);
+    for s in &scored {
+        if s.index < n && !placed[s.index] {
+            placed[s.index] = true;
+            let mut item = window[s.index].clone();
+            item.provenance.rerank_score = Some(s.score);
+            item.provenance.rerank_truncated = truncated;
+            reordered.push(item);
+        }
+    }
+    for (i, item) in window.into_iter().enumerate() {
+        if !placed[i] {
+            reordered.push(item);
+        }
+    }
+    reordered
+}
+
 /// The reranker handle, loaded once (the ONNX session is the expensive part).
 /// `TextRerank::rerank` takes `&mut self` (ONNX scratch buffers), so the
 /// `Mutex` lets the shared handle stay `&self` for the call sites — the lock is
@@ -226,8 +282,7 @@ impl Reranker {
             Ok(g) => g,
             Err(_) => return Ok(()), // poisoned — fail open
         };
-        // Score the top-n by RRF order. rerank() returns results sorted by score
-        // descending; we re-apply that order to the slice tail-included.
+        // Score the top-n by RRF order.
         let docs: Vec<&str> = fused[..n].iter().map(|r| r.content.as_str()).collect();
         let results = match guard.rerank(query, &docs, false, None) {
             Ok(r) => r,
@@ -236,33 +291,18 @@ impl Reranker {
                 return Ok(());
             }
         };
-        // `results` is score-descending with `index` into the top-n window.
-        // Reorder the window by the reranker's ordering; carry the score + the
-        // truncated flag. Pull the window out of the slice so we can rebuild it.
+        // The window is pulled out and reordered by the PURE law
+        // (`apply_rerank_order` — unit-pinned without ONNX in the module
+        // tests, and from `tests/rerank_tier_pins.rs`).
         let window: Vec<SearchResult> = fused[..n].to_vec();
-        let mut reordered: Vec<SearchResult> = Vec::with_capacity(n);
-        let mut placed = vec![false; window.len()];
-        let mut top_score: Option<f32> = None;
-        for r in &results {
-            let idx = r.index;
-            if idx < window.len() && !placed[idx] {
-                placed[idx] = true;
-                let mut item = window[idx].clone();
-                item.provenance.rerank_score = Some(r.score);
-                item.provenance.rerank_truncated = truncated;
-                if top_score.is_none() {
-                    top_score = Some(r.score);
-                }
-                reordered.push(item);
-            }
-        }
-        // Any candidates the reranker didn't return (shouldn't happen) keep
-        // their RRF order with no rerank score, so nothing is silently dropped.
-        for (i, item) in window.iter().enumerate() {
-            if !placed[i] {
-                reordered.push(item.clone());
-            }
-        }
+        let scored: Vec<ScoredIndex> = results
+            .into_iter()
+            .map(|r| ScoredIndex {
+                index: r.index,
+                score: r.score,
+            })
+            .collect();
+        let reordered = apply_rerank_order(window, scored, truncated);
         // Splice the reordered top-n back; the un-reranked tail (n..) keeps its
         // RRF order, flagged truncated so the consumer sees they were dropped
         // from scoring.
@@ -272,9 +312,199 @@ impl Reranker {
                 r.provenance.rerank_truncated = true;
             }
         }
-        // Record the new top-1 score on the (already-set) top result's
-        // provenance. No extra telemetry field — the caller owns rerank_ms.
-        let _ = top_score;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod rerank_order_law_tests {
+    use super::{ScoredIndex, apply_rerank_order};
+    use crate::search::{SearchResult, TrustTier};
+
+    fn hit(id: i64, trust: Option<TrustTier>) -> SearchResult {
+        SearchResult {
+            id,
+            score: 1.0 / (id as f32 + 1.0), // the RRF-ish incoming distinctness
+            title: Some(format!("hit-{id}")),
+            content: format!("content-{id}"),
+            trust,
+            ..Default::default()
+        }
+    }
+
+    fn window(trusts: &[Option<TrustTier>]) -> Vec<SearchResult> {
+        trusts
+            .iter()
+            .enumerate()
+            .map(|(i, t)| hit(i as i64, *t))
+            .collect()
+    }
+
+    /// The reranker's order replaces the incoming order for distinct scores.
+    #[test]
+    fn rerank_order_replaces_incoming_order() {
+        let w = window(&[None, None, None]);
+        let scored = vec![
+            ScoredIndex {
+                index: 2,
+                score: 0.9,
+            },
+            ScoredIndex {
+                index: 0,
+                score: 0.5,
+            },
+            ScoredIndex {
+                index: 1,
+                score: 0.1,
+            },
+        ];
+        let out = apply_rerank_order(w, scored, false);
+        let ids: Vec<i64> = out.iter().map(|r| r.id).collect();
+        assert_eq!(ids, vec![2, 0, 1]);
+        assert_eq!(out[0].provenance.rerank_score, Some(0.9));
+        assert_eq!(out[1].provenance.rerank_score, Some(0.5));
+        assert_eq!(out[2].provenance.rerank_score, Some(0.1));
+        assert!(!out.iter().any(|r| r.provenance.rerank_truncated));
+    }
+
+    /// THE COMPOSITION LAW: equal rerank scores defer to the incoming order —
+    /// regardless of the order the scorer emitted its ties in.
+    #[test]
+    fn equal_rerank_scores_defer_to_incoming_order() {
+        let w = window(&[None, None, None]);
+        // Scorer emits the tie BACKWARDS (index 2 before index 0) — the law
+        // must still keep 0 ahead of 1 inside the tie bucket.
+        let scored = vec![
+            ScoredIndex {
+                index: 2,
+                score: 0.9,
+            },
+            ScoredIndex {
+                index: 1,
+                score: 0.5,
+            },
+            ScoredIndex {
+                index: 0,
+                score: 0.5,
+            },
+        ];
+        let out = apply_rerank_order(w, scored, false);
+        let ids: Vec<i64> = out.iter().map(|r| r.id).collect();
+        assert_eq!(
+            ids,
+            vec![2, 0, 1],
+            "tie {{0,1}} resolves to the incoming order"
+        );
+    }
+
+    /// The trust tier is a LABEL riding provenance: it travels with its hit
+    /// through the reorder and is never a post-rerank ordering force.
+    #[test]
+    fn trust_labels_ride_their_hits_through_the_reorder() {
+        let w = window(&[
+            Some(TrustTier::Published),
+            Some(TrustTier::Raw),
+            Some(TrustTier::Approved),
+        ]);
+        let scored = vec![
+            ScoredIndex {
+                index: 1,
+                score: 0.9,
+            }, // Raw wins the rerank
+            ScoredIndex {
+                index: 0,
+                score: 0.2,
+            }, // Published demoted
+            ScoredIndex {
+                index: 2,
+                score: 0.1,
+            },
+        ];
+        let out = apply_rerank_order(w, scored, false);
+        assert_eq!(out[0].trust, Some(TrustTier::Raw), "the label rides");
+        assert_eq!(out[1].trust, Some(TrustTier::Published));
+        assert_eq!(out[2].trust, Some(TrustTier::Approved));
+        // And the ordering that produced this is the RERANK score, not the
+        // trust tier: Raw > Published > Approved in the output order.
+        let ids: Vec<i64> = out.iter().map(|r| r.id).collect();
+        assert_eq!(ids, vec![1, 0, 2]);
+    }
+
+    /// Provenance honesty (P-8's construction half): a hit carries
+    /// rerank_score IFF the rerank placed it; unscored candidates keep their
+    /// incoming order unscored, and nothing is silently dropped.
+    #[test]
+    fn unscored_candidates_keep_order_and_stay_unscored() {
+        let w = window(&[None, None, None, None]);
+        let scored = vec![ScoredIndex {
+            index: 3,
+            score: 0.7,
+        }];
+        let out = apply_rerank_order(w, scored, true);
+        assert_eq!(out[0].id, 3);
+        assert_eq!(out[0].provenance.rerank_score, Some(0.7));
+        assert!(out[0].provenance.rerank_truncated);
+        for r in &out[1..] {
+            assert!(
+                r.provenance.rerank_score.is_none(),
+                "unscored stays unscored"
+            );
+            // NOT truncated: the flag's contract is "length-capped before
+            // reranking" — these were IN the scored window, the scorer simply
+            // failed to return them. Claiming truncation would be a guess.
+            assert!(!r.provenance.rerank_truncated);
+        }
+        let ids: Vec<i64> = out.iter().map(|r| r.id).collect();
+        assert_eq!(ids, vec![3, 0, 1, 2], "unscored keep incoming order");
+    }
+
+    /// Duplicate verdicts and out-of-range indices are absorbed: first
+    /// (highest-score) wins, garbage is ignored, the window never changes size.
+    #[test]
+    fn duplicate_and_out_of_range_verdicts_are_absorbed() {
+        let w = window(&[None, None]);
+        let scored = vec![
+            ScoredIndex {
+                index: 1,
+                score: 0.9,
+            },
+            ScoredIndex {
+                index: 1,
+                score: 0.8,
+            }, // duplicate — absorbed
+            ScoredIndex {
+                index: 9,
+                score: 0.99,
+            }, // out of range — ignored
+            ScoredIndex {
+                index: 0,
+                score: 0.1,
+            },
+        ];
+        let out = apply_rerank_order(w, scored, false);
+        assert_eq!(out.len(), 2, "the window never grows");
+        assert_eq!(out[0].id, 1);
+        assert_eq!(out[0].provenance.rerank_score, Some(0.9), "first wins");
+        assert_eq!(out[1].id, 0);
+    }
+
+    /// NaN verdicts cannot poison the order (partial_cmp falls back to the
+    /// index key, so the tie law absorbs the garbage deterministically).
+    #[test]
+    fn nan_scores_fall_back_to_the_index_key() {
+        let w = window(&[None, None]);
+        let scored = vec![
+            ScoredIndex {
+                index: 1,
+                score: f32::NAN,
+            },
+            ScoredIndex {
+                index: 0,
+                score: 0.4,
+            },
+        ];
+        let out = apply_rerank_order(w, scored, false);
+        let ids: Vec<i64> = out.iter().map(|r| r.id).collect();
+        assert_eq!(ids, vec![0, 1]);
     }
 }
