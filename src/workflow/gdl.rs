@@ -218,6 +218,12 @@ const MAX_REQUIRED_REPORT: usize = 16;
 /// the message could drift from the code it claimed to describe. Now one name.
 const MAX_DIAGNOSTIC_SEAMS: usize = 16;
 const MAX_SOURCES_PER_HYPOTHESIS: usize = 8;
+/// CG-05: the multi-issue ceiling. NOT a measured rate — the pilot
+/// corpus holds 0 multi-issue cases (S0 measured `fixture.db` +
+/// `rehearsal-log.txt`: the gradebook ticket is single-issue). The bound
+/// is the cost ceiling of one full loop per child — 7 phases × 3
+/// attempts per child — made structural rather than tuned silent.
+const MAX_ISSUES: usize = 4;
 
 /// The pinned P-class SLA table: integer seconds from the Triage pass to
 /// the deadline. The literals are pinned by test and preregistered — a
@@ -365,6 +371,43 @@ pub(crate) struct IntakeArtifact {
     /// Bounded: at most 16 declarations, each 1..=64 lowercase chars.
     #[serde(default)]
     pub diagnostic_seams: Vec<String>,
+    /// CG-05: the multi-issue decomposition — the containment law's
+    /// multi-issue reading: one ticket, several separable problems.
+    /// Carried ONLY on a split-pending intake; absent (and skipped at
+    /// serialization) on a single-issue one — the no-churn arm, so a
+    /// single-issue intake serializes byte-identically to the pre-lane
+    /// shape (the `VerifyArtifact.rehypothesis` precedent). The model
+    /// proposes; the intake gate disposes (series law 3) — a gate PASS
+    /// on a well-formed decomposition IS the disposition, and the split
+    /// rides the Intake transition's satellite (S2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decomposition: Option<Decomposition>,
+}
+
+/// One proposed issue: the model's answerable-issue question, validated
+/// for shape only (non-empty, bounded, distinct). `severity_hint` is
+/// INFORMATIONAL — no vocabulary claim, no gate weight.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) struct ProposedIssue {
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub question: String,
+    #[serde(default)]
+    pub severity_hint: String,
+}
+
+/// The decomposition half of an Intake proposal — one ticket, several
+/// separable problems (different teams or skills). `issues` is 2..=MAX_ISSUES;
+/// a single issue is not a decomposition (refused by name, never a
+/// one-child split). `rationale` names why this splits — always required,
+/// never conditional.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) struct Decomposition {
+    #[serde(default)]
+    pub issues: Vec<ProposedIssue>,
+    #[serde(default)]
+    pub rationale: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1206,8 +1249,11 @@ fn err(law: &str, detail: &str) -> String {
 /// KT intake completeness (the plan's gate-every-case item): all four
 /// IS/IS-NOT rows present with both columns non-empty; telemetry captured
 /// (L1); what-changed recorded, "unknown" allowed (L4); known-good
-/// recorded, "none available" allowed (L3).
-fn intake_gate(a: &IntakeArtifact) -> Vec<String> {
+/// recorded, "none available" allowed (L3). CG-05: the decomposition arms
+/// (A3) validate the model-proposed multi-issue split for shape only —
+/// the gate disposes, the model proposes (series law 3). The `case` arg
+/// (C-12) carries the one-level law's depth check (arm 6, S2).
+fn intake_gate(a: &IntakeArtifact, _case: &GdlCase) -> Vec<String> {
     let mut errors = Vec::new();
     if a.telemetry_refs.len() > MAX_TELEMETRY_REFS {
         errors.push(err(
@@ -1296,6 +1342,83 @@ fn intake_gate(a: &IntakeArtifact) -> Vec<String> {
                 ),
             ));
         }
+    }
+    // CG-05 (A3): the decomposition arms. A gate-refused decomposition
+    // costs nothing — a malformed proposal is a named refusal, never a
+    // silent co-tenancy; absent decomposition is exactly today's
+    // (pin N-1) — no error, no key, no gate firing.
+    if let Some(d) = &a.decomposition {
+        // Arm 1 (bounds law — the MAX_HYPOTHESES message shape).
+        if d.issues.len() > MAX_ISSUES {
+            errors.push(err(
+                "A3",
+                &format!(
+                    "decomposition declares {} issues — at most {MAX_ISSUES} may \
+                     be carried (bounds law)",
+                    d.issues.len()
+                ),
+            ));
+        }
+        // Arm 2: one issue is not a decomposition — never a one-child split.
+        if d.issues.len() == 1 {
+            errors.push(err(
+                "A3",
+                "one issue needs no split — proceed as a single case",
+            ));
+        }
+        // Arm 3: rationale is uniform law, never conditional.
+        if d.rationale.trim().is_empty() {
+            errors.push(err("A3", "name why this splits"));
+        }
+        // Arm 4: the launch ticket's own bounds (1..=8192 bytes after
+        // trim — the case_run.rs law). "Answerable" is not
+        // gate-decidable; the bounds are.
+        for (i, issue) in d.issues.iter().enumerate() {
+            if issue.title.trim().is_empty() {
+                errors.push(err("A3", &format!("issues[{i}] title empty")));
+            }
+            if issue.question.trim().is_empty() {
+                errors.push(err("A3", &format!("issues[{i}] question empty")));
+            } else if issue.question.len() > 8192 {
+                errors.push(err(
+                    "A3",
+                    &format!(
+                        "issues[{i}] question is {} bytes — the launch ticket's \
+                         bound is 8192 (bounds law)",
+                        issue.question.len()
+                    ),
+                ));
+            }
+        }
+        // Arm 5: pairwise DISTINCT by containment, both directions (the
+        // `locator_resolves` discipline — the floor is NOT applied: the
+        // needle is the whole title, containment is the test). An empty
+        // title is already refused by arm 4; pairs touching one are
+        // skipped here rather than double-reported.
+        let titles: Vec<String> = d
+            .issues
+            .iter()
+            .map(|issue| issue.title.to_lowercase())
+            .collect();
+        for i in 0..titles.len() {
+            for j in (i + 1)..titles.len() {
+                let (x, y) = (&titles[i], &titles[j]);
+                if x.is_empty() || y.is_empty() {
+                    continue;
+                }
+                if x.contains(y.as_str()) || y.contains(x.as_str()) {
+                    errors.push(err(
+                        "A3",
+                        &format!(
+                            "issues[{i}] and issues[{j}] overlap — name separable \
+                             problems"
+                        ),
+                    ));
+                }
+            }
+        }
+        // Arm 6 (one level, C-8) ships in S2 with the `parent_case_id`
+        // state field it reads; the widened signature is ready for it.
     }
     errors
 }
@@ -2419,7 +2542,7 @@ pub(crate) fn parse_and_gate(
     match phase {
         GdlPhase::Intake => match serde_json::from_value::<IntakeArtifact>(parsed.clone()) {
             Ok(mut a) => {
-                let errors = intake_gate(&a);
+                let errors = intake_gate(&a, case);
                 if errors.is_empty() {
                     // The persisted declaration is canonical: sorted and
                     // deduped, so seam matching is exact.
@@ -2825,7 +2948,10 @@ pub(crate) fn phase_instruction_with_law(
             "Emit ONE JSON object: \
 {\"is_not\":{\"what\":{\"is\":\"..\",\"is_not\":\"..\"},\"where\":{..},\"when\":{..},\"extent\":{..}},\
 \"telemetry_refs\":[\"tsr://..\"],\"what_changed\":\".. or unknown\",\"known_good\":\".. or none available\"} — \
-telemetry_refs are scheme://locators (tsr://, sel://); prose is not a reference"
+telemetry_refs are scheme://locators (tsr://, sel://); prose is not a reference. \
+you MAY carry decomposition — {issues:[{title,question,severity_hint}],rationale} — \
+only when the ticket holds several separable problems (different teams or skills); \
+omit it for a single issue"
         }
         GdlPhase::Triage => {
             "Emit ONE JSON object: \
@@ -8590,8 +8716,9 @@ mod tests {
             what_changed: String::new(),
             known_good: String::new(),
             diagnostic_seams: vec![],
+            decomposition: None,
         };
-        let errors = intake_gate(&a);
+        let errors = intake_gate(&a, &gate_case("t"));
         let joined = errors.join(" | ");
         for law in ["KT", "L1", "L4", "L3"] {
             assert!(joined.contains(law), "{law} must be cited: {joined}");
@@ -8620,11 +8747,12 @@ mod tests {
             what_changed: "unknown".into(),
             known_good: "none available".into(),
             diagnostic_seams: vec![],
+            decomposition: None,
         };
         assert!(
-            intake_gate(&honest).is_empty(),
+            intake_gate(&honest, &gate_case("t")).is_empty(),
             "recorded-unknown is valid KT honesty: {:?}",
-            intake_gate(&honest)
+            intake_gate(&honest, &gate_case("t"))
         );
     }
 
@@ -8642,7 +8770,7 @@ mod tests {
                     value["is_not"][dimension]["is_not"] = serde_json::json!("   ");
                 }
                 let artifact: IntakeArtifact = serde_json::from_value(value).unwrap();
-                let errors = intake_gate(&artifact);
+                let errors = intake_gate(&artifact, &gate_case("t"));
                 assert!(
                     errors
                         .iter()
@@ -8651,6 +8779,202 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// A valid two-issue decomposition over the INTAKE_JSON base — the
+    /// honest shape every arm must accept (the refusals below each
+    /// damage ONE part of it).
+    fn honest_decomposition() -> IntakeArtifact {
+        let mut a: IntakeArtifact = serde_json::from_str(INTAKE_JSON).unwrap();
+        a.decomposition = Some(Decomposition {
+            issues: vec![
+                ProposedIssue {
+                    title: "gradebook workbook errors".into(),
+                    question: "why does the shared gradebook workbook fail to open".into(),
+                    severity_hint: "high".into(),
+                },
+                ProposedIssue {
+                    title: "idrac cache batteries".into(),
+                    question: "what is the state of the idrac cache batteries".into(),
+                    severity_hint: String::new(),
+                },
+            ],
+            rationale: "different teams own the workbook and the batteries".into(),
+        });
+        a
+    }
+
+    /// N-1: single-issue intake is byte-identically today's — no
+    /// `decomposition` key, same gate, same terminal shape.
+    #[test]
+    fn single_issue_intake_is_byte_identical() {
+        let a: IntakeArtifact = serde_json::from_str(INTAKE_JSON).unwrap();
+        assert!(a.decomposition.is_none(), "absent parses to None");
+        assert!(
+            intake_gate(&a, &gate_case("t")).is_empty(),
+            "no decomposition, no gate firing: {:?}",
+            intake_gate(&a, &gate_case("t"))
+        );
+        let normalized = serde_json::to_string(&a).unwrap();
+        assert!(
+            !normalized.contains("decomposition"),
+            "no decomposition key serializes (the no-churn arm): {normalized}"
+        );
+        // The full arbiter path: a single-issue intake passes exactly
+        // as today, and the normalized artifact carries no key.
+        let (gate, artifact) = parse_and_gate(GdlPhase::Intake, &gate_case("t"), INTAKE_JSON);
+        assert!(matches!(gate, Gate::Pass), "single-issue passes: {gate:?}");
+        assert!(
+            !artifact.unwrap().contains("decomposition"),
+            "the normalized artifact is today-identical"
+        );
+        // And the honest two-issue decomposition passes the same gate.
+        let d = honest_decomposition();
+        assert!(
+            intake_gate(&d, &gate_case("t")).is_empty(),
+            "a well-formed decomposition passes: {:?}",
+            intake_gate(&d, &gate_case("t"))
+        );
+    }
+
+    /// E-1: overlapping issue titles (containment, either direction;
+    /// exact duplicates too) refuse BY NAME — never a silent co-tenancy.
+    #[test]
+    fn overlapping_issue_titles_refuse_by_name() {
+        // Title[1] contains title[0].
+        let mut a = honest_decomposition();
+        a.decomposition.as_mut().unwrap().issues[1].title =
+            "gradebook workbook errors at night".into();
+        let errors = intake_gate(&a, &gate_case("t"));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.starts_with("A3") && e.contains("overlap")),
+            "containment in one direction refuses: {errors:?}"
+        );
+        // Title[0] contains title[1] (case-insensitive).
+        let mut a = honest_decomposition();
+        a.decomposition.as_mut().unwrap().issues[0].title =
+            "IDRAC cache batteries and the backup set".into();
+        let errors = intake_gate(&a, &gate_case("t"));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.starts_with("A3") && e.contains("overlap")),
+            "containment in the other direction refuses: {errors:?}"
+        );
+        // Exact duplicates are containment both ways.
+        let mut a = honest_decomposition();
+        a.decomposition.as_mut().unwrap().issues[1].title =
+            a.decomposition.as_ref().unwrap().issues[0].title.clone();
+        let errors = intake_gate(&a, &gate_case("t"));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.starts_with("A3") && e.contains("overlap")),
+            "exact duplicates refuse: {errors:?}"
+        );
+        // Separable titles (neither contains the other) pass.
+        let a = honest_decomposition();
+        assert!(
+            !intake_gate(&a, &gate_case("t"))
+                .iter()
+                .any(|e| e.contains("overlap")),
+            "separable titles pass"
+        );
+    }
+
+    /// E-2: empty title / empty question / question > 8192 bytes each
+    /// refuse BY NAME (the launch ticket's bound, cited).
+    #[test]
+    fn malformed_decomposition_fields_refuse_by_name() {
+        let mut a = honest_decomposition();
+        a.decomposition.as_mut().unwrap().issues[0].title = "   ".into();
+        let errors = intake_gate(&a, &gate_case("t"));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.starts_with("A3") && e.contains("title empty")),
+            "empty title refuses: {errors:?}"
+        );
+        let mut a = honest_decomposition();
+        a.decomposition.as_mut().unwrap().issues[1].question = String::new();
+        let errors = intake_gate(&a, &gate_case("t"));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.starts_with("A3") && e.contains("question empty")),
+            "empty question refuses: {errors:?}"
+        );
+        let mut a = honest_decomposition();
+        a.decomposition.as_mut().unwrap().issues[0].question = "q".repeat(8193);
+        let errors = intake_gate(&a, &gate_case("t"));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.starts_with("A3") && e.contains("8192")),
+            "an overlong question refuses with the launch bound cited: {errors:?}"
+        );
+        // 8192 exactly passes (the launch bound is inclusive).
+        let mut a = honest_decomposition();
+        a.decomposition.as_mut().unwrap().issues[0].question = "q".repeat(8192);
+        assert!(
+            intake_gate(&a, &gate_case("t")).is_empty(),
+            "8192 bytes is the launch bound, inclusive: {:?}",
+            intake_gate(&a, &gate_case("t"))
+        );
+    }
+
+    /// E-3: `issues > MAX_ISSUES` and `issues == 1` each refuse BY NAME;
+    /// empty rationale refuses (uniform law, not conditional).
+    #[test]
+    fn decomposition_bounds_and_rationale_refuse_by_name() {
+        let mut a = honest_decomposition();
+        a.decomposition.as_mut().unwrap().issues.extend(
+            [
+                "third problem".into(),
+                "fourth problem".into(),
+                "fifth problem".into(),
+            ]
+            .into_iter()
+            .map(|title| ProposedIssue {
+                title,
+                question: "a question".into(),
+                severity_hint: String::new(),
+            })
+            .collect::<Vec<_>>(),
+        );
+        let errors = intake_gate(&a, &gate_case("t"));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.starts_with("A3") && e.contains("bounds law")),
+            "5 issues over MAX_ISSUES=4 refuses: {errors:?}"
+        );
+        let mut a = honest_decomposition();
+        a.decomposition.as_mut().unwrap().issues.truncate(1);
+        let errors = intake_gate(&a, &gate_case("t"));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.starts_with("A3") && e.contains("one issue needs no split")),
+            "a single issue is not a decomposition: {errors:?}"
+        );
+        let mut a = honest_decomposition();
+        a.decomposition.as_mut().unwrap().rationale = "  ".into();
+        let errors = intake_gate(&a, &gate_case("t"));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.starts_with("A3") && e.contains("why this splits")),
+            "empty rationale refuses: {errors:?}"
+        );
+    }
+
+    /// The ceiling's value, pinned (the `MAX_*` bounds family at 205-220).
+    #[test]
+    fn max_issues_is_pinned() {
+        assert_eq!(MAX_ISSUES, 4);
     }
 
     #[test]
@@ -9121,7 +9445,7 @@ mod tests {
     fn oversized_or_malformed_seam_declaration_is_named_intake_failure() {
         let oversized = r#"{"is_not":{"what":{"is":"s","is_not":"n"},"where":{"is":"s","is_not":"n"},"when":{"is":"s","is_not":"n"},"extent":{"is":"s","is_not":"n"}},"telemetry_refs":["tsr://x"],"what_changed":"unknown","known_good":"none available","diagnostic_seams":["0123456789012345678901234567890123456789012345678901234567890123456789"]}"#;
         let a: IntakeArtifact = serde_json::from_str(oversized).unwrap();
-        let errors = intake_gate(&a);
+        let errors = intake_gate(&a, &gate_case("t"));
         assert!(
             errors
                 .iter()
@@ -9131,7 +9455,7 @@ mod tests {
         let malformed = r#"{"is_not":{"what":{"is":"s","is_not":"n"},"where":{"is":"s","is_not":"n"},"when":{"is":"s","is_not":"n"},"extent":{"is":"s","is_not":"n"}},"telemetry_refs":["tsr://x"],"what_changed":"unknown","known_good":"none available","diagnostic_seams":["IDRAC"]}"#;
         let a: IntakeArtifact = serde_json::from_str(malformed).unwrap();
         assert!(
-            intake_gate(&a)
+            intake_gate(&a, &gate_case("t"))
                 .iter()
                 .any(|e| e.starts_with("L1") && e.contains("diagnostic_seams")),
             "a non-lowercase seam is malformed"
@@ -9139,7 +9463,7 @@ mod tests {
         let crowded = r#"{"is_not":{"what":{"is":"s","is_not":"n"},"where":{"is":"s","is_not":"n"},"when":{"is":"s","is_not":"n"},"extent":{"is":"s","is_not":"n"}},"telemetry_refs":["tsr://x"],"what_changed":"unknown","known_good":"none available","diagnostic_seams":["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q"]}"#;
         let a: IntakeArtifact = serde_json::from_str(crowded).unwrap();
         assert!(
-            intake_gate(&a)
+            intake_gate(&a, &gate_case("t"))
                 .iter()
                 .any(|e| e.starts_with("L1") && e.contains("diagnostic_seams")),
             "more than 16 declared seams is a named intake failure"
@@ -9940,12 +10264,12 @@ mod tests {
         let mut intake: IntakeArtifact = serde_json::from_str(INTAKE_JSON).unwrap();
         intake.telemetry_refs = many("tsr://node-");
         assert!(
-            intake_gate(&intake)
+            intake_gate(&intake, &gate_case("t"))
                 .iter()
                 .any(|e| e.contains("telemetry_refs")),
             "an unbounded telemetry_refs list is unbounded consumption from an \
              agent-authored artifact; errors: {:?}",
-            intake_gate(&intake)
+            intake_gate(&intake, &gate_case("t"))
         );
         // TriageArtifact.search_hits
         let mut triage: TriageArtifact = serde_json::from_str(TRIAGE_JSON).unwrap();
@@ -10340,7 +10664,7 @@ mod tests {
         let mut a: IntakeArtifact = serde_json::from_str(INTAKE_JSON).unwrap();
         a.telemetry_refs = vec!["a TSR export someone mentioned".into()];
         assert!(
-            intake_gate(&a)
+            intake_gate(&a, &gate_case("t"))
                 .iter()
                 .any(|e| e.starts_with("L1") && e.contains("not a locator")),
             "prose telemetry must fail"
