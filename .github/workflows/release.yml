@@ -54,11 +54,14 @@ jobs:
         # that was compiled. The shell lane already builds this way
         # (`--locked --offline`); the release did not, and that gap is what
         # this closes. The lockfile satisfies every feature set below
-        # (checked with `cargo metadata --locked` for `bench,migrate`,
-        # `connector-github` and `connector-crm`), so this refuses a release
-        # whose lockfile has drifted — which is the fail-closed direction.
+        # (checked with `cargo metadata --locked` for
+        # `bench,migrate,rerank-tier`, `connector-github` and
+        # `connector-crm`), so this refuses a release whose lockfile has
+        # drifted — which is the fail-closed direction. CG-12's ship-set
+        # decision added `rerank-tier` to the kernel build (the app-bundle
+        # delta measured 18.8 MB against the ~30 MB budget, audit clean).
         run: |
-          cargo build --release --locked --features bench,migrate
+          cargo build --release --locked --features bench,migrate,rerank-tier
           cargo build --release --locked --features connector-github --bin brain-connector-gh
           cargo build --release --locked --features connector-crm --bin brain-connector-crm
         continue-on-error: true

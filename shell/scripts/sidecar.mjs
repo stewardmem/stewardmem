@@ -113,12 +113,16 @@ function archName(cputype) {
  */
 /**
  * The stage build's cargo argv, per target triple. The feature set is the
- * SHIPPED one (`bench,migrate` — the same set release.yml compiles for the
- * Linux binaries): the bundled sidecar's `--import` lives behind the kernel's
- * `migrate` feature, and a default-feature build would silently ignore the
- * app's import argv and fall through to the server boot. Staged without the
- * feature set is staged wrong; the pin in `tests/sidecar-bundle.test.ts`
- * carries this argv's shape.
+ * SHIPPED one (`bench,migrate,rerank-tier` — the same set release.yml
+ * compiles for the Linux binaries; CG-12's ship-set decision): the bundled
+ * sidecar's `--import` lives behind the kernel's `migrate` feature, and a
+ * default-feature build would silently ignore the app's import argv and
+ * fall through to the server boot. The rerank tier joins for the same
+ * reason — a staged sidecar without it cannot honor the app's rerank
+ * choice (the tier compiles OFF, which is a valid posture, but the SET the
+ * choice can act on is this one). Staged without the feature set is staged
+ * wrong; the pin in `tests/sidecar-bundle.test.ts` carries this argv's
+ * shape.
  */
 export function stageBuildArgs(triple) {
 	return [
@@ -126,7 +130,7 @@ export function stageBuildArgs(triple) {
 		'--release',
 		'--locked',
 		'--features',
-		'bench,migrate',
+		'bench,migrate,rerank-tier',
 		'--bin',
 		'brain-server',
 		'--target',

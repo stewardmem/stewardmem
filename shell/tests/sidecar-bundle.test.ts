@@ -542,18 +542,23 @@ test('the_staging_record_carries_the_kernel_commit_version_and_api', () => {
 test('the_staged_kernel_compiles_the_shipped_feature_set', () => {
 	// The bundled sidecar's `--import` — the workspace import's engine —
 	// lives behind the kernel's `migrate` feature, and the shipped feature
-	// set everywhere else is `bench,migrate` (release.yml's Linux build,
-	// the bench lane, the migrate suite). A stage that compiled the DEFAULT
-	// features would ship a sidecar that silently ignores `--import` and
-	// falls through to the server boot — the stale-binary near-miss shape,
-	// one release away from the operator's store. The argv carries the
-	// feature set BY NAME, per triple, and stays locked.
+	// set everywhere else is `bench,migrate,rerank-tier` (release.yml's
+	// Linux build, the bench lane, the migrate suite; CG-12's ship-set
+	// decision added the rerank tier to the set the app's choice can act
+	// on). A stage that compiled the DEFAULT features would ship a sidecar
+	// that silently ignores `--import` and falls through to the server
+	// boot — the stale-binary near-miss shape, one release away from the
+	// operator's store. The argv carries the feature set BY NAME, per
+	// triple, and stays locked.
 	for (const target of ['aarch64-apple-darwin', 'x86_64-apple-darwin']) {
 		const args = stageBuildArgs(target) as string[];
 		expect(args).toContain('--locked');
 		expect(args).toContain('--features');
 		const features = args[args.indexOf('--features') + 1] ?? '';
 		expect(features.split(',')).toEqual(expect.arrayContaining(['bench', 'migrate']));
+		expect(features.split(','), 'the CG-12 ship-set: the rerank tier rides by name').toContain(
+			'rerank-tier'
+		);
 		expect(args[args.indexOf('--bin') + 1]).toBe('brain-server');
 		expect(args[args.indexOf('--target') + 1]).toBe(target);
 	}
