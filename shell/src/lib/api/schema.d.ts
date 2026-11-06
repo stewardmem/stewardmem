@@ -2847,6 +2847,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workflow/hand-down": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark a resolved procedure executable by the lowest tier, behind the conformance precondition (Admin)
+         * @description The hand-down act. Admin-only, audit-per-call. The body carries the source run (`procedure_id`) and the conformance receipt (run id, pack/output SHA-256 hashes, verdict, decided_at). A receipt whose verdict is not pass, an unresolved or ineligible source, or a second conformance run for the same procedure is refused by name (`hand_down_refused`). A repeat of the same pair is the no-op receipt (`created` false); the existing chain row is unchanged.
+         */
+        post: operations["handDownProcedure"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workflow/runs/{id}/complaint/lifecycle": {
         parameters: {
             query?: never;
@@ -11862,6 +11882,76 @@ export interface operations {
             };
             /** @description provider_unavailable | provider_response_invalid | provider_timeout | provider_cancelled | gdl_provider_failed | gdl_episode_unavailable -- no loopback fallback */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    handDownProcedure: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The resolved source run id whose persisted plan is sealed. */
+                    procedure_id: number;
+                    conformance: {
+                        run_id: string;
+                        /** @description SHA-256 of the gold pack (64 lowercase hex). */
+                        pack_hash: string;
+                        /** @description SHA-256 of the conformance outputs (64 lowercase hex). */
+                        outputs_hash: string;
+                        /** @enum {string} */
+                        verdict: "pass" | "fail" | "skip";
+                        decided_at: number;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description The mark landed (or the no-op receipt for a repeat pair) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        procedure_id?: number;
+                        conformance_run_id?: string;
+                        snapshot_digest?: string;
+                        created?: boolean;
+                    };
+                };
+            };
+            /** @description hand_down_refused (procedure_id must be positive) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not authorized (Admin) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description hand_down_refused (no passing receipt */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
