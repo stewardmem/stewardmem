@@ -1117,9 +1117,21 @@ pooled read connections and are fused.
   leg had not run, a complexity-gated second graph pass runs before the
   engine gives up.
 - **Rerank tier** — a cross-encoder rerank stage exists behind the
-  `rerank-tier` feature (enterprise/desktop profiles; BYO ONNX model,
-  opt-in env); the default edge build ships RRF-only, and the rerank is a
-  no-op there by construction.
+  `rerank-tier` feature (enterprise/desktop/quality-local profiles auto-arm
+  it; an explicit `BRAIN_RERANK_ENABLED=1` at boot warms it BEFORE serving;
+  BYO ONNX model — golden `mxbai-rerank-large-v1` int8 from an ABSOLUTE
+  `BRAIN_RERANK_MODEL_DIR`, a CWD-relative dir is refused; the default edge
+  build ships RRF-only, and the rerank is a no-op there by construction).
+  The tier echoes its state honestly on the admin `/health/db`
+  (`rerank: {state: off|loading|ready|failed, model, top_n}` — `ready`
+  names the model ACTUALLY loaded, `off` is the truth on a feature-less
+  kernel; CG-12). The reorder law: rerank order replaces the incoming order
+  for the scored window; EQUAL rerank scores defer to the incoming order
+  (score DESC, index ASC — the freshness/trust tie-break stays the force
+  that decided window membership, never a post-rerank ordering force); a
+  hit carries `rerank_score` IFF the rerank placed it; the fail-open
+  contract leaves the RRF order untouched on any reranker fault (the
+  health echo says `failed` instead of a silently dead tier).
 
 The hit record carries per-retriever ranks and the fused score; the rendered
 per-hit provenance block (retriever ranks, expansion flag and term count,
