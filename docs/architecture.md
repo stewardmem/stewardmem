@@ -57,7 +57,7 @@ IP repo after changing anything here.
 | Stage | Where it lives | Status |
 |---|---|---|
 | **Create** | `src/workflow/create.rs` + `src/workflow/create/` (9 modules) · six routes under `/workflow/claim-schemas` and `/workflow/claims*` | Built and wired. **Promotion is inert** — the promote route returns `promotion_disabled` in every configuration. The disproof condition is now stated at write time and evaluated at read time (`create/disproof.rs`) |
-| **Solve** | `src/workflow/gdl.rs`, `gdl_checkpoint.rs`, `gdl_eval.rs`, `src/agentloop/run_loop.rs` · entry `src/handlers/case_run.rs:224` | The most built — the agentic crank, checkpointed and digest-gated |
+| **Solve** | `src/workflow/gdl.rs`, `gdl_checkpoint.rs`, `gdl_eval.rs`, `hand_down.rs`, `src/agentloop/run_loop.rs` · entry `src/handlers/case_run.rs:108` | The most built — the agentic crank, checkpointed and digest-gated |
 | **Evolve** | `src/gate.rs`, `src/handlers/gate.rs`, `src/service/gate.rs`, `src/workflow/kcs.rs`, `crates/brain-evolve-core` | Built and wired — the human approval gate, plus a per-domain knowledge-version axis that bumps at publication |
 | **Deflect** | `src/workflow/kcs.rs`, `src/workflow/scoreboard.rs`, `src/workflow/drift_census.rs` | Measurement and evidence: reuse, deflection, and scorer-drift over a frozen gold corpus. It does not yet act on what it finds |
 | **Operate** | no module named Operate — and the return path is still the least-built part of the ring | The **first return-path code exists**: the ranked gap queue (`create/queue.rs`, built to be the `Operate → Create` edge) and the agreement/labeling machinery — but nothing yet drains a gap into claim creation end-to-end, and outcome attribution to specific knowledge remains design, not code |
@@ -312,11 +312,16 @@ deflects to self-service entirely — and the scoreboard proves which happened.
 ## The GDL case machine — Solve's deterministic core
 
 The crank above is driven by the **GDL case machine** (`src/workflow/gdl.rs`,
-11,127 lines; `gdl_checkpoint.rs`, 825; `gdl_eval.rs`, 1,191 — 13,143 total):
+15,453 lines; `gdl_checkpoint.rs`, 1,164; `gdl_eval.rs`, 1,839;
+`hand_down.rs`, 902):
 the 7-phase governed troubleshooting loop
 `Intake → Triage → Hypothesize → Plan → Act → Verify → Handoff`
-(`GdlPhase::ALL` — forward-only, the machine never skips; a case that cannot
-satisfy a phase routes or escalates instead).
+(`GdlPhase::ALL`; the forward target per phase is phase-based —
+`forward_phase` — linear except for two named exceptions: a
+handed-down case jumps Triage → Act, skipping the two L3-owned phases
+(CG-07), and a failed Verify may re-enter Hypothesize (CG-04), dormant
+at `MAX_REHYPOTHESES = 0` so it refuses always today; a case that
+cannot satisfy a phase routes or escalates instead).
 
 The phase machine is deterministic Rust: the model proposes a phase artifact
 as JSON, a pure arbiter (`parse_and_gate` — no DB, no clock, no provider)
@@ -340,12 +345,14 @@ derived (`verify_phase_exchange_cost_is_strategy_dependent_and_measured`), and
 the document is held to them.
 
 The case carries **one cumulative token budget across every phase**, not a
-per-attempt cap: `BRAIN_GDL_CASE_TOKEN_BUDGET` (default `3 × p99 = 336` tokens —
-the measured happy path times the bounded retry ladder, from
-`config::GDL_CASE_TOKEN_BUDGET_DEFAULT`). Exhausting it CAPPES the case
-receipt-backed rather than routing it. **Scale caveat:** the p99 is the loopback
-provider's own token accounting over the judged seeds, not a frontier model's —
-an operator on a real provider sets the variable to their own measured ceiling.
+per-attempt cap: `BRAIN_GDL_CASE_TOKEN_BUDGET` (default `3 × 3,987 = 11,961`
+tokens — the pilot's live `afm-stdio` per-case p99 times the bounded retry
+ladder, from `config::GDL_CASE_TOKEN_BUDGET_DEFAULT`). Exhausting it CAPPES
+the case receipt-backed rather than routing it. **Scale caveat:** the
+p99 is measured over the pilot's live population (a resolving case costs
+more — the default is the measured floor of the observed population); the
+loopback figure (336) survives only as the pin's comparison floor. An
+operator on a real provider sets the variable to their own measured ceiling.
 
 The same law governs Deliver — a model proposes, only the gate disposes — where
 the arbiter is `brain-delivery-core`'s `promote` instead (see The delivery loop —
@@ -368,6 +375,31 @@ fact):
   known-good comparison · **L4** what-changed first · **L5** least-invasive
   ladder · **L6** verify under failing conditions · **L7** no premature closure
   · **L8** escalation = evidence handoff · **L9** no fix from memory.
+
+**Loop mechanics shipped across the closing-gaps lanes (all deterministic,
+all gate-disposed — the model proposes, Rust disposes):** hypotheses carry
+a server-computed rank (`Hypothesis.rank`, dominance weights in
+`ranking.rs`, computed once in `apply`, rendered `H{rank}:` on the strip;
+the Plan gate binds plan order to rank order); a failed Verify may carry
+a rehypothesis proposal (`VerifyArtifact.rehypothesis`, four admission
+arms in `rehypothesis_admits`, ordinals at `7 + 4·count`) — dormant at
+`MAX_REHYPOTHESES = 0`, so the edge refuses always today and the terminal
+is byte-identical to the forward-only law; an Intake decomposition
+splits one ticket into N−1 real sibling runs inside the Intake
+transition's transaction (one level only, parent resolves
+independently, strip renders `split · N`); a resolved case sealed behind
+a passing conformance receipt (`POST /workflow/hand-down`, Admin) becomes
+executable by L1 — the intake matcher rides the sealed plan
+(`forward_phase` Triage → Act, hypotheses stay empty), each Act row must
+equal the sealed row byte-for-byte or the case routes to
+`Escalated{Act}` (no new outcome variant), and the strip renders
+`procedure: <id> (handed down, conf <run-id>)`. `phase_owner` is
+byte-stable throughout: Intake/Triage/Act L1, Verify/Handoff L2,
+Hypothesize/Plan L3. Eval rows (`EvalRow` in `gdl_eval.rs`) carry the
+advisory continuity columns `certainty_overall`, `rehypothesis_count`,
+`split_child_count`, `hand_down_matched`, `hand_down_deviations`,
+`hand_down_conformance_run` (serde-defaulted: pre-lane rows parse to
+`None`, never 0-as-data; they feed no gate).
 
 Case-level invariants: the SLA clock arms at triage on a typed row (pinned
 P-class table — P1 3,600 / P2 14,400 / P3 86,400 / P4 604,800 seconds,

@@ -10,7 +10,7 @@ It provides **deterministic hybrid retrieval, human-gated memory promotion, prov
 >
 > Memory operations — recall, search, ingest, approval — are deterministic and
 > zero-token. Separately, an OPTIONAL **operator-launched GDL provider lane**
-> (`BRAIN_GDL_PROVIDER_*`) can call a configured HTTP provider for GDL workflow
+> (`BRAIN_GDL_PROVIDER_*`) can call a configured HTTP or AFM-stdio provider for GDL workflow
 > runs under server-owned controls; its output **never auto-promotes** (a human
 > gate decides), and pointing it at a local endpoint keeps memory from leaving
 > the host at all.

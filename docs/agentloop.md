@@ -1,6 +1,6 @@
 # The agent loop
 
-The agent loop (`src/agentloop/`, 11 modules) is the kernel-side async driver
+The agent loop (`src/agentloop/`, 12 modules) is the kernel-side async driver
 that runs one model exchange at a time: it takes caller-owned input, projects
 durable session history into a bounded provider request, streams one assistant
 turn, executes any tool calls the model asked for, and repeats until the model
@@ -46,10 +46,12 @@ is implemented) — not a route, not a policy, not a human.
 - A provider. The provider is a pluggable seam (`LlmProvider` in
   `src/agentloop/provider.rs`): constructor-injected, channel-based,
   and **dropping the receiver is the cancel** — no detached producer can
-  outlive a cancelled turn. Zero provider code ships in-tree for selection;
-  tests ride the loopback fixture (`LoopbackProvider`, scripted turns, never
-  a production provider). The one real egress is the HTTP adapter
-  (`src/agentloop/provider_http.rs`); see Gates.
+  outlive a cancelled turn. Tests ride the loopback fixture
+  (`LoopbackProvider`, scripted turns, never a production provider).
+  Production egress is the HTTP adapter (`src/agentloop/provider_http.rs`,
+  kind `http`) and the AFM-stdio bridge provider
+  (`src/agentloop/provider_afm.rs`, kind `afm-stdio` —
+  `BRAIN_GDL_PROVIDER_KIND` selects; see Gates).
 - A shell, a filesystem, or a process spawner. The loop never spawns a
   process or opens a file itself. Tool execution rides the SDK registry over
   an injected `ExecutionEnv`; the only process path is the mediated `exec`

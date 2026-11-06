@@ -61,8 +61,14 @@ behaviour* of the machine does not push the operator into them:
 
 > **The invariant:** nothing here auto-promotes, auto-decays-away, or auto-deletes. The
 > human decides. Zero tokens, no LLM, no background worker decides what becomes memory.
-> The OPTIONAL operator-launched GDL provider lane never changes this: its output is a
-> proposal-grade artifact behind the same human gate, never an auto-promotion.
+> The OPTIONAL operator-launched GDL provider lane never changes this: a case's
+> captured output is a proposal-grade artifact behind the same human gate, never
+> an auto-promotion. (The one non-proposal human act this lane adds is the
+> hand-down itself — `POST /workflow/hand-down`, Admin-only: an Admin marks a
+> resolved procedure executable by the lowest tier behind a passing
+> conformance receipt. That mark is a human decision recorded on the chain;
+> it promotes no memory, and a handed-down case still escalates to the
+> higher tier at Verify.)
 
 ---
 
