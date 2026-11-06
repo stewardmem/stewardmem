@@ -1613,18 +1613,20 @@ fn r2_a_real_score_gap_is_never_crossed_by_tier() {
 fn r3_existing_keys_keep_precedence_over_trust() {
     // R-3: precedence inside the bucket: `observed_at` → `authority` →
     // `trust` (existing keys first). The observed_at key decides before
-    // trust is consulted, whichever way it points: the hit that wins on
-    // observed_at wins even at the lowest tier. (C-10: the call site
-    // `cmp_observed(b, a)` sorts OLDER-first, inverting cmp_observed's
-    // documented newer-first — pre-existing, out of this lane's scope;
-    // the pin holds the precedence, not the direction.)
+    // trust is consulted: the hit that wins on observed_at wins even at
+    // the lowest tier. (CG-02 C-10 fixed: the call site is now
+    // `cmp_observed(a, b)` — newer-first as documented; this pin now
+    // holds precedence AND direction.)
     let mut older_raw = sr_tier(1, 0.5, Some(TrustTier::Raw));
     older_raw.observed_at = Some("2026-01-01T00:00:00Z".to_string());
     let mut newer_published = sr_tier(2, 0.5, Some(TrustTier::Published));
     newer_published.observed_at = Some("2026-11-04T00:00:00Z".to_string());
     let mut v = [newer_published, older_raw];
     v.sort_by(tiebreak_cmp);
-    assert_eq!(v[0].id, 1, "the observed_at key beats higher trust");
+    assert_eq!(
+        v[0].id, 2,
+        "newer observed_at wins (newer-first, CG-02 C-10 fix)"
+    );
 
     let mut auth_raw = sr_tier(3, 0.5, Some(TrustTier::Raw));
     auth_raw.authority = Some(0.99);
@@ -1645,9 +1647,30 @@ fn r4_absent_trust_degrades_to_raw() {
     let mut v = [none, approved, raw];
     v.sort_by(tiebreak_cmp);
     assert_eq!(v[0].id, 3, "Approved beats both None and Raw");
-    // None and Raw tie — stable sort keeps their input order.
+    // None and Raw tie on trust (both Raw band) — the final stable
+    // key (id ASC) orders them, not input order.
     assert_eq!(v[1].id, 1, "None degrades to the Raw band");
     assert_eq!(v[2].id, 2);
+}
+
+/// R-6: the final stable key — hits tied on score, observed_at,
+/// authority AND trust order by immutable id ASC (a total order:
+/// pagination cannot shuffle on input order). Damage = drop the id
+/// key → a reversed input order stays reversed.
+#[test]
+fn r6_id_is_the_final_stable_key() {
+    let hi = sr_tier(9, 0.5, Some(TrustTier::Raw));
+    let lo = sr_tier(4, 0.5, Some(TrustTier::Raw));
+    let mut v = [hi, lo];
+    v.sort_by(tiebreak_cmp);
+    assert_eq!(v[0].id, 4, "lower id first at a full tie");
+    assert_eq!(v[1].id, 9);
+    // Reversed input, same output.
+    let hi = sr_tier(9, 0.5, Some(TrustTier::Raw));
+    let lo = sr_tier(4, 0.5, Some(TrustTier::Raw));
+    let mut v = [lo, hi];
+    v.sort_by(tiebreak_cmp);
+    assert_eq!(v[0].id, 4, "id order is input-order independent");
 }
 
 #[test]

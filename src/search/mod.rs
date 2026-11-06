@@ -2366,13 +2366,18 @@ pub fn perform_search_traced(
 
 /// The deterministic tie-break comparator (blind-spot 7's ranking law):
 /// inside the equal-score bucket ONLY, `observed_at` → `authority` →
-/// `trust` (Published > Approved > Raw). Never reorders across a score
-/// gap; never writes any score. Pure over the two hits.
+/// `trust` (Published > Approved > Raw) → `id` ASC (the stable final
+/// key — a total order, never input-order dependent). Never reorders
+/// across a score gap; never writes any score. Pure over the two hits.
 fn tiebreak_cmp(a: &SearchResult, b: &SearchResult) -> std::cmp::Ordering {
     use std::cmp::Ordering;
     // Equal score → apply tie-break; otherwise keep RRF order.
     if (a.score - b.score).abs() < 1e-6 {
-        let by_obs = cmp_observed(b.observed_at.as_deref(), a.observed_at.as_deref());
+        // `cmp_observed(a, b)` is newer-first (its body is `pb.cmp(pa)`);
+        // calling it `(a, b)` — not `(b, a)` — is what makes the
+        // documented newer-first hold (CG-02 C-10, fixed here: the
+        // swapped call sorted older-first).
+        let by_obs = cmp_observed(a.observed_at.as_deref(), b.observed_at.as_deref());
         if by_obs != Ordering::Equal {
             return by_obs;
         }
@@ -2387,7 +2392,13 @@ fn tiebreak_cmp(a: &SearchResult, b: &SearchResult) -> std::cmp::Ordering {
         // never blended into any score.
         let bt = b.trust.unwrap_or(TrustTier::Raw);
         let at = a.trust.unwrap_or(TrustTier::Raw);
-        return bt.cmp(&at);
+        let by_trust = bt.cmp(&at);
+        if by_trust != Ordering::Equal {
+            return by_trust;
+        }
+        // Final stable key: immutable id ASC — no two hits can truly tie,
+        // so pagination cannot shuffle on input order.
+        return a.id.cmp(&b.id);
     }
     Ordering::Equal
 }
