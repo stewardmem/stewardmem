@@ -447,11 +447,12 @@ fn r51_gdl_engine_site_is_bound_to_new_with_proficiency() {
     // artifacts, gate arms and split act shifted the site down by the
     // same additive shape — no statement, expression, data path or
     // control-flow edge at the construction site changed.
+    // Re-dated a seventh time for CG-07 (dry-run lipstyk fixes), whose line edits shifted the site by one — no statement, expression, data path or control-flow edge at the construction site changed.
     // Re-dated a sixth time for CG-07 (S-3), whose hand-down mark,
     // forward-phase derivation and act arms shifted the site down
     // by the same additive shape — no statement, expression, data
     // path or control-flow edge at the construction site changed.
-    let site_line = 3499usize;
+    let site_line = 3498usize;
 
     // Walk backwards to the nearest `fn` declaration.
     let enclosing = lines
