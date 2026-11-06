@@ -6033,6 +6033,9 @@ fn run_eval(endpoint: &str, floors: &[(String, f32)], safety: SafetyTerm) -> Res
 
     let mut sums = [0.0_f32; 5]; // r5, r10, p5, p10, mrr
     let mut ndcg_sum = 0.0_f32;
+    // Per-query vectors retained, not summed-and-discarded: the paired
+    // bootstrap (CG-06) resamples these with shared indices across metrics.
+    let mut per_query: Vec<Vec<f64>> = Vec::new();
     for q in &queries {
         // GET /search reads `q`+`k` (the legacy params); POST /recall is a
         // JSON body (`query`+`limit`) — it was added as POST-only, so a GET
@@ -6078,6 +6081,14 @@ fn run_eval(endpoint: &str, floors: &[(String, f32)], safety: SafetyTerm) -> Res
         sums[3] += p10;
         sums[4] += m;
         ndcg_sum += brain_server::eval::ndcg(&ids, &relevant, 10);
+        per_query.push(vec![
+            r5 as f64,
+            r10 as f64,
+            p5 as f64,
+            p10 as f64,
+            m as f64,
+            brain_server::eval::ndcg(&ids, &relevant, 10) as f64,
+        ]);
         let label = if q.query.chars().count() > 48 {
             let t: String = q.query.chars().take(45).collect();
             format!("{t}...")
@@ -6106,6 +6117,33 @@ fn run_eval(endpoint: &str, floors: &[(String, f32)], safety: SafetyTerm) -> Res
         mean[4],
         mean[5],
         queries.len()
+    );
+    // Paired bootstrap CI beside the points (CG-06): the interval rides
+    // beside the gate, never inside it — judge_admission below reads `mean`,
+    // not `lo`. Columns: r5, r10, p5, p10, mrr, ndcg@10.
+    let columns: Vec<Vec<f64>> = (0..6)
+        .map(|c| per_query.iter().map(|q| q[c]).collect())
+        .collect();
+    let ci = brain_server::eval::paired_bootstrap_ci_columns(
+        &columns,
+        brain_server::eval::BOOTSTRAP_RESAMPLES,
+        brain_server::eval::BOOTSTRAP_SEED,
+    );
+    println!(
+        "paired CI (95%, B={} seeded) r@5 [{:.3}, {:.3}] r@10 [{:.3}, {:.3}] p@5 [{:.3}, {:.3}] p@10 [{:.3}, {:.3}] mrr [{:.3}, {:.3}] ndcg@10 [{:.3}, {:.3}]",
+        brain_server::eval::BOOTSTRAP_RESAMPLES,
+        ci[0].1,
+        ci[0].2,
+        ci[1].1,
+        ci[1].2,
+        ci[2].1,
+        ci[2].2,
+        ci[3].1,
+        ci[3].2,
+        ci[4].1,
+        ci[4].2,
+        ci[5].1,
+        ci[5].2
     );
     // ── the joint admission ──────────────────────────────────────────────
     //

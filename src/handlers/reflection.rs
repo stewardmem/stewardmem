@@ -75,10 +75,11 @@ pub async fn get_reflection_corpus(
         // row count. The corpus read and its audit share one
         // connection so the count describes exactly the emitted page.
         let detail = format!(
-            "principal={who} since={since:?} limit={limit} partition={} rows={}",
+            "principal={who} since={since:?} limit={limit} partition={} epoch={} rows={}",
             partition
                 .map(crate::workflow::reflection::Partition::as_str)
                 .unwrap_or("all"),
+            crate::workflow::reflection::CORPUS_EXPORT_EPOCH,
             entries.len()
         );
         crate::audit::record_tenant(
