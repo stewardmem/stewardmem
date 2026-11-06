@@ -35,11 +35,10 @@ const W_KIND: i32 = 5;
 const W_SOURCE: i32 = 1;
 
 /// The ranked differential: the case's hypotheses reordered so rank 1
-/// (first to test) is first. Pure over committed case state (the
+/// (first to test) is first, each carrying its gap-free `rank`
+/// (`rank == position + 1`). Pure over committed case state (the
 /// `citation_universe` discipline — nothing from the current pass's raw
-/// model bytes). Called only from `gdl::apply`'s Hypothesize arm
-/// (S2's compute point; S1 lands the pure order — `rank` assignment
-/// arrives with the field in S2).
+/// model bytes). Called only from `gdl::apply`'s Hypothesize arm.
 pub(crate) fn ranked(case: &GdlCase) -> Vec<Hypothesis> {
     let universe = citation_universe(case);
     let scores: Vec<i32> = case
@@ -69,7 +68,12 @@ pub(crate) fn ranked(case: &GdlCase) -> Vec<Hypothesis> {
     });
     order
         .into_iter()
-        .map(|i| case.hypotheses[i].clone())
+        .enumerate()
+        .map(|(pos, i)| {
+            let mut h = case.hypotheses[i].clone();
+            h.rank = Some((pos + 1) as u16);
+            h
+        })
         .collect()
 }
 

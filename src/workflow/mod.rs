@@ -90,6 +90,7 @@ pub fn fuzz_hypothesis_status(sources: Vec<String>) -> String {
         prediction: String::new(),
         sources,
         confidence: None,
+        rank: None,
     };
     format!("{:?}", crate::workflow::gdl::hypothesis_status(&hypothesis))
 }

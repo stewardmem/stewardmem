@@ -549,6 +549,16 @@ pub(crate) struct Hypothesis {
     /// or stalls a case.
     #[serde(default)]
     pub confidence: Option<f64>,
+    /// The order to test this hypothesis in (1 = first to test), computed
+    /// deterministically in `apply()` from committed case state
+    /// (`ranking::ranked`, the only call site outside its module).
+    /// `None` = a pre-rank legacy state (hypothesized before CG-03):
+    /// the Plan ordering law passes it, readers treat it as unranked,
+    /// and it is never backfilled with a guessed order. The model never
+    /// declares this field — any model-sent value is discarded by the
+    /// gate's canonicalization and recomputed here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rank: Option<u16>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1829,6 +1839,86 @@ fn plan_gate(a: &PlanArtifact) -> Vec<String> {
     errors
 }
 
+/// CG-03: the ranked-differential Plan checks — the ordering law plus
+/// the needle-order binding. Called from `parse_and_gate`'s Plan arm
+/// alongside `plan_gate` (kept artifact-only so its 15 test call sites
+/// stand; the rank checks need `case` and live here — execution
+/// correction C-11 in `CG03_EVIDENCE`). Legacy `None` ranks pass both
+/// checks (pre-rank states are never refused here).
+fn plan_rank_errors(a: &PlanArtifact, case: &GdlCase) -> Vec<String> {
+    let mut errors = Vec::new();
+    if case.hypotheses.is_empty() || case.hypotheses.iter().any(|h| h.rank.is_none()) {
+        return errors;
+    }
+    // (i) The ordering law: ranks are the gap-free permutation 1..=n in
+    // Vec order (`rank == position + 1`), mirroring the step-order
+    // refusal vocabulary.
+    for (i, h) in case.hypotheses.iter().enumerate() {
+        let rank = h.rank.unwrap_or(0);
+        if rank != (i as u16) + 1 {
+            errors.push(err(
+                "§10",
+                &format!(
+                    "hypothesis[{i}].rank {rank} breaks contiguous 1..=n ordering — \
+                     the ranked differential is the test order; a malformed order \
+                     never plans"
+                ),
+            ));
+        }
+    }
+    if !errors.is_empty() {
+        return errors;
+    }
+    // (ii) The needle-order binding (C-8): needle-bearing steps must
+    // test the differential in rank order — the first such step tests
+    // rank 1, the next tests rank 2 or later, never earlier. Needle-less
+    // setup steps are exempt. Specific needles only (ticket topic words
+    // excluded), so a shared topic word cannot make every step "test"
+    // every hypothesis.
+    let mut bearing: Vec<u16> = Vec::new();
+    for s in &a.steps {
+        let step_needles = super::ranking::specific_step_needles(&case.ticket, s);
+        if step_needles.is_empty() {
+            continue;
+        }
+        let mut tested: Option<u16> = None;
+        for h in &case.hypotheses {
+            let hyp_needles = super::ranking::specific_hypothesis_needles(&case.ticket, h);
+            if step_needles.iter().any(|n| hyp_needles.contains(n)) {
+                tested = h.rank;
+                break;
+            }
+        }
+        if let Some(r) = tested {
+            bearing.push(r);
+        }
+    }
+    if let Some(&first) = bearing.first()
+        && first != 1
+    {
+        errors.push(err(
+            "§10",
+            &format!(
+                "the first hypothesis-testing step tests rank {first} — the plan \
+                 must test rank 1 before rank 2 (ranked differential)"
+            ),
+        ));
+    }
+    for pair in bearing.windows(2) {
+        if pair[1] < pair[0] {
+            errors.push(err(
+                "§10",
+                &format!(
+                    "a rank {} step follows a rank {} step — plan steps must follow \
+                     the differential's rank order",
+                    pair[1], pair[0]
+                ),
+            ));
+        }
+    }
+    errors
+}
+
 /// Act: each executed row follows the plan's order, tests ONE variable
 /// (L2), cites its playbook step or is explicitly experimental (L9), and
 /// the case had telemetry before the first action (L1 — enforced at
@@ -2185,8 +2275,18 @@ pub(crate) fn parse_and_gate(
         },
         GdlPhase::Hypothesize => {
             match serde_json::from_value::<HypothesizeArtifact>(parsed.clone()) {
-                Ok(a) => {
+                Ok(mut a) => {
                     let errors = hypothesize_gate(&a, case);
+                    if errors.is_empty() {
+                        // The rank is server-computed in `apply()` — the
+                        // model never declares it. Canonicalize any
+                        // model-sent value to `None` so the normalized
+                        // artifact carries no rank key (the persist
+                        // bytes compare stays untouched — CG-03 C-6).
+                        for h in &mut a.hypotheses {
+                            h.rank = None;
+                        }
+                    }
                     let gate = if errors.is_empty() {
                         Gate::Pass
                     } else {
@@ -2202,7 +2302,8 @@ pub(crate) fn parse_and_gate(
         }
         GdlPhase::Plan => match serde_json::from_value::<PlanArtifact>(parsed.clone()) {
             Ok(a) => {
-                let errors = plan_gate(&a);
+                let mut errors = plan_gate(&a);
+                errors.extend(plan_rank_errors(&a, case));
                 if errors.is_empty()
                     && let Some(seam) =
                         a.steps
@@ -2342,6 +2443,9 @@ pub(crate) fn apply(case: &mut GdlCase, phase: GdlPhase, artifact_json: &str) {
         GdlPhase::Hypothesize => {
             if let Ok(a) = serde_json::from_str::<HypothesizeArtifact>(artifact_json) {
                 case.hypotheses = a.hypotheses;
+                // The rank is born here — once, at hypothesize construction,
+                // from committed state (the certainty precedent below).
+                case.hypotheses = super::ranking::ranked(case);
             }
         }
         GdlPhase::Plan => {
@@ -2449,8 +2553,16 @@ pub(crate) fn plan_strip_with_law(case: &GdlCase, corroboration_ablated: bool) -
         } else {
             hypothesis_status(h)
         };
+        // CG-03: the rank number leads (a number, no prose) — ranked
+        // cases are stored in rank order, so `H1:` precedes `H2:`.
+        // Legacy `None` renders no number (never a guessed order).
+        let head = match h.rank {
+            Some(r) => format!("H{r}:"),
+            None => "H:".to_string(),
+        };
         lines.push(format!(
-            "H: {} [{}] — predicts: {}",
+            "{} {} [{}] — predicts: {}",
+            head,
             h.statement,
             match status {
                 HypothesisStatus::Confirmed => "confirmed",
@@ -6267,6 +6379,7 @@ mod tests {
                 prediction: String::new(),
                 sources: vec![],
                 confidence: None,
+                rank: None,
             }];
 
             let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -8334,6 +8447,7 @@ mod tests {
             prediction: "state Failed".into(),
             sources: vec!["test:tsr".into(), "test:sel".into()],
             confidence: None,
+            rank: None,
         };
         assert_eq!(
             hypothesis_status(&same_kind),
@@ -8352,6 +8466,7 @@ mod tests {
             prediction: "state Failed".into(),
             sources: vec!["test:tsr".into()],
             confidence: None,
+            rank: None,
         };
         assert_eq!(hypothesis_status(&one), HypothesisStatus::Hypothesis);
         assert_eq!(
@@ -8403,6 +8518,7 @@ mod tests {
             prediction: "state Failed".into(),
             sources: vec!["test:tsr".into(), "test:tsr".into()],
             confidence: None,
+            rank: None,
         };
         assert_eq!(hypothesis_status(&one), HypothesisStatus::Hypothesis);
         let one_kind = Hypothesis {
@@ -8441,6 +8557,169 @@ mod tests {
         // The dead-end escalation is defined, never improvised (L8).
         a.dead_end.escalate_to = String::new();
         assert!(plan_gate(&a).iter().any(|e| e.starts_with("L8")));
+    }
+
+    // ── CG-03 S2 typed pins ────────────────────────────────────────
+
+    /// R-5/O-1/S-1/W-1 fixtures. The ticket carries the source locator
+    /// so the hypothesize gate's resolution law passes.
+    fn ranked_case_two() -> GdlCase {
+        let mut case = GdlCase::fresh("sel events battery");
+        case.hypotheses = vec![
+            serde_json::from_str(
+                r#"{"statement":"pump fault","prediction":"pump reports Failed","sources":["test:sel events"]}"#,
+            )
+            .unwrap(),
+            serde_json::from_str(
+                r#"{"statement":"battery fault","prediction":"battery reports Failed","sources":["test:sel events","actual:sel events"]}"#,
+            )
+            .unwrap(),
+        ];
+        case.hypotheses = crate::workflow::ranking::ranked(&case);
+        case
+    }
+
+    /// R-5: ranked output is gap-free 1..=n with rank == position + 1.
+    #[test]
+    fn cg03_r5_rank_is_position() {
+        let case = ranked_case_two();
+        assert_eq!(case.hypotheses.len(), 2);
+        for (i, h) in case.hypotheses.iter().enumerate() {
+            assert_eq!(h.rank, Some((i as u16) + 1), "rank == position + 1");
+        }
+        // The 2-kind hypothesis outranks the 1-kind one.
+        assert_eq!(case.hypotheses[0].statement, "battery fault");
+        // Single + empty via apply.
+        let mut one = GdlCase::fresh("sel events battery");
+        apply(
+            &mut one,
+            GdlPhase::Hypothesize,
+            r#"{"hypotheses":[{"statement":"only","prediction":"battery reports Failed","sources":["test:sel events"]}]}"#,
+        );
+        assert_eq!(one.hypotheses[0].rank, Some(1));
+    }
+
+    /// O-1: a corrupt `Some(rank)` refuses BY NAME (§10); legacy `None`
+    /// passes.
+    #[test]
+    fn cg03_o1_ordering_law_and_legacy_pass() {
+        let mut case = ranked_case_two();
+        let plan: PlanArtifact = serde_json::from_str(PLAN_JSON).unwrap();
+        assert!(
+            plan_rank_errors(&plan, &case).is_empty(),
+            "ranked case passes the ordering law"
+        );
+        case.hypotheses[0].rank = Some(2);
+        let errors = plan_rank_errors(&plan, &case);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.starts_with("§10") && e.contains("rank")),
+            "corrupt rank refuses by name: {errors:?}"
+        );
+        let legacy = GdlCase::fresh("sel events battery");
+        assert!(
+            plan_rank_errors(&plan, &legacy).is_empty(),
+            "legacy (None) passes — never refused here"
+        );
+    }
+
+    /// O-2: needle-order binding — inverted plan refuses, setup step
+    /// exempt, ordered plan passes.
+    #[test]
+    fn cg03_o2_needle_order_binding() {
+        // The ticket must NOT carry the discriminating words (battery /
+        // pump) — ticket words are excluded as generic, so a hyp whose
+        // distinctive word is also a ticket word cannot be bound.
+        let mut case = GdlCase::fresh("sel events rebuild");
+        case.hypotheses = vec![
+            serde_json::from_str(
+                r#"{"statement":"battery fault","prediction":"battery reports Failed","sources":["test:sel events"]}"#,
+            )
+            .unwrap(),
+            serde_json::from_str(
+                r#"{"statement":"pump fault","prediction":"pump reports Failed","sources":["test:sel events"]}"#,
+            )
+            .unwrap(),
+        ];
+        case.hypotheses = crate::workflow::ranking::ranked(&case);
+        // Rank 1 is battery (statement tie-break: battery < pump).
+        assert_eq!(case.hypotheses[0].statement, "battery fault");
+        let mut plan: PlanArtifact = serde_json::from_str(PLAN_JSON).unwrap();
+        plan.steps[0].description = "query battery state".into();
+        plan.steps[0].command = "racadm battery".into();
+        plan.steps[0].expected = "battery Ready".into();
+        plan.steps[1].description = "query pump state".into();
+        plan.steps[1].command = "racadm pump".into();
+        plan.steps[1].expected = "pump Ready".into();
+        assert!(
+            plan_rank_errors(&plan, &case).is_empty(),
+            "ordered plan passes"
+        );
+        // Inverted: pump first.
+        plan.steps.swap(0, 1);
+        for (i, s) in plan.steps.iter_mut().enumerate() {
+            s.order = (i as i64) + 1;
+        }
+        let errors = plan_rank_errors(&plan, &case);
+        assert!(
+            errors.iter().any(|e| e.starts_with("§10")),
+            "inverted plan refuses by name: {errors:?}"
+        );
+        // A leading needle-less setup step is exempt.
+        let mut plan2: PlanArtifact = serde_json::from_str(PLAN_JSON).unwrap();
+        plan2.steps[0].description = "check intake telemetry".into();
+        plan2.steps[0].command = "collect logs".into();
+        plan2.steps[0].expected = "telemetry captured".into();
+        plan2.steps[1].description = "query battery state".into();
+        plan2.steps[1].command = "racadm battery".into();
+        plan2.steps[1].expected = "battery Ready".into();
+        assert!(
+            plan_rank_errors(&plan2, &case).is_empty(),
+            "leading setup step exempt, rank-1 next passes"
+        );
+    }
+
+    /// S-1: the strip renders `H1:` before `H2:` in rank order; legacy
+    /// renders no number.
+    #[test]
+    fn cg03_s1_strip_renders_rank_number() {
+        let case = ranked_case_two();
+        let strip = plan_strip(&case);
+        let h1 = strip.find("H1:").expect("H1 rendered");
+        let h2 = strip.find("H2:").expect("H2 rendered");
+        assert!(h1 < h2, "rank order in the strip: {strip}");
+        let legacy = GdlCase::fresh("t");
+        assert!(
+            !plan_strip(&legacy).contains("H1:"),
+            "legacy renders no rank number"
+        );
+    }
+
+    /// W-1: a model-sent rank is canonicalized to `None` in the
+    /// normalized artifact and recomputed by `apply`.
+    #[test]
+    fn cg03_w1_model_rank_canonicalized_and_recomputed() {
+        let case = GdlCase::fresh("sel events battery");
+        let text = r#"{"hypotheses":[{"statement":"battery fault","prediction":"battery reports Failed","sources":["test:sel events"],"rank":5}]}"#;
+        let (gate, normalized) = parse_and_gate(GdlPhase::Hypothesize, &case, text);
+        assert_eq!(gate, Gate::Pass);
+        let normalized = normalized.expect("normalized artifact");
+        assert!(
+            !normalized.contains("\"rank\""),
+            "normalized artifact carries no rank key: {normalized}"
+        );
+        let mut applied = case.clone();
+        apply(&mut applied, GdlPhase::Hypothesize, &normalized);
+        assert_eq!(
+            applied.hypotheses[0].rank,
+            Some(1),
+            "apply recomputes the rank the model never declared"
+        );
+        // Legacy literal without the key parses to None.
+        let legacy: Hypothesis =
+            serde_json::from_str(r#"{"statement":"s","prediction":"p","sources":[]}"#).unwrap();
+        assert_eq!(legacy.rank, None);
     }
 
     /// F8: an act-gate case with intake + plan + a triage that confirmed
@@ -9269,6 +9548,7 @@ mod tests {
                 prediction: "p".into(),
                 sources: vec!["actual:unheld nowhere".into()],
                 confidence: None,
+                rank: None,
             }],
         };
         assert!(
