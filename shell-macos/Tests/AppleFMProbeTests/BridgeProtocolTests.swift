@@ -17,7 +17,7 @@ import FoundationModels
 // where the model is unavailable they assert the NAMED refusal instead of
 // skipping, because "not measured here" is an answer, not a pass.
 
-@Suite("brain-afm bridge protocol")
+@Suite("brain-afm bridge protocol", .serialized)
 struct BrainAfmBridgeTests {
     /// Locate the built executable relative to THIS file, so `swift test`
     /// always drives the binary the same build produced.

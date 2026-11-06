@@ -2062,7 +2062,7 @@ pub fn afm_bridge_path() -> Option<std::path::PathBuf> {
 }
 
 /// The chat tier the spine requests, verbatim, as the bridge wire's
-/// additive-optional `model` field (CG-10 E4). `BRAIN_CHAT_MODEL` names it;
+/// additive-optional `model` field. `BRAIN_CHAT_MODEL` names it;
 /// unset/empty is `None` — the field is OMITTED from the wire, which every
 /// bridge revision parses as the AFM tier, so the default changes nothing
 /// byte-for-byte. The kernel does NOT validate the value: the child owns

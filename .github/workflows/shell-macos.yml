@@ -120,6 +120,12 @@ jobs:
       # instead of leaving a reader to infer it from a passing log.
       - name: Measure on this runner
         working-directory: shell-macos
+        # One on-device model is shared by every live arm: parallel
+        # execution contends on it (window/capability reads and safety
+        # refusals flake under contention; serial runs green). Serial
+        # is the deterministic posture for a single-model package.
+        env:
+          SWIFT_TEST_USE_PARALLEL: "0"
         run: swift test
 
       - name: Report whether this runner could actually measure

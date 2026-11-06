@@ -771,7 +771,7 @@ pub async fn chat_turn(
             .into_response();
     }
 
-    // CG-11 E3 — THE GREEDY ANSWER CACHE. Both serving tiers are
+    // THE GREEDY ANSWER CACHE. Both serving tiers are
     // greedy-locked (the MLX tier is `temperature: 0` by construction; the
     // AFM tier by CG-09 S5), so the answer is a pure function of (model,
     // prompt) — the exact key below, prompt version inside the hash. A
@@ -887,7 +887,7 @@ pub async fn chat_turn(
             instructions: Some(CHAT_INSTRUCTIONS_V1.to_owned()),
             max_response_tokens: Some(max_response_tokens),
             history: seed_history,
-            // CG-10 E4: the configured chat tier (None = the field is
+            // the configured chat tier (None = the field is
             // omitted and every bridge parses it as the AFM tier).
             model: crate::config::chat_model_id(),
         })
@@ -955,7 +955,7 @@ pub async fn chat_turn(
                     abstain,
                     claims,
                 } => {
-                    // CG-11 E3: the answer is stored for the NEXT identical
+                    // the answer is stored for the NEXT identical
                     // (model, prompt) — this arm only runs on a MISS (the
                     // hit path returns before the bridge is asked), and the
                     // model's raw assertions are what's cached: the support

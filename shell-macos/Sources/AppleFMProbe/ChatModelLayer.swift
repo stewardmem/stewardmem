@@ -278,6 +278,12 @@ public enum ChatWindow {
         guard case .available = model.availability else {
             return .unreadable(reason: "on-device model unavailable")
         }
+        // A reported zero window is not a window: under contention the
+        // model can report available with contextSize 0, and routing on a
+        // zero budget would be a silent misroute. Say unreadable instead.
+        guard model.contextSize > 0 else {
+            return .unreadable(reason: "on-device model reported a zero window")
+        }
         return .window(model.contextSize)
     }
 
@@ -293,7 +299,13 @@ public enum ChatWindow {
     public static func privateCloud() async -> Reading {
         let pcc = PrivateCloudComputeLanguageModel()
         do {
-            return .window(try await pcc.contextSize)
+            // Same zero-window law as the on-device half: a reported zero
+            // is unreadable, never a routable window.
+            let size = try await pcc.contextSize
+            guard size > 0 else {
+                return .unreadable(reason: "private cloud reported a zero window")
+            }
+            return .window(size)
         } catch {
             return .unreadable(reason: String(describing: error))
         }

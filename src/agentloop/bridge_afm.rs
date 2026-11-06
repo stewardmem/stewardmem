@@ -116,7 +116,7 @@ pub struct BridgeHistoryEntry {
 /// cache is invalidated by an instruction change, so merging would be a lie).
 /// `history` seeds a session the child must CREATE (after a restart or
 /// kill); an existing live session ignores it — its live transcript is
-/// authoritative. `model` names the chat tier (CG-10 E3): absent = the AFM
+/// authoritative. `model` names the chat tier: absent = the AFM
 /// tier, byte-identical to every caller that shipped before the field
 /// existed — the GDL propose loop never sends it, so its sessions stay AFM
 /// by construction. The CHILD owns the vocabulary (`ChatModelId` + `forChat`);

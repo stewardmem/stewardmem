@@ -1,4 +1,4 @@
-//! The greedy answer cache (CG-11 E3): the chat spine's bridge-turn path
+//! The greedy answer cache: the chat spine's bridge-turn path
 //! answers a repeated `(model, prompt)` from the stored answer instead of a
 //! second decode. Sound BY LAW, not by assumption: both serving tiers are
 //! greedy-locked (the MLX tier is `temperature: 0` by construction in

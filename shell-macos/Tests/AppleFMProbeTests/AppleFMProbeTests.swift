@@ -20,7 +20,7 @@ import FoundationModels
 /// build where `@available` had compiled the whole surface out of existence.
 /// So each test asks the framework and then checks that what it said is
 /// coherent.
-@Suite("Apple FM probe")
+@Suite("Apple FM probe", .serialized)
 struct AppleFMProbeTests {
 
     @Test("The on-device window is reported, and it is a combined budget")

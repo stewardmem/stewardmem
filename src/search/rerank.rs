@@ -122,7 +122,7 @@ pub(crate) struct ScoredIndex {
     pub score: f32,
 }
 
-/// The pure reorder law (CG-12 E2's derivation, pinned without ONNX in the
+/// The pure reorder law (the rerank round's derivation, pinned without ONNX in the
 /// module tests below): given the incoming window — RRF fusion order, already
 /// freshness-tie-broken (`observed_at` → `authority` → trust) — and the
 /// cross-encoder's verdicts, return the window reordered so that

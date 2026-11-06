@@ -181,7 +181,7 @@ impl LlmProvider for AfmBridgeProvider {
                 // And no model field: absent = the AFM tier, so the case
                 // machine's verdicts stay on the tier they were measured
                 // on regardless of the chat tier's configuration (CG-10
-                // E5's zero-gate-verdict law; pinned by M-4's scan).
+                // the zero-gate-verdict law; pinned by the isolation scan).
                 model: None,
             };
             let (bridge_id, mut bridge_rx) = match bridge.turn(turn).await {
