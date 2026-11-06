@@ -17196,7 +17196,15 @@ Final paragraph after the rule.";
         let tmp = tempfile::NamedTempFile::new().unwrap();
         let state = drawbridge_state(&tmp);
         for run in 1..=3 {
-            seed_reflection_row(&state, run, 1, "proposal");
+            // Differentiated disagreements (the near-dup filter collapses
+            // identical renderings — CG-06): each run gets its own proposal
+            // vocabulary so all three rows render.
+            seed_reflection_row(
+                &state,
+                run,
+                1,
+                &format!("run{run}alpha run{run}bravo run{run}charlie run{run}delta"),
+            );
         }
         let out = export(
             &state,
@@ -17256,7 +17264,15 @@ Final paragraph after the rule.";
         let tmp = tempfile::NamedTempFile::new().unwrap();
         let state = drawbridge_state(&tmp);
         for run in 1..=6 {
-            seed_reflection_row(&state, run, 1, "proposal");
+            // Differentiated disagreements (the near-dup filter collapses
+            // identical renderings — CG-06): each run gets its own proposal
+            // vocabulary so all six rows render.
+            seed_reflection_row(
+                &state,
+                run,
+                1,
+                &format!("run{run}alpha run{run}bravo run{run}charlie run{run}delta"),
+            );
         }
         let out = export(
             &state,
@@ -17306,7 +17322,15 @@ Final paragraph after the rule.";
         let tmp = tempfile::NamedTempFile::new().unwrap();
         let state = drawbridge_state(&tmp);
         for run in 1..=6 {
-            seed_reflection_row(&state, run, 1, "proposal");
+            // Differentiated disagreements (the near-dup filter collapses
+            // identical renderings — CG-06): each run gets its own proposal
+            // vocabulary so all six rows render.
+            seed_reflection_row(
+                &state,
+                run,
+                1,
+                &format!("run{run}alpha run{run}bravo run{run}charlie run{run}delta"),
+            );
         }
         let first = export(
             &state,
