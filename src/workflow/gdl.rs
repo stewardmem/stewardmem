@@ -1154,6 +1154,28 @@ pub(crate) struct GdlCase {
     /// bound.
     #[serde(default)]
     pub rehypothesis_count: u32,
+    /// CG-05: the split-pending marker — mirrors the Intake artifact's
+    /// `decomposition` after `apply` (the machine's own copy, so the
+    /// split act reads case state, never an artifact). Additive
+    /// state_json (no SQL column, no migration); `skip_serializing_if`
+    /// keeps the no-split persisted case byte-identical to the
+    /// pre-lane shape; old states parse to `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decomposition: Option<Decomposition>,
+    /// CG-05: child run ids from the split act (the link, parent side).
+    /// Additive state_json; old states parse to `vec![]`.
+    #[serde(default)]
+    pub children: Vec<i64>,
+    /// CG-05: the parent run id, on a split child's own case (the link,
+    /// child side). The one-level law's read: a case with a parent does
+    /// not decompose further (C-8).
+    #[serde(default)]
+    pub parent_case_id: Option<i64>,
+    /// CG-05: all N child ids of the split (on a child's own case) —
+    /// the N-set the parent's `children` holds; the child finds its
+    /// siblings without scanning other runs.
+    #[serde(default)]
+    pub sibling_ids: Vec<i64>,
 }
 
 impl GdlCase {
@@ -1176,7 +1198,39 @@ impl GdlCase {
             certainty: None,
             rehypothesis: None,
             rehypothesis_count: 0,
+            decomposition: None,
+            children: Vec::new(),
+            parent_case_id: None,
+            sibling_ids: Vec::new(),
         }
+    }
+
+    /// CG-05: is this run's `state_json` a SEEDED split child — the row
+    /// the Intake split act inserted (C-10): a fresh Intake-phase case
+    /// carrying the parent link, never driven (no intake artifact, no
+    /// hypotheses, no children of its own). Parked between `{}` and a
+    /// driven case: the freshness sentinel accepts exactly this shape
+    /// (the launch verb's pre-check and `admit`'s fresh path both read
+    /// this one predicate — the two checks cannot drift), and refuses
+    /// every other non-`{}` byte as corrupt or ambiguous legacy.
+    pub(crate) fn seeded_split_child(state_json: &str) -> Option<GdlCase> {
+        let case: GdlCase = serde_json::from_str(state_json).ok()?;
+        let seeded = case.phase == GdlPhase::Intake
+            && case.intake.is_none()
+            && case.triage.is_none()
+            && case.hypotheses.is_empty()
+            && case.plan.is_empty()
+            && case.verify_step.is_none()
+            && case.dead_end.is_none()
+            && case.test_log.is_empty()
+            && case.verify.is_none()
+            && case.capture.is_none()
+            && case.closure.is_none()
+            && case.back_referral.is_none()
+            && case.parent_case_id.is_some()
+            && case.children.is_empty()
+            && case.decomposition.is_none();
+        seeded.then_some(case)
     }
 
     /// The escalation bundle (L8): IS/NOT + telemetry + differential +
@@ -1252,8 +1306,9 @@ fn err(law: &str, detail: &str) -> String {
 /// recorded, "none available" allowed (L3). CG-05: the decomposition arms
 /// (A3) validate the model-proposed multi-issue split for shape only —
 /// the gate disposes, the model proposes (series law 3). The `case` arg
-/// (C-12) carries the one-level law's depth check (arm 6, S2).
-fn intake_gate(a: &IntakeArtifact, _case: &GdlCase) -> Vec<String> {
+/// (C-12) carries the one-level law: a split child does not decompose
+/// further (C-8).
+fn intake_gate(a: &IntakeArtifact, case: &GdlCase) -> Vec<String> {
     let mut errors = Vec::new();
     if a.telemetry_refs.len() > MAX_TELEMETRY_REFS {
         errors.push(err(
@@ -1417,8 +1472,16 @@ fn intake_gate(a: &IntakeArtifact, _case: &GdlCase) -> Vec<String> {
                 }
             }
         }
-        // Arm 6 (one level, C-8) ships in S2 with the `parent_case_id`
-        // state field it reads; the widened signature is ready for it.
+        // Arm 6 (one level, C-8): a split child does not decompose
+        // further — recursion is a named future act with a budget
+        // model, not a free behavior. The `case` read is the linkage
+        // stamped at the child's admit (S2's seeded admission).
+        if case.parent_case_id.is_some() {
+            errors.push(err(
+                "A3",
+                "a split issue does not decompose further (one level)",
+            ));
+        }
     }
     errors
 }
@@ -2744,6 +2807,9 @@ pub(crate) fn apply(case: &mut GdlCase, phase: GdlPhase, artifact_json: &str) {
     match phase {
         GdlPhase::Intake => {
             if let Ok(a) = serde_json::from_str::<IntakeArtifact>(artifact_json) {
+                // CG-05: the split-pending marker mirrors the artifact's
+                // decomposition (the split act reads case state).
+                case.decomposition = a.decomposition.clone();
                 case.intake = Some(a);
             }
         }
@@ -2860,6 +2926,14 @@ pub(crate) fn plan_strip_with_law(case: &GdlCase, corroboration_ablated: bool) -
             case.rehypothesis_count,
             crate::workflow::gdl::MAX_REHYPOTHESES
         ));
+    }
+    // CG-05 (C-4): the split aggregate — DISPLAY only (the independence
+    // law: the aggregator is state, never a gate). The children count,
+    // no prose; non-split cases render byte-identically (the no-line
+    // arm). The renderer is the strip — there is no GDL surface in the
+    // shell; the chip lands with the GDL-surface lane.
+    if !case.children.is_empty() {
+        lines.push(format!("split · {}", case.children.len()));
     }
     let executed: std::collections::HashSet<i64> = case.test_log.iter().map(|r| r.order).collect();
     for s in &case.plan {
@@ -9949,6 +10023,413 @@ mod tests {
         assert_eq!(expected_phases(0), 7);
         assert_eq!(expected_phases(1), 11);
         assert_eq!(expected_phases(2), 15);
+    }
+
+    /// CG-05: the scripted split intake (the honest two-issue
+    /// decomposition over INTAKE_JSON) and its two questions. The
+    /// parent keeps the ticket; issue 2's question is the child's.
+    fn intake_with_decomposition() -> String {
+        let mut value: serde_json::Value = serde_json::from_str(INTAKE_JSON).unwrap();
+        value["decomposition"] = serde_json::json!({
+            "issues": [
+                {
+                    "title": "gradebook workbook errors",
+                    "question": "why does the shared gradebook workbook fail to open",
+                    "severity_hint": "high"
+                },
+                {
+                    "title": "idrac cache batteries",
+                    "question": "what is the state of the idrac cache batteries",
+                    "severity_hint": ""
+                }
+            ],
+            "rationale": "different teams own the workbook and the batteries"
+        });
+        serde_json::to_string(&value).unwrap()
+    }
+
+    const SPLIT_ISSUE_2_QUESTION: &str = "what is the state of the idrac cache batteries";
+
+    /// CG-05 SPL-1: a 2-issue case — the parent resolves its issue-1
+    /// differential; ONE sibling row (active, linked both ways, its own
+    /// chain); no further decomposition from the child (C-8).
+    #[test]
+    fn split_parent_resolves_and_one_sibling_row_is_linked() {
+        let intake = intake_with_decomposition();
+        let f = fixture(vec![
+            scripted_text(&intake),
+            scripted_text(TRIAGE_JSON),
+            scripted_text(HYPOTHESIZE_JSON),
+            scripted_text(PLAN_JSON),
+            scripted_text(ACT_JSON),
+            scripted_text(VERIFY_JSON),
+            scripted_text(RECHECK_JSON),
+            scripted_text(VERIFY_JSON),
+            scripted_text(HANDOFF_JSON),
+        ]);
+        seed_kb_for_ticket(&f, "odd case");
+        let cancel = CancellationToken::new();
+        let outcome = rt()
+            .block_on(f.driver.run_case(1, "odd case", &cancel))
+            .unwrap();
+        assert!(
+            matches!(outcome, GdlOutcome::Resolved { phases: 7, .. }),
+            "the parent resolves its issue-1 differential: {outcome:?}"
+        );
+        let conn = Connection::open(f.tmp.path()).unwrap();
+        // Exactly one sibling row, inserted by the split act.
+        let rows: Vec<(i64, String, String)> = {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, status, state_json FROM workflow_runs \
+                     WHERE kind='troubleshoot' ORDER BY id",
+                )
+                .unwrap();
+            stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap()
+        };
+        assert_eq!(rows.len(), 2, "parent + one sibling: {rows:?}");
+        let (sibling_id, sibling_status, sibling_json) = &rows[1];
+        assert_eq!(sibling_status, "active", "the sibling sits active");
+        let sibling: GdlCase = serde_json::from_str(sibling_json).unwrap();
+        // D-1's both-ways link (asserted here where the split was
+        // produced by the full drive): parent side + child side.
+        assert_eq!(sibling.parent_case_id, Some(1));
+        assert_eq!(
+            sibling.ticket, SPLIT_ISSUE_2_QUESTION,
+            "the child's ticket is the approved question"
+        );
+        assert_eq!(
+            sibling.sibling_ids,
+            vec![*sibling_id],
+            "sibling_ids is the N-set (the split's children)"
+        );
+        let parent_json: String = conn
+            .query_row("SELECT state_json FROM workflow_runs WHERE id=1", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        let parent: GdlCase = serde_json::from_str(&parent_json).unwrap();
+        assert_eq!(
+            parent.children,
+            vec![*sibling_id],
+            "the parent side links back"
+        );
+        // Its own chain: the sibling holds no checkpoint yet — its
+        // admission is a fresh claim, independent of the parent's chain.
+        let sibling_events: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM agent_session_events WHERE run_id=?1",
+                [*sibling_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(sibling_events, 0, "the sibling's chain is its own");
+        // C-8: the child does not decompose further — its own Intake
+        // with the same decomposition refuses BY NAME (one level).
+        let (gate, _) = parse_and_gate(GdlPhase::Intake, &sibling, &intake);
+        match &gate {
+            Gate::Fail(errors) => assert!(
+                errors
+                    .iter()
+                    .any(|e| e.starts_with("A3") && e.contains("one level")),
+                "a split child refuses decomposition BY NAME: {errors:?}"
+            ),
+            other => panic!("the child's decomposition refuses: {other:?}"),
+        }
+        // And the strip renders the aggregate (count, no prose).
+        assert!(
+            plan_strip(&parent).contains(&format!("split · {}", parent.children.len())),
+            "the strip carries the split count: {}",
+            plan_strip(&parent)
+        );
+    }
+
+    /// CG-05 SPL-2: the parent resolves while its child runs — the
+    /// independence law (no closure-wait, C-5). The parent's resolution
+    /// above already proved it; here the child is DRIVEN concurrently
+    /// in the same tree and the parent's terminal is unchanged.
+    #[test]
+    fn parent_resolves_while_child_runs() {
+        let intake = intake_with_decomposition();
+        let f = fixture(vec![
+            scripted_text(&intake),
+            scripted_text(TRIAGE_JSON),
+            scripted_text(HYPOTHESIZE_JSON),
+            scripted_text(PLAN_JSON),
+            scripted_text(ACT_JSON),
+            scripted_text(VERIFY_JSON),
+            scripted_text(RECHECK_JSON),
+            scripted_text(VERIFY_JSON),
+            scripted_text(HANDOFF_JSON),
+        ]);
+        seed_kb_for_ticket(&f, "odd case");
+        let cancel = CancellationToken::new();
+        let outcome = rt()
+            .block_on(f.driver.run_case(1, "odd case", &cancel))
+            .unwrap();
+        assert!(
+            matches!(outcome, GdlOutcome::Resolved { .. }),
+            "{outcome:?}"
+        );
+        // The child sits active and undriven in the same DB after the
+        // parent's terminal — the parent needed nothing from it.
+        let conn = Connection::open(f.tmp.path()).unwrap();
+        let parent_status: String = conn
+            .query_row("SELECT status FROM workflow_runs WHERE id=1", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(parent_status, "resolved");
+        let child_status: String = conn
+            .query_row("SELECT status FROM workflow_runs WHERE id=2", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            child_status, "active",
+            "the child is still runnable on its own"
+        );
+    }
+
+    /// CG-05 SPL-3: a red-flagged CHILD escalates per the monotonic law
+    /// without touching the parent's resolution. The split is produced
+    /// by the direct Intake advance (the same `advance_tx` the driver
+    /// rides); the child is then driven with a defer triage.
+    #[test]
+    fn red_flagged_child_escalates_independently_of_parent() {
+        let intake = intake_with_decomposition();
+        let f = fixture(vec![
+            scripted_text(INTAKE_JSON),
+            scripted_text(
+                r#"{"priority":"P2","stabilized":true,"search_hits":[],"verdict":"defer"}"#,
+            ),
+        ]);
+        let mut conn = Connection::open(f.tmp.path()).unwrap();
+        let mut cp = checkpoint::admit(&mut conn, 1, "odd case", "test", "owner").unwrap();
+        let normalize = |artifact: &str| -> String {
+            let value: serde_json::Value = serde_json::from_str(artifact).unwrap();
+            typed_json::<IntakeArtifact>(value).unwrap()
+        };
+        let exchange = fixture_exchange(&mut conn, &cp, GdlPhase::Intake, 1, &intake, "owner");
+        cp = checkpoint::advance(
+            &mut conn,
+            &cp,
+            "owner",
+            checkpoint::Transition {
+                phase: GdlPhase::Intake,
+                attempt: 1,
+                verdict: "pass",
+                errors: vec![],
+                artifact: Some(normalize(&intake)),
+                exchange: Some(exchange),
+                terminal: None,
+                usage: None,
+                next_phase: None,
+                rehypothesis_count: 0,
+            },
+            None,
+        )
+        .unwrap();
+        assert_eq!(cp.case.children, vec![2], "the split produced sibling 2");
+        // The parent's persisted bytes before the child's run.
+        let parent_before: String = conn
+            .query_row("SELECT state_json FROM workflow_runs WHERE id=1", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        // Drive the child: its own intake passes, its defer escalates.
+        let cancel = CancellationToken::new();
+        let outcome = rt()
+            .block_on(f.driver.run_case(2, SPLIT_ISSUE_2_QUESTION, &cancel))
+            .unwrap();
+        match &outcome {
+            GdlOutcome::Escalated { at, bundle } => {
+                assert_eq!(*at, GdlPhase::Triage);
+                assert!(
+                    bundle.complete,
+                    "the child's defer escalates with the bundle"
+                );
+            }
+            other => panic!("the child escalates at triage: {other:?}"),
+        }
+        // The parent's rows are byte-untouched by the child's run.
+        let parent_after: String = conn
+            .query_row("SELECT state_json FROM workflow_runs WHERE id=1", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            parent_before, parent_after,
+            "the child's escalation touches no parent byte"
+        );
+    }
+
+    /// CG-05 C-1: the crank-consumption SQL sees parent + N−1 rows
+    /// after the split — the per-child dial input. The pin reads the
+    /// crank's own enumeration query (the CLI's SQL verbatim); the
+    /// crank binary itself is not invoked (recorded boundary).
+    #[test]
+    fn crank_enumeration_sees_parent_and_children_after_the_split() {
+        let intake = intake_with_decomposition();
+        let f = fixture(vec![scripted_text(&intake)]);
+        // Drive ONLY the Intake phase (the split), then pause — "after
+        // the split", mid-flight.
+        let outcome = rt()
+            .block_on(f.driver.run_case_until(
+                1,
+                "odd case",
+                &CancellationToken::new(),
+                Some(1),
+                &EscapeFlag::new(),
+            ))
+            .unwrap();
+        assert!(outcome.is_none(), "paused after the Intake pass");
+        let conn = Connection::open(f.tmp.path()).unwrap();
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, domain, status, state_json FROM workflow_runs \
+                 WHERE kind = 'troubleshoot' AND status IN ('active','resolved') ORDER BY id",
+            )
+            .unwrap();
+        let rows: Vec<(i64, String, String, String)> = stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(rows.len(), 2, "the dial sees parent + N−1 rows: {rows:?}");
+        assert_eq!(rows[0].0, 1);
+        assert_eq!(rows[1].0, 2);
+    }
+
+    /// CG-05 O-1: hash continuity across the split — the parent's
+    /// chain verifies after the split, and tampering the split
+    /// transition's gate row fails `verify_link` (append-only across
+    /// the split). The gate row is the one place only the chain check
+    /// reads: the case bytes are honest, so `bind` passes and the chain
+    /// itself must red. The parent is driven to `Resolved` (a terminal
+    /// chain re-admits without the mid-flight pause law), so the
+    /// honest control and the tamper share one production entry point.
+    #[test]
+    fn split_preserves_parent_hash_continuity() {
+        let intake = intake_with_decomposition();
+        let f = fixture(vec![
+            scripted_text(&intake),
+            scripted_text(TRIAGE_JSON),
+            scripted_text(HYPOTHESIZE_JSON),
+            scripted_text(PLAN_JSON),
+            scripted_text(ACT_JSON),
+            scripted_text(VERIFY_JSON),
+            scripted_text(RECHECK_JSON),
+            scripted_text(VERIFY_JSON),
+            scripted_text(HANDOFF_JSON),
+        ]);
+        seed_kb_for_ticket(&f, "odd case");
+        let cancel = CancellationToken::new();
+        let outcome = rt()
+            .block_on(f.driver.run_case(1, "odd case", &cancel))
+            .unwrap();
+        assert!(
+            matches!(outcome, GdlOutcome::Resolved { .. }),
+            "{outcome:?}"
+        );
+        let mut conn = Connection::open(f.tmp.path()).unwrap();
+        // The recorded policy identity (the resume binding compares it).
+        let policy_json: String = conn
+            .query_row(
+                "SELECT payload_json FROM agent_session_events \
+                 WHERE run_id=1 AND kind='control:gdl' ORDER BY seq DESC LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let policy = serde_json::from_str::<serde_json::Value>(&policy_json).unwrap()["policy"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        // Positive control: the honest terminal chain re-admits
+        // byte-exactly (the split did not fork or corrupt the
+        // parent's revisions).
+        let readmit = checkpoint::admit(&mut conn, 1, "odd case", &policy, "owner").unwrap();
+        assert_eq!(readmit.case.children, vec![2]);
+        // Free the claim, then tamper the split revision's gate row
+        // (control:gdl:2:gate — the Intake successor that fired the
+        // split): the chain must red on the first re-verification.
+        // (The terminal readmit above released its own claim, so the
+        // second claim is a fresh one.)
+        conn.execute(
+            "UPDATE agent_session_events SET payload_json=replace(payload_json,'\"verdict\":\"pass\"','\"verdict\":\"fail\"') WHERE idempotency_key='control:gdl:2:gate'",
+            [],
+        )
+        .unwrap();
+        assert!(
+            checkpoint::admit(&mut conn, 1, "odd case", &policy, "owner").is_err(),
+            "tampering a parent gate across the split must fail the chain"
+        );
+    }
+
+    /// CG-05 D-1: child tickets are the approved questions; linkage
+    /// reads both ways; sibling_ids is the N-set. The forward direction
+    /// is SPL-1's; here the backward read is pinned from the linkage
+    /// alone (each side names the other, and the N-set is complete).
+    #[test]
+    fn split_linkage_reads_both_ways() {
+        let intake = intake_with_decomposition();
+        let f = fixture(vec![]);
+        let mut conn = Connection::open(f.tmp.path()).unwrap();
+        let cp = checkpoint::admit(&mut conn, 1, "odd case", "test", "owner").unwrap();
+        let normalize = |artifact: &str| -> String {
+            let value: serde_json::Value = serde_json::from_str(artifact).unwrap();
+            typed_json::<IntakeArtifact>(value).unwrap()
+        };
+        let exchange = fixture_exchange(&mut conn, &cp, GdlPhase::Intake, 1, &intake, "owner");
+        let _cp = checkpoint::advance(
+            &mut conn,
+            &cp,
+            "owner",
+            checkpoint::Transition {
+                phase: GdlPhase::Intake,
+                attempt: 1,
+                verdict: "pass",
+                errors: vec![],
+                artifact: Some(normalize(&intake)),
+                exchange: Some(exchange),
+                terminal: None,
+                usage: None,
+                next_phase: None,
+                rehypothesis_count: 0,
+            },
+            None,
+        )
+        .unwrap();
+        let parent_json: String = conn
+            .query_row("SELECT state_json FROM workflow_runs WHERE id=1", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        let parent: GdlCase = serde_json::from_str(&parent_json).unwrap();
+        let child_json: String = conn
+            .query_row("SELECT state_json FROM workflow_runs WHERE id=2", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        let child: GdlCase = serde_json::from_str(&child_json).unwrap();
+        // Forward: the parent's children contain the child, and the
+        // child's ticket is the approved issue-2 question.
+        assert!(parent.children.contains(&2));
+        assert_eq!(child.ticket, SPLIT_ISSUE_2_QUESTION);
+        assert_eq!(
+            child.ticket,
+            parent.decomposition.as_ref().unwrap().issues[1].question,
+            "the child's ticket is the approved question verbatim"
+        );
+        // Backward: the child's parent names the parent, and its
+        // sibling set is the complete N-set (the split's children).
+        assert_eq!(child.parent_case_id, Some(1));
+        assert_eq!(child.sibling_ids, parent.children);
+        assert_eq!(child.sibling_ids.len(), 1, "the N-set is complete");
     }
 
     /// CG-04 W-1: a pre-lane state (no `rehypothesis` keys) parses to

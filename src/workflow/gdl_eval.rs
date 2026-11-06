@@ -206,6 +206,14 @@ pub(crate) struct EvalRow {
     /// `None`).
     #[serde(default)]
     pub(crate) rehypothesis_count: Option<u32>,
+    /// CG-05: the run's split child count, read off the persisted
+    /// case (`GdlCase.children.len()`) — the metric the NEXT
+    /// decomposition preregistration reads (CG-06 judges decomp
+    /// frequencies + child outcomes via this). ADVISORY: an eval
+    /// column, not a gate. Pre-split traces parse to None — no data,
+    /// never 0-as-data (a recorded 0 IS data; absence is `None`).
+    #[serde(default)]
+    pub(crate) split_child_count: Option<u32>,
 }
 
 #[cfg(test)]
@@ -413,6 +421,9 @@ pub(crate) mod runner {
         // CG-04: the count off persisted state (a recorded 0 IS data;
         // None only in pre-lane JSONL rows that predate the field).
         let rehypothesis_count = Some(final_case.rehypothesis_count);
+        // CG-05: the split child count off persisted state (the parent's
+        // `children` length; a recorded 0 IS data).
+        let split_child_count = Some(final_case.children.len() as u32);
         EvalRow {
             suite: SUITE.to_string(),
             task_id: task_id.to_string(),
@@ -439,6 +450,7 @@ pub(crate) mod runner {
             repeat_contact,
             certainty_overall,
             rehypothesis_count,
+            split_child_count,
         }
     }
 
@@ -1334,6 +1346,7 @@ never rewritten).\n",
             repeat_contact: false,
             certainty_overall: None,
             rehypothesis_count: None,
+            split_child_count: None,
         };
         let rows = vec![
             mk_row("B", 0, true),

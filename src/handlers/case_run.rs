@@ -23,7 +23,7 @@ use crate::agentloop::provider::{LlmProvider, ProviderError};
 use crate::agentloop::provider_http::{HttpProvider, HttpProviderConfig};
 use crate::auth::policy::PrincipalKind;
 use crate::server::bootstrap::AppState;
-use crate::workflow::gdl::{GdlDriver, GdlOutcome};
+use crate::workflow::gdl::{GdlCase, GdlDriver, GdlOutcome};
 use crate::workflow::host::SqliteWorkflowHost;
 
 use super::{HandlerError, authorize, authorize_role};
@@ -171,17 +171,26 @@ pub(crate) async fn run_gdl_case(
     }
 
     // The launch law: a FRESH troubleshoot run only (the checkpoint admits
-    // nothing else — pre-checked here for a cheap, honest refusal).
+    // nothing else — pre-checked here for a cheap, honest refusal). CG-05
+    // names the one other launchable shape: a seeded split child (the row
+    // the Intake split act inserted — revision 0, active, carrying the
+    // parent link). The pre-check reads the same predicate `admit`'s
+    // sentinel reads (`seeded_split_child`) — the two cannot drift; the
+    // launch ticket must still name the child's approved question, and
+    // `admit` refuses the mismatch (D-1).
     if kind != "troubleshoot" {
         return Err(HandlerError::unprocessable(
             "run_kind_invalid",
             "GDL cases launch on kind='troubleshoot' runs only",
         ));
     }
-    if status != "active" || revision != 0 || state_json.trim() != "{}" {
+    if status != "active"
+        || revision != 0
+        || (state_json.trim() != "{}" && GdlCase::seeded_split_child(&state_json).is_none())
+    {
         return Err(HandlerError::conflict_with(
             "run_not_fresh",
-            "GDL cases launch on fresh runs only (state '{}', revision 0, active)",
+            "GDL cases launch on fresh runs only (state '{}' or a seeded split child, revision 0, active)",
             serde_json::json!({}),
         ));
     }

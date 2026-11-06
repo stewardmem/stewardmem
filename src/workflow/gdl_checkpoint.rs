@@ -159,11 +159,18 @@ impl Checkpoint {
 
     fn verify_link(&self, conn: &Connection) -> Result<(), LoopError> {
         if self.revision == 1 {
+            // CG-05: a seeded split child's initial checkpoint carries
+            // the parent link on an otherwise-fresh case — an initial
+            // claim, not a mutation (admit built it from the seeded
+            // row; the link fields are the split's own).
+            let mut fresh = GdlCase::fresh(&self.case.ticket);
+            fresh.parent_case_id = self.case.parent_case_id;
+            fresh.sibling_ids = self.case.sibling_ids.clone();
             if self.exchange.is_some()
                 || self.terminal.is_some()
                 || self.phases != 0
                 || self.attempt != 0
-                || self.case != GdlCase::fresh(&self.case.ticket)
+                || self.case != fresh
                 || self.next_phase != Some(GdlPhase::Intake)
             {
                 return Err(persist_error("invalid initial GDL checkpoint"));
@@ -225,6 +232,11 @@ impl Checkpoint {
             return Err(persist_error("GDL rehypothesis count jump is not one step"));
         }
         expected.rehypothesis_count = gate.rehypothesis_count;
+        // CG-05 (the count's precedent): the gate row binds the
+        // split children — the one field the split act (not `apply`)
+        // sets, so the derivation takes it from the gate, never
+        // invents it.
+        expected.children = gate.split_children.clone();
         let accepted = gate.verdict == "pass";
         // CG-04: `next_phase` is derived PHASE-BASED from the gate's
         // explicit target (the admitted `Verify → Hypothesize` edge, the
@@ -299,6 +311,15 @@ struct GateRecord {
     /// could produce).
     #[serde(default)]
     rehypothesis_count: u32,
+    /// CG-05: the split child ids AFTER this transition (the case's
+    /// `children` — empty before the split, N ids after). Additive —
+    /// `default` keeps old rows readable ([] the only value the old
+    /// code could produce). The state-derivation law binds it: the
+    /// committed case re-derives `children` from the gate row, exactly
+    /// as CG-04 binds the count (the split act's ids are the gate row's
+    /// business, not the derivation's invention).
+    #[serde(default)]
+    split_children: Vec<i64>,
     /// F12b: the exchange's provider-reported usage. Additive — `default`
     /// keeps old rows (written before this field) readable.
     #[serde(default)]
@@ -585,15 +606,36 @@ pub(super) fn admit(
             "SELECT EXISTS(SELECT 1 FROM workflow_steps WHERE run_id=?1) OR EXISTS(SELECT 1 FROM agent_session_events WHERE run_id=?1)",
             [run], |r| r.get(0),
         ).map_err(persist_error)?;
+        // CG-05 (C-10): a seeded split child is the other launchable
+        // shape — the row the Intake split act inserted (revision 0,
+        // active, a fresh Intake case carrying the parent link, never
+        // driven). `{}` stays `{}`; every other non-`{}` byte still
+        // refuses as corrupt or ambiguous legacy. The predicate is the
+        // one the launch verb's pre-check reads (`seeded_split_child`)
+        // — the two checks cannot drift.
+        let is_seeded = row.json.trim() != "{}" && GdlCase::seeded_split_child(&row.json).is_some();
         if row.kind != "troubleshoot"
             || row.status != "active"
             || row.revision != 0
-            || row.json.trim() != "{}"
+            || !(row.json.trim() == "{}" || is_seeded)
             || history
         {
             return Err(persist_error("corrupt state or ambiguous legacy GDL run"));
         }
         session_log::acquire(tx.tx(), run, owner).map_err(persist_error)?;
+        // The child's ticket IS the approved question (D-1): a launch
+        // that names another ticket is the invocation binding mismatch,
+        // the same law the resume path enforces above.
+        let case = if is_seeded {
+            let child = GdlCase::seeded_split_child(&row.json)
+                .ok_or_else(|| persist_error("corrupt state or ambiguous legacy GDL run"))?;
+            if child.ticket != ticket {
+                return Err(persist_error("GDL invocation binding mismatch"));
+            }
+            child
+        } else {
+            GdlCase::fresh(ticket)
+        };
         let cp = Checkpoint {
             version: 1,
             run,
@@ -601,7 +643,7 @@ pub(super) fn admit(
             policy: policy.into(),
             episode: uuid::Uuid::new_v4().to_string(),
             revision: 1,
-            case: GdlCase::fresh(ticket),
+            case,
             next_phase: Some(GdlPhase::Intake),
             attempt: 0,
             errors: Vec::new(),
@@ -748,6 +790,71 @@ fn advance_tx(
         next.attempt = change.attempt;
         next.errors.clone_from(&change.errors);
     }
+    // CG-05: the split act — a satellite of the Intake transition. A
+    // gate-passed decomposition splits INSIDE this transaction (one
+    // commit point: no window where a child is durable and the parent's
+    // update is not). The exactly-once guard (`children` empty) keeps
+    // the act idempotent across retries of the same transition — the
+    // `open_run` sibling creation happens in this one function and
+    // nowhere else (pins S-1/S-2). The parent IS issue-1's case; issues
+    // 2..=N each get a REAL sibling run — an independent case with its
+    // own chain, seeded from its approved question with the parent link
+    // (two-pass: rowids first, then the full N-set on each child). The
+    // machine never auto-drives them: they sit `active` until the CRANK
+    // enumeration or an operator launch drives each.
+    if change.phase == GdlPhase::Intake
+        && next.case.decomposition.is_some()
+        && next.case.children.is_empty()
+    {
+        let domain = next.domain.clone();
+        let parent_run = old.run;
+        let questions: Vec<String> = next
+            .case
+            .decomposition
+            .as_ref()
+            .map(|d| {
+                d.issues
+                    .iter()
+                    .skip(1)
+                    .map(|issue| issue.question.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+        // Pass 1: insert each child row (revision 0, active) and collect
+        // its id. The state rides seeded, so `admit`'s sentinel accepts
+        // it as a launched-child (C-10's `seeded_split_child`).
+        let mut ids: Vec<i64> = Vec::new();
+        for question in &questions {
+            let mut child = GdlCase::fresh(question);
+            child.parent_case_id = Some(parent_run);
+            let child_json = serde_json::to_string(&child).map_err(persist_error)?;
+            let id = state::open_run(
+                tx.tx(),
+                &domain,
+                "troubleshoot",
+                &child_json,
+                chrono::Utc::now().timestamp(),
+            )
+            .map_err(persist_error)?;
+            ids.push(id);
+        }
+        // Pass 2: the IDs are rowids only after every row exists — now
+        // the full N-set goes onto each child's own state (the update
+        // never touches the revision column: the child stays revision 0).
+        for (index, id) in ids.iter().enumerate() {
+            let mut child = GdlCase::fresh(&questions[index]);
+            child.parent_case_id = Some(parent_run);
+            child.sibling_ids = ids.clone();
+            let child_json = serde_json::to_string(&child).map_err(persist_error)?;
+            tx.tx()
+                .execute(
+                    "UPDATE workflow_runs SET state_json = ?1 WHERE id = ?2",
+                    params![child_json, id],
+                )
+                .map_err(persist_error)?;
+        }
+        next.case.children = ids;
+    }
     if matches!(next.terminal, Some(GdlOutcome::Resolved { .. })) {
         next.status = "resolved".into();
     }
@@ -769,6 +876,7 @@ fn advance_tx(
             terminal: change.terminal,
             next_phase: next.next_phase,
             rehypothesis_count: next.case.rehypothesis_count,
+            split_children: next.case.children.clone(),
             usage: change.usage,
         })
         .map_err(persist_error)?,
