@@ -837,6 +837,9 @@ mod tests {
                 ),
             ),
             cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: std::sync::Arc::new(
+                crate::service::chat_answer_cache::ChatAnswerCache::new(),
+            ),
             durability: Default::default(),
             loom: Default::default(),
             model,

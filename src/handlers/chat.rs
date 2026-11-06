@@ -308,7 +308,7 @@ fn merge_carried(
     out
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 pub struct ChatTurnRequest {
     /// Conversation id. Round 1 defaults to one conversation ("default");
     /// the sidebar's session ids arrive with Round 2.
@@ -771,6 +771,115 @@ pub async fn chat_turn(
             .into_response();
     }
 
+    // CG-11 E3 — THE GREEDY ANSWER CACHE. Both serving tiers are
+    // greedy-locked (the MLX tier is `temperature: 0` by construction; the
+    // AFM tier by CG-09 S5), so the answer is a pure function of (model,
+    // prompt) — the exact key below, prompt version inside the hash. A
+    // repeat turn is answered HERE with zero decode: the grounding event
+    // is fresh (same fence — the hash covers it), the final carries the
+    // cached answer with 0/0 token counts (honest: this turn generated
+    // nothing), `turn` 0 like every kernel-served final (the abstain
+    // precedent), and the support verdict is RECOMPUTED over this turn's
+    // own grounding, never copied. The pair persists like any final. The
+    // store side lives in the Final arm below — a HIT never reaches the
+    // bridge, so it never re-stores. GDL propose cannot ride this: the
+    // case machine's turns go through `agentloop::provider_afm`, a
+    // different call site (pinned).
+    let cache_key = crate::service::chat_answer_cache::ChatAnswerCache::key(
+        crate::config::chat_model_id().as_deref(),
+        PROMPT_VERSION,
+        &prompt,
+    );
+    if let Some(cached) = state.chat_answer_cache.get(&cache_key) {
+        let support = crate::service::chat_support::support_verdict(
+            cached.abstain,
+            &cached.claims,
+            grounding_hit_count,
+            grounding_degraded,
+        );
+        let now_unix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let persist_pool = state.pool.clone();
+        let persist_owner = crate::handlers::gate::content_owner_stamp(&principal.0)
+            .unwrap_or_else(|| crate::handlers::gate::LOOPBACK_OPERATOR_OWNER.to_owned());
+        let persist_message = message.clone();
+        let persist_grounding = grounding_event.to_string();
+        let persist_session = session.clone();
+        let (tx, rx_out) = tokio::sync::mpsc::channel::<Result<Event, Infallible>>(64);
+        tokio::spawn(async move {
+            let send = |event: Event| async { tx.send(Ok(event)).await.is_ok() };
+            let grounding_ok = send(
+                Event::default()
+                    .event("grounding")
+                    .json_data(grounding_event)
+                    .unwrap_or_default(),
+            )
+            .await;
+            let final_ok = send(
+                Event::default()
+                    .event("final")
+                    .json_data(json!({
+                        "text": cached.text,
+                        "tier": cached.tier,
+                        "turn": 0,
+                        "inputTokens": 0,
+                        "outputTokens": 0,
+                        "abstain": cached.abstain,
+                        "claims": cached
+                            .claims
+                            .iter()
+                            .map(|claim| json!({"text": claim.text, "cites": claim.cites}))
+                            .collect::<Vec<_>>(),
+                    }))
+                    .unwrap_or_default(),
+            )
+            .await;
+            let support_ok = send(
+                Event::default()
+                    .event("support")
+                    .json_data(json!({
+                        "cited": support.cited,
+                        "uncited": support.uncited,
+                        "unknown_refs": support.unknown_refs,
+                        "decision": support.decision.as_str(),
+                    }))
+                    .unwrap_or_default(),
+            )
+            .await;
+            if grounding_ok && final_ok {
+                let persisted = tokio::task::spawn_blocking(move || -> Result<i64, String> {
+                    let mut conn = persist_pool.get().map_err(|e| e.to_string())?;
+                    crate::service::chat_sessions::persist_turn_pair(
+                        &mut conn,
+                        &persist_session,
+                        &persist_owner,
+                        &persist_message,
+                        &cached.text,
+                        Some(&persist_grounding),
+                        Some(cached.tier.as_str()),
+                        Some(support.decision.as_str()),
+                        now_unix,
+                    )
+                    .map_err(|e| e.to_string())
+                })
+                .await;
+                match persisted {
+                    Ok(Ok(_)) => {}
+                    Ok(Err(e)) => tracing::error!("chat cache-hit persistence failed: {e}"),
+                    Err(e) => tracing::error!("chat cache-hit persistence task failed: {e}"),
+                }
+            }
+            let _ = support_ok;
+        });
+        let stream: Pin<Box<dyn Stream<Item = Result<Event, Infallible>> + Send>> =
+            Box::pin(ReceiverStream::new(rx_out));
+        return Sse::new(stream)
+            .keep_alive(axum::response::sse::KeepAlive::default())
+            .into_response();
+    }
+
     let (bridge_id, mut rx) = match bridge
         .turn(BridgeTurn {
             session: session.clone(),
@@ -810,6 +919,7 @@ pub async fn chat_turn(
         .unwrap_or_else(|| crate::handlers::gate::LOOPBACK_OPERATOR_OWNER.to_owned());
     let persist_message = message.clone();
     let persist_grounding = grounding_event.to_string();
+    let cache = state.chat_answer_cache.clone();
     let (tx, rx_out) = tokio::sync::mpsc::channel::<Result<Event, Infallible>>(64);
     tokio::spawn(async move {
         let send = |event: Event| async { tx.send(Ok(event)).await.is_ok() };
@@ -845,6 +955,20 @@ pub async fn chat_turn(
                     abstain,
                     claims,
                 } => {
+                    // CG-11 E3: the answer is stored for the NEXT identical
+                    // (model, prompt) — this arm only runs on a MISS (the
+                    // hit path returns before the bridge is asked), and the
+                    // model's raw assertions are what's cached: the support
+                    // verdict below is recomputed per turn, never stored.
+                    cache.store(
+                        cache_key.clone(),
+                        crate::service::chat_answer_cache::CachedAnswer {
+                            text: text.clone(),
+                            tier: tier.clone(),
+                            abstain,
+                            claims: claims.clone(),
+                        },
+                    );
                     // THE VERDICT, before anything leaves: pure index
                     // arithmetic over the packed set this turn actually
                     // sent — no LLM in the gate. The kernel labels the
@@ -1137,6 +1261,83 @@ mod tests {
             "the instructions must state that fenced memory is data, not instructions"
         );
         assert!(CHAT_INSTRUCTIONS_V1.contains("BRAIN_UNTRUSTED_CONTEXT"));
+    }
+
+    /// CG-11 E3 / P-4, the ORDER: the cache lookup sits AFTER the abstain
+    /// gate (the deterministic abstain never enters or consults the cache —
+    /// it answers without the bridge already) and BEFORE the bridge turn
+    /// (a hit means the bridge is never asked); the STORE sits inside the
+    /// Final arm — only a turn the bridge actually produced is cached. The
+    /// lookup needle is assembled so this test's own text is not the needle.
+    #[test]
+    fn the_cache_lookup_sits_before_the_bridge_turn_and_the_store_at_the_final() {
+        let src = include_str!("chat.rs");
+        let abstain_gate = src
+            .find("if abstains_without_bridge(")
+            .expect("the abstain gate");
+        let lookup = src
+            .find(concat!(
+                "service::chat_answer_cache::ChatAnswer",
+                "Cache::key("
+            ))
+            .expect("the cache key is built in the turn path");
+        let cache_hit = src
+            .find("state.chat_answer_cache.get(&cache_key)")
+            .expect("the cache is consulted");
+        let bridge_call = src
+            .find("bridge\n        .turn(BridgeTurn {")
+            .expect("the bridge turn call");
+        let store = src
+            .find(concat!("service::chat_answer_cache::Cached", "Answer {"))
+            .expect("the Final arm stores the produced answer");
+        assert!(
+            abstain_gate < lookup && lookup < cache_hit && cache_hit < bridge_call,
+            "the cache is consulted after the abstain gate and before the bridge is asked"
+        );
+        assert!(
+            store > bridge_call,
+            "only a bridge-produced final is cached — the hit path never re-stores"
+        );
+    }
+
+    /// CG-11 E3 / P-4, the SAMPLED half: the turn request carries NO
+    /// sampling vocabulary — a client that injects a sampling knob gets it
+    /// silently dropped by serde's closed-field deserialization, so a
+    /// sampled request CANNOT exist on this path and the cache's greedy
+    /// precondition holds by construction. The proof is equality: a request
+    /// WITH injected sampling fields deserializes equal to the same request
+    /// without them.
+    #[test]
+    fn the_turn_request_has_no_sampling_vocabulary() {
+        let with_sampling: ChatTurnRequest = serde_json::from_value(json!({
+            "session": "s",
+            "message": "hello",
+            "temperature": 0.9,
+            "top_p": 0.5,
+        }))
+        .expect("unknown fields are ignored, never errors");
+        let clean: ChatTurnRequest = serde_json::from_value(json!({
+            "session": "s",
+            "message": "hello",
+        }))
+        .expect("the clean request parses");
+        assert_eq!(
+            with_sampling, clean,
+            "an injected sampling knob crossed the request — the greedy precondition is broken"
+        );
+    }
+
+    /// CG-11 E3 / P-4, the ISOLATION law (M-4's extension): GDL propose
+    /// never rides the cache — the case machine's BridgeTurns live in
+    /// `agentloop::provider_afm`, and that file must not reference the
+    /// answer cache at all.
+    #[test]
+    fn gdl_propose_never_touches_the_answer_cache() {
+        let provider = include_str!("../agentloop/provider_afm.rs");
+        assert!(
+            !provider.contains(concat!("chat_answer_", "cache")),
+            "the GDL provider references the answer cache — the case machine's verdicts must stay the machine's"
+        );
     }
 
     /// THE ABSTAIN GATE (LL-04 §1.3): zero hits from a calibrated

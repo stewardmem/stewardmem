@@ -125,6 +125,9 @@ fn server() -> Server {
             db_path.clone(),
         )),
         cors: tower_http::cors::CorsLayer::new(),
+        chat_answer_cache: std::sync::Arc::new(
+            brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+        ),
         durability: Default::default(),
         loom: Default::default(),
         model,

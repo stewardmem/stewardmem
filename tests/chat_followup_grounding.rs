@@ -128,6 +128,10 @@ fn hit_ids(grounding: &serde_json::Value) -> Option<Vec<i64>> {
 mod common;
 
 #[tokio::test]
+// The tier lock's guard INTENTIONALLY spans the body's awaits: it
+// serializes the process-global BRAIN_CHAT_MODEL window (tests/common);
+// a single-test mutex, no deadlock shape.
+#[allow(clippy::await_holding_lock)]
 async fn the_followup_grounds_to_the_prior_turns_topic_not_the_corpus_generic() {
     // The bridge binary is a macOS artifact; when it is not built this test
     // owns its skip with a stated reason (the macOS lane runs it for real).
@@ -173,6 +177,9 @@ async fn the_followup_grounds_to_the_prior_turns_topic_not_the_corpus_generic() 
             db_path.clone(),
         )),
         cors: tower_http::cors::CorsLayer::new(),
+        chat_answer_cache: std::sync::Arc::new(
+            brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+        ),
         durability: Default::default(),
         loom: Default::default(),
         model,
@@ -301,6 +308,10 @@ async fn the_followup_grounds_to_the_prior_turns_topic_not_the_corpus_generic() 
 /// bridge, but the handler still needs the binary present for its
 /// capabilities gate, hence the same skip.
 #[tokio::test]
+// The tier lock's guard INTENTIONALLY spans the body's awaits: it
+// serializes the process-global BRAIN_CHAT_MODEL window (tests/common);
+// a single-test mutex, no deadlock shape.
+#[allow(clippy::await_holding_lock)]
 async fn an_abstaining_turn_files_exactly_one_capture_proposal_and_no_knowledge() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let candidates = [
@@ -343,6 +354,9 @@ async fn an_abstaining_turn_files_exactly_one_capture_proposal_and_no_knowledge(
             db_path.clone(),
         )),
         cors: tower_http::cors::CorsLayer::new(),
+        chat_answer_cache: std::sync::Arc::new(
+            brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+        ),
         durability: Default::default(),
         loom: Default::default(),
         model,

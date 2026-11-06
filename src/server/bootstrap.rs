@@ -199,6 +199,11 @@ pub struct AppState {
     pub jwt_middleware_state: Arc<JwtMiddlewareState>,
     /// The boot-built CORS layer (env-resolved origins/methods/headers).
     pub cors: CorsLayer,
+    /// CG-11 E3: the greedy answer cache behind the chat spine's turn path
+    /// (`service::chat_answer_cache`). Process-lifetime, in-memory, keyed
+    /// (model, prompt-hash) — per-state so a test binary's states stay
+    /// isolated from each other.
+    pub chat_answer_cache: Arc<crate::service::chat_answer_cache::ChatAnswerCache>,
 }
 
 /// The ONE CORS layer implementation: boot and the CORS wire pins
@@ -1178,6 +1183,9 @@ pub fn bootstrap() -> Result<BootOutcome> {
         token_store,
         jwt_middleware_state,
         cors,
+        chat_answer_cache: std::sync::Arc::new(
+            crate::service::chat_answer_cache::ChatAnswerCache::new(),
+        ),
     });
     // watch pending proposals and fire the `expiry`
     // alert once per SLA-tier boundary crossed.

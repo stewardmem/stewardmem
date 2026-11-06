@@ -132,6 +132,9 @@ fn build_server() -> TestServer {
         token_store: brain_server::auth::TokenStore::new(),
         jwt_middleware_state,
         cors: tower_http::cors::CorsLayer::new(),
+        chat_answer_cache: std::sync::Arc::new(
+            brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+        ),
         durability: Default::default(),
         loom: Default::default(),
         model,
@@ -1095,6 +1098,9 @@ async fn authz_matrix_opaque_mode_superuser_and_none() {
         token_store,
         jwt_middleware_state,
         cors: tower_http::cors::CorsLayer::new(),
+        chat_answer_cache: std::sync::Arc::new(
+            brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+        ),
         durability: Default::default(),
         loom: Default::default(),
         model,
@@ -1641,6 +1647,9 @@ async fn authz_matrix_revoked_principal_row_per_class() {
         },
         jwt_middleware_state,
         cors: tower_http::cors::CorsLayer::new(),
+        chat_answer_cache: std::sync::Arc::new(
+            brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+        ),
         durability: Default::default(),
         loom: Default::default(),
         model,
@@ -1729,6 +1738,9 @@ fn build_opaque_token_server(
         token_store,
         jwt_middleware_state,
         cors: tower_http::cors::CorsLayer::new(),
+        chat_answer_cache: std::sync::Arc::new(
+            brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+        ),
         durability: Default::default(),
         loom: Default::default(),
         model,
@@ -3251,6 +3263,9 @@ async fn delivery_attestation_read_refuses_with_409_on_a_keyless_host() {
         token_store,
         jwt_middleware_state,
         cors: tower_http::cors::CorsLayer::new(),
+        chat_answer_cache: std::sync::Arc::new(
+            brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+        ),
         durability: Default::default(),
         loom: Default::default(),
         model,

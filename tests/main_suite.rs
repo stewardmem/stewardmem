@@ -1088,6 +1088,9 @@ mod tests {
                 tmp.path().to_path_buf(),
             )),
             cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: std::sync::Arc::new(
+                brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+            ),
             durability: Default::default(),
             loom: Default::default(),
             model,
@@ -5855,6 +5858,9 @@ Final paragraph after the rule.";
                 global_path.clone(),
             )),
             cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: std::sync::Arc::new(
+                brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+            ),
             durability: Default::default(),
             loom: Default::default(),
             model: Arc::new(
@@ -5956,6 +5962,9 @@ Final paragraph after the rule.";
             token_store: auth::TokenStore::new(),
             jwt_middleware_state: jwt_mid.clone(),
             cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: std::sync::Arc::new(
+                brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+            ),
             durability: Default::default(),
             loom: Default::default(),
             model: std::sync::Arc::new(
@@ -6636,6 +6645,9 @@ Final paragraph after the rule.";
                 tmp.path().to_path_buf(),
             )),
             cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: std::sync::Arc::new(
+                brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+            ),
             durability: Default::default(),
             loom: Default::default(),
             model,
@@ -8458,6 +8470,9 @@ Final paragraph after the rule.";
                 tmp.path().to_path_buf(),
             )),
             cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: std::sync::Arc::new(
+                brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+            ),
             durability: Default::default(),
             loom: Default::default(),
             model,
@@ -9118,6 +9133,9 @@ Final paragraph after the rule.";
                 tmp.path().to_path_buf(),
             )),
             cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: std::sync::Arc::new(
+                brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+            ),
             durability: Default::default(),
             loom: Default::default(),
             model,
@@ -11319,6 +11337,9 @@ Final paragraph after the rule.";
                 global_path.clone(),
             )),
             cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: std::sync::Arc::new(
+                brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+            ),
             durability: Default::default(),
             loom: Default::default(),
             pool: global_pool,
@@ -11431,6 +11452,9 @@ Final paragraph after the rule.";
                 global_path.clone(),
             )),
             cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: std::sync::Arc::new(
+                brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+            ),
             durability: Default::default(),
             loom: Default::default(),
             pool: global_pool,
@@ -12101,6 +12125,9 @@ Final paragraph after the rule.";
                 db_path.clone(),
             )),
             cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: std::sync::Arc::new(
+                brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+            ),
             durability: Default::default(),
             loom: Default::default(),
             pool: pool.clone(),
@@ -12241,6 +12268,9 @@ Final paragraph after the rule.";
                 tmp.path().to_path_buf(),
             )),
             cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: std::sync::Arc::new(
+                brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+            ),
             durability: Default::default(),
             loom: Default::default(),
             model,
@@ -12423,6 +12453,9 @@ Final paragraph after the rule.";
                 tmp.path().to_path_buf(),
             )),
             cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: std::sync::Arc::new(
+                brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+            ),
             durability: Default::default(),
             loom: Default::default(),
             model,
@@ -12682,6 +12715,9 @@ Final paragraph after the rule.";
                 tmp.path().to_path_buf(),
             )),
             cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: std::sync::Arc::new(
+                brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+            ),
             durability: Default::default(),
             loom: Default::default(),
             model,
@@ -12826,6 +12862,9 @@ Final paragraph after the rule.";
                 tmp.path().to_path_buf(),
             )),
             cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: std::sync::Arc::new(
+                brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+            ),
             durability: Default::default(),
             loom: Default::default(),
             model,
@@ -12994,6 +13033,9 @@ Final paragraph after the rule.";
                 tmp.path().to_path_buf(),
             )),
             cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: std::sync::Arc::new(
+                brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+            ),
             durability: Default::default(),
             loom: Default::default(),
             model,
@@ -13294,6 +13336,9 @@ Final paragraph after the rule.";
                 tmp.path().to_path_buf(),
             )),
             cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: std::sync::Arc::new(
+                brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+            ),
             durability: Default::default(),
             loom: Default::default(),
             model,
@@ -13529,6 +13574,9 @@ Final paragraph after the rule.";
                 tmp.path().to_path_buf(),
             )),
             cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: std::sync::Arc::new(
+                brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+            ),
             durability: Default::default(),
             loom: Default::default(),
             model,
@@ -15414,6 +15462,9 @@ Final paragraph after the rule.";
                 PathBuf::from(":memory:"),
             )),
             cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: std::sync::Arc::new(
+                brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+            ),
             durability: Default::default(),
             loom: Default::default(),
             model: Arc::new(
@@ -16275,6 +16326,9 @@ Final paragraph after the rule.";
                 db_path.clone(),
             )),
             cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: std::sync::Arc::new(
+                brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+            ),
             durability: Default::default(),
             loom: Default::default(),
             pool: pool.clone(),
@@ -18305,6 +18359,9 @@ mod scrim {
                 ),
             ),
             cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: std::sync::Arc::new(
+                brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+            ),
             durability: Default::default(),
             loom: Default::default(),
             model,

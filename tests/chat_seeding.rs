@@ -86,6 +86,10 @@ fn final_of(events: &[(String, serde_json::Value)]) -> serde_json::Value {
 mod common;
 
 #[tokio::test]
+// The tier lock's guard INTENTIONALLY spans the body's awaits: it
+// serializes the process-global BRAIN_CHAT_MODEL window (tests/common);
+// a single-test mutex, no deadlock shape.
+#[allow(clippy::await_holding_lock)]
 async fn killing_the_bridge_mid_chat_loses_no_in_context_answer() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let candidates = [
@@ -129,6 +133,9 @@ async fn killing_the_bridge_mid_chat_loses_no_in_context_answer() {
             db_path.clone(),
         )),
         cors: tower_http::cors::CorsLayer::new(),
+        chat_answer_cache: std::sync::Arc::new(
+            brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+        ),
         durability: Default::default(),
         loom: Default::default(),
         model,

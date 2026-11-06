@@ -32,10 +32,6 @@ use brain_server::server::router::app;
 use brain_server::server::router::auth::JwtMiddlewareState;
 use tower::ServiceExt;
 
-
-
-#[allow(dead_code)] // the stripper is inert here; the tier seam is what we use
-
 #[allow(dead_code)] // the stripper is inert here; the tier seam is what we use
 mod common;
 
@@ -129,6 +125,9 @@ async fn mlx_app_with_memory(
             db_path.clone(),
         )),
         cors: tower_http::cors::CorsLayer::new(),
+        chat_answer_cache: std::sync::Arc::new(
+            brain_server::service::chat_answer_cache::ChatAnswerCache::new(),
+        ),
         durability: Default::default(),
         loom: Default::default(),
         model,
@@ -169,6 +168,10 @@ async fn mlx_app_with_memory(
 /// follow-up that the CG-08 session-topic shape carries, both through the
 /// ChatSession path (`tier: "mlx_native"`).
 #[tokio::test]
+// The tier lock's guard INTENTIONALLY spans the body's awaits: it serializes
+// the process-global BRAIN_CHAT_MODEL window (tests/common — the
+// scheduling-flake guard); a single-test mutex, no deadlock shape.
+#[allow(clippy::await_holding_lock)]
 async fn the_vitamin_d_sequence_answers_on_the_mlx_tier() {
     let Some(bridge_binary) = common::bridge_binary() else {
         eprintln!(
@@ -182,7 +185,12 @@ async fn the_vitamin_d_sequence_answers_on_the_mlx_tier() {
     let (state, _dir) = mlx_app_with_memory(Some(vitamin_d_memory())).await;
 
     // Turn 1: the grounded question.
-    let turn1 = post_turn(state.clone(), "mlx-d", "What should I know about vitamin D?").await;
+    let turn1 = post_turn(
+        state.clone(),
+        "mlx-d",
+        "What should I know about vitamin D?",
+    )
+    .await;
     let final1 = final_of(&turn1);
     assert_eq!(
         final1["tier"].as_str(),
@@ -196,7 +204,12 @@ async fn the_vitamin_d_sequence_answers_on_the_mlx_tier() {
     );
 
     // Turn 2: the CG-08 follow-up — no topic term of its own beyond "it".
-    let turn2 = post_turn(state.clone(), "mlx-d", "Why is it best to take it with food?").await;
+    let turn2 = post_turn(
+        state.clone(),
+        "mlx-d",
+        "Why is it best to take it with food?",
+    )
+    .await;
     let final2 = final_of(&turn2);
     assert_eq!(
         final2["tier"].as_str(),
@@ -225,6 +238,7 @@ async fn the_vitamin_d_sequence_answers_on_the_mlx_tier() {
 /// unanswerable-from-evidence question records the tier's honest answer in
 /// the evidence file rather than a pin.)
 #[tokio::test]
+#[allow(clippy::await_holding_lock)] // the tier lock spans the body by law (see arm 1)
 async fn the_zero_evidence_control_abstains_deterministically_without_the_bridge() {
     let Some(bridge_binary) = common::bridge_binary() else {
         eprintln!(
@@ -239,7 +253,12 @@ async fn the_zero_evidence_control_abstains_deterministically_without_the_bridge
     // persists the prior turn; turn 2's message plus the prior topic
     // exceeds the recall query bound → degraded + zero hits.
     let (state, _dir) = mlx_app_with_memory(None).await;
-    let turn1 = post_turn(state.clone(), "mlx-control", "what is the capital of the moon?").await;
+    let turn1 = post_turn(
+        state.clone(),
+        "mlx-control",
+        "what is the capital of the moon?",
+    )
+    .await;
     let final1 = final_of(&turn1);
     assert_eq!(
         final1["tier"].as_str(),
@@ -267,6 +286,7 @@ async fn the_zero_evidence_control_abstains_deterministically_without_the_bridge
 /// respawned session is seeded from the persisted transcript and the
 /// `history` field hydrates the fresh ChatSession.
 #[tokio::test]
+#[allow(clippy::await_holding_lock)] // the tier lock spans the body by law (see arm 1)
 async fn killing_the_bridge_mid_chat_loses_no_in_context_answer_on_the_mlx_tier() {
     let Some(bridge_binary) = common::bridge_binary() else {
         eprintln!(
@@ -314,7 +334,12 @@ async fn killing_the_bridge_mid_chat_loses_no_in_context_answer_on_the_mlx_tier(
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     // Turn 2: only the RESEEDED transcript can answer this.
-    let turn2 = post_turn(state, "mlx-kill", "When did my doctor say to take the drops?").await;
+    let turn2 = post_turn(
+        state,
+        "mlx-kill",
+        "When did my doctor say to take the drops?",
+    )
+    .await;
     let final2 = final_of(&turn2);
     assert_eq!(
         final2["tier"].as_str(),
