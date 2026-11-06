@@ -775,6 +775,49 @@ rulings) — the runbook's quarterly re-check rule applies.
 |---|---|---|
 | R35 (unreleased) | 2026-09-25 | GDL launch execution integrity: provider failures finalize exchange/invocation/checkpoint/claim through existing transactions; typed terminal outcomes are non-retryable; total request/body deadline and receiver-driven HTTP cancellation; tri-state provider readiness and workflow-operator role. No recovery API or provider-body/secret reflection. |
 | R34 (unreleased) | 2026-09-25 | GDL provider boundary hardening: ticket-only request, server-owned provider profile, root-confined owner-only secret, HTTPS/URL-shape validation, retained DNS pinning/redirect refusal, fail-closed GDL role gate, and stable provider errors with no raw payload/credential reflection. |
+| 1.29.42 | 2026-11-03 | the update path works again: old apps update, the import card lands in the store the kernel actually serves (see CHANGELOG). |
+| 1.29.41 | 2026-11-02 | the workspace import ships: bring your OpenClaw library home from Settings (see CHANGELOG). |
+| 1.29.40 | 2026-11-01 | the four repairs: refusals a browser can read, titles stored as the truth, and a rotation that tells the truth (see CHANGELOG). |
+| 1.29.39 | 2026-11-01 | the first trimmed release: one stapled image carries the macOS set, and the release proves its own page (see CHANGELOG). |
+| 1.29.38 | 2026-10-31 | the App Store edition exists: sandboxed, updater-free, Signal-free, and the CI disk law (see CHANGELOG). |
+| 1.29.37 | 2026-10-31 | first launch that lives: the model downloads beside the app, and the window is a window (see CHANGELOG). |
+| 1.29.36 | 2026-10-29 | the app is signed, notarized, and Gatekeeper-clean: the Developer ID round lands (see CHANGELOG). |
+| 1.29.35 | 2026-10-29 | the loop runs live: the on-device pilot, the scheduler's first flip (see CHANGELOG). |
+| 1.29.34 | 2026-10-26 | the chat answers live: the streaming composer, grounded on your memory (see CHANGELOG). |
+| 1.29.33 | 2026-10-26 | the chat transcript learns to survive (M3-c, sessions and history) (see CHANGELOG). |
+| 1.29.32 | 2026-10-25 | governed rows, a self-installing app, and the chat learns to answer (see CHANGELOG). |
+| 1.29.31 | 2026-10-25 | the chat is the app: the chat-first IA lands, and the chrome earns its place by exception (see CHANGELOG). |
+| 1.29.30 | 2026-10-23 | the plugin's suite runs, and the integration is proved against the shipped binary (see CHANGELOG). |
+| 1.29.29 | 2026-10-22 | every release now has to carry the update chain (see CHANGELOG). |
+| 1.29.28 | 2026-10-22 | the desktop app carries no slop, and the update chain's address resolves (see CHANGELOG). |
+| 1.29.27 | 2026-10-22 | the release ships what the updater can fetch, and the witness says UNKNOWN when it knows nothing (see CHANGELOG). |
+| 1.29.26 | 2026-10-21 | the review queue is displayed, and nothing more (see CHANGELOG). |
+| 1.29.25 | 2026-10-21 | the audit gate reads one config, and the tree carries no known advisories (see CHANGELOG). |
+| 1.29.24 | 2026-10-20 | the updater ships with a pinned key, and the review queue stops being the agent's to read (see CHANGELOG). |
+| 1.29.23 | 2026-10-20 | the shell joins the release line, and the drift gate moves in front of the tag (see CHANGELOG). |
+| 1.29.22 | 2026-10-19 | the outage, and the pin that cried wolf (see CHANGELOG). |
+| 1.29.21 | 2026-10-19 | the allocation ceiling (see CHANGELOG). |
+| 1.29.20 | 2026-10-19 | the follow-through release (see CHANGELOG). |
+| 1.29.19 | 2026-10-19 | the security audit release (see CHANGELOG). |
+| 1.29.18 | 2026-10-18 | the agent loop stops lying, and the primary test gate is green again (see CHANGELOG). |
+| 1.29.17 | 2026-10-15 | the on-device model is measured now, and two "faster" models turned out to be broken (see CHANGELOG). |
+| 1.29.16 | 2026-10-15 | the log is archived, the gates under it were half-asserting, and the lockfiles were a day behind (see CHANGELOG). |
+| 1.29.15 | 2026-10-13 | the release path repairs itself (see CHANGELOG). |
+| 1.29.14 | 2026-10-13 | the suite is finally measured, and the CI band is bounded (see CHANGELOG). |
+| 1.29.13 | 2026-10-12 | the eleventh pass closed, then attacked (see CHANGELOG). |
+| 1.29.12 | 2026-10-11 | "Sealed": the chain's head, the LOW debt, and the rolling snapshots (see CHANGELOG). |
+| 1.29.11 | 2026-10-10 | "Identity": who is asking, not what the env says (see CHANGELOG). |
+| 1.29.10 | 2026-10-10 | "Reach": target authority on writes, and the read gate where it was missing (see CHANGELOG). |
+| 1.29.9 | 2026-10-09 | "Ledger": the dist check ships as a script, not inline (see CHANGELOG). |
+| 1.29.8 | 2026-10-09 | "Ledger": the release verify step survives its transport (see CHANGELOG). |
+| 1.29.7 | 2026-10-09 | "Ledger": the plan-reference pin passes clean clones (see CHANGELOG). |
+| 1.29.6 | 2026-10-09 | "Ledger": private reads bind to owners, releases carry their own SBOM (see CHANGELOG). |
+| 1.29.5 | 2026-10-09 | "Routing": unscoped recall learns where the corpus lives (see CHANGELOG). |
+| 1.29.4 | 2026-10-07 | "Domains": the agent principal reaches its domains, and two hardening rounds ship (see CHANGELOG). |
+| 1.29.3 | 2026-10-06 | "Hardening": two audit passes land as shipped behavior (see CHANGELOG). |
+| 1.29.2 | 2026-09-26 | "Engines": the delivery loop grows an executor it can actually call (see CHANGELOG). |
+| 1.29.1 | 2026-09-26 | "Delivery persistence": the loop gets a storage plane (see CHANGELOG). |
+| 1.29.0 | 2026-09-25 | "GDL boundary, governed decisions, and model identity" (see CHANGELOG). |
 | 1.28.92 | 2026-09-22 | "Ledger" — loop-exec OS boundary (sandbox-exec/Landlock, fail-closed); machine-refusal law (`decision_ref` required, agent class refused); bulk-read dual gates (Admin+DPO, audited, seam-de-identified); GDL law-cited gates through 1.32.7; LAYA System-1 Phase 0 pure (ungated, no callers). |
 | 1.28.91 | 2026-09-15 | "Notary" — off-host `brain anchor` / `--verify` state fingerprint (catches business-row tamper behind a green chain); physical `brain shred` residue drop (freelist 0, `forget` row). |
 | 1.28.90 | 2026-09-14 | "Refresh" — dependency service bump (nine Dependabot PRs applied and verified). |
