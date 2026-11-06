@@ -775,6 +775,7 @@ rulings) — the runbook's quarterly re-check rule applies.
 |---|---|---|
 | R35 (unreleased) | 2026-09-25 | GDL launch execution integrity: provider failures finalize exchange/invocation/checkpoint/claim through existing transactions; typed terminal outcomes are non-retryable; total request/body deadline and receiver-driven HTTP cancellation; tri-state provider readiness and workflow-operator role. No recovery API or provider-body/secret reflection. |
 | R34 (unreleased) | 2026-09-25 | GDL provider boundary hardening: ticket-only request, server-owned provider profile, root-confined owner-only secret, HTTPS/URL-shape validation, retained DNS pinning/redirect refusal, fail-closed GDL role gate, and stable provider errors with no raw payload/credential reflection. |
+|---|---|---|
 | 1.29.42 | 2026-11-03 | the update path works again: old apps update, the import card lands in the store the kernel actually serves (see CHANGELOG). |
 | 1.29.41 | 2026-11-02 | the workspace import ships: bring your OpenClaw library home from Settings (see CHANGELOG). |
 | 1.29.40 | 2026-11-01 | the four repairs: refusals a browser can read, titles stored as the truth, and a rotation that tells the truth (see CHANGELOG). |
@@ -826,7 +827,6 @@ rulings) — the runbook's quarterly re-check rule applies.
 | 1.28.87 | 2026-09-14 | "Ownerstamp" — seventh-pass closures, release 2 of 4 (content owner stamps, crew seam). |
 | 1.28.86 | 2026-09-13 | "Attrbane" — seventh-pass closures, release 1 of 4 (read-seam attribute tier). |
 | 1.28.85 | 2026-09-13 | "SixthPass" — sixth-pass closures (Forget-kind erasure rows, fork hostile-element mirror). |
-|---|---|---|
 | 1.28.84 | 2026-09-13 | "Quarterly" — bounded SSE revocation kill (`sse_reauth` re-auth pump, default 30s, fail-closed), required-by-default webhook signing (HMAC-SHA256, boot refuses URL-without-secret, posture surfaced at `/ready`; DSAR path no opt-out), complete hostile-element read-seam set (26 elements incl. opaque `math`/`style`, 30 MathML fallbacks, four fixture-pinned lanes), newer-schema open refusal + rehearse parity, embedder saturation gauge, 25-row error taxonomy + 7 singularity pins, CodeQL #73 cleared (test-key literal), docs-truth pass (UMP badge from CI conformance, env-truth gate, SBOM scope per CISA-2026, `/ready` probe → JSON). |
 | 1.28.83 | 2026-09-12 | "Recall" — the fifth-pass fix release (+ untagged fourth-pass closures): availability-first kill-switch (warn-not-refuse, supersedes the untagged refuse), evidenced/complete/bounded single-chunk erasure, fail-closed injection thresholds, segment-exact CSP seat, 0700 secret dirs, multi-get source convergence, behavioral poison/lock pins, honest SQL guard, US map (TAKE IT DOWN 48h, CO HB26-1263, IL SB315) + Art 17 directive, no-slice gate law, plugin 0.6.6/0.6.7, fork turn-prepare hygiene fix. |
 | 1.28.82 | 2026-09-12 | "Vigil" — the deep-round fix release: tenant-scoped channel drain/ack, read-seam closure (get source, procedure steps, trace replay), exact-kind `traverse:` scopes, revocation-drain paging, DSAR exact-mode arms, 0600/0700 plaintext temps, legal-hold reapply honesty, provenance unknown-field rejection, model-manifest symlink refusal, RFC 8215 egress row, bridge redirect/media gates, `MAX_SOURCE`/revoke-key bounds, recursive dormancy pin, all 26 CodeQL hard-coded-key alerts cleared via generated test keys, plugin 0.6.5. |
@@ -849,22 +849,176 @@ rulings) — the runbook's quarterly re-check rule applies.
 | 1.28.65 | 2026-09-07 | "Meridian" — content hygiene across the model seam: `/suggest` hits carry `untrusted: true`; the plugin's invisible set is EXACTLY the Rust canonical set (CI parity fixture); the openclaw merge seam sanitizes EVERY plugin context segment (invisible strip + forged-marker neutralization); MCP tool results ride the external-content envelope. |
 | 1.28.64 | 2026-09-08 | "Blackout" — the principal kill-switch wires into bearer AuthN (revocation checked before signature/row work, probe-blind); denylist rows expire at the token's real `exp`; JWT per-kid alg compare; public-path lists deduplicated to ONE source; guard tables verify in BOTH directions; `INJECTION_POLICY=allow` warns loudly. |
 | 1.28.63 | 2026-09-06 | "Wardline" — reserved topic vocabulary at the workflow input seam (`channel/*`, `steering`, `workflow/*` unreachable via the events route), closed run-status vocabulary, valet `what` screened on all write paths, alert-bus kind vocabulary closed — the three-gate channel law is code-true again. |
+| 1.28.62 | 2026-09-06 | "Attestation": provenance marks, the principal kill-switch, the crypto inventory — the Enterprise Line closes (see CHANGELOG). |
+| 1.28.61 | 2026-09-06 | "Standby": the warm-standby core; the seven open CodeQL alerts closed (see CHANGELOG). |
+| 1.28.60 | 2026-09-06 | "Loom": CPU parallelism as an opt-in, determinism-proven tier (see CHANGELOG). |
+| 1.28.59 | 2026-09-05 | "Headroom": the write-path policy made explicit, pinned, and machine-guarded (see CHANGELOG). |
+| 1.28.58 | 2026-09-05 | "Throughput": concurrent truth, visible contention, the calendar as code — the Enterprise Line opens (see CHANGELOG). |
+| 1.28.57 | 2026-09-05 | "Capstone": the enforcing flip + the audit — the Spire Line closes (see CHANGELOG). |
+| 1.28.56 | 2026-09-04 | "Vaulting": the lib flip — bootstrap + router decomposition (see CHANGELOG). |
+| 1.28.55 | 2026-09-03 | "Buttress": the helpers come home — the pre-main library code promoted with its pins (see CHANGELOG). |
+| 1.28.54 | 2026-09-03 | "Scaffold": the Spire Line opens — measure, freeze, evacuate what needs no router — 2026-09-03 — "Scaffold": the Spire Line opens — measure, freeze, evacuate what needs no router (see CHANGELOG). |
+| 1.28.53 | 2026-09-03 | "Triage": proposals gain a domain — the review queue is domain-scoped FOR REAL (see CHANGELOG). |
+| 1.28.52 | 2026-09-03 | "Cornerstone": THE FIN — the Foundation Line complete and machine-enforced (see CHANGELOG). |
+| 1.28.51 | 2026-09-02 | "Confluence": the long tail, sixteen files to zero (see CHANGELOG). |
+| 1.28.50 | 2026-08-28 | "Aqueduct": the retrieval surfaces, two cores (see CHANGELOG). |
+| 1.28.49 | 2026-08-28 | "Terrace": the register surfaces, two cores (see CHANGELOG). |
+| 1.28.48 | 2026-08-28 | "Masonry": the lifecycle surface, three cores (see CHANGELOG). |
+| 1.28.47 | 2026-08-28 | "Quarry": the rights surface, one core (see CHANGELOG). |
+| 1.28.46 | 2026-08-28 | "Plumb": the service layer, the debt lock, the first vein (see CHANGELOG). |
+| 1.28.45 | 2026-08-27 | "Herald": Slack and Microsoft Teams (the operator channels) (see CHANGELOG). |
+| 1.28.44 | 2026-08-27 | "Caravel": WhatsApp for Business, the governed edge (see CHANGELOG). |
+| 1.28.43 | 2026-08-27 | "Switchboard": the channel bridge framework, Signal first-class (see CHANGELOG). |
+| 1.28.42 | 2026-08-26 | "Valet": the personal AI assistant, dogfooded (see CHANGELOG). |
+| 1.28.41 | 2026-08-26 | "Terrain": the tier guide, tested — and the series exit (see CHANGELOG). |
+| 1.28.40 | 2026-08-26 | "Handshake": the ops interop seam, people made visible (see CHANGELOG). |
+| 1.28.39 | 2026-08-26 | "Access": accessibility as a hard gate, globally (see CHANGELOG). |
+| 1.28.38 | 2026-08-26 | "Lexicon": the normative metric dictionary (see CHANGELOG). |
+| 1.28.37.1 | 2026-08-26 | the debt burn-down ledger (see CHANGELOG). |
+| 1.28.37 | 2026-08-26 | "Advocate": complaints, the whole ISO 10002 lifecycle (see CHANGELOG). |
+| 1.28.36 | 2026-08-26 | "Keystone": the last three Order-of-Care gaps (see CHANGELOG). |
+| 1.28.35 | 2026-08-26 | "Outreach": proactive care, consent-first (see CHANGELOG). |
+| 1.28.34 | 2026-08-26 | "Goodwill": complaints, the full ISO 10002/10003 lifecycle (see CHANGELOG). |
+| 1.28.33 | 2026-08-26 | "Returns": aftersales objects with the same evidence law (see CHANGELOG). |
+| 1.28.32 | 2026-08-26 | "Frontdesk": one intake for every post-sale worktype (see CHANGELOG). |
+| 1.28.31 | 2026-08-26 | "Charter": the conformance pack lands (see CHANGELOG). |
+| 1.28.30 | 2026-08-25 | "Parcels": sites share knowledge, governed (see CHANGELOG). |
+| 1.28.29 | 2026-08-25 | "Mesh": agents as named colleagues (see CHANGELOG). |
+| 1.28.28 | 2026-08-25 | "Channel": the case gets a room (see CHANGELOG). |
+| 1.28.27 | 2026-08-25 | "Relay": the one-click handover (see CHANGELOG). |
+| 1.28.26 | 2026-08-25 | "Crew": colleagues become visible (see CHANGELOG). |
+| 1.28.25 | 2026-08-24 | "Watchbill": shifts and the sun (see CHANGELOG). |
+| 1.28.24 | 2026-08-24 | "Beacon": knowledge goes public, demand drops (see CHANGELOG). |
+| 1.28.23 | 2026-08-24 | "Evolve": the KCS loop closes — every solved case becomes knowledge, every case is linked to living knowledge (see CHANGELOG). |
+| 1.28.22 | 2026-08-24 | "Bridges": the universal loop's intake — support cases flow in from the CRMs (see CHANGELOG). |
+| 1.28.21 | 2026-08-24 | "Fathom": virtual unlimited context — unbounded session, deterministic windowing (see CHANGELOG). |
+| 1.28.20 | 2026-08-23 | "Cockpit": the console surface is real, one codebase, every platform (see CHANGELOG). |
+| 1.28.19 | 2026-08-23 | "Witness": the client finally testifies (see CHANGELOG). |
+| 1.28.18 | 2026-08-23 | "Lineage": events remember where they came from (see CHANGELOG). |
 | 1.28.17 | 2026-08-23 | "Settle": budget enforcement reachable + fail-closed (`BudgetExceeded` denies dispatch before any handler runs); cooperative cancel settles exactly between steps; event idempotency keys derive from the PERSISTED step count (a cancelled-then-resumed run no longer re-keys from 1 and silently swallow resumed-step event twins); `CancellationToken::clone` shares one signal cell (clone holders observe cancels). SDK settlement invariants pinned as CI gates (`steward-harness-gate`). |
 | 1.28.16 | 2026-08-23 | "Anvil": all four remaining hostcall kinds get server handlers — `exec` (argv-only, operator allowlist, empty = deny ALL, cwd-pinned, 64 KiB/stream caps, 30 s bound, sanitized), `http` (deny-by-default egress allowlist, remote HTTPS-only, redirects refused), `events` (outbox-only door, `workflow/*` topics, ≤64 KiB, idempotency-key required), `ui` (named refusal); every canonicalized dispatch tallies per-run counters (denials count); run-scoped hostcall audit tenants; `/workflow/scoreboard` audited-run linkage repaired to hash-membership over `target_hash` (the plain-text column never existed) and stays fail-closed; client binaries send exactly one bearer slot from multi-slot rotation files (whole-file paste corrupted headers into empty-body 400s). |
 | 1.28.15 | 2026-08-23 | "FirstLight": the governed workflow loop runs for real — role-gated run/state/events/answer/steering routes (`workflow` engine role; `approve` for AskHuman answers), answers digest-bound to the live pending question and prompt-injection-screened before touching state, CAS transitions + audit rows commit atomically, dead executor INSERTs into non-existent columns removed before they could ever fire. |
 | 1.28.14 | 2026-08-23 | Audit-hardening line wrap (1.28.9 → 1.28.14): MCP protocol-version echo hardened (hostile `_meta.protocolVersion` hex-escaped in BOTH `error.message` and `error.data.requested` — same injection carrier, two surfaces). |
+| 1.28.8 | 2026-08-23 | see CHANGELOG. |
+| 1.28.7 | 2026-08-22 | see CHANGELOG. |
+| 1.28.6 | 2026-08-22 | see CHANGELOG. |
+| 1.28.5 | 2026-08-22 | see CHANGELOG. |
+| 1.28.4 | 2026-08-22 | see CHANGELOG. |
+| 1.28.3 | 2026-08-22 | see CHANGELOG. |
+| 1.28.2 | 2026-08-22 | see CHANGELOG. |
+| 1.28.1 | 2026-08-22 | see CHANGELOG. |
+| 1.28.0 | 2026-08-22 | see CHANGELOG. |
+| 1.27.42 | 2026-08-21 | see CHANGELOG. |
+| 1.27.41 | 2026-08-21 | see CHANGELOG. |
+| 1.27.40 | 2026-08-21 | see CHANGELOG. |
+| 1.27.39 | 2026-08-21 | see CHANGELOG. |
+| 1.27.38 | 2026-08-21 | see CHANGELOG. |
+| 1.27.37 | 2026-08-21 | see CHANGELOG. |
+| 1.27.36 | 2026-08-21 | see CHANGELOG. |
+| 1.27.35 | 2026-08-21 | see CHANGELOG. |
+| 1.27.34 | 2026-08-21 | see CHANGELOG. |
+| 1.27.33 | 2026-08-21 | see CHANGELOG. |
+| 1.27.32 | 2026-08-21 | see CHANGELOG. |
 | 1.27.31 | 2026-08-21 | "AuditRepair": the announced audit-chain re-anchor — links commit the FULL row (8 fields) under HMAC-SHA256 keyed by a 32-byte key that never lives in the DB it protects (`BRAIN_AUDIT_CHAIN_KEY`/`_KEY_FILE`/`audit-chain.key` 0600); the head pin `(id, hash, epoch)` is written in the same tx as every audit row and detects truncation/extension; restore verifies the restored chain before certifying + discloses rolled-back heads (F-09); `/audit/verify`, `/audit`, `/metrics`, `/ump/audit/verify` and the retention prune cover EVERY registered domain (F-22); the format flips only via the offline `brain-server --re-audit` (verify-before-replay, per-domain `anchor` evidence row, new head epoch) — fresh DBs bootstrap straight to `hmac256` when a key resolves. Fixed `--re-embed` exiting 2 in the argv guard. |
+| 1.27.30 | 2026-08-21 | see CHANGELOG. |
+| 1.27.29 | 2026-08-21 | see CHANGELOG. |
+| 1.27.28 | 2026-08-20 | see CHANGELOG. |
+| 1.27.27 | 2026-08-20 | see CHANGELOG. |
+| 1.27.26 | 2026-08-20 | see CHANGELOG. |
+| 1.27.25 | 2026-08-19 | see CHANGELOG. |
+| 1.27.24 | 2026-08-18 | see CHANGELOG. |
+| 1.27.23 | 2026-08-18 | see CHANGELOG. |
+| 1.27.22 | 2026-08-18 | see CHANGELOG. |
+| 1.27.21 | 2026-08-18 | see CHANGELOG. |
+| 1.27.20 | 2026-08-17 | see CHANGELOG. |
+| 1.27.19 | 2026-08-16 | see CHANGELOG. |
+| 1.27.18 | 2026-08-16 | see CHANGELOG. |
+| 1.27.17 | 2026-08-16 | see CHANGELOG. |
+| 1.27.16 | 2026-08-16 | see CHANGELOG. |
+| 1.27.15 | 2026-08-16 | see CHANGELOG. |
+| 1.27.14 | 2026-08-16 | see CHANGELOG. |
+| 1.27.13 | 2026-08-16 | see CHANGELOG. |
 | 1.27.12 | 2026-08-15 | "ReviewArmour · Rotate · Provenance": HITL approvals bind to the displayed bytes — `/proposals` serves the read-canonical review form (`sanitize_read`: PII redact → markdown-ref → invisible strip) + a principal-independent `content_digest`; `approve_proposal` accepts the digest and `409`s on any drift, checked inside the `BEGIN IMMEDIATE` tx. `brain token rotate` atomically replaces the bearer token (0600 temp + `create_new`, fsync, rename) and refuses wide secret modes; startup warns on unsigned webhook sinks + wide UMP signing keys. Retrievers thread `source`/`node_kind`/`lawful_basis`/`region` through fusion into `RecallHit` and the plugin renders a deterministic `[src: · mk: · lb: · reg:]` line inside the `UNTRUSTED_*` fence (`sanitizeForBlock` closes fence-marker forging). |---|
+| 1.27.11 | 2026-08-15 | see CHANGELOG. |
+| 1.27.10 | 2026-08-15 | see CHANGELOG. |
+| 1.27.9 | 2026-08-15 | see CHANGELOG. |
+| 1.27.8 | 2026-08-15 | see CHANGELOG. |
+| 1.27.7 | 2026-08-15 | see CHANGELOG. |
+| 1.27.6 | 2026-08-15 | see CHANGELOG. |
+| 1.27.5 | 2026-08-15 | see CHANGELOG. |
+| 1.27.4 | 2026-08-15 | see CHANGELOG. |
+| 1.27.3 | 2026-08-15 | see CHANGELOG. |
+| 1.27.2 | 2026-08-15 | see CHANGELOG. |
+| 1.27.1 | 2026-08-15 | see CHANGELOG. |
+| 1.27.0 | 2026-08-15 | see CHANGELOG. |
+| 1.26.3 | 2026-08-15 | see CHANGELOG. |
+| 1.26.2 | 2026-08-15 | see CHANGELOG. |
+| 1.26.1 | 2026-08-15 | see CHANGELOG. |
+| 1.26.0 | 2026-08-15 | see CHANGELOG. |
+| 1.25.0 | 2026-08-15 | see CHANGELOG. |
+| 1.24.0 | 2026-08-15 | see CHANGELOG. |
+| 1.23.0 | 2026-08-15 | see CHANGELOG. |
+| 1.22.0 | 2026-08-15 | see CHANGELOG. |
+| 1.21.0 | 2026-08-15 | see CHANGELOG. |
+| 1.20.30 | 2026-08-14 | see CHANGELOG. |
+| 1.20.29 | 2026-08-14 | see CHANGELOG. |
+| 1.20.28 | 2026-08-14 | see CHANGELOG. |
+| 1.20.27 | 2026-08-14 | see CHANGELOG. |
+| 1.20.26 | 2026-08-14 | see CHANGELOG. |
+| 1.20.24 | 2026-08-13 | see CHANGELOG. |
+| 1.20.23 | 2026-08-13 | see CHANGELOG. |
+| 1.20.22 | 2026-08-13 | see CHANGELOG. |
+| 1.20.21 | 2026-08-13 | see CHANGELOG. |
+| 1.20.20 | 2026-08-13 | see CHANGELOG. |
+| 1.20.19 | 2026-08-13 | see CHANGELOG. |
+| 1.20.18 | 2026-08-13 | see CHANGELOG. |
+| 1.20.17 | 2026-08-12 | see CHANGELOG. |
+| 1.20.16 | 2026-08-12 | see CHANGELOG. |
+| 1.20.15 | 2026-08-12 | see CHANGELOG. |
+| 1.20.14 | 2026-08-12 | see CHANGELOG. |
+| 1.20.13 | 2026-08-12 | see CHANGELOG. |
+| 1.20.12 | 2026-08-12 | see CHANGELOG. |
+| 1.20.11 | 2026-08-12 | see CHANGELOG. |
+| 1.20.10 | 2026-08-12 | see CHANGELOG. |
+| 1.20.9 | 2026-08-12 | see CHANGELOG. |
+| 1.20.8 | 2026-08-12 | see CHANGELOG. |
+| 1.20.7 | 2026-08-12 | see CHANGELOG. |
+| 1.20.6 | 2026-08-12 | see CHANGELOG. |
+| 1.20.5 | 2026-08-11 | see CHANGELOG. |
+| 1.20.4 | 2026-08-11 | see CHANGELOG. |
 | 1.20.3 | 2026-08-11 | "Classify" (G5): two-layer injection screen — layer 1 deterministic blocklist (always on) + optional feature-gated local ONNX classifier (layer 2, off by default; the blocklist + `flagged`/`untrusted` stay the always-on defense). Canonical invisible-char predicate shared by screen/classifier/client-render boundary (client strips invisible smuggling chars from displayed hits; raw bytes never rewritten). `screen_verdict` review badge recomputed at read. Policy + thresholds read per call |
+| 1.20.2 | 2026-08-11 | see CHANGELOG. |
+| 1.20.1 | 2026-08-11 | see CHANGELOG. |
+| 1.20.0 | 2026-08-11 | see CHANGELOG. |
+| 1.19.0 | 2026-08-10 | see CHANGELOG. |
+| 1.18.2 | 2026-08-09 | see CHANGELOG. |
+| 1.18.1 | 2026-08-09 | see CHANGELOG. |
+| 1.18.0 | 2026-08-09 | see CHANGELOG. |
+| 1.17.9 | 2026-08-09 | see CHANGELOG. |
+| 1.17.8 | 2026-08-09 | see CHANGELOG. |
+| 1.17.7 | 2026-08-09 | see CHANGELOG. |
+| 1.17.6 | 2026-08-09 | see CHANGELOG. |
+| 1.17.5 | 2026-08-09 | see CHANGELOG. |
+| 1.17.4 | 2026-08-09 | see CHANGELOG. |
+| 1.17.3 | 2026-08-09 | see CHANGELOG. |
+| 1.17.2 | 2026-08-09 | see CHANGELOG. |
+| 1.17.1 | 2026-08-09 | see CHANGELOG. |
+| 1.17.0 | 2026-08-08 | see CHANGELOG. |
+| 1.16.8 | 2026-08-08 | see CHANGELOG. |
 | 1.16.7 | 2026-08-08 | Client "Integrated": deep links + PWA (offline shell caches app shell only — never the API, no content caching) + paginated audit + command palette + recall debounce + hardening (drawer focus trap, aria-live, `dir="auto"`). Client-only; server + API contract unchanged |
 | 1.16.6 | 2026-08-08 | Client "Mobile": secure token storage via OS keyring (`keyring`, non-web; web stays in-memory — browser localStorage is not a secure credential store per MASVS-STORAGE) + responsive tab-bar UX; Dioxus pinned to 0.7.10 (wasm-hotpatch TOCTOU/UB + panic-resilience fixes compiled in) |
 | 1.16.5 | 2026-08-08 | Client "Secure": JWT refresh lifecycle — silent refresh-on-401 (single-flight mutex), pre-emptive expiry refresh, principal identity pillar, revocation-aware error mapping |
 | 1.16.4 | 2026-08-08 | Client "Styled": shadcn/ui design-system restyle; deploy-web.sh stale-CSS fix |
 | 1.16.3 | 2026-08-08 | Client "Serve": web bundle served under `/app`; path-aware CSP (`CLIENT_CSP` gains `'unsafe-eval'` for wasm-bindgen glue — API CSP stays strict); same-origin connect default |
 | 1.16.2 | 2026-08-08 | Client "Harden + Accessible": server serves the client + path-aware CSP; WCAG 2.2 AA client pass (focus-to-`<h1>`, document titles, no-`<div onclick>` semantic gate, AA-contrast token); ErrorBoundary + error mapping; cancel-safe batch summary; grep guards (`xss_escape_hatch_is_unused`, `credentials_stay_in_memory`) |
+| 1.16.1 | 2026-08-08 | see CHANGELOG. |
 | 1.16.0 | 2026-08-08 | Client "Client": Dioxus control surface (web + desktop + iOS + Android, one Rust codebase) — connection state machine, honest-batch review, recall decision-path viewer, DSAR certificate card, auth-failure feed, audit filters, semantic-token layer |
 | 1.15.0 | 2026-08-08 | "Observe": read-event audit (recall/search/get emit rows into the SHA-256 chain; opt-in), recall trace endpoint, DSAR workflow (locate→export→purge→chain-verifiable deletion certificate, `GET /tombstones`), Art 19 HMAC-SHA256 webhook (opt-in; reqwest now required for outbound HTTP); ISO 42001/NIST AI RMF/SOC 2 map in `COMPLIANCE.md` |
 | 1.14.0 | 2026-08-07 | "Gate": human-in-the-loop write-back (`POST /ingest/proposal` → `POST /proposals/{id}/approve`, one tx, optional `?supersedes`); per-chunk `expires_at` decay (strict `<`, nothing decays autonomously); record-level `access_scope` + `owner` (JWT-mode deny-by-default filter); PII output redaction (`[redacted:…]`); GDPR `GET /export` + `POST /purge` (hard audited delete across tables, tombstone + audit) |
+| 1.13.6 | 2026-08-07 | see CHANGELOG. |
+| 1.13.5 | 2026-08-07 | see CHANGELOG. |
+| 1.13.4 | 2026-08-06 | see CHANGELOG. |
+| 1.13.3 | 2026-08-06 | see CHANGELOG. |
 | 1.13.2 | 2026-08-06 | "Harden": `PRAGMA busy_timeout=5000` on every SQLite pool init (write contention now queues up to 5s instead of failing with `SQLITE_BUSY`); `/graph/traverse` `name`/`entity` aliases; `/recall` `explain` alias |
 | 1.13.1 | 2026-08-06 | "Recall" fix: automatic retrieval routing in shim mode (matched domain + `global` rescue leg); kill switch `BRAIN_RECALL_ROUTING_ENABLED` |
 | 1.13.0 | 2026-08-06 | "Route": domain relabeling migration (`global` + per-domain labels); retrieval routing by centroid |
@@ -872,19 +1026,35 @@ rulings) — the runbook's quarterly re-check rule applies.
 | 1.12.1 | 2026-08-04 | AuthZ wiring completion ("Harden"): closes the S1 audit finding — every non-public route now calls `authorize()` at handler entry with the v1.2 §3.3 matrix action (20 previously-ungated handlers wired: search/stats/embeddings/get*/multi-get/graph*/quarantine-list/audit/audit-verify/metrics/recall/verify/propose/connectors/revoke/domains/suggest-metrics/procedure-steps; `reindex` + `DELETE /memory/{id}` upgraded Write→Admin; `/audit` gains Admin gate + cross-tenant 403 via `audit_scope`; `/auth/revoke` finally enforces its documented admin requirement). Back-compat preserved: `None` principal (opaque mode) stays superuser; webhooks stay HMAC-internal. New wiring-guard test pins every non-public route to an `authorize()` call (mutation-proven) + router-level middleware tests. 465 tests green |
 | 1.12.0 | 2026-08-03 | Noise-aware graph retrieval + complexity-gated activation ("Discern"): edge-type weights (`tagged_with`/`alias_of` → 0.1 vs semantic types → 1.0) + GAAMA-style hub dampening (`w_ij·min(1, θ/deg(i))`, θ=50) tame the taxonomy-heavy KG (94% of live edges are tag noise; degree-73/101/150 mega-hubs); graph leg auto-engages as a bounded rescue pass on the would-be-abstention path (`ClarifyQuery` only, `BRAIN_GRAPH_RESCUE_ENABLED` kill switch, arXiv:2602.03578). Retrieval-only, deterministic, no LLM, no new schema, no re-ingest; θ and weights are corpus-calibrated constants, not learned |
 | 1.11.0 | 2026-08-03 | HippoRAG-2-style graph retrieval ("Associate"): deterministic Personalized PageRank over the existing `entities`/`relationships` KG as an opt-in third RRF leg (`?graph=true`). No new schema, no embeddings, no LLM; bounded power iteration (`MAX_PPR_ITER`/`MAX_VISITED`) prevents a dense/taxonomy-heavy KG from blowing the compute budget; exact-name entity seeding (no fuzzy matching on untrusted input); retrieval-only — the leg reads the KG and never writes |
+| 1.10.0 | 2026-08-02 | see CHANGELOG. |
+| 1.9.1 | 2026-08-02 | see CHANGELOG. |
+| 1.9.0 | 2026-08-02 | see CHANGELOG. |
+| 1.8.0 | 2026-08-01 | see CHANGELOG. |
+| 1.7.0 | 2026-08-01 | see CHANGELOG. |
+| 1.6.0 | 2026-08-01 | see CHANGELOG. |
+| 1.5.0 | 2026-08-01 | see CHANGELOG. |
+| 1.4.2 | 2026-07-30 | see CHANGELOG. |
+| 1.4.1 | 2026-07-30 | see CHANGELOG. |
 | 1.4.0 | 2026-07-30 | Surpass-human retrieval ("Calibrate"): bi-temporal edges (`relationships.valid_at`/`invalid_at`, Graphiti valid-time model, Context7-verified); deterministic temporal-marker extraction (no LLM); submodular evidence packing (budgeted monotone maximization, MMR-style dedup, arXiv:2607.00725); TRACE typed-edge prefixes + bounded validity-aware traversal; `?at=` bi-temporal filter on `/recall` + `/graph/traverse`; `knowledge.node_kind`/`parent_id` schema reservation; pure eval metrics (P@k/R@k/MRR/NDCG) + `bench eval` regression harness; `multivec` feature reserved (M4 deferred per lazy-dev escape hatch) |
 | 1.3.0 | 2026-07-29 | Memory-safety hardening ("Bedrock"): zero `unwrap`/`expect`/`panic!` in production paths; 10 duplicate `unsafe` transmute blocks collapsed into one documented `register_sqlite_vec()`; every remaining `unsafe` carries a `// SAFETY:` comment; cargo-fuzz targets; proptests for chunker/validator/capacity invariants; `/health` exposes a `hardening` object (`unsafe_blocks`, `panics_caught`, `memory_leaks_detected`); `BRAIN_WORKER_THREADS` runtime tuning |
 | 1.2.1 | 2026-07-29 | Dead-code elimination + panic fixes found during the v1.3.0 audit (unused `AuthzPolicy` trait, `TokenType::as_str`, `DEFAULT_ALG`, etc.); `authorize()` now uses `principal.tenant` as team context |
+| 1.2.0 | 2026-07-29 | see CHANGELOG. |
 | 1.2 | 2026-07-29 | JWT/JWS verification (RS256/ES256/EdDSA, alg whitelist, no HS256/`none`); `(jti, iss)` revocation; refresh-chain reuse detection; AuthZ trait (deny-by-default); OIDC discovery + JWKS; key management CLI |
 | 1.1.2 | 2026-07-29 | Constant-time auth hardening: bearer-token compare swapped from a hand-rolled fold (LLVM-short-circuitable) to `subtle::ConstantTimeEq::ct_eq` (asm/`black_box`-backed); query parameterization audit (no injection surface) |
 | 1.1.1 | 2026-07-29 | Audit hash-chain false-negative fix: `verify_chain` no longer fails on the NULL→`Some` boundary created by the v1.0→v1.1 additive `prev_hash` migration; `record_tenant` wrapped in `SAVEPOINT` for caller-transaction safety; `/metrics` `brain_audit_chain_ok` TTL-cached |
+| 1.1.0 | 2026-07-28 | see CHANGELOG. |
 | 1.1 | 2026-07-28 | Per-tenant audit + SHA-256 hash chain; fail-safe file-watch token rotation; rolling backups + `/health` integrity; graceful-shutdown drain cap + WAL checkpoint; RSS watchdog; Prometheus `/metrics` exporter |
-| 2.0 (planned) | 2026-Q4 | Multi-team tenancy consuming v1.2 AuthZ; team namespace in paths |
-| 2.1 (planned) | 2026-Q4 | Per-tenant + tiered rate limiting; Redis impl; cost tracking; quota alerts |
-| 3.7 (planned) | 2027-Q1 | A2A federation over mTLS; per-field PII encryption; differential privacy (no SQLCipher/KMS database-key commitment) |
 | 1.0.1 | 2026-07-26 | Structured-ingest auto-create bug fix; systemd deploy on openclaw |
 | 1.0.0 | 2026-07-26 | Multi-domain + cross-domain RRF + domain lifecycle + boot-time legacy cutover |
 | 0.9.9 | 2026-07-25 | Capacity envelopes; migration rehearsal tool; storage layout |
+| 0.9.7 | 2026-07-20 | "Guard" (see CHANGELOG). |
+| 0.9.6 | 2026-07-20 | "Bridge" (see CHANGELOG). |
+| 0.9.5 | 2026-07-19 | "Inspect" (see CHANGELOG). |
 | 0.9.4 | 2026-07-11 | Full middleware stack hardening (rate limit, security headers, request ID, timeout, panic catch, sensitive header redaction, compression, tracing) |
+| 0.9.3 | 2026-07-11 | "Calibrate" (see CHANGELOG). |
 | 0.9.2 | 2026-07-11 | Vault ingest provenance, wikilink KG edges, prompt injection guard |
+| 0.9.1 | 2026-07-11 | "Recall" (see CHANGELOG). |
 | 0.9.0 | 2026-07-08 | sqlite-vec migration, parameterized queries, CORS lockdown, auth scaffold |
+| 2.0 (planned) | 2026-Q4 | Multi-team tenancy consuming v1.2 AuthZ; team namespace in paths |
+| 2.1 (planned) | 2026-Q4 | Per-tenant + tiered rate limiting; Redis impl; cost tracking; quota alerts |
+| 3.7 (planned) | 2027-Q1 | A2A federation over mTLS; per-field PII encryption; differential privacy (no SQLCipher/KMS database-key commitment) |
