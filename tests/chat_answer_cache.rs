@@ -66,6 +66,10 @@ async fn post_turn(
     let bytes = axum::body::to_bytes(resp.into_body(), 8 * 1024 * 1024)
         .await
         .expect("sse body");
+    // THE E5 TRANSCRIPT: the raw SSE body, verbatim, for the lane's
+    // evidence file (`cargo test --test chat_answer_cache -- --nocapture`).
+    eprintln!("── SSE transcript [{session}] msg={message:?}");
+    eprintln!("{}", String::from_utf8_lossy(&bytes));
     sse_events(&String::from_utf8_lossy(&bytes))
 }
 
