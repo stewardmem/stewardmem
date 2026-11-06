@@ -1029,6 +1029,22 @@ mod tests {
     }
 
     #[test]
+    fn kappa_report_on_empty_corpus_emits_zero_cells_never_a_number() {
+        // K-1: at zero labels the report emits NO_KAPPA cells or zero cells —
+        // never a fabricated number. S0 measured 0 labels: zero cells here.
+        let conn = db();
+        let cells = kappa_report(&conn).unwrap();
+        assert!(
+            cells.is_empty(),
+            "an empty corpus names itself with no cells"
+        );
+        assert!(
+            cells.iter().all(|c| c.kappa_units == NO_KAPPA),
+            "no measured value may appear at n=0"
+        );
+    }
+
+    #[test]
     fn kappa_degenerate_pair_names_itself() {
         let mut conn = db();
         let digest = seed_tuple(&conn, 31, "acme", "case-d", "C2");

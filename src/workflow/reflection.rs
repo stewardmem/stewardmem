@@ -33,6 +33,24 @@ pub(crate) const WOULD_DO_DIFFERENTLY_CAP: usize = 4000;
 /// order. A case cannot grow tuples without gates, and gates are bounded.
 pub(crate) const MAX_TUPLES_PER_FLAG: usize = 64;
 
+/// Near-dup token Jaccard threshold as integer arithmetic: a rendered pair
+/// whose token-set Jaccard meets `NUM/DEN` is a near-dup rendering of the
+/// same disagreement and renders one representative. 0.80 — a rational
+/// ceiling since the corpus holds 0 tuples (CG-06 S0, measured 2026-11-06):
+/// no calibration corpus exists, so the threshold is NAMED, never retuned
+/// silent. Index arithmetic only — ints, never floats.
+pub(crate) const NEAR_DUP_TOKEN_JACCARD_EPSILON_NUM: usize = 80;
+pub(crate) const NEAR_DUP_TOKEN_JACCARD_EPSILON_DEN: usize = 100;
+
+/// The filter's text-size cap (bytes after trim): the launch-size bound
+/// precedent (`case_run.rs`, 1..=8192), so per-pair runtime is bounded.
+pub(crate) const NEAR_DUP_TEXT_CAP: usize = 8192;
+
+/// The rendered-export epoch. A filter-semantic change bumps it (a named
+/// act); it stamps the export audit row only and never moves the frozen
+/// partition mapping (a pure run-id function).
+pub(crate) const CORPUS_EXPORT_EPOCH: u32 = 1;
+
 /// Kernel-authored markers inside `gdl_gate` error strings. The errors are
 /// law constants minted by the gates, never model text, so matching on
 /// them is deterministic and un-forgeable by an agent.
@@ -697,10 +715,87 @@ fn sanitize_tuple_mut(t: &mut DisagreementTuple) {
     t.governed_truth = bound(&sanitize_seam(&t.governed_truth), GOVERNED_TRUTH_CAP);
 }
 
+/// Tokenize for the near-dup filter: lowercase alphanumeric runs, sorted,
+/// deduped. Regex-free — the token vocabulary discipline (alphanumeric
+/// manifests, plan/floor-parse precedents).
+pub(crate) fn token_set(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut buf = String::new();
+    for ch in text.chars() {
+        if ch.is_alphanumeric() {
+            for c in ch.to_lowercase() {
+                buf.push(c);
+            }
+        } else if !buf.is_empty() {
+            out.push(std::mem::take(&mut buf));
+        }
+    }
+    if !buf.is_empty() {
+        out.push(buf);
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// The filter text of one rendered entry: the join of its disagreements'
+/// phase + governed truth + model-proposal excerpt (all three — a duplicate
+/// must duplicate the disagreement), capped at the launch byte bound.
+fn entry_disagreement_text(entry: &CorpusEntry) -> String {
+    let mut s = String::new();
+    for d in &entry.disagreements {
+        s.push_str(&d.phase);
+        s.push(' ');
+        s.push_str(&d.governed_truth);
+        s.push(' ');
+        s.push_str(&d.model_proposal);
+        s.push(' ');
+    }
+    if s.len() > NEAR_DUP_TEXT_CAP {
+        let mut end = NEAR_DUP_TEXT_CAP;
+        while !s.is_char_boundary(end) {
+            end -= 1;
+        }
+        s.truncate(end);
+    }
+    s
+}
+
+/// Near-dup predicate over two sorted token sets: integer arithmetic only,
+/// `|A∩B|·DEN ≥ NUM·|A∪B|`. An empty set never duplicates anything — an
+/// entry with no disagreements is differentiated evidence, not a dup.
+pub(crate) fn near_dup_token_sets(a: &[String], b: &[String]) -> bool {
+    if a.is_empty() || b.is_empty() {
+        return false;
+    }
+    let inter = a.iter().filter(|t| b.binary_search(t).is_ok()).count();
+    let union = a.len() + b.len() - inter;
+    inter * NEAR_DUP_TOKEN_JACCARD_EPSILON_DEN >= NEAR_DUP_TOKEN_JACCARD_EPSILON_NUM * union
+}
+
+/// The render-time near-dup law: a pair above the threshold renders ONE
+/// representative (the lowest run_id, seq — the export's deterministic
+/// enumeration order). Stored rows untouched; labels stay digest-stable.
+pub(crate) fn dedupe_corpus_entries(entries: Vec<CorpusEntry>) -> Vec<CorpusEntry> {
+    let mut ordered = entries;
+    ordered.sort_by_key(|e| (e.run_id, e.seq));
+    let mut kept: Vec<(Vec<String>, CorpusEntry)> = Vec::new();
+    for e in ordered {
+        let toks = token_set(&entry_disagreement_text(&e));
+        let dup = kept.iter().any(|(kt, _)| near_dup_token_sets(kt, &toks));
+        if !dup {
+            kept.push((toks, e));
+        }
+    }
+    kept.into_iter().map(|(_, e)| e).collect()
+}
+
 /// The bounded corpus page: the recorded `reflection` rows (optionally
 /// since a timestamp, optionally one partition), in run/row order, each
 /// rendered with its disagreement rows through the read-seam sanitizer.
 /// Export rows carry their frozen partition so a bleed is checkable.
+/// The near-dup filter ([`dedupe_corpus_entries`]) applies at render time:
+/// a near-dup pair renders one representative, never both.
 pub(crate) fn reflection_corpus(
     conn: &rusqlite::Connection,
     since: Option<i64>,
@@ -788,7 +883,7 @@ pub(crate) fn reflection_corpus(
             disagreements,
         });
     }
-    Ok(out)
+    Ok(dedupe_corpus_entries(out))
 }
 
 // ── the κ instrument lives in workflow::kappa: the promotion put the
@@ -922,6 +1017,123 @@ mod tests {
         Partition::parse("train").unwrap();
         Partition::parse("holdout").unwrap();
         assert!(Partition::parse("all").is_none());
+    }
+
+    fn corpus_entry(
+        run_id: i64,
+        seq: i64,
+        phase: &str,
+        truth: &str,
+        proposal: &str,
+    ) -> CorpusEntry {
+        CorpusEntry {
+            run_id,
+            seq,
+            partition: partition_for_run(run_id),
+            record: record_fixture(),
+            disagreements: vec![DisagreementPayload {
+                input_digest: "d".into(),
+                phase: phase.into(),
+                model_proposal: proposal.into(),
+                governed_truth: truth.into(),
+            }],
+        }
+    }
+
+    #[test]
+    fn near_dup_filter_is_identity_on_differentiated_evidence() {
+        // N-1: the filter is identity on differentiated evidence.
+        let a = corpus_entry(1, 1, "verify", "alpha bravo", "charlie delta");
+        let b = corpus_entry(2, 2, "triage", "echo foxtrot", "golf hotel");
+        assert_eq!(
+            dedupe_corpus_entries(vec![a.clone(), b.clone()]),
+            vec![a, b],
+            "disjoint token sets render byte-identical"
+        );
+    }
+
+    #[test]
+    fn near_dup_filter_keeps_lowest_representative_deterministically() {
+        // F-1: same corpus → same rendered page, same representative.
+        let a = corpus_entry(1, 1, "verify", "alpha bravo", "charlie delta");
+        let dup = corpus_entry(2, 2, "verify", "alpha bravo", "charlie delta echo");
+        assert_eq!(
+            dedupe_corpus_entries(vec![a.clone(), dup.clone()]),
+            vec![a.clone()]
+        );
+        // Reversed input order names the same representative.
+        assert_eq!(dedupe_corpus_entries(vec![dup, a.clone()]), vec![a]);
+    }
+
+    #[test]
+    fn frozen_holdout_stable_across_re_export() {
+        // F-2: the pure run-id partition never moves; the epoch is the
+        // filter-semantic version stamp. Golden partitions for runs 1..=10
+        // (measured at landing): damaging the split digest changes the set.
+        assert_eq!(CORPUS_EXPORT_EPOCH, 1);
+        let golden = [
+            (1, false),
+            (2, false),
+            (3, true),
+            (4, false),
+            (5, true),
+            (6, false),
+            (7, false),
+            (8, false),
+            (9, false),
+            (10, true),
+        ];
+        for (run_id, holdout) in golden {
+            assert_eq!(
+                partition_for_run(run_id) == Partition::Holdout,
+                holdout,
+                "run {run_id} left the frozen holdout set"
+            );
+        }
+        for run_id in -100..100 {
+            assert_eq!(partition_for_run(run_id), partition_for_run(run_id));
+        }
+        let conn = db();
+        let page_a = reflection_corpus(&conn, None, 500, None).unwrap();
+        let page_b = reflection_corpus(&conn, None, 500, None).unwrap();
+        assert_eq!(page_a, page_b);
+        assert!(page_a.is_empty(), "S0: the corpus is empty");
+    }
+
+    #[test]
+    fn empty_corpus_renders_nothing_and_never_panics() {
+        // F-3: the S0 emptiness drives the empty render — no divide, no panic.
+        let conn = db();
+        assert!(
+            reflection_corpus(&conn, None, 500, None)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(dedupe_corpus_entries(Vec::new()).is_empty());
+        assert!(token_set("").is_empty());
+        assert!(
+            !near_dup_token_sets(&[], &[]),
+            "two empty sets are not a dup"
+        );
+        let out = dedupe_corpus_entries(vec![
+            corpus_entry(1, 1, "", "", ""),
+            corpus_entry(2, 2, "", "", ""),
+        ]);
+        assert_eq!(out.len(), 2, "empty evidence is never collapsed");
+    }
+
+    #[test]
+    fn filter_region_carries_no_model_signal() {
+        // F-4: ints only — no embedding, no chunk scan, no float in the filter.
+        let full = include_str!("reflection.rs");
+        let body = full.split("#[cfg(test)]").next().unwrap();
+        assert!(
+            !body.contains("find_near_duplicates"),
+            "the chunk scan is the ONLY embedding near-dup in the tree"
+        );
+        assert!(!body.contains("f32"), "ints only in the filter region");
+        assert!(!body.contains("f64"), "ints only in the filter region");
+        assert!(body.contains("NEAR_DUP_TOKEN_JACCARD_EPSILON_NUM"));
     }
 
     #[test]
