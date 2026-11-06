@@ -1498,9 +1498,8 @@ fn intake_gate(a: &IntakeArtifact, case: &GdlCase) -> Vec<String> {
             .iter()
             .map(|issue| issue.title.to_lowercase())
             .collect();
-        for i in 0..titles.len() {
-            for j in (i + 1)..titles.len() {
-                let (x, y) = (&titles[i], &titles[j]);
+        for (i, x) in titles.iter().enumerate() {
+            for (j, y) in titles.iter().enumerate().skip(i + 1) {
                 if x.is_empty() || y.is_empty() {
                     continue;
                 }
@@ -4074,19 +4073,15 @@ impl GdlDriver {
                         })
                         .await
                         .map_err(persist_error)?;
-                        match snapshot_result {
-                            Ok(snapshot) => {
-                                if let Some(reason) = super::hand_down::harness_deviation(
-                                    &snapshot.test_log,
-                                    &delivered,
-                                ) {
-                                    gate = Gate::Route(reason);
-                                }
-                            }
-                            Err(e) => {
-                                gate = Gate::Route(format!(
-                                    "hand-down deviation at step 1: the harness left the record — escalate ({e})"
-                                ));
+                        if let Err(e) = &snapshot_result {
+                            gate = Gate::Route(format!(
+                                "hand-down deviation at step 1: the harness left the record — escalate ({e})"
+                            ));
+                        } else if let Ok(snapshot) = snapshot_result {
+                            if let Some(reason) =
+                                super::hand_down::harness_deviation(&snapshot.test_log, &delivered)
+                            {
+                                gate = Gate::Route(reason);
                             }
                         }
                     }

@@ -81,7 +81,7 @@ pub(crate) fn ranked(case: &GdlCase) -> Vec<Hypothesis> {
 
 /// One hypothesis's integer score under the dominance weights.
 fn score_hypothesis(case: &GdlCase, h: &Hypothesis, universe: &[String]) -> i32 {
-    let mut score: i32 = 0;
+    let mut score = 0;
     if is_falsified(case, h) {
         score -= W_FALSIFIED;
     }
