@@ -1497,7 +1497,7 @@ fn redflag_catalog_errors(domain: &str, ticket: &str, rf: &RedFlagArtifact) -> V
 /// locator 1..=96 chars. Malformed sources never count toward
 /// confirmation — corroboration is measured over evidence KINDS, not
 /// over strings that merely differ.
-fn kind_source(s: &str) -> Option<super::evidence::EvidenceKind> {
+pub(crate) fn kind_source(s: &str) -> Option<super::evidence::EvidenceKind> {
     let (prefix, locator) = s.split_once(':')?;
     if locator.trim().is_empty() || locator.chars().count() > 96 {
         return None;

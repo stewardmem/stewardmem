@@ -46,6 +46,7 @@ pub(crate) mod drift_census;
 pub(crate) mod driver;
 pub(crate) mod entitlement;
 pub mod measurement;
+pub(crate) mod ranking;
 pub mod routing;
 pub mod scheduler;
 pub mod separation;
