@@ -4077,12 +4077,11 @@ impl GdlDriver {
                             gate = Gate::Route(format!(
                                 "hand-down deviation at step 1: the harness left the record — escalate ({e})"
                             ));
-                        } else if let Ok(snapshot) = snapshot_result {
-                            if let Some(reason) =
+                        } else if let Ok(snapshot) = snapshot_result
+                            && let Some(reason) =
                                 super::hand_down::harness_deviation(&snapshot.test_log, &delivered)
-                            {
-                                gate = Gate::Route(reason);
-                            }
+                        {
+                            gate = Gate::Route(reason);
                         }
                     }
                     if matches!(gate, Gate::Pass) && phase == GdlPhase::Triage {
