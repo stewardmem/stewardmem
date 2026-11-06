@@ -11,6 +11,7 @@ import LocaleSection from '#lib/components/settings/locale-section.svelte';
 import UpdateSection from '#lib/components/settings/update-section.svelte';
 import AdvancedSection from '#lib/components/settings/advanced-section.svelte';
 import ModelSection from '#lib/components/settings/model-section.svelte';
+import RerankSection from '#lib/components/settings/rerank-section.svelte';
 import SignalSection from '#lib/components/settings/signal-section.svelte';
 import RunModeSection from '#lib/components/settings/run-mode-section.svelte';
 import ImportSection from '#lib/components/settings/import-section.svelte';
@@ -22,6 +23,11 @@ export const coreSettings: ExtensionManifest = {
 	contributes: {
 		settingsSections: [
 			{ id: 'model', component: ModelSection, category: 'model' },
+			// CG-12: the rerank tier's fact surface sits with the retrieval
+			// model's own facts (same category) — the kernel's state echo,
+			// read-only facts in EVERY edition; writes never ride here for a
+			// kernel the app does not own (P-9).
+			{ id: 'rerank', component: RerankSection, category: 'model' },
 			{ id: 'locale', component: LocaleSection, category: 'general' },
 			// W-2 (the wizard round): "How StewardMem runs" joins General — the
 			// gate's one-time decision, re-runnable as a SECTION, not a dialog.

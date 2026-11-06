@@ -1102,7 +1102,10 @@ test('the_authz_table_is_derived_from_the_wire_the_routes_call', () => {
 			// the extension manifest (which wires the sections into the
 		// registry AppShell renders) and the section components themselves.
 		join(shellRoot, 'src', 'lib', 'extensions', 'core-settings.ts'),
-		join(shellRoot, 'src', 'lib', 'components', 'settings', 'model-section.svelte')
+		join(shellRoot, 'src', 'lib', 'components', 'settings', 'model-section.svelte'),
+		// CG-12: the rerank section joins the walk with the model section —
+		// same dialog, same read module (`kernel-facts.ts`'s rerank echo).
+		join(shellRoot, 'src', 'lib', 'components', 'settings', 'rerank-section.svelte')
 	];
 	for (const file of apiModules) {
 		const bySymbol = apiModuleSymbolPaths(readFileSync(file, 'utf8'));

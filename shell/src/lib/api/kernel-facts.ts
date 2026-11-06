@@ -101,3 +101,43 @@ export async function fetchModelState(): Promise<ModelStateRead> {
 	}
 	return { model: null, state: 'unknown', error: null };
 }
+
+/** The rerank tier's state echo (CG-12): `{state, model, top_n}` off the
+ * admin `/health/db`, the kernel's own honest snapshot of its boot/lazy load
+ * decision.
+ *
+ * `not-reported` is the OLDER-CORE shape: a kernel predating the echo
+ * carries no `rerank` field at all, and this read REFUSES to guess — the
+ * section renders "not reported by this kernel" instead of inventing a
+ * state. A malformed or unknown `state` value reads the same way: an echo
+ * this build cannot name is not a state this build may display. */
+export type RerankState = 'off' | 'loading' | 'ready' | 'failed';
+
+export type RerankStateRead =
+	| { readonly state: RerankState; readonly model: string | null; readonly topN: number }
+	| { readonly state: 'not-reported' };
+
+const RERANK_STATES: readonly RerankState[] = ['off', 'loading', 'ready', 'failed'];
+
+export async function fetchRerankState(): Promise<RerankStateRead> {
+	try {
+		const { data, response } = await client.GET('/health/db');
+		if (response.status === 200 && data) {
+			const wire = (data as Record<string, unknown>)['rerank'];
+			if (wire && typeof wire === 'object') {
+				const echo = wire as Record<string, unknown>;
+				const state = echo['state'];
+				if (typeof state === 'string' && (RERANK_STATES as readonly string[]).includes(state)) {
+					return {
+						state: state as RerankState,
+						model: stringOrNull(echo['model']),
+						topN: countOrNull(echo['top_n']) ?? 50
+					};
+				}
+			}
+		}
+	} catch {
+		// the tick retries; nothing is guessed
+	}
+	return { state: 'not-reported' };
+}

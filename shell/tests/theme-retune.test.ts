@@ -589,6 +589,17 @@ const TEXT_AUDIT: Readonly<Record<string, AuditRow>> = {
 	'settings.model.failed': 'verdict',
 	'settings.model.fallback_name': 'label',
 	'settings.model.hint': 'hint',
+	// CG-12: the rerank tier's fact surface — the state words are verdicts
+	// (the dot already says live/dead), the hints carry the ownership law.
+	'settings.rerank.heading': 'label',
+	'settings.rerank.off': 'verdict',
+	'settings.rerank.loading': 'verdict',
+	'settings.rerank.ready': 'verdict',
+	'settings.rerank.failed': 'verdict',
+	'settings.rerank.not_reported': 'verdict',
+	'settings.rerank.fallback_name': 'label',
+	'settings.rerank.hint': 'hint',
+	'settings.rerank.external_hint': 'hint',
 	// The wizard's Settings surface (the W-2 round): every transition's
 	// outcome sentence is a verdict, the actions are labels, and the
 	// uninstall's removal list + offered data path ride params.

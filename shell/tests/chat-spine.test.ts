@@ -1056,7 +1056,11 @@ describe('the envelope law', () => {
 		// picker by name + the report render + the named act + the undo) +
 		// 18 message keys × five locales → 230,956 gzipped (+3,506): named
 		// act, midpoint moves, register carries it.
-		const R0_BASELINE = 230_956;
+		// AND AGAIN (2026-11-06, the CG-12 rerank round): the rerank tier's
+		// fact surface (the settings section + the /health/db echo read +
+		// 9 message keys × five locales) → 232,483 gzipped (+1,527): named
+		// act, midpoint moves, register carries it.
+		const R0_BASELINE = 232_483;
 		const BAND = 512;
 		expect(
 			Math.abs(total - R0_BASELINE),

@@ -225,6 +225,10 @@ test('the_settings_dialog_renders_the_registry_s_sections_in_contribution_order'
 	// section whose every act is named and reversible (direct channel only).
 	expect(settingsSections.map((section) => section.id)).toEqual([
 		'model',
+		// 2026-11-06 (CG-12): the rerank tier's fact surface joins the model
+		// category, directly after the model section — the kernel's state
+		// echo rendered as read-only facts in every edition.
+		'rerank',
 		'locale',
 		'runmode',
 		'import',
