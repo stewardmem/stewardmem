@@ -779,7 +779,7 @@ pub(crate) struct VerifyArtifact {
     /// CG-04: the bounded re-hypothesis proposal (the `HandoffArtifact.
     /// red_flag` precedent — a NEW record at close time). Additive;
     /// `skip_serializing_if` keeps a no-proposal verify byte-identical
-    /// to the pre-lane shape (pin N-1). Allowed ONLY on `pass: false`.
+    /// to the pre-lane shape. Allowed ONLY on `pass: false`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rehypothesis: Option<RehypothesisArtifact>,
 }
@@ -1102,7 +1102,7 @@ pub(crate) struct GdlCase {
     /// Verify) — the ranker's falsified input and the audit record.
     /// Additive state_json (no SQL column, no migration);
     /// `skip_serializing_if` keeps the no-proposal persisted case
-    /// byte-identical to the pre-lane shape (pin N-1); old states parse
+    /// byte-identical to the pre-lane shape; old states parse
     /// to `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rehypothesis: Option<RehypothesisArtifact>,
@@ -2302,7 +2302,7 @@ fn verify_gate(a: &VerifyArtifact, case: &GdlCase) -> Vec<String> {
     // CG-04 arms §1.1 (all refused BY NAME): a proposal may ride ONLY a
     // failed verify, naming each falsified prediction with evidence
     // that resolves into held evidence. No proposal on a fail is NOT an
-    // error — the terminal is exactly today's (pin N-1).
+    // error — the terminal is exactly today's.
     if a.pass && a.rehypothesis.is_some() {
         errors.push(err(
             "A3",
@@ -2730,7 +2730,7 @@ pub(crate) fn plan_strip_with_law(case: &GdlCase, corroboration_ablated: bool) -
     ));
     // CG-04: the re-entry count, when a re-entry has occurred (the count,
     // no prose). `count > 0` gates the line, so linear cases render
-    // byte-identically (pin N-1 touches the strip too).
+    // byte-identically (the strip's no-line arm keeps linear renders).
     if case.rehypothesis_count > 0 {
         lines.push(format!(
             "Hypothesize · re-entry {}/{}",
