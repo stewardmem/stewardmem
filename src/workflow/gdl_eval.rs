@@ -199,6 +199,13 @@ pub(crate) struct EvalRow {
     /// data, never as a score.
     #[serde(default)]
     pub(crate) certainty_overall: Option<String>,
+    /// CG-04: the run's admitted re-entry count, read off the persisted
+    /// case (`GdlCase.rehypothesis_count`). The metric the NEXT
+    /// preregistration reads. Pre-rehypothesis traces parse to None —
+    /// no data, never 0-as-data... (a recorded 0 IS data; absence is
+    /// `None`).
+    #[serde(default)]
+    pub(crate) rehypothesis_count: Option<u32>,
 }
 
 #[cfg(test)]
@@ -403,6 +410,9 @@ pub(crate) mod runner {
             .as_ref()
             .and_then(|g| serde_json::to_value(g.overall).ok())
             .and_then(|v| v.as_str().map(str::to_string));
+        // CG-04: the count off persisted state (a recorded 0 IS data;
+        // None only in pre-lane JSONL rows that predate the field).
+        let rehypothesis_count = Some(final_case.rehypothesis_count);
         EvalRow {
             suite: SUITE.to_string(),
             task_id: task_id.to_string(),
@@ -428,6 +438,7 @@ pub(crate) mod runner {
             escalations_honored,
             repeat_contact,
             certainty_overall,
+            rehypothesis_count,
         }
     }
 
@@ -1322,6 +1333,7 @@ never rewritten).\n",
             escalations_honored: if resolved { 0 } else { 1 },
             repeat_contact: false,
             certainty_overall: None,
+            rehypothesis_count: None,
         };
         let rows = vec![
             mk_row("B", 0, true),

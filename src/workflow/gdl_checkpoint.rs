@@ -2,7 +2,9 @@
 //! finished an exchange may explicitly pause. A crash retains its claim.
 //! rusqlite rollback-on-drop verified via Context7 2026-09-17 (upstream docs).
 
-use super::{GdlCase, GdlOutcome, GdlPhase, LoopError, MAX_PHASE_ATTEMPTS, session_log};
+use super::{
+    GdlCase, GdlOutcome, GdlPhase, LoopError, MAX_PHASE_ATTEMPTS, expected_phases, session_log,
+};
 use crate::workflow::{state, tx::WorkflowTx};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -61,19 +63,26 @@ impl Checkpoint {
     }
 
     fn validate(&self) -> Result<(), LoopError> {
-        let phase_count = self.next_phase.map_or(7, |p| p as u32);
+        // CG-04 ordinal machine: `phases` is total accepted passes. Mid-flight
+        // the pass count is the next phase's position plus 4 passes per
+        // COMPLETED re-entry loop (Hypothesize→Plan→Act→Verify); the count
+        // bounds the loops. At count == 0 this is exactly today's
+        // `phases == next_phase as u32`.
+        let position = self.next_phase.map_or(7, |p| p as u32);
+        let loops = (self.phases as i64) - (position as i64);
+        let consistent =
+            loops >= 0 && loops % 4 == 0 && loops / 4 <= self.case.rehypothesis_count as i64;
         if self.version != 1
             || self.revision < 1
             || self.episode.is_empty()
             || self.episode.len() > 128
             || self.attempt > MAX_PHASE_ATTEMPTS
             || (self.terminal.is_none() && self.attempt == MAX_PHASE_ATTEMPTS)
-            || self.phases > 7
+            || self.phases > expected_phases(self.case.rehypothesis_count)
             || self.errors.len() > 64
             || self.errors.iter().any(|s| s.len() > 16_384)
             || (self.attempt == 0) != self.errors.is_empty()
-            || (self.terminal.is_none()
-                && (self.next_phase.is_none() || self.phases != phase_count))
+            || (self.terminal.is_none() && (self.next_phase.is_none() || !consistent))
             || self.exchange.is_some_and(|id| id <= 0)
             || self.status
                 != if matches!(self.terminal, Some(GdlOutcome::Resolved { .. })) {
@@ -90,8 +99,9 @@ impl Checkpoint {
                 verify,
                 capture,
             }) => {
-                *phases == 7
-                    && self.phases == 7
+                let expected = expected_phases(self.case.rehypothesis_count);
+                *phases == expected
+                    && self.phases == expected
                     && self.next_phase.is_none()
                     && self.case.phase == GdlPhase::Handoff
                     && verify.pass
@@ -204,9 +214,29 @@ impl Checkpoint {
         if let Some(artifact) = &gate.artifact {
             super::apply(&mut expected, gate.phase, artifact);
         }
+        // CG-04: the gate row is the transition's definition. The count
+        // moves 0..=1 per transition (the admitted edge is the only
+        // increment — a jump of 2+ is corrupt even if the stored case
+        // matches); `expected` takes the gate's count so the full case
+        // comparison binds the stored state to the transition.
+        if gate.rehypothesis_count != prior.case.rehypothesis_count
+            && gate.rehypothesis_count != prior.case.rehypothesis_count + 1
+        {
+            return Err(persist_error("GDL rehypothesis count jump is not one step"));
+        }
+        expected.rehypothesis_count = gate.rehypothesis_count;
         let accepted = gate.verdict == "pass";
+        // CG-04: `next_phase` is derived PHASE-BASED from the gate's
+        // explicit target (the admitted `Verify → Hypothesize` edge, the
+        // Handoff exit), not array-indexed from the pass count. A legacy
+        // gate row (pre-field, serde-defaulted None) with an artifact
+        // falls back to the legacy derivation — identical at count 0.
         let next_phase = if accepted {
-            GdlPhase::ALL.get((prior.phases + 1) as usize).copied()
+            match gate.next_phase {
+                Some(target) => Some(target),
+                None if gate.artifact.is_none() => prior.next_phase,
+                None => GdlPhase::ALL.get((prior.phases + 1) as usize).copied(),
+            }
         } else {
             prior.next_phase
         };
@@ -226,7 +256,7 @@ impl Checkpoint {
         {
             return Err(persist_error("GDL gate artifact/state mismatch"));
         }
-        gate.verify_receipt(conn, self.run, row.seq)?;
+        gate.verify_receipt(conn, self.run, row.seq, prior.case.rehypothesis_count)?;
         Ok(())
     }
 
@@ -259,6 +289,16 @@ struct GateRecord {
     revision: i64,
     artifact: Option<String>,
     terminal: Option<GdlOutcome>,
+    /// CG-04: the explicit forward target of this transition (phase-based).
+    /// Additive — `default` keeps old rows readable; a legacy row's None
+    /// derives the legacy value (identical at count == 0).
+    #[serde(default)]
+    next_phase: Option<GdlPhase>,
+    /// CG-04: the rehypothesis count AFTER this transition. Additive —
+    /// `default` keeps old rows readable (0, the only count the old code
+    /// could produce).
+    #[serde(default)]
+    rehypothesis_count: u32,
     /// F12b: the exchange's provider-reported usage. Additive — `default`
     /// keeps old rows (written before this field) readable.
     #[serde(default)]
@@ -275,7 +315,17 @@ struct ExchangeEnd {
 }
 
 impl GateRecord {
-    fn verify_receipt(&self, conn: &Connection, run: i64, gate_seq: i64) -> Result<(), LoopError> {
+    /// CG-04 C-14: `pre_count` is the PRIOR checkpoint's
+    /// `rehypothesis_count` — the exchange key's loop disambiguator
+    /// (pre-transition, matching the driver's key formation at the
+    /// phase's start). Old rows have count 0 throughout → base keys.
+    fn verify_receipt(
+        &self,
+        conn: &Connection,
+        run: i64,
+        gate_seq: i64,
+        pre_count: u32,
+    ) -> Result<(), LoopError> {
         use super::RunOutcome;
         let Some(id) = self.exchange else {
             if self.verdict == "route"
@@ -302,10 +352,8 @@ impl GateRecord {
             .map_err(persist_error)?
             .ok_or_else(|| persist_error("GDL exchange start missing"))?;
         let expected_key = format!(
-            "control:exchange:gdl:{}:phase:{}:attempt:{}",
-            self.episode,
-            self.phase.as_str(),
-            self.attempt
+            "control:exchange:{}",
+            super::exchange_key(&self.episode, self.phase, self.attempt, pre_count)
         );
         if start_key != expected_key && start_key != format!("{expected_key}:confirm") {
             return Err(persist_error("GDL exchange key mismatch"));
@@ -600,6 +648,15 @@ pub(super) struct Transition {
     /// as absent, and rows for receipt-less transitions (route-at-gate)
     /// carry None.
     pub usage: Option<(u64, u64)>,
+    /// CG-04: the explicit forward target of this transition. `None`
+    /// derives the legacy value (`ALL[phases]` — identical to the
+    /// phase-based value at count == 0); the admitted back edge sets
+    /// `Some(Hypothesize)`.
+    pub next_phase: Option<GdlPhase>,
+    /// CG-04: the rehypothesis count after this transition. The driver
+    /// increments it ONLY on the admitted edge; every other transition
+    /// carries the prior count.
+    pub rehypothesis_count: u32,
 }
 
 /// Called only after the exchange has settled, never across an external await.
@@ -681,7 +738,10 @@ fn advance_tx(
         super::apply(&mut next.case, change.phase, artifact);
         write_phase(tx.tx(), old.run, change.phase, artifact)?;
         next.phases += 1;
-        next.next_phase = GdlPhase::ALL.get(next.phases as usize).copied();
+        next.next_phase = change
+            .next_phase
+            .or_else(|| GdlPhase::ALL.get(next.phases as usize).copied());
+        next.case.rehypothesis_count = change.rehypothesis_count;
         next.attempt = 0;
         next.errors.clear();
     } else if change.verdict == "fail" {
@@ -707,6 +767,8 @@ fn advance_tx(
             revision: old.revision,
             artifact: change.artifact,
             terminal: change.terminal,
+            next_phase: next.next_phase,
+            rehypothesis_count: next.case.rehypothesis_count,
             usage: change.usage,
         })
         .map_err(persist_error)?,

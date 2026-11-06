@@ -61,6 +61,26 @@ mod checkpoint;
 /// resolve — a case the model cannot artifact honestly is a human's case).
 pub(crate) const MAX_PHASE_ATTEMPTS: u32 = 3;
 
+/// The preregistered bounded re-hypothesis bound (CG-04): admitted
+/// `Verify → Hypothesize` re-entries per case, at most.
+///
+/// PREREGISTRATION `plans/closing_gaps/REHYPOTHESIS_PREREGISTRATION_2026-11-06.md`:
+/// the pilot's Verify-failure rate per completed case is UNMEASURABLE (0/0 —
+/// `fixture.db` holds 2 runs with 0 cases reaching Verify; `PILOT_EVIDENCE`
+/// A5 records the same 19/19 no-reach population), so `N = ceil(observed × 2)`
+/// capped at 2 FAILS CLOSED to 0. The edge therefore refuses always (arm 2 of
+/// the admission gate fires on every failed verify) and a failed verify's
+/// terminal is byte-identically today's. Changing this const is a named act —
+/// a new preregistration on measured Verify data — never a tweak.
+pub(crate) const MAX_REHYPOTHESES: u32 = 0;
+
+/// The total accepted-pass bound for a case under `MAX_REHYPOTHESES`: the
+/// linear 7 phases plus exactly Hypothesize→Plan→Act→Verify (4 passes) per
+/// admitted re-entry. At `MAX = 0` this is 7 — the pre-lane shape.
+pub(crate) const fn expected_phases(rehypothesis_count: u32) -> u32 {
+    7 + 4 * rehypothesis_count
+}
+
 /// The MEASURED provider-exchange cost of one Verify phase, by strategy —
 /// the number `docs/architecture.md` states and the doc-truth pin reads.
 ///
@@ -1078,6 +1098,19 @@ pub(crate) struct GdlCase {
     /// data, never as a synthetic score.
     #[serde(default)]
     pub certainty: Option<super::certainty::CertaintyGrade>,
+    /// CG-04: the last rehypothesis proposal (from the latest failed
+    /// Verify) — the ranker's falsified input and the audit record.
+    /// Additive state_json (no SQL column, no migration);
+    /// `skip_serializing_if` keeps the no-proposal persisted case
+    /// byte-identical to the pre-lane shape (pin N-1); old states parse
+    /// to `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rehypothesis: Option<RehypothesisArtifact>,
+    /// CG-04: admitted re-entry count — incremented ONLY by the driver
+    /// on the admitted edge (never by `apply`); arming key against the
+    /// bound.
+    #[serde(default)]
+    pub rehypothesis_count: u32,
 }
 
 impl GdlCase {
@@ -1098,6 +1131,8 @@ impl GdlCase {
             back_referral: None,
             triage_search: Vec::new(),
             certainty: None,
+            rehypothesis: None,
+            rehypothesis_count: 0,
         }
     }
 
@@ -2167,6 +2202,56 @@ fn act_gate(a: &ActArtifact, case: &GdlCase) -> Vec<String> {
     errors
 }
 
+/// CG-04: the exchange request key. Post-re-entry passes re-run phases at
+/// `(phase, attempt)` pairs already used by the first loop — the
+/// idempotency key must disambiguate, or a re-entered pass would REUSE
+/// the first loop's assistant bytes. `reentry` is the case's
+/// `rehypothesis_count` as the phase STARTS; the zero-loop key is
+/// byte-identical to the pre-lane shape, so existing rows verify
+/// unchanged (execution-found correction C-14).
+pub(crate) fn exchange_key(episode: &str, phase: GdlPhase, attempt: u32, reentry: u32) -> String {
+    let base = format!(
+        "gdl:{}:phase:{}:attempt:{}",
+        episode,
+        phase.as_str(),
+        attempt
+    );
+    if reentry == 0 {
+        base
+    } else {
+        format!("{base}:r{reentry}")
+    }
+}
+
+/// CG-04: the bounded re-hypothesis edge — the ONLY site where the four
+/// admission arms are evaluated (S-1). Pure index arithmetic (S-3: no
+/// confidence/read of any grade; the model proposes, this disposes).
+/// `max` and the caller-computed facts are parameters so table tests can
+/// exercise the ADMIT leg at hypothetical bounds; production passes
+/// `MAX_REHYPOTHESES`. Arm ORDER is the law: red-flag → count → artifact
+/// → budget. Reordering is a named act, never a tidy.
+pub(crate) fn rehypothesis_admits(
+    red_flag_open: bool,
+    rehypothesis_count: u32,
+    max: u32,
+    proposal_present: bool,
+    attempt: u32,
+) -> bool {
+    if red_flag_open {
+        return false;
+    }
+    if rehypothesis_count >= max {
+        return false;
+    }
+    if !proposal_present {
+        return false;
+    }
+    if attempt >= MAX_PHASE_ATTEMPTS {
+        return false;
+    }
+    true
+}
+
 /// Verify (A6/L6): the re-run IS the plan's failing scenario, the
 /// stability window is at least the floor, the negative check ran, and
 /// only a PASS closes a case.
@@ -2566,7 +2651,11 @@ pub(crate) fn apply(case: &mut GdlCase, phase: GdlPhase, artifact_json: &str) {
         }
         GdlPhase::Verify => {
             if let Ok(a) = serde_json::from_str::<VerifyArtifact>(artifact_json) {
-                case.verify = Some(a);
+                case.verify = Some(a.clone());
+                // CG-04: the proposal rides the case for the ranker and
+                // the audit. `rehypothesis_count` is NOT touched here —
+                // only the driver's admitted edge increments it (S-2).
+                case.rehypothesis = a.rehypothesis.clone();
             }
         }
         GdlPhase::Handoff => {
@@ -2639,6 +2728,16 @@ pub(crate) fn plan_strip_with_law(case: &GdlCase, corroboration_ablated: bool) -
         "GDL PLAN STRIP (live) — phase: {}",
         case.phase.as_str()
     ));
+    // CG-04: the re-entry count, when a re-entry has occurred (the count,
+    // no prose). `count > 0` gates the line, so linear cases render
+    // byte-identically (pin N-1 touches the strip too).
+    if case.rehypothesis_count > 0 {
+        lines.push(format!(
+            "Hypothesize · re-entry {}/{}",
+            case.rehypothesis_count,
+            crate::workflow::gdl::MAX_REHYPOTHESES
+        ));
+    }
     let executed: std::collections::HashSet<i64> = case.test_log.iter().map(|r| r.order).collect();
     for s in &case.plan {
         let mark = if executed.contains(&s.order) {
@@ -3356,7 +3455,12 @@ impl GdlDriver {
             max_turns: ADVERSARIAL_RECHECK_MAX_TURNS,
             token_budget: token_ask,
         };
-        let invocation_key = format!("gdl:{episode}:phase:verify:attempt:{attempt}:recheck");
+        // CG-04 C-14: the recheck key rides the SAME loop-disambiguated
+        // base (post-re-entry attempts reuse (phase, attempt)).
+        let invocation_key = format!(
+            "{}:recheck",
+            exchange_key(episode, GdlPhase::Verify, attempt, case.rehypothesis_count)
+        );
         // The recheck reserves against the CASE budget, not a throwaway
         // per-delegation root — its spend propagates to `case_budget` via
         // the reservation's parent link, where the pin reads it.
@@ -3551,6 +3655,13 @@ impl GdlDriver {
                 exchange: None,
                 terminal: None,
                 usage: None,
+                // CG-04: explicit forward target + count (the checkpoint
+                // ordinal machine derives nothing silently). `next_phase`
+                // None = the phase-based forward derivation (identical to
+                // the legacy count derivation at count == 0); the admit
+                // arm sets Some(Hypothesize) explicitly.
+                next_phase: None,
+                rehypothesis_count: cp.case.rehypothesis_count,
             };
             // The adversarial re-check finding for THIS pass, if it runs one.
             // Carried to the advance rather than written on the spot, so the
@@ -3607,11 +3718,7 @@ impl GdlDriver {
                     .loop_driver
                     .run_turns_owned(
                         run_id,
-                        &format!(
-                            "gdl:{}:phase:{}:attempt:{attempt}",
-                            cp.episode,
-                            phase.as_str()
-                        ),
+                        &exchange_key(&cp.episode, phase, attempt, cp.case.rehypothesis_count),
                         &instruction,
                         &owner,
                         cancel,
@@ -3813,10 +3920,33 @@ impl GdlDriver {
                                 && case.verify.as_ref().is_some_and(|v| !v.pass)
                             {
                                 change.artifact = Some(artifact);
-                                change.terminal = Some(GdlOutcome::VerifyFailed {
-                                    at: phase,
-                                    bundle: case.escalation_bundle(),
-                                });
+                                // CG-04 intercept: the bounded back edge.
+                                // Fail-closed arm order (red-flag → count →
+                                // artifact → budget); refusal lands today's
+                                // VerifyFailed terminal, unchanged.
+                                let red_flag_open = case
+                                    .triage
+                                    .as_ref()
+                                    .is_some_and(|t| red_flag_is_open(&t.red_flag));
+                                let proposal_present = case
+                                    .rehypothesis
+                                    .as_ref()
+                                    .is_some_and(|r| !r.falsified.is_empty());
+                                if rehypothesis_admits(
+                                    red_flag_open,
+                                    cp.case.rehypothesis_count,
+                                    MAX_REHYPOTHESES,
+                                    proposal_present,
+                                    attempt,
+                                ) {
+                                    change.rehypothesis_count = cp.case.rehypothesis_count + 1;
+                                    change.next_phase = Some(GdlPhase::Hypothesize);
+                                } else {
+                                    change.terminal = Some(GdlOutcome::VerifyFailed {
+                                        at: phase,
+                                        bundle: case.escalation_bundle(),
+                                    });
+                                }
                             } else if phase == GdlPhase::Verify && !self.ablated {
                                 // C3 first — the adversarial re-check: ONE
                                 // tool-less child attempts to falsify the
@@ -3899,9 +4029,13 @@ impl GdlDriver {
                                 // interrupt's receipt is the confirm's.
                                 if change.terminal.is_none() && change.verdict == "pass" {
                                     let confirm_key = format!(
-                                        "gdl:{}:phase:{}:attempt:{attempt}:confirm",
-                                        cp.episode,
-                                        phase.as_str()
+                                        "{}:confirm",
+                                        exchange_key(
+                                            &cp.episode,
+                                            phase,
+                                            attempt,
+                                            cp.case.rehypothesis_count
+                                        )
                                     );
                                     let confirm = self
                                         .loop_driver
@@ -5730,11 +5864,7 @@ mod tests {
             tx.tx(),
             1,
             owner,
-            &format!(
-                "gdl:{}:phase:{}:attempt:{attempt}",
-                cp.episode,
-                phase.as_str()
-            ),
+            &exchange_key(&cp.episode, phase, attempt, cp.case.rehypothesis_count),
             &fingerprint,
         )
         .unwrap();
@@ -7607,6 +7737,8 @@ mod tests {
                 exchange: Some(exchange),
                 terminal: None,
                 usage: None,
+                next_phase: None,
+                rehypothesis_count: 0,
             },
             Some(&satellites),
         )
@@ -7807,6 +7939,8 @@ mod tests {
                 exchange: Some(exchange),
                 terminal: None,
                 usage: None,
+                next_phase: None,
+                rehypothesis_count: 0,
             },
             None,
         )
@@ -8108,6 +8242,8 @@ mod tests {
                 exchange: Some(exchange),
                 terminal: None,
                 usage: None,
+                next_phase: None,
+                rehypothesis_count: 0,
             },
             None,
         );
@@ -9220,6 +9356,330 @@ mod tests {
             verify_gate(&a, &case).is_empty(),
             "the valid proposal passes with no errors: {:?}",
             verify_gate(&a, &case)
+        );
+    }
+
+    // ── CG-04 S2: the bounded back edge (§1.3) ─────────────────────────
+    /// CG-04 E-2 (red flag never loops): red-flag OPEN + proposal + bound
+    /// room + budget room ⇒ refuse. At the hypothetical `MAX = 2` the flag
+    /// arm is the only firing arm (table-proved here; production arms at
+    /// MAX = 0 through show too).
+    #[test]
+    fn cg04_e2_red_flag_never_loops() {
+        assert!(
+            !rehypothesis_admits(true, 0, 2, true, 0),
+            "a red-flagged case hands off even with a valid proposal"
+        );
+        assert!(
+            rehypothesis_admits(false, 0, 2, true, 0),
+            "control: same facts without the flag admit"
+        );
+    }
+
+    /// CG-04 E-3 (bound exact): `count == MAX` + valid proposal ⇒ refuse;
+    /// `count == MAX - 1` ⇒ admit. At the production `MAX = 0`, the bound
+    /// arm refuses every failed verify (the E-3 production leg).
+    #[test]
+    fn cg04_e3_bound_is_exact() {
+        assert!(!rehypothesis_admits(false, 2, 2, true, 0));
+        assert!(rehypothesis_admits(false, 1, 2, true, 0));
+        assert!(
+            !rehypothesis_admits(false, MAX_REHYPOTHESES, MAX_REHYPOTHESES, true, 0),
+            "production leg: count == MAX == 0 refuses"
+        );
+    }
+
+    /// CG-04 E-4 (budget arm): Verify `attempt == MAX_PHASE_ATTEMPTS` ⇒
+    /// refuse; `MAX - 1` ⇒ admit.
+    #[test]
+    fn cg04_e4_verify_attempt_budget_arm() {
+        assert!(!rehypothesis_admits(false, 0, 2, true, MAX_PHASE_ATTEMPTS));
+        assert!(rehypothesis_admits(
+            false,
+            0,
+            2,
+            true,
+            MAX_PHASE_ATTEMPTS - 1
+        ));
+    }
+
+    /// CG-04 §1.3.3: no proposal (or empty falsified) ⇒ refuse; the
+    /// terminal then is exactly today's (pin N-1 below).
+    #[test]
+    fn cg04_no_or_empty_proposal_refuses() {
+        assert!(!rehypothesis_admits(false, 0, 2, false, 0));
+    }
+
+    /// CG-04 N-1: without a proposal, a failed verify is byte-identically
+    /// today's `VerifyFailed` terminal — no `rehypothesis` key in the
+    /// persisted artifact, same bundle, same outcome label. Driver-level:
+    /// the failed-verify fixture terminates `VerifyFailed` and the
+    /// persisted state carries no new key. (With a VALID proposal the
+    /// production terminal is still `VerifyFailed` — arm 2 fires at
+    /// MAX = 0 — the two legs pin both.)
+    #[test]
+    fn cg04_n1_no_proposal_terminal_is_byte_identical() {
+        let runtime = rt();
+        for (label, verify_json) in [
+            (
+                "no-proposal",
+                VERIFY_JSON.replace("\"pass\":true", "\"pass\":false"),
+            ),
+            (
+                "with-proposal",
+                VERIFY_JSON
+                    .replace("\"pass\":true", "\"pass\":false")
+                    .replace(
+                        "\"negative_check\":true",
+                        "\"negative_check\":true,\"rehypothesis\":{\"falsified\":[{\"prediction\":\"rebuild completes under load\",\"evidence_ref\":\"test:battery state\"}],\"pivot\":\"test the cache path\",\"retained\":[]}",
+                    ),
+            ),
+        ] {
+            let mut script = happy_script();
+            script[5] = scripted_text(&verify_json);
+            let f = fixture(script);
+            seed_kb_for_ticket(&f, "n1");
+            let outcome = runtime
+                .block_on(f.driver.run_case(1, "n1", &CancellationToken::new()))
+                .unwrap();
+            match &outcome {
+                GdlOutcome::VerifyFailed { at, .. } => {
+                    assert_eq!(*at, GdlPhase::Verify);
+                }
+                other => panic!("{label}: expected VerifyFailed, got {other:?}"),
+            }
+            let conn = Connection::open(f.tmp.path()).unwrap();
+            let state_json: String = conn
+                .query_row(
+                    "SELECT state_json FROM workflow_runs WHERE id = 1",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert!(
+                !state_json.contains("\"rehypothesis\":null"),
+                "{label}: proposals serialize, never a null key"
+            );
+            // No proposal ever carried: the artifact bytes carry no
+            // `rehypothesis` key at all (skip_serializing_if — pin N-1's
+            // byte story). With a proposal the key is present, and (at
+            // MAX = 0) the case count stays 0.
+            let case: GdlCase = serde_json::from_str(&state_json).unwrap();
+            assert_eq!(case.rehypothesis_count, 0);
+        }
+    }
+
+    /// CG-04 O-1 + O-2: a looped case's ordinals (checkpoint revisions
+    /// strictly increase across the back edge; `phases == 7 + 4·count` at
+    /// `Resolved` — a looped case can never validate as `phases == 7`),
+    /// and hash continuity across the back edge (flipping any looped
+    /// revision byte fails `verify_link`). Built with production
+    /// `advance` — fixing the missing Triage stamp needs the stamped
+    /// artifact (the receipt's invariant). At production MAX = 0 the
+    /// driver never admits this shape; the chain law is the checkpoint's
+    /// and is proved here directly.
+    #[test]
+    fn cg04_o1_o2_looped_chain_ordinals_and_hash_continuity() {
+        let f = fixture(vec![]);
+        let mut conn = Connection::open(f.tmp.path()).unwrap();
+        let mut cp = checkpoint::admit(&mut conn, 1, "t", "test", "owner").unwrap();
+        let mut triage: TriageArtifact = serde_json::from_str(TRIAGE_JSON).unwrap();
+        triage.confirmed_matches = Some(triage.search_hits.clone());
+        let triage_json = serde_json::to_string(&triage).unwrap();
+        let failed_verify = VERIFY_JSON
+            .replace("\"pass\":true", "\"pass\":false")
+            .replace(
+                "\"negative_check\":true",
+                "\"negative_check\":true,\"rehypothesis\":{\"falsified\":[{\"prediction\":\"rebuild completes under load\",\"evidence_ref\":\"test:battery state\"}],\"pivot\":\"test the cache path\",\"retained\":[]}",
+            );
+        // The gate-row artifact must be the NORMALIZED bytes (the receipt
+        // re-serializes through `typed_json` before comparing).
+        let normalize = |phase: GdlPhase, artifact: &str| -> String {
+            let value: serde_json::Value = serde_json::from_str(artifact).unwrap();
+            match phase {
+                GdlPhase::Intake => typed_json::<IntakeArtifact>(value),
+                GdlPhase::Triage => typed_json::<TriageArtifact>(value),
+                GdlPhase::Hypothesize => typed_json::<HypothesizeArtifact>(value),
+                GdlPhase::Plan => typed_json::<PlanArtifact>(value),
+                GdlPhase::Act => typed_json::<ActArtifact>(value),
+                GdlPhase::Verify => typed_json::<VerifyArtifact>(value),
+                GdlPhase::Handoff => typed_json::<HandoffArtifact>(value),
+            }
+            .unwrap()
+        };
+        let steps: Vec<(GdlPhase, String, Option<GdlPhase>, u32)> = Vec::from([
+            (GdlPhase::Intake, INTAKE_JSON.into(), None, 0),
+            (GdlPhase::Triage, triage_json, None, 0),
+            (GdlPhase::Hypothesize, HYPOTHESIZE_JSON.into(), None, 0),
+            (GdlPhase::Plan, PLAN_JSON.into(), None, 0),
+            (GdlPhase::Act, ACT_JSON.into(), None, 0),
+            (
+                GdlPhase::Verify,
+                failed_verify,
+                Some(GdlPhase::Hypothesize),
+                1,
+            ),
+            (
+                GdlPhase::Hypothesize,
+                HYPOTHESIZE_JSON.into(),
+                Some(GdlPhase::Plan),
+                1,
+            ),
+            (GdlPhase::Plan, PLAN_JSON.into(), Some(GdlPhase::Act), 1),
+            (GdlPhase::Act, ACT_JSON.into(), Some(GdlPhase::Verify), 1),
+            (
+                GdlPhase::Verify,
+                VERIFY_JSON.into(),
+                Some(GdlPhase::Handoff),
+                1,
+            ),
+        ])
+        .into_iter()
+        .map(|(phase, artifact, next, count)| (phase, normalize(phase, &artifact), next, count))
+        .collect();
+        let mut last_revision = cp.revision;
+        for (phase, artifact, next, count) in steps {
+            let exchange = fixture_exchange(&mut conn, &cp, phase, 1, &artifact, "owner");
+            cp = checkpoint::advance(
+                &mut conn,
+                &cp,
+                "owner",
+                checkpoint::Transition {
+                    phase,
+                    attempt: 1,
+                    verdict: "pass",
+                    errors: vec![],
+                    artifact: Some(artifact),
+                    exchange: Some(exchange),
+                    terminal: None,
+                    usage: None,
+                    next_phase: next,
+                    rehypothesis_count: count,
+                },
+                None,
+            )
+            .unwrap();
+            assert!(
+                cp.revision > last_revision,
+                "revisions strictly increase across the back edge"
+            );
+            last_revision = cp.revision;
+        }
+        // Final: Handoff pass → Resolved at exactly 7 + 4·1 = 11.
+        let verify = cp.case.verify.clone().unwrap();
+        let capture = serde_json::from_str::<HandoffArtifact>(HANDOFF_JSON)
+            .unwrap()
+            .capture;
+        let exchange =
+            fixture_exchange(&mut conn, &cp, GdlPhase::Handoff, 1, HANDOFF_JSON, "owner");
+        let handoff_json = normalize(GdlPhase::Handoff, HANDOFF_JSON);
+        cp = checkpoint::advance(
+            &mut conn,
+            &cp,
+            "owner",
+            checkpoint::Transition {
+                phase: GdlPhase::Handoff,
+                attempt: 1,
+                verdict: "pass",
+                errors: vec![],
+                artifact: Some(handoff_json),
+                exchange: Some(exchange),
+                terminal: Some(GdlOutcome::Resolved {
+                    phases: 11,
+                    verify,
+                    capture,
+                }),
+                usage: None,
+                next_phase: None,
+                rehypothesis_count: 1,
+            },
+            None,
+        )
+        .unwrap();
+        assert_eq!(cp.phases, 11, "11 = 7 + 4·1 accepted passes");
+        assert_eq!(cp.case.rehypothesis_count, 1);
+        // O-1 holds: the Resolved validation accepted `phases == 7 + 4·1`
+        // (advance's own validate passed) and binding the chain through
+        // the production re-admit path still verifies byte-exactly (the
+        // terminal release means the honest path is a fresh claim).
+        let readmit = checkpoint::admit(&mut conn, 1, "t", "test", "owner").unwrap();
+        assert_eq!(readmit.revision, cp.revision);
+        // O-2: tamper a LOOPED revision's data (revision 7 — the
+        // verify-fail successor): rewrite its persisted count 1→2. The
+        // chain must red on the first re-verification.
+        conn.execute(
+            "UPDATE agent_session_events SET payload_json=replace(payload_json,'\"rehypothesis_count\":1','\"rehypothesis_count\":2') WHERE idempotency_key=?1",
+            ["control:gdl:7"],
+        )
+        .unwrap();
+        assert!(
+            checkpoint::admit(&mut conn, 1, "t", "test", "owner").is_err(),
+            "tampering a looped revision must fail the chain"
+        );
+    }
+
+    /// CG-04 O-1 helper legs: the expected-pass bound and the mid-flight
+    /// consistency relation reduce to today's exactly at count == 0.
+    #[test]
+    fn cg04_expected_phases_bounds() {
+        assert_eq!(expected_phases(0), 7);
+        assert_eq!(expected_phases(1), 11);
+        assert_eq!(expected_phases(2), 15);
+    }
+
+    /// CG-04 W-1: a pre-lane state (no `rehypothesis` keys) parses to
+    /// `None`/0; the persist bytes tell the byte story: linear cases
+    /// carry NO proposal key (the count rides as additive 0). A synthe-
+    /// tic default (`Some(fake)`) would red this (the C-8 recipe).
+    #[test]
+    fn cg04_w1_legacy_state_parses_and_bytes_tell_the_story() {
+        let json = serde_json::to_string(&GdlCase::fresh("t")).unwrap();
+        assert!(
+            !json.contains("\"rehypothesis\":"),
+            "linear bytes carry no proposal key: {json}"
+        );
+        assert!(
+            json.contains("\"rehypothesis_count\":0"),
+            "zero count is additive: {json}"
+        );
+        // A pre-lane literal (no keys at all) parses to None/0.
+        let mut legacy: serde_json::Value = serde_json::from_str(&json).unwrap();
+        legacy.as_object_mut().unwrap().remove("rehypothesis_count");
+        let back: GdlCase = serde_json::from_value(legacy).unwrap();
+        assert_eq!(back.rehypothesis, None);
+        assert_eq!(back.rehypothesis_count, 0);
+        // And a state whose history looped round-trips losslessly.
+        let mut looped = GdlCase::fresh("t");
+        looped.rehypothesis = Some(RehypothesisArtifact {
+            falsified: vec![FalsifiedPrediction {
+                prediction: "p".into(),
+                evidence_ref: "test:t".into(),
+            }],
+            pivot: "pivot".into(),
+            retained: vec![],
+        });
+        looped.rehypothesis_count = 1;
+        let bytes = serde_json::to_string(&looped).unwrap();
+        assert!(bytes.contains("\"rehypothesis\":{\"falsified\":"));
+        let back: GdlCase = serde_json::from_str(&bytes).unwrap();
+        assert_eq!(back, looped);
+    }
+
+    /// CG-04 strip: the re-entry line renders once per count, no prose;
+    /// linear cases render byte-identically (no line).
+    #[test]
+    fn cg04_strip_reentry_line_only_when_counted() {
+        let linear = GdlCase::fresh("t");
+        assert!(
+            !plan_strip(&linear).contains("re-entry"),
+            "linear strip: no line"
+        );
+        let mut case = GdlCase::fresh("t");
+        case.rehypothesis_count = 1;
+        let strip = plan_strip(&case);
+        assert!(
+            strip.contains("Hypothesize · re-entry 1/0"),
+            "count renders as the number, no prose: {strip}"
         );
     }
 
@@ -10549,6 +11009,8 @@ mod tests {
                         exchange: Some(exchange),
                         terminal: None,
                         usage: None,
+                        next_phase: None,
+                        rehypothesis_count: 0,
                     },
                     None,
                 )

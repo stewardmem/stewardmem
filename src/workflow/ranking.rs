@@ -15,6 +15,8 @@
 //! CLASS policy. Both share the house shape: pure, conservative until
 //! measured.
 
+#[cfg(test)]
+use super::gdl::{FalsifiedPrediction, RehypothesisArtifact};
 use super::gdl::{
     GdlCase, Hypothesis, MIN_CITATION_LOCATOR_CHARS, Verdict, citation_universe, kind_source,
     locator_resolves, red_flag_is_open,
@@ -186,8 +188,25 @@ fn is_worst_adjacent(case: &GdlCase, h: &Hypothesis) -> bool {
 
 /// Falsified iff a hypothesis-specific needle appears in the text of a
 /// `Fail` test-log row (vacuous on the first pass — the log is empty
-/// until Act; CG-04's re-entry exercises it for real).
+/// until Act; CG-04's re-entry exercises it for real), OR the hypothesis
+/// is on the stored rehypothesis falsified list (CG-04 input (d): the
+/// list is authoritative when present; the test-log reading stays).
 fn is_falsified(case: &GdlCase, h: &Hypothesis) -> bool {
+    // CG-04: a hypothesis NAMED on the rehypothesis falsified list is
+    // falsified — matched by its prediction text (the list carries the
+    // prediction the model itself named). Empty once the first pass
+    // proposes no rehypothesis (`case.rehypothesis` None).
+    if let Some(r) = case.rehypothesis.as_ref() {
+        for f in &r.falsified {
+            let named = f.prediction.trim().to_lowercase();
+            if !named.is_empty()
+                && (h.prediction.trim().to_lowercase() == named
+                    || h.statement.trim().to_lowercase() == named)
+            {
+                return true;
+            }
+        }
+    }
     let needles = specific_hypothesis_needles(&case.ticket, h);
     if needles.is_empty() {
         return false;
@@ -262,6 +281,55 @@ mod tests {
 
     fn statements(ranked: &[Hypothesis]) -> Vec<&str> {
         ranked.iter().map(|h| h.statement.as_str()).collect()
+    }
+
+    /// CG-04 D-1: a hypothesis named on the stored rehypothesis falsified
+    /// list demotes (specific prediction match) even with an empty test
+    /// log; the list is authoritative when present. Remove the list and
+    /// the same case ranks equal (the list is the only new signal).
+    #[test]
+    fn d1_falsified_list_demotes_rank() {
+        let hyps = || {
+            vec![
+                hyp(
+                    "vd5 rebuild completes",
+                    "vd5 rebuild completes",
+                    &["test:sel://events"],
+                ),
+                hyp(
+                    "vd5 rebuild stalled",
+                    "vd5 rebuild reports Failed",
+                    &["test:sel://events"],
+                ),
+            ]
+        };
+        let mut case = case_with("vd5 rebuild", None, hyps());
+        assert_eq!(
+            statements(&ranked(&case))[0],
+            "vd5 rebuild stalled",
+            "baseline: the testable one leads"
+        );
+        case.rehypothesis = Some(RehypothesisArtifact {
+            falsified: vec![FalsifiedPrediction {
+                prediction: "vd5 rebuild reports Failed".into(),
+                evidence_ref: "test:sel://events".into(),
+            }],
+            pivot: "test the cache path".into(),
+            retained: vec![],
+        });
+        let r = ranked(&case);
+        assert_eq!(
+            statements(&r)[1],
+            "vd5 rebuild stalled",
+            "the named prediction must demote: {r:?}"
+        );
+        assert_eq!(r[1].rank, Some(2));
+        case.rehypothesis = None;
+        assert_eq!(
+            statements(&ranked(&case))[0],
+            "vd5 rebuild stalled",
+            "without the list the baseline order returns"
+        );
     }
 
     /// R-1: determinism — same case bytes rank equal twice, and the
