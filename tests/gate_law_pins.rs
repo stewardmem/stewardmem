@@ -443,7 +443,11 @@ fn r51_gdl_engine_site_is_bound_to_new_with_proficiency() {
     // Re-dated a fourth time for CG-04 (S-4a), whose rehypothesis artifacts
     // and gate arms shifted the site down by the same additive shape with
     // no statement, expression, data path or control-flow edge changed.
-    let site_line = 3235usize;
+    // Re-dated a fifth time for CG-05 (S-3), whose decomposition
+    // artifacts, gate arms and split act shifted the site down by the
+    // same additive shape — no statement, expression, data path or
+    // control-flow edge at the construction site changed.
+    let site_line = 3435usize;
 
     // Walk backwards to the nearest `fn` declaration.
     let enclosing = lines

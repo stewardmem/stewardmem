@@ -37,41 +37,45 @@ use std::path::Path;
 /// (+10 between the two insertion points, +19 after the second). Needles
 /// unchanged — a plausible wrong line is the failure mode, so only the
 /// numbers moved.
+/// CG-05 (2026-11-06) re-derived the six gdl.rs anchors after the
+/// decomposition artifacts + gate arms + split act moved everything
+/// below them (needles unchanged — a plausible wrong line is the
+/// failure mode, so only the numbers moved).
 const ANCHORS: &[(&str, &str, usize, &str)] = &[
     (
         "F15 — the main phase exchange",
         "src/workflow/gdl.rs",
-        3719,
+        3919,
         "run_turns_owned",
     ),
     (
         "F15 — the adversarial re-check delegation",
         "src/workflow/gdl.rs",
-        3467,
+        3667,
         "delegate_owned_budgeted",
     ),
     (
         "F15 — the second-verification confirmation",
         "src/workflow/gdl.rs",
-        4042,
+        4242,
         "run_turns_owned",
     ),
     (
         "F8 — accept requires a SERVER hit",
         "src/workflow/gdl.rs",
-        1343,
+        1529,
         "no server knowledge hits",
     ),
     (
         "F8 — a cited id must be one the server returned",
         "src/workflow/gdl.rs",
-        1360,
+        1546,
         "unknown knowledge id",
     ),
     (
         "F9 — locator resolution",
         "src/workflow/gdl.rs",
-        1685,
+        1871,
         "fn locator_resolves",
     ),
     (

@@ -10470,6 +10470,62 @@ mod tests {
         assert_eq!(back, looped);
     }
 
+    /// CG-05 W-1: a pre-lane state (no CG-05 keys) parses to
+    /// `None`/[]/`None`/[]; the persist bytes tell the byte story:
+    /// a no-split case serializes NO `decomposition` key (the
+    /// skip-if-None marker). The synthetic-default damage (dropping
+    /// the skip) reds this pin.
+    #[test]
+    fn cg05_w1_legacy_state_parses_and_bytes_tell_the_story() {
+        let json = serde_json::to_string(&GdlCase::fresh("t")).unwrap();
+        assert!(
+            !json.contains("\"decomposition\":"),
+            "a no-split case carries no decomposition key: {json}"
+        );
+        // A pre-lane literal (no CG-05 keys at all) parses to the
+        // defaults: `None`/`[]`/`None`/[].
+        let mut legacy: serde_json::Value = serde_json::from_str(&json).unwrap();
+        for key in ["decomposition", "children", "parent_case_id", "sibling_ids"] {
+            legacy.as_object_mut().unwrap().remove(key);
+        }
+        let back: GdlCase = serde_json::from_value(legacy).unwrap();
+        assert_eq!(back.decomposition, None, "absent marker parses to None");
+        assert_eq!(
+            back.children,
+            Vec::<i64>::new(),
+            "absent children parse to []"
+        );
+        assert_eq!(back.parent_case_id, None, "absent parent parses to None");
+        assert_eq!(
+            back.sibling_ids,
+            Vec::<i64>::new(),
+            "absent siblings parse to []"
+        );
+        // And a split case round-trips losslessly.
+        let mut split = GdlCase::fresh("t");
+        split.decomposition = Some(Decomposition {
+            issues: vec![
+                ProposedIssue {
+                    title: "one".into(),
+                    question: "q1".into(),
+                    severity_hint: String::new(),
+                },
+                ProposedIssue {
+                    title: "two".into(),
+                    question: "q2".into(),
+                    severity_hint: String::new(),
+                },
+            ],
+            rationale: "two teams".into(),
+        });
+        split.children = vec![2];
+        let bytes = serde_json::to_string(&split).unwrap();
+        assert!(bytes.contains("\"decomposition\":{\"issues\":"));
+        assert!(bytes.contains("\"children\":[2]"));
+        let back: GdlCase = serde_json::from_str(&bytes).unwrap();
+        assert_eq!(back, split);
+    }
+
     /// CG-04 strip: the re-entry line renders once per count, no prose;
     /// linear cases render byte-identically (no line).
     #[test]
