@@ -14,9 +14,12 @@ import Testing
 struct ChatSessionRoutingPins {
 
     /// The named tiers, stated plainly so a reader does not have to infer
-    /// them from the loop below. The roster is the E1a/E1c measured-green
-    /// set (2026-11-05): the 8B on the old engine, the Qwen3.5 2B and the
-    /// operator's pipenetwork 9B heretic quant on the fixed engine.
+    /// them from the loop below. The roster is the measured-green set
+    /// (E1a/E1c 2026-11-05 + the CG-11 roster amendment 2026-11-06): the
+    /// 8B on the old engine; the Qwen3.5 2B, the operator's pipenetwork
+    /// 9B heretic quant, the mlx-community 9B 4-bit (its exclusion
+    /// RETIRED by measurement), and the operator-named avan-ag 4B
+    /// uncensored on the fixed engine.
     @Test("AFM routes to LanguageModelSession; MLX tiers route to ChatSession")
     func namedTiersRouteByKind() {
         #expect(
@@ -36,19 +39,24 @@ struct ChatSessionRoutingPins {
             "the operator's named 9B tier must ride the native ChatSession path"
         )
         #expect(
-            ChatModelId.qwen3_5.sessionKind == .mlx,
-            "the excluded 9B repo is still an MLX-class model — its routing does not depend on its refusal (forChat gates that separately)"
+            ChatModelId.qwen3_5_9b_4bit.sessionKind == .mlx,
+            "the admitted 9B 4-bit (exclusion retired by measurement) must ride the native ChatSession path"
+        )
+        #expect(
+            ChatModelId.qwen3_5_4b_uncensored.sessionKind == .mlx,
+            "the operator-named 4B uncensored must ride the native ChatSession path"
         )
     }
 
-    /// The E1/E1c-earned flips, held so they cannot silently revert: the
+    /// The earned flips, held so they cannot silently revert: the
     /// measured-green tiers serve chat, `forChat` admits them, and no
     /// refusal reason rides on them. The allCases law in
     /// `qwen35CannotEnterAChatPath` already demands the XOR with
     /// `chatRefusalReason`; this pin holds the MEASURED side of it.
     @Test("the measured-green MLX tiers are admitted through forChat")
     func verifiedMLXTiersServeChat() {
-        for id in [ChatModelId.qwen3_8b_4bit, .qwen3_5_2b, .qwen3_5_9b_heretic] {
+        for id in [ChatModelId.qwen3_8b_4bit, .qwen3_5_2b, .qwen3_5_9b_heretic,
+                   .qwen3_5_9b_4bit, .qwen3_5_4b_uncensored] {
             #expect(
                 id.mayServeChat,
                 "\(id.rawValue) is probe-verified — reverting its flip re-excludes a measured model"
@@ -65,8 +73,10 @@ struct ChatSessionRoutingPins {
 
     /// The law over the whole set: every id routes somewhere, every
     /// MLX-class id routes `.mlx`, and `mayServeChat` — the gate — is
-    /// orthogonal to routing (qwen3_5 routes `.mlx` while forChat refuses
-    /// it; the roster question is not a routing question).
+    /// orthogonal to routing. The gate is vacuous over today's roster
+    /// (nothing is excluded since the CG-11 amendment) but stays pinned:
+    /// a future exclusion must re-populate `chatRefusalReason` in the
+    /// same breath as flipping `mayServeChat`, or this reds.
     @Test("routing is exhaustive over allCases; the gate stays orthogonal")
     func routingIsExhaustiveAndGateOrthogonal() {
         for id in ChatModelId.allCases {

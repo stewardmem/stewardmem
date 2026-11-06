@@ -63,12 +63,42 @@ public enum MLXChatTier: Sendable, Equatable {
     /// recalls, ARM D uses the dispatched tool result, cold control clean.
     ///
     /// POSTURE NOTE (a named operator act, recorded 2026-11-05): the
-    /// earlier "uncensored refused (governed production)" refusal governs
+    /// earlier "uncensored refused (governed production)" refusal governed
     /// the PRODUCT tier roster, and the operator accepted this tier's
     /// provenance and fine-tune posture for the LOCAL, self-hosted MLX
     /// path. The refusal law is unchanged for anything kernel- or
     /// cloud-side.
     case qwen3_5_9b_heretic_5bit
+
+    /// `mlx-community/Qwen3.5-9B-4bit` (5.98 GB, standard affine 4-bit) —
+    /// ADMITTED 2026-11-06 (the CG-11 roster amendment), retiring the
+    /// CG-10 exclusion BY MEASUREMENT: the probe battery on the fixed
+    /// engine is all green (turn 2 recalls, tool continuation works, cold
+    /// control honest, the ARM L needle recalled at 3,098 tokens;
+    /// 26–28.7 tok/s, ~5.9–6.2 GiB phys_footprint). The exclusion's three
+    /// causes are each resolved: the turn-2 raise was the swift-jinja
+    /// 1.3.0 slice bug (fixed, the engine floor pins ≥ 3.0.0); the broken
+    /// `tokenizer_class: "TokenizersBackend"` is handled by the
+    /// official-repo override (the heretic's proven pattern); and
+    /// end-to-end verification is THIS battery. The `ChatModelId.qwen3_5`
+    /// refusal mirror (bridge_afm.rs) was updated in the same commit.
+    case qwen3_5_9b_4bit
+
+    /// `avan-ag/Qwen3.5-4B-Uncensored-MLX-4bit` — ADMITTED 2026-11-06 (the
+    /// CG-11 roster amendment, the OPERATOR'S named request): the probe
+    /// battery all green on the fixed engine (turn 2 recalls, tool
+    /// continuation, honest cold, the needle recalled at 3,098 tokens) —
+    /// **the fastest tier measured: 41.8–43.7 tok/s, ~2.5–2.7 GiB**.
+    /// Weights from the quant repo, tokenizer from the official
+    /// `Qwen/Qwen3.5-4B` (the family's broken TokenizersBackend pattern).
+    ///
+    /// POSTURE NOTE (a named operator act, recorded 2026-11-06, the
+    /// heretic's recorded shape): the "uncensored refused (governed
+    /// production)" refusal governs the PRODUCT tier roster, and the
+    /// operator accepted this tier's provenance and fine-tune posture for
+    /// the LOCAL, self-hosted MLX path. The refusal law is unchanged for
+    /// anything kernel- or cloud-side.
+    case qwen3_5_4b_uncensored_4bit
 
     /// Maps a wire model id to its tier. Nil is a NAMED refusal upstream
     /// (`bad_request` naming the id) — never a fallback.
@@ -77,6 +107,8 @@ public enum MLXChatTier: Sendable, Equatable {
         case "qwen3-8b-4bit": .qwen3_8b_4bit
         case "qwen3.5-2b-4bit": .qwen3_5_2b_4bit
         case "qwen3.5-9b-heretic-5bit": .qwen3_5_9b_heretic_5bit
+        case "qwen3.5-9b-4bit": .qwen3_5_9b_4bit
+        case "qwen3.5-4b-uncensored-4bit": .qwen3_5_4b_uncensored_4bit
         default: nil
         }
     }
@@ -93,10 +125,18 @@ public enum MLXChatTier: Sendable, Equatable {
                 tokenizerSource: .id("Qwen/Qwen3.5-2B"),
                 extraEOSTokens: [""],
                 reasoningConfig: .thinkTagsWithEnableThinking)
-        case .qwen3_5_9b_heretic_5bit:
+        case .qwen3_5_9b_heretic_5bit, .qwen3_5_9b_4bit:
             ModelConfiguration(
-                id: "pipenetwork/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-MLX-5bit",
+                id: self == .qwen3_5_9b_heretic_5bit
+                    ? "pipenetwork/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-MLX-5bit"
+                    : "mlx-community/Qwen3.5-9B-4bit",
                 tokenizerSource: .id("Qwen/Qwen3.5-9B"),
+                extraEOSTokens: [""],
+                reasoningConfig: .thinkTagsWithEnableThinking)
+        case .qwen3_5_4b_uncensored_4bit:
+            ModelConfiguration(
+                id: "avan-ag/Qwen3.5-4B-Uncensored-MLX-4bit",
+                tokenizerSource: .id("Qwen/Qwen3.5-4B"),
                 extraEOSTokens: [""],
                 reasoningConfig: .thinkTagsWithEnableThinking)
         }
@@ -108,7 +148,9 @@ public enum MLXChatTier: Sendable, Equatable {
     public var contextTokens: Int {
         switch self {
         case .qwen3_8b_4bit: 40_960
-        case .qwen3_5_2b_4bit, .qwen3_5_9b_heretic_5bit: 262_144
+        case .qwen3_5_2b_4bit, .qwen3_5_9b_heretic_5bit, .qwen3_5_9b_4bit,
+            .qwen3_5_4b_uncensored_4bit:
+            262_144
         }
     }
 
@@ -122,7 +164,9 @@ public enum MLXChatTier: Sendable, Equatable {
     public var primesThinkBlock: Bool {
         switch self {
         case .qwen3_8b_4bit: false
-        case .qwen3_5_2b_4bit, .qwen3_5_9b_heretic_5bit: true
+        case .qwen3_5_2b_4bit, .qwen3_5_9b_heretic_5bit, .qwen3_5_9b_4bit,
+            .qwen3_5_4b_uncensored_4bit:
+            true
         }
     }
 

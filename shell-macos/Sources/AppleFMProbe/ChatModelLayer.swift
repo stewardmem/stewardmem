@@ -55,32 +55,37 @@ import FoundationModels
 /// With both fixed, E1c witnessed end-to-end on the FIXED engine: the 2B
 /// text tower all green, and the operator's
 /// `pipenetwork/Qwen3.5-9B-…-Heretic-MLX-5bit` — `MULTI-TURN MEMORY WORKS
-/// on Qwen3.5 via ChatSession`. The measured-green roster is the MLX tier
-/// set below; `qwen3_5` (the mlx-community 9B repo) stays excluded only
-/// because it is not among the verified candidates.
+/// on Qwen3.5 via ChatSession`. **AMENDED 2026-11-06 (the CG-11 roster
+/// amendment): the exclusion of `mlx-community/Qwen3.5-9B-4bit` is
+/// RETIRED BY MEASUREMENT** — its probe battery on the fixed engine is
+/// all green (memory, tool continuation, honest cold, the 3,098-token
+/// needle; 26–28.7 tok/s) — and the operator named
+/// `avan-ag/Qwen3.5-4B-Uncensored-MLX-4bit` into the roster (all green,
+/// 41.8–43.7 tok/s, the fastest tier measured; the heretic's posture-note
+/// shape recorded). The measured-green roster is the MLX tier set below;
+/// NOTHING is currently excluded, and `forChat`/`chatRefusalReason` stay
+/// as the vocabulary any FUTURE exclusion must use (a value, a check, and
+/// a pin — never a convention).
 public enum ChatModelId: String, Sendable, Equatable, CaseIterable {
     /// The measured tier. 4,096 combined tokens, and the only one that has
     /// completed a turn on the development machine.
     case onDeviceAFM = "afm3-core"
 
-    /// Excluded, with the reason attached to the case rather than to a comment
-    /// that a refactor can leave behind.
+    /// `mlx-community/Qwen3.5-9B-4bit` (5.98 GB, standard affine 4-bit).
     ///
-    /// Retained as a case — not deleted — because `allCases` is what lets a pin
-    /// enumerate the whole set and fail if an id that is not allowed ever
-    /// appears. Deleting it would make the exclusion unenforceable and leave
-    /// only the memory of it.
-    ///
-    /// The CURRENT reason (both earlier attributions retired): this specific
-    /// repo is not among the measured-green tiers. E1c verified the 2B and
-    /// the operator's pipenetwork 9B quant end-to-end on the fixed engine —
-    /// never this repo. It also ships the broken
-    /// `tokenizer_class: "TokenizersBackend"` (needs the official-repo
-    /// `tokenizerSource` override), and its multi-turn raise was the
-    /// swift-jinja 1.3.0 slice bug, upstream-fixed in 3.0.0 (the engine
-    /// floor `shell-macos-mlx` now pins). It can be measured in like any
-    /// other candidate; until then it stays refused.
-    case qwen3_5 = "qwen3.5-9b-4bit"
+    /// ADMITTED 2026-11-06 (the CG-11 roster amendment). This case WAS the
+    /// enum's one exclusion — `mayServeChat: false`, a pinned refusal —
+    /// and the admission retires it BY MEASUREMENT, the same way it
+    /// entered: the probe battery on the fixed engine is all green (turn 2
+    /// recalls, the tool continuation answers, the cold control declines
+    /// honestly, the ARM L needle recalled at 3,098 tokens; 26–28.7 tok/s,
+    /// ~5.9–6.2 GiB), so all three exclusion causes are resolved (the
+    /// raise was the engine, fixed at the pinned floor; the broken
+    /// `TokenizersBackend` is handled by the official-repo override; the
+    /// end-to-end verification is that battery). The refusal mirror in
+    /// `bridge_afm.rs` was updated in the same commit — the mirror pins
+    /// doing their job, again.
+    case qwen3_5_9b_4bit = "qwen3.5-9b-4bit"
 
     /// The MLX text tier the CG-10 probe verified live: weights
     /// `mlx-community/Qwen3-8B-4bit` (text architecture, supported
@@ -112,27 +117,45 @@ public enum ChatModelId: String, Sendable, Equatable, CaseIterable {
     /// cloud-side.
     case qwen3_5_9b_heretic = "qwen3.5-9b-heretic-5bit"
 
+    /// `avan-ag/Qwen3.5-4B-Uncensored-MLX-4bit` — ADMITTED 2026-11-06 (the
+    /// CG-11 roster amendment, the OPERATOR'S named request): the probe
+    /// battery all green on the fixed engine (memory, tool continuation,
+    /// honest cold, the 3,098-token needle recalled) — **the fastest tier
+    /// measured: 41.8–43.7 tok/s, ~2.5–2.7 GiB**. Weights from the quant
+    /// repo, tokenizer from the official `Qwen/Qwen3.5-4B` (the family's
+    /// broken-TokenizersBackend pattern).
+    ///
+    /// POSTURE NOTE (a named operator act, recorded 2026-11-06, the
+    /// heretic's recorded shape): the "uncensored refused (governed
+    /// production)" refusal governs the PRODUCT tier roster, and the
+    /// operator accepted this tier's provenance and fine-tune posture for
+    /// the LOCAL, self-hosted MLX path. The refusal law is unchanged for
+    /// anything kernel- or cloud-side.
+    case qwen3_5_4b_uncensored = "qwen3.5-4b-uncensored-4bit"
+
     /// Whether this model may serve a CHAT path — a multi-turn conversation
-    /// with history carried across turns.
+    /// with history carried across turns. TRUE for the whole roster today:
+    /// the CG-11 amendment admitted the last excluded id, so the guard
+    /// below is VACUOUS over `allCases` — kept as the STRUCTURE any future
+    /// exclusion must flow through (a value, a throwing entry point, and
+    /// the allCases pins that fail when an id is neither usable nor
+    /// explained), per this file's own header law.
     public var mayServeChat: Bool {
         switch self {
-        case .onDeviceAFM: true
-        case .qwen3_5: false
-        case .qwen3_8b_4bit, .qwen3_5_2b, .qwen3_5_9b_heretic: true
+        case .onDeviceAFM, .qwen3_8b_4bit, .qwen3_5_2b, .qwen3_5_9b_heretic,
+            .qwen3_5_9b_4bit, .qwen3_5_4b_uncensored:
+            true
         }
     }
 
-    /// Why not, for the error a caller gets.
+    /// Why not, for the error a caller gets. Nil across the roster today
+    /// (nothing is excluded); the vocabulary a future exclusion must
+    /// populate — see the header.
     public var chatRefusalReason: String? {
         switch self {
-        case .onDeviceAFM, .qwen3_8b_4bit, .qwen3_5_2b, .qwen3_5_9b_heretic: nil
-        case .qwen3_5:
-            "mlx-community/Qwen3.5-9B-4bit is not among the measured-green tiers: its "
-                + "turn-2 raise was the swift-jinja 1.3.0 slice bug (fixed in 3.0.0, the "
-                + "engine floor), the repo ships the broken tokenizer_class "
-                + "'TokenizersBackend' (needs the official-repo tokenizerSource override), "
-                + "and it was never verified end-to-end — the measured-green 9B is the "
-                + "operator's pipenetwork heretic quant. See ChatModelId for the roster."
+        case .onDeviceAFM, .qwen3_8b_4bit, .qwen3_5_2b, .qwen3_5_9b_heretic,
+            .qwen3_5_9b_4bit, .qwen3_5_4b_uncensored:
+            nil
         }
     }
 
@@ -163,7 +186,9 @@ public enum ChatModelId: String, Sendable, Equatable, CaseIterable {
     public var sessionKind: ChatSessionKind {
         switch self {
         case .onDeviceAFM: .afm
-        case .qwen3_5, .qwen3_8b_4bit, .qwen3_5_2b, .qwen3_5_9b_heretic: .mlx
+        case .qwen3_8b_4bit, .qwen3_5_2b, .qwen3_5_9b_heretic, .qwen3_5_9b_4bit,
+            .qwen3_5_4b_uncensored:
+            .mlx
         }
     }
 }

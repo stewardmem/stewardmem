@@ -692,14 +692,24 @@ mod tests {
 
     /// CG-10 E3, the model field's behavioral half: the field is
     /// additive-optional on the wire and the CHILD owns the gate. An unknown
-    /// id is `bad_request` naming the id; an excluded one (`qwen3.5-9b-4bit`)
-    /// is `model_excluded` carrying its cause. Both refuse at PARSE time —
-    /// no registry slot, no model work, no capabilities needed beyond the
-    /// ordering law — so this pin is machine-independent. (Red-proof:
+    /// id is `bad_request` naming the id, refused at PARSE time — no
+    /// registry slot, no model work, no capabilities needed beyond the
+    /// ordering law — so this half is machine-independent. (Red-proof:
     /// damage the child's `resolveWireModel` to pass unknown ids through →
     /// this pin reds; revert → green.)
+    ///
+    /// AMENDED 2026-11-06 (the CG-11 roster amendment): the pin's second
+    /// arm asserted `qwen3.5-9b-4bit` refuses `model_excluded` with the
+    /// roster cause — and the ADMISSION of that id by measurement retired
+    /// the exclusion, so this mirror redded on the next run (the mirrors
+    /// doing their job again: a Swift-side roster flip redded the Rust
+    /// assert). The excluded arm is GONE because there is no excluded id:
+    /// the admission's machine-independent coverage lives on the Swift
+    /// side (the routing pins + the allCases XOR law); if a FUTURE
+    /// exclusion enters, its arm comes back HERE — parse-time, cause as
+    /// the message — per the same law this pin has always held.
     #[tokio::test]
-    async fn the_model_field_refuses_unknown_and_excluded_ids_by_name() {
+    async fn the_model_field_refuses_unknown_ids_by_name() {
         let candidates = bridge_path_candidates();
         let Some(binary) = candidates.iter().find(|p| p.is_file()) else {
             eprintln!(
@@ -729,35 +739,6 @@ mod tests {
                 assert!(
                     said.contains("no-such-model"),
                     "the refusal must name the offending id, got: {said}"
-                );
-            }
-            other => panic!("expected the named refusal, got {other:?}"),
-        }
-
-        // The excluded id: model_excluded, with the CAUSE as the message —
-        // the roster cause (corrected by E1a/E1c: not among the
-        // measured-green tiers; the engine floor), not the retired
-        // template throw and not the retracted VLM claim. This needle
-        // tracks the corrected cause; a future rewrite updates it in the
-        // same commit.
-        let (_id2, mut rx2) = bridge
-            .turn(BridgeTurn {
-                session: "cg10-excluded-model".into(),
-                prompt: "hi".into(),
-                instructions: None,
-                max_response_tokens: None,
-                history: None,
-                model: Some("qwen3.5-9b-4bit".into()),
-            })
-            .await
-            .expect("turn begins");
-        match rx2.recv().await {
-            Some(BridgeEvent::Failed { code, message, .. }) => {
-                assert_eq!(code, "model_excluded", "the excluded id refuses by name");
-                let said = message.unwrap_or_default();
-                assert!(
-                    said.contains("measured-green tiers") && said.contains("swift-jinja 1.3.0"),
-                    "the refusal must carry the corrected roster + engine-floor cause, got: {said}"
                 );
             }
             other => panic!("expected the named refusal, got {other:?}"),

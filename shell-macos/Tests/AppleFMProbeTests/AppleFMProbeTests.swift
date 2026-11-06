@@ -1638,31 +1638,33 @@ struct SwitchModifier: LanguageModelSession.DynamicProfileModifier {
 // turn 2, which presents as a memory bug and gets chased as one. So the refusal
 // is a value, a throwing entry point, and this pin.
 //
+// AMENDED 2026-11-06 (the CG-11 roster amendment): the pin's named target —
+// mlx-community/Qwen3.5-9B-4bit — was ADMITTED by measurement (its probe
+// battery all green on the fixed engine), so the roster now has NO excluded
+// id and this pin holds the law that survives the amendment: the whole set
+// is either usable or explained, and the admitting flip is held (reverting
+// `qwen3_5_9b_4bit`'s admission re-reds here). A FUTURE exclusion flows
+// through the same machinery — flip `mayServeChat`, populate
+// `chatRefusalReason` — and this pin's XOR is what makes a half-done
+// exclusion fail.
+//
 // The pin enumerates `allCases` rather than naming the one bad id, so a model
 // added LATER is covered by the same rule without this file being edited.
-@Test("mlx-community/Qwen3.5-9B-4bit cannot enter a chat path — the id is refused, not merely unused")
+@Test("every chat model id is usable or explains itself — the exclusion law over allCases")
 func qwen35CannotEnterAChatPath() {
-    // The named case, stated plainly so a reader does not have to infer it.
+    // The admitted case, held: the measurement earned this flip, and
+    // silently reverting it re-excludes a measured model.
     #expect(
-        !ChatModelId.qwen3_5.mayServeChat,
-        "mlx-community/Qwen3.5-9B-4bit is marked chat-capable again — it is not among the measured-green tiers (the measured 9B is the operator's pipenetwork quant)"
+        ChatModelId.qwen3_5_9b_4bit.mayServeChat,
+        "mlx-community/Qwen3.5-9B-4bit was admitted BY MEASUREMENT (CG-11, 2026-11-06) — reverting the flip without new evidence re-excludes a measured model"
     )
-    #expect(
-        ChatModelId.qwen3_5.chatRefusalReason?.isEmpty == false,
-        "an excluded model must say WHY, or the next person re-adds it to find out"
-    )
+    #expect(throws: Never.self) {
+        try ChatModelId.forChat(.qwen3_5_9b_4bit)
+    }
     #expect(
         ChatModelId.onDeviceAFM.mayServeChat,
         "the measured tier must remain usable — nothing else has ever completed a turn here"
     )
-
-    // The REFUSAL actually happens, rather than the flag merely being false.
-    #expect(throws: ChatModelError.self) {
-        try ChatModelId.forChat(.qwen3_5)
-    }
-    #expect(throws: Never.self) {
-        try ChatModelId.forChat(.onDeviceAFM)
-    }
 
     // The law, over the whole set: every id is either chat-capable or carries a
     // reason. An id that is neither is a model someone can route to by accident.

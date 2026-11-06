@@ -28,8 +28,11 @@
 // before the field existed (the GDL propose loop among them — it never
 // sends `model`, so its sessions stay AFM by construction). Present → the
 // id is resolved through `ChatModelId` and gated through `forChat` BEFORE
-// any registry or model work: an unknown id is `bad_request`, an excluded
-// one (`qwen3.5-9b-4bit`) is `model_excluded` with its cause. A session's
+// any registry or model work: an unknown id is `bad_request`. (The
+// `model_excluded` arm has been VACUOUS since the CG-11 roster amendment
+// admitted the last excluded id — `qwen3.5-9b-4bit`, by measurement,
+// 2026-11-06 — but the vocabulary stays: a future exclusion flows through
+// `ChatModelId.forChat` and re-arms it.) A session's
 // model is locked at first use — the conversation lives in ONE ledger
 // (LanguageModelSession or ChatSession), and a mid-session tier flip would
 // silently strand it — so a mismatching later request is `model_locked`.

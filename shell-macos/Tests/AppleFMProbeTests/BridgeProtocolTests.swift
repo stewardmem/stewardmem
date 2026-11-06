@@ -141,29 +141,29 @@ struct BrainAfmBridgeTests {
     // ── CG-10 E3 — the model field ───────────────────────────────────────
 
     /// The model field is additive-optional and the CHILD owns the gate.
-    /// An unknown id refuses `bad_request` naming the id; the excluded 9B
-    /// repo refuses `model_excluded` carrying its CAUSE (not among the
-    /// measured-green tiers; the cause text is the one place the exclusion
-    /// is explained on the wire — this assert tracks the corrected E1a/E1c
-    /// facts, and a future cause rewrite must update this needle in the
-    /// same commit). Both refuse at parse time: no slot, no model work, so
-    /// the pin is machine-independent. (Red-proof: damage the child's
-    /// `resolveWireModel` to pass unknown ids through → this pin reds;
-    /// revert → green.)
-    @Test("the model field refuses unknown and excluded ids by name")
-    func modelFieldRefusesUnknownAndExcludedIds() throws {
+    /// An unknown id refuses `bad_request` naming the id, at parse time:
+    /// no slot, no model work, so the pin is machine-independent.
+    /// (Red-proof: damage the child's `resolveWireModel` to pass unknown
+    /// ids through → this pin reds; revert → green.)
+    ///
+    /// AMENDED 2026-11-06 (the CG-11 roster amendment): the pin's second
+    /// arm asserted the excluded 9B repo refuses `model_excluded` with its
+    /// cause — the ADMISSION of that id by measurement retired the
+    /// exclusion and this mirror redded on the next run (a Swift-side
+    /// roster flip redding a pin, the mirrors doing their job again).
+    /// There is no excluded id anymore, so the excluded arm is gone; a
+    /// FUTURE exclusion re-arms it here (parse-time refusal, cause as the
+    /// message, needle updated in the same commit).
+    @Test("the model field refuses unknown ids by name")
+    func modelFieldRefusesUnknownIdsByName() throws {
         let replies = try Self.drive([
             ["id": "c1", "op": "capabilities"],
             [
                 "id": "t1", "op": "turn", "session": "cg10-unknown",
                 "prompt": "hi", "model": "no-such-model",
             ],
-            [
-                "id": "t2", "op": "turn", "session": "cg10-excluded",
-                "prompt": "hi", "model": "qwen3.5-9b-4bit",
-            ],
         ])
-        #expect(replies.count == 3, "capabilities plus two named refusals")
+        #expect(replies.count == 2, "capabilities plus the one named refusal")
         let unknown = replies.first { $0["id"] as? String == "t1" }
         #expect(unknown?["event"] as? String == "error")
         #expect(unknown?["code"] as? String == "bad_request")
@@ -171,19 +171,6 @@ struct BrainAfmBridgeTests {
         #expect(
             saidUnknown.contains("no-such-model"),
             "the refusal must name the offending id, got: \(saidUnknown)"
-        )
-
-        let excluded = replies.first { $0["id"] as? String == "t2" }
-        #expect(excluded?["event"] as? String == "error")
-        #expect(excluded?["code"] as? String == "model_excluded")
-        let saidExcluded = excluded?["message"] as? String ?? ""
-        #expect(
-            saidExcluded.contains("measured-green tiers"),
-            "the refusal must carry the roster cause, got: \(saidExcluded)"
-        )
-        #expect(
-            saidExcluded.contains("swift-jinja 1.3.0"),
-            "the refusal must carry the engine-floor cause, got: \(saidExcluded)"
         )
     }
 
