@@ -37,12 +37,12 @@ that applies them, not in prose that can drift from it.
 
 | Class | Tests | Share |
 |---|---:|---:|
-| `behavioral_pin` | 3264 | 86.1% |
-| `structural` | 392 | 10.3% |
+| `behavioral_pin` | 3284 | 86.1% |
+| `structural` | 394 | 10.3% |
 | `control` | 63 | 1.7% |
 | `residual_documentation` | 63 | 1.7% |
 | `unclassified` | 9 | 0.2% |
-| **total** | **3791** | |
+| **total** | **3813** | |
 
 Scope: `src/` + `tests/`, the two trees the badge's count comes from.
 The census reads HIGHER than the README badge for two reasons, both
@@ -59,13 +59,13 @@ eleven such cases). The census counts what the compiler does.
 | File | Tests |
 |---|---:|
 | `tests/main_suite.rs` | 356 |
-| `src/workflow/gdl.rs` | 146 |
+| `src/workflow/gdl.rs` | 151 |
 | `src/workflow/decide/router.rs` | 59 |
 | `src/agentloop/run_loop.rs` | 56 |
 | `tests/authz_matrix.rs` | 56 |
 | `src/workflow/delivery.rs` | 54 |
 | `src/bin/mcp.rs` | 53 |
-| `src/search/tests.rs` | 49 |
+| `src/search/tests.rs` | 50 |
 | `src/bin/brain.rs` | 44 |
 | `src/screen.rs` | 43 |
 
@@ -85,8 +85,8 @@ have no call in it.
 | `src/trace.rs:47` `trace_traversal_caps_are_bounded` |
 | `src/workflow/decide/router.rs:351` `alias_checkpoints_table_is_the_three_names` |
 | `src/workflow/decide/router.rs:361` `alias_bundle_repo_is_the_english_root` |
-| `src/workflow/gdl.rs:6307` `adversarial_task_bound_is_pinned_by_value` |
-| `src/workflow/gdl.rs:6318` `artifact_bounds_are_pinned_by_value` |
+| `src/workflow/gdl.rs:6420` `adversarial_task_bound_is_pinned_by_value` |
+| `src/workflow/gdl.rs:6431` `artifact_bounds_are_pinned_by_value` |
 | `src/workflow/session_log.rs:1161` `scope_caps_are_pinned_by_value` |
 
 ## What this census does NOT police
