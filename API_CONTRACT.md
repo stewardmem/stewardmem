@@ -341,7 +341,10 @@ annotation engine was retired in v0.9.0).
 ```
 The primary consumer probes this to confirm the server is up (it only
 reads `status`). On failure the server returns `{ "status": "error", "version": "...", "error": "..." }`.
-Detail (capacity, pool, durability, classifier posture, …) is the
+Detail (capacity, pool, durability, classifier posture, the rerank tier's
+state echo — `rerank: {state: off|loading|ready|failed, model, top_n}`, admin
+shape only, CG-12; `ready` names the model ACTUALLY loaded, `off` is the
+truth on a feature-less kernel — …) is the
 `GET /health/db` surface.
 
 ### `DELETE /memory/{id}` → `200` / `404`

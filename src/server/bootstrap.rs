@@ -775,10 +775,11 @@ pub fn bootstrap() -> Result<BootOutcome> {
     // whose hardware can afford it (enterprise/desktop). search/mod.rs is lib
     // code and can't read the server-private profile, so the gate is an env var
     // the boot owns. edge-default/air-gapped stay rerank-free.
-    if matches!(
+    let profile_arms_rerank = matches!(
         profile,
         config::PROFILE_ENTERPRISE | config::PROFILE_DESKTOP | config::PROFILE_QUALITY_LOCAL
-    ) {
+    );
+    if profile_arms_rerank {
         // SAFETY: env mutation is unsafe in this edition because getenv /
         // setenv race with concurrent readers. This write happens during
         // single-threaded boot, before the server spawns any worker thread
@@ -791,11 +792,23 @@ pub fn bootstrap() -> Result<BootOutcome> {
         info!(
             "rerank tier armed (profile={profile}); loading mxbai-rerank-large-v1 (fallback bge-reranker-v2-m3)…"
         );
-        // Warm at boot, not on first recall: the lazy load would otherwise put
-        // the model download inside the request path (observed: first-query 503
-        // `recall timed out` while the reranker downloaded).
+    }
+    // Warm at boot whenever the flag is ALREADY set — by the profile match
+    // above OR by an explicit launch env (what the app's rerank setting sets
+    // on its spawned sidecar, and what a service plist carries; the sidecar's
+    // default profile `edge-default` is NOT in the arm set). Without this the
+    // first recall pays the lazy load inside the request path (observed:
+    // first-query 503 `recall timed out` while the reranker downloaded). On a
+    // feature-less binary the warm is compiled out and a preset flag stays a
+    // harmless no-op.
+    if std::env::var("BRAIN_RERANK_ENABLED").as_deref() == Ok("1") {
         #[cfg(feature = "rerank-tier")]
-        crate::search::rerank::warmup();
+        {
+            crate::search::rerank::warmup();
+            info!("rerank tier warm at boot");
+        }
+    }
+    if profile_arms_rerank {
         info!("rerank tier ready (profile={profile})");
     }
 

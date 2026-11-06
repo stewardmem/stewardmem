@@ -762,7 +762,9 @@ BRAIN_INJECTION_THRESHOLD_LOW=0.7
 
 A nonexistent classifier path refuses boot; thresholds band reject vs
 quarantine without restart. `/health/db` echoes the resolved profile,
-rerank arming, and classifier state — verify there before piloting.
+rerank arming (`rerank.state`: `off` / `loading` / `ready` / `failed`, with
+the model id actually loaded and the working `top_n` — admin shape, added
+CG-12), and classifier state — verify there before piloting.
 
 Why each change (see `MEMORY_STACK_REPORT_2026-09-09.md` §1):
 

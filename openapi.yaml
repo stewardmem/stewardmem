@@ -73,6 +73,29 @@ paths:
                   model_error:
                     type: string
                     description: Present only when model_state is failed.
+                  rerank:
+                    type: object
+                    description: >-
+                      The cross-encoder rerank tier's state echo (CG-12, admin
+                      shape only — the reduced public shape carries nothing).
+                      `off` = the feature is absent from this binary or the
+                      tier was never armed (the truth about a feature-less
+                      kernel, never a guess); `loading` = the lazy/warm load
+                      is in flight; `ready` = the handle is live and `model`
+                      names the id ACTUALLY loaded (`byo:<dirname>` or the bge
+                      fallback — never a hardcoded label); `failed` = the load
+                      failed and recall falls back to the RRF order. `top_n`
+                      is the working candidate cap. Never `ready` while no
+                      reranker handle exists.
+                    properties:
+                      state:
+                        type: string
+                        enum: [off, loading, ready, failed]
+                      model:
+                        type: string
+                        nullable: true
+                      top_n:
+                        type: integer
                   system:
                     type: object
                     properties:

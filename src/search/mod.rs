@@ -2587,6 +2587,11 @@ pub mod query;
 #[cfg(feature = "rerank-tier")]
 pub mod rerank;
 
+// The rerank tier's health echo cell — compiled in EVERY build so the admin
+// `/health/db` shape is stable across binaries: a feature-less kernel reads
+// `off` forever, which is the truth about that binary.
+pub mod rerank_health;
+
 // ── Retrieval quality estimation (QPP) ────────────────────────────────────
 pub mod quality;
 

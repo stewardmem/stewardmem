@@ -2788,6 +2788,18 @@ async fn health_db_admin_full_read_reduced() {
         "admin sees the full body"
     );
 
+    // CG-12 (P-6): the rerank echo rides the ADMIN body additively — and it
+    // is honest by construction in the default test kernel: no rerank flag
+    // was armed here, so the state is `off` (never `ready` while no handle
+    // loaded; the ready transition requires a model id in the cell's type).
+    let v: serde_json::Value = serde_json::from_str(&body).expect("admin body is JSON");
+    let rerank = v
+        .get("rerank")
+        .expect("the admin body carries the rerank echo (CG-12)");
+    assert_eq!(rerank["state"], "off", "nothing armed it in this kernel");
+    assert!(rerank["model"].is_null(), "`off` never names a model");
+    let top_n = rerank["top_n"].as_u64().expect("top_n is a number");
+
     let (st, body) = send_body(&srv, Some(&reader), "/health/db", "GET", "").await;
     assert_eq!(
         st,
@@ -2800,6 +2812,10 @@ async fn health_db_admin_full_read_reduced() {
         obj.keys().collect::<Vec<_>>(),
         vec!["db_ok", "status", "version"],
         "the reduced shape is exactly status/version/db_ok (serde sorts keys)"
+    );
+    assert!(
+        !obj.contains_key("rerank"),
+        "the reduced shape carries NO rerank echo (P-6 second half; top_n default was {top_n})"
     );
 }
 

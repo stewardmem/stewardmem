@@ -79,13 +79,16 @@ static RERANKER: LazyLock<Option<Reranker>> = LazyLock::new(|| {
     }
     let top_n =
         crate::search::parse_rerank_top_n(std::env::var("BRAIN_RERANK_TOP_N").ok().as_deref());
+    crate::search::rerank_health::RERANK_HEALTH.loading(top_n);
     match Reranker::new(top_n) {
         Ok(r) => {
             tracing::info!("reranker loaded: {} (top_n={top_n})", r.model_id());
+            crate::search::rerank_health::RERANK_HEALTH.ready(r.model_id(), top_n);
             Some(r)
         }
         Err(e) => {
             tracing::warn!("reranker load failed (recall falls back to RRF order): {e}");
+            crate::search::rerank_health::RERANK_HEALTH.failed(top_n);
             None
         }
     }
@@ -93,8 +96,10 @@ static RERANKER: LazyLock<Option<Reranker>> = LazyLock::new(|| {
 
 /// The seam `perform_search_with_prf` calls after fusion + PRF. No-op (preserves
 /// the RRF order, leaves `rerank_score = None`) when the reranker is off (edge
-/// profile) or failed to load. Records `rerank_ms` into telemetry either way so
-/// the provenance stays honest about whether a rerank stage ran.
+/// profile) or failed to load. The CALL SITE owns the clock: it times this call
+/// and records `rerank_ms` into telemetry whether or not a rerank ran, so the
+/// provenance stays honest about whether a rerank stage ran (this function
+/// takes `_tel` and never writes it — the ranking probe's misreading warning).
 pub fn maybe_rerank(query: &str, candidates: &mut [SearchResult], _tel: &mut SearchTelemetry) {
     let Some(r) = RERANKER.as_ref() else {
         return; // edge profile / load failure — RRF order stands

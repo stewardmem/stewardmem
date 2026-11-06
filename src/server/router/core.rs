@@ -418,6 +418,17 @@ pub async fn health_db(
                 // the durability echo — a snapshot of a boot decision, never
                 // a per-request read. `active (N threads)` | `off:<reason>`.
                 m.insert("loom".to_string(), serde_json::json!(s.loom.describe()));
+                // Rerank (CG-12): the cross-encoder tier's state echo, same
+                // class as the durability/loom echoes — a snapshot of the
+                // boot/lazy load decision, never a per-request read.
+                // `{state, model, top_n}` where `off` is the truth on a
+                // feature-less kernel and `ready` names the model ACTUALLY
+                // loaded (the cell's ready transition requires it). The
+                // reduced public shape above carries nothing of this.
+                m.insert(
+                    "rerank".to_string(),
+                    crate::search::rerank_health::RERANK_HEALTH.echo(),
+                );
             }
             Ok(Json(body))
         }

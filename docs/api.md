@@ -15,7 +15,7 @@ machine-readable contract is at **`GET /openapi.yaml`** at runtime and
 | GET | `/` · `/app/*` | The operator GUI SPA, served from `BRAIN_CLIENT_DIST` when built and mounted (static asset surface — the JSON API routes are unaffected). The default bundle is the Dioxus client (`client/`); the SvelteKit + Tauri shell (`shell/`) is a successor GUI over the same API, not yet the served default |
 | GET | `/health` | Liveness probe (minimal `{status, version}`; detail on `/health/db`) |
 | GET | `/ready` | Readiness probe for load balancers; includes the redacted `gdl_provider` posture (`disabled`, `configured`, or `invalid`; invalid is `NOT_READY`) |
-| GET | `/health/db` | Admin-gated detail (v1.28.70: the full body — capacity, pool, hardening, model, otel, DPO, concurrency, durability — is operator telemetry); a Read credential gets the reduced probe `{status, version, db_ok}`; Read-only dashboards add the admin credential for the full body |
+| GET | `/health/db` | Admin-gated detail (v1.28.70: the full body — capacity, pool, hardening, model, otel, DPO, concurrency, durability, rerank echo (CG-12: `off`/`loading`/`ready`/`failed` + the model actually loaded + `top_n`) — is operator telemetry); a Read credential gets the reduced probe `{status, version, db_ok}`; Read-only dashboards add the admin credential for the full body |
 | GET | `/stats`, `/version` | Counts, model, version |
 | GET | `/openapi.yaml` | Full API contract |
 | GET | `/.well-known/security.txt` · `/.well-known/openid-configuration` · `/.well-known/jwks.json` | RFC 9116 disclosure file, OIDC discovery (RFC 8414), JWKS key set (RFC 7517) — all public, no auth |
