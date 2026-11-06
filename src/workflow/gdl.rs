@@ -1401,7 +1401,7 @@ fn intake_gate(a: &IntakeArtifact, case: &GdlCase) -> Vec<String> {
     // CG-05 (A3): the decomposition arms. A gate-refused decomposition
     // costs nothing — a malformed proposal is a named refusal, never a
     // silent co-tenancy; absent decomposition is exactly today's
-    // (pin N-1) — no error, no key, no gate firing.
+    // — no error, no key, no gate firing.
     if let Some(d) = &a.decomposition {
         // Arm 1 (bounds law — the MAX_HYPOTHESES message shape).
         if d.issues.len() > MAX_ISSUES {

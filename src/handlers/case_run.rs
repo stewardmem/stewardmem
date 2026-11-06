@@ -177,7 +177,7 @@ pub(crate) async fn run_gdl_case(
     // parent link). The pre-check reads the same predicate `admit`'s
     // sentinel reads (`seeded_split_child`) — the two cannot drift; the
     // launch ticket must still name the child's approved question, and
-    // `admit` refuses the mismatch (D-1).
+    // `admit` refuses the mismatch.
     if kind != "troubleshoot" {
         return Err(HandlerError::unprocessable(
             "run_kind_invalid",

@@ -623,7 +623,7 @@ pub(super) fn admit(
             return Err(persist_error("corrupt state or ambiguous legacy GDL run"));
         }
         session_log::acquire(tx.tx(), run, owner).map_err(persist_error)?;
-        // The child's ticket IS the approved question (D-1): a launch
+        // The child's ticket IS the approved question: a launch
         // that names another ticket is the invocation binding mismatch,
         // the same law the resume path enforces above.
         let case = if is_seeded {
