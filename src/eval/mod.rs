@@ -198,6 +198,156 @@ pub fn evaluate(judged: &[(Judgment, Vec<i64>, Option<bool>)], k: usize) -> Eval
     }
 }
 
+/// One query's metric row (all HEADLINE metrics, in report order).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct QueryMetrics {
+    pub precision_at_5: f64,
+    pub recall_at_5: f64,
+    pub mrr: f64,
+    pub ndcg_at_5: f64,
+    pub answer_in_context: Option<f64>,
+}
+
+/// Per-query metric rows for a judged set, in EvalReport order.
+pub fn query_metrics(judged: &[(Judgment, Vec<i64>, Option<bool>)], k: usize) -> Vec<QueryMetrics> {
+    judged
+        .iter()
+        .map(|(j, retrieved, aic)| QueryMetrics {
+            precision_at_5: precision_at_k(retrieved, &j.relevant_ids, k) as f64,
+            recall_at_5: recall_at_k(retrieved, &j.relevant_ids, k) as f64,
+            mrr: mrr(retrieved, &j.relevant_ids) as f64,
+            ndcg_at_5: ndcg(retrieved, &j.relevant_ids, k) as f64,
+            answer_in_context: aic.map(|b| if b { 1.0 } else { 0.0 }),
+        })
+        .collect()
+}
+
+/// The paired-bootstrap resample count: the Smucker/inter-floor standard
+/// minimum for stable percentile estimates. Rigorous IR practice prefers
+/// B=10000 for tail stability — named here as the dated upgrade, never taken
+/// silently (the compute is queries x B, so B=10000 is affordable there).
+pub const BOOTSTRAP_RESAMPLES: usize = 1000;
+
+/// The bootstrap's named seed: the same seed reproduces byte-identical
+/// intervals across runs, machines and rand versions.
+pub const BOOTSTRAP_SEED: u64 = 20261106;
+
+/// One SplitMix64 draw over u64: four lines, zero deps, version-stable
+/// forever (the `fold8`/`partition_for_run` precedents — NOT `rand::StdRng`,
+/// whose algorithm may change in any release).
+fn splitmix64(state: &mut u64) -> u64 {
+    *state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    let mut z = *state;
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
+fn column_point(rows: &[Vec<Option<f64>>], c: usize) -> f64 {
+    let (sum, count) = rows
+        .iter()
+        .filter_map(|r| r[c])
+        .fold((0.0, 0usize), |(s, n), v| (s + v, n + 1));
+    if count == 0 { 0.0 } else { sum / count as f64 }
+}
+
+fn bootstrap_quantile(values: &[f64], q: f64) -> f64 {
+    if values.is_empty() {
+        return 0.0;
+    }
+    let mut sorted = values.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let i = ((q * (sorted.len() - 1) as f64).round() as usize).min(sorted.len() - 1);
+    sorted[i]
+}
+
+/// The paired percentile interval (95 range per metric, shared resample
+/// indices): queries resampled with replacement, the SAME index draws for
+/// every metric in a resample (paired across metrics — the covariance link
+/// that makes the CI readable). `None` is absent for that metric only.
+fn bootstrap_rows(rows: &[Vec<Option<f64>>], resamples: usize, seed: u64) -> Vec<(f64, f64, f64)> {
+    let width = rows.first().map_or(0, |r| r.len());
+    if rows.is_empty() || resamples == 0 {
+        return (0..width)
+            .map(|c| {
+                let p = column_point(rows, c);
+                (p, p, p)
+            })
+            .collect();
+    }
+    let n = rows.len();
+    let points: Vec<f64> = (0..width).map(|c| column_point(rows, c)).collect();
+    let mut boots: Vec<Vec<f64>> = vec![Vec::with_capacity(resamples); width];
+    let mut state = seed.wrapping_add(1);
+    for _ in 0..resamples {
+        let mut sums = vec![0.0; width];
+        let mut counts = vec![0usize; width];
+        for _ in 0..n {
+            let idx = (splitmix64(&mut state) % n as u64) as usize;
+            for (c, v) in rows[idx].iter().enumerate() {
+                if let Some(x) = v {
+                    sums[c] += x;
+                    counts[c] += 1;
+                }
+            }
+        }
+        for c in 0..width {
+            boots[c].push(if counts[c] > 0 {
+                sums[c] / counts[c] as f64
+            } else {
+                0.0
+            });
+        }
+    }
+    (0..width)
+        .map(|c| {
+            (
+                points[c],
+                bootstrap_quantile(&boots[c], 0.025),
+                bootstrap_quantile(&boots[c], 0.975),
+            )
+        })
+        .collect()
+}
+
+/// The paired bootstrap CI over per-query metric rows: (point, lo, hi) per
+/// metric, report order. The floor gate is NOT a caller — the CI rides
+/// beside the point, never inside the gate (pin B-3).
+pub fn paired_bootstrap_ci(
+    per_query: &[QueryMetrics],
+    resamples: usize,
+    seed: u64,
+) -> Vec<(f64, f64, f64)> {
+    let rows: Vec<Vec<Option<f64>>> = per_query
+        .iter()
+        .map(|q| {
+            vec![
+                Some(q.precision_at_5),
+                Some(q.recall_at_5),
+                Some(q.mrr),
+                Some(q.ndcg_at_5),
+                q.answer_in_context,
+            ]
+        })
+        .collect();
+    bootstrap_rows(&rows, resamples, seed)
+}
+
+/// The same evaluator over caller-named metric columns (the surface whose
+/// headline set is not EvalReport's — `brain eval`'s six floor metrics).
+pub fn paired_bootstrap_ci_columns(
+    columns: &[Vec<f64>],
+    resamples: usize,
+    seed: u64,
+) -> Vec<(f64, f64, f64)> {
+    let width = columns.len();
+    let n = columns.first().map_or(0, |c| c.len());
+    let rows: Vec<Vec<Option<f64>>> = (0..n)
+        .map(|i| (0..width).map(|c| Some(columns[c][i])).collect())
+        .collect();
+    bootstrap_rows(&rows, resamples, seed)
+}
+
 // ---------------------------------------------------------------------------
 // The joint evaluation objective: safety as a feasibility constraint, not a term.
 //
@@ -579,6 +729,86 @@ mod tests {
         let rep = evaluate(&judged, 5);
         assert_eq!(rep.queries, 2);
         assert!((rep.answer_in_context_rate - 1.0).abs() < 1e-6); // 1/1 judged
+    }
+
+    fn query_metrics_fixture() -> Vec<QueryMetrics> {
+        // 24 queries with real variance on every metric (a constant column
+        // would trivially bracket; this one must earn it).
+        let mut out = Vec::new();
+        for i in 0..24 {
+            let v = (i % 4) as f64 / 3.0;
+            out.push(QueryMetrics {
+                precision_at_5: v,
+                recall_at_5: 1.0 - v,
+                mrr: (i % 3) as f64 / 2.0,
+                ndcg_at_5: ((i % 5) as f64) / 4.0,
+                answer_in_context: if i % 2 == 0 { Some(v) } else { None },
+            });
+        }
+        out
+    }
+
+    #[test]
+    fn paired_ci_brackets_the_point_for_every_metric() {
+        // B-1: lo <= point <= hi on all five headline metrics.
+        let per_query = query_metrics_fixture();
+        let ci = paired_bootstrap_ci(&per_query, BOOTSTRAP_RESAMPLES, BOOTSTRAP_SEED);
+        assert_eq!(
+            ci.len(),
+            5,
+            "one interval per headline metric, report order"
+        );
+        for (m, (point, lo, hi)) in ci.iter().enumerate() {
+            assert!(
+                lo <= point && point <= hi,
+                "metric {m}: interval [{lo}, {hi}] must bracket its point {point}"
+            );
+            assert!(lo <= hi, "metric {m}: lo must not exceed hi");
+        }
+        // The named constants are the research values, never silent literals.
+        assert_eq!(BOOTSTRAP_RESAMPLES, 1000);
+    }
+
+    #[test]
+    fn paired_ci_is_seeded_stable() {
+        // B-2: the same seed reproduces byte-identical intervals.
+        let per_query = query_metrics_fixture();
+        let a = paired_bootstrap_ci(&per_query, BOOTSTRAP_RESAMPLES, BOOTSTRAP_SEED);
+        let b = paired_bootstrap_ci(&per_query, BOOTSTRAP_RESAMPLES, BOOTSTRAP_SEED);
+        assert_eq!(a, b, "same seed → identical intervals across runs");
+    }
+
+    #[test]
+    fn paired_ci_empty_and_zero_resamples_never_panic() {
+        assert!(paired_bootstrap_ci(&[], BOOTSTRAP_RESAMPLES, BOOTSTRAP_SEED).is_empty());
+        let per_query = query_metrics_fixture();
+        let zero = paired_bootstrap_ci(&per_query, 0, BOOTSTRAP_SEED);
+        for (point, lo, hi) in &zero {
+            assert_eq!(point, lo);
+            assert_eq!(lo, hi);
+        }
+    }
+
+    #[test]
+    fn bootstrap_ci_rides_beside_the_gate_never_inside() {
+        // B-3: the floor gate reads the point exactly as before — the CI is
+        // printed beside it, never fed into `judge_admission`.
+        let src = cli_source();
+        let body = run_eval_body(&src);
+        assert!(
+            body.contains("paired_bootstrap_ci"),
+            "run_eval must print the CI in its receipt"
+        );
+        assert!(
+            body.contains("judge_admission(&mean, floors, safety)"),
+            "the gate reads the point means — a CI-derived value must not decide a floor"
+        );
+        for line in run_eval_decision_lines(&body) {
+            assert!(
+                !line.contains("judge_admission") || line.contains("&mean"),
+                "an admission not fed by the point means: `{line}`"
+            );
+        }
     }
 
     /// the regression-harness metric functions produce the

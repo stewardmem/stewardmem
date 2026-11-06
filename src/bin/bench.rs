@@ -1432,7 +1432,9 @@ fn print_report(
 /// Ship gate: set `BENCH_EVAL_REGRESSION_PCT` (default 2.0); if recall@5 drops
 /// more than that vs the `BENCH_EVAL_BASELINE` JSON, exits non-zero.
 fn run_eval() -> Result<(), String> {
-    use brain_server::eval::{Judgment, evaluate};
+    use brain_server::eval::{
+        BOOTSTRAP_RESAMPLES, BOOTSTRAP_SEED, Judgment, evaluate, paired_bootstrap_ci, query_metrics,
+    };
 
     let path = std::env::var("BRAIN_EVAL_JUDGMENTS").map_err(|_| {
         "BRAIN_EVAL_JUDGMENTS env var must point to a judgments JSON file".to_string()
@@ -1504,6 +1506,8 @@ fn run_eval() -> Result<(), String> {
     }
 
     let report = evaluate(&judged, k);
+    let per_query = query_metrics(&judged, k);
+    let ci = paired_bootstrap_ci(&per_query, BOOTSTRAP_RESAMPLES, BOOTSTRAP_SEED);
     println!("## Brain Server retrieval-quality eval\n");
     println!(
         "Target: `{base}`  |  queries: {}  |  k: {}",
@@ -1513,15 +1517,27 @@ fn run_eval() -> Result<(), String> {
         println!("Packing budget: {budget:?} tokens");
     }
     println!();
-    println!("| metric | value |");
-    println!("|---|---|");
-    println!("| precision@{k} | {:.4} |", report.precision_at_5);
-    println!("| recall@{k}    | {:.4} |", report.recall_at_5);
-    println!("| MRR          | {:.4} |", report.mrr);
-    println!("| NDCG@{k}     | {:.4} |", report.ndcg_at_5);
+    println!("| metric | value | 95% paired CI |");
+    println!("|---|---|---|");
     println!(
-        "| answer_in_context_rate | {:.4} |",
-        report.answer_in_context_rate
+        "| precision@{k} | {:.4} | [{:.4}, {:.4}] |",
+        report.precision_at_5, ci[0].1, ci[0].2
+    );
+    println!(
+        "| recall@{k}    | {:.4} | [{:.4}, {:.4}] |",
+        report.recall_at_5, ci[1].1, ci[1].2
+    );
+    println!(
+        "| MRR          | {:.4} | [{:.4}, {:.4}] |",
+        report.mrr, ci[2].1, ci[2].2
+    );
+    println!(
+        "| NDCG@{k}     | {:.4} | [{:.4}, {:.4}] |",
+        report.ndcg_at_5, ci[3].1, ci[3].2
+    );
+    println!(
+        "| answer_in_context_rate | {:.4} | [{:.4}, {:.4}] |",
+        report.answer_in_context_rate, ci[4].1, ci[4].2
     );
 
     // Optional ship gate: compare against a baseline JSON.
