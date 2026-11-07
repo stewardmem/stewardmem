@@ -1,0 +1,17 @@
+Left Column: The Two Doors
+
+Every page of this document was laid out in two columns. The reading
+order a human follows is column by column, but a recognition pass sees
+geometry first and semantics second, so the transcript may interleave
+what the layout separated.
+
+The transcript is still faithful to the page: fidelity to the source
+order is a layout claim, and the header never makes one. The words are
+the words; their order is the engine's reading order.
+
+Right Column: What Is Measured
+
+The error rate for this class counts substitutions, deletions, and
+insertions against the column-ordered reference. A gap here is a real
+signal: either a word was misread, or the reading order moved, and the
+evidence records which class the gap belongs to.

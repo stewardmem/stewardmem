@@ -1,0 +1,17 @@
+On-Device Transcription
+
+The scanner delivers a picture of a page, and a picture cites nothing.
+The recognition engine reads it on this machine, and the reading crosses
+the same doors that typed text crosses: the strip, the screen, the
+dedupe, and the fence. Nothing about the path is privileged by its
+medium.
+
+Every recognized page carries its own provenance. The engine stamps the
+request type and the build of the operating system it ran under, the
+page carries the lowest confidence among its candidates, and a weak
+region marks the whole page rather than hiding inside it.
+
+A page the engine refuses is a named refusal, never an invented blank.
+The record shows the hole and the reason for the hole, because a
+transcript that hides its gaps is a transcript that manufactures
+confidence it did not earn.

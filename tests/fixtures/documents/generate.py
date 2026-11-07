@@ -23,6 +23,11 @@ Fixtures (the plan's S1 set):
   footnotes.pdf       2 pages, body text + footnote block
   scanned.pdf         2 pages, image-only (uncompressed 4x4 RGB XObject, no
                       text operators) — the no_text_layer named-refusal test
+  hybrid.pdf          4 pages, text-layer and image-only MIXED — the OV-1
+                      vehicle (IMPROVE05): per-page emptiness is the routing
+                      signal, so pages 2 and 4 go to the sidecar and pages 1
+                      and 3 keep Tier-0 verbatim; the per-page tier map
+                      records the split in the header and the row.
 """
 
 import hashlib
@@ -308,6 +313,36 @@ SCAN_PAGES = [
     (image_page_stream(54, 200, 504, 500), {"image": True}),
 ]
 
+# ── hybrid.pdf (IMPROVE05, the OV-1 vehicle) ─────────────────────────────────
+# Text-layer pages and image-only pages MIXED in one document: a born-digital
+# report with scanned inserts. The routing law under `tier:"ocr"` is per-page
+# emptiness — pages 2 and 4 (image-only, no text operators) go to the OCR
+# sidecar; pages 1 and 3 keep their Tier-0 text verbatim and are NEVER sent
+# (OV-1). The image-only pages reuse the scanned.pdf 4x4 XObject: the routing
+# signal is EMPTINESS of the text walk, so the vehicle does not need readable
+# pixels — the sidecar answering "no text" on them is the honest verdict, and
+# the fidelity classes with real pixels live in ocr-real/ (generated once by
+# generate-real.swift, frozen at commit).
+
+HYBRID_PAGES = [
+    [
+        "Field Report: Mixed Sources",
+        "",
+        "This page was born digital. Its text layer is complete, and no",
+        "OCR engine will ever be asked about it: a page that can cite",
+        "itself through its own text layer is never sent to the sidecar.",
+    ],
+    (image_page_stream(54, 200, 504, 500), {"image": True}),
+    [
+        "Second Digital Page",
+        "",
+        "The same law holds here. The routing signal is per-page emptiness",
+        "of the text walk, not the request's tier label: ask for ocr and",
+        "the text-layer pages still keep their extracted text verbatim.",
+    ],
+    (image_page_stream(54, 200, 504, 500), {"image": True}),
+]
+
 # ── hostile-font-panic.pdf ──────────────────────────────────────────────────
 # The isolation-boundary fixture (IMPROVE04, measured 2026-11-07): a font
 # whose ToUnicode CMap covers only 'A', with NO /Encoding fallback, over text
@@ -379,6 +414,12 @@ def main() -> None:
         "table.pdf": build_pdf([(page_stream(TABLE_PAGE), {})]),
         "footnotes.pdf": build_pdf([(page_stream(p), {}) for p in FOOTNOTE_PAGES]),
         "scanned.pdf": build_pdf(SCAN_PAGES),
+        "hybrid.pdf": build_pdf(
+            [
+                p if isinstance(p, tuple) else prose_page(p)
+                for p in HYBRID_PAGES
+            ]
+        ),
         "hostile-font-panic.pdf": build_hostile_pdf(),
     }
     manifest = []
