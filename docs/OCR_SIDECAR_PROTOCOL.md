@@ -88,7 +88,7 @@ non-zero:
 | Code | Meaning |
 |---|---|
 | `bad_request` | The request line is not valid JSON, `op` is not `"ocr"`, `dpi` is out of band, a page index is out of range, or the stdin carried no request line at all. |
-| `raster_failed` | The bytes after the request line are not a PDF PDFKit can open (document-level), or a requested page could not be rendered (document-level refusal — the kernel sees the named code). |
+| `raster_failed` | The bytes after the request line are not a PDF CoreGraphics can open (document-level), or a requested page could not be rendered (document-level refusal — the kernel sees the named code). |
 | `ocr_page_failed` | Per-page only (inside `ok:true`): Vision refused that page's recognition. Never fabricated into an empty. |
 
 ## Exit codes

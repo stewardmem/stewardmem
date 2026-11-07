@@ -184,7 +184,7 @@ APP="shell/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/StewardMem
 # overlay — tauri.macos.conf.json is NOT in it), so a config typo would ship a
 # kernel-less app that only dies on the user's machine. Refuse HERE, on the
 # bytes, named.
-for b in brain-server brain-afm; do
+for b in brain-server brain-afm shell-vision; do
   [[ -x "$APP/Contents/MacOS/$b" ]] \
     || fail "the sidecar $b is NOT in the bundle — the MAS merge chain lost externalBin; a kernel-less app must not be submitted."
 done

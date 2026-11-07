@@ -714,77 +714,84 @@ function stage() {
 	}
 	artifacts.push({ name: universalName, target: UNIVERSAL_TRIPLE, path: universalPath });
 
-	// brain-afm — the AFM bridge executable (the chat spine). Built by
-	// SwiftPM in shell-macos as a UNIVERSAL binary, staged under the same
-	// triple convention so the bundler's externalBin places it beside the
-	// kernel in Contents/MacOS (the kernel resolves it as
-	// current_exe().parent()/brain-afm). The provenance record below covers
-	// it like every other artifact: a reader that finds the record can trust
-	// every entry it names. No --version round-trip guard here: the bridge
-	// speaks JSONL, not flags, and a capabilities round-trip would boot the
-	// model; the arch check + the sealed sha256 + the kernel's own live
-	// protocol pin carry the integrity story.
-	const afmDir = join(REPO_ROOT, 'shell-macos');
-	console.log('[stage] swift build -c release --arch arm64 --arch x86_64 (brain-afm)');
-	const afmBuild = run(
+	// The Swift sidecars — brain-afm (the chat spine) and shell-vision (the
+	// OCR sidecar, IMPROVE05). Built by ONE SwiftPM universal build in
+	// shell-macos (both executables live in the package), staged under the
+	// same triple convention so the bundler's externalBin places them beside
+	// the kernel in Contents/MacOS (the kernel resolves each as
+	// current_exe().parent()/<name>). The provenance record below covers
+	// them like every other artifact: a reader that finds the record can
+	// trust every entry it names. No --version round-trip guard here: the
+	// sidecars speak JSONL, not flags, and a capabilities round-trip would
+	// boot the model; the arch check + the sealed sha256 + the kernel's own
+	// live protocol pins carry the integrity story.
+	const swiftDir = join(REPO_ROOT, 'shell-macos');
+	const swiftSidecars = ['brain-afm', 'shell-vision'];
+	console.log('[stage] swift build -c release --arch arm64 --arch x86_64 (brain-afm, shell-vision)');
+	const swiftBuild = run(
 		'swift',
 		['build', '-c', 'release', '--arch', 'arm64', '--arch', 'x86_64'],
-		{ cwd: afmDir }
+		{ cwd: swiftDir }
 	);
-	if (afmBuild.status !== 0) {
-		console.error(`[stage] swift build failed for brain-afm: ${output(afmBuild)}`);
+	if (swiftBuild.status !== 0) {
+		console.error(`[stage] swift build failed: ${output(swiftBuild)}`);
 		process.exit(1);
 	}
 	// SwiftPM's universal builds land under .build/apple/...; single-arch
 	// under .build/out/... — probe both so a toolchain layout change fails
-	// loudly here rather than silently skipping the bridge.
-	const afmCandidates = [
-		join(afmDir, '.build', 'apple', 'Products', 'Release', 'brain-afm'),
-		join(afmDir, '.build', 'out', 'Products', 'Release', 'brain-afm'),
-		join(afmDir, '.build', 'release', 'brain-afm')
-	];
-	const afmSource = afmCandidates.find((candidate) => existsSync(candidate));
-	if (!afmSource) {
-		console.error(`[stage] brain-afm build output absent — probed:\n  ${afmCandidates.join('\n  ')}`);
-		process.exit(1);
-	}
-	const afmArchs = machoArchs(afmSource);
-	if (!sameArchSet(afmArchs, expectedArchs)) {
-		console.error(
-			`[stage] brain-afm carries [${afmArchs.join(' ')}], expected the universal [${expectedArchs.join(' ')}]`
-		);
-		process.exit(1);
-	}
-	const afmName = `brain-afm-${UNIVERSAL_TRIPLE}`;
-	const afmPath = join(STAGED_DIR, afmName);
-	copyFileSync(afmSource, afmPath);
-	chmodSync(afmPath, 0o755);
-	artifacts.push({ name: afmName, target: UNIVERSAL_TRIPLE, path: afmPath });
-
-	// The same three-file law the kernel's staging obeys (see the header
-	// note): each arch's compile step resolves externalBin against its OWN
-	// triple, and only the bundle copy step takes the universal name — only
-	// the universal file present fails with `resource path ... doesn't exist`.
-	// The thin slices are THINNED out of the verified universal rather than
-	// copied, so a fat binary can never sit under a thin name, and each is
-	// arch-checked before it earns a record entry.
-	for (const target of TARGETS) {
-		const thinName = `brain-afm-${target.triple}`;
-		const thinPath = join(STAGED_DIR, thinName);
-		const thin = run('lipo', ['-thin', target.arch, afmPath, '-output', thinPath]);
-		if (thin.status !== 0) {
-			console.error(`[stage] lipo -thin ${target.arch} failed for brain-afm: ${output(thin)}`);
-			process.exit(1);
-		}
-		chmodSync(thinPath, 0o755);
-		const thinArchs = machoArchs(thinPath);
-		if (thinArchs.length !== 1 || thinArchs[0] !== target.arch) {
+	// loudly here rather than silently skipping a sidecar.
+	for (const sidecarName of swiftSidecars) {
+		const candidates = [
+			join(swiftDir, '.build', 'apple', 'Products', 'Release', sidecarName),
+			join(swiftDir, '.build', 'out', 'Products', 'Release', sidecarName),
+			join(swiftDir, '.build', 'release', sidecarName)
+		];
+		const source = candidates.find((candidate) => existsSync(candidate));
+		if (!source) {
 			console.error(
-				`[stage] ${thinPath} carries [${thinArchs.join(' ')}], expected exactly [${target.arch}]`
+				`[stage] ${sidecarName} build output absent — probed:\n  ${candidates.join('\n  ')}`
 			);
 			process.exit(1);
 		}
-		artifacts.push({ name: thinName, target: target.triple, path: thinPath });
+		const archs = machoArchs(source);
+		if (!sameArchSet(archs, expectedArchs)) {
+			console.error(
+				`[stage] ${sidecarName} carries [${archs.join(' ')}], expected the universal [${expectedArchs.join(' ')}]`
+			);
+			process.exit(1);
+		}
+		const universalName = `${sidecarName}-${UNIVERSAL_TRIPLE}`;
+		const universalPath = join(STAGED_DIR, universalName);
+		copyFileSync(source, universalPath);
+		chmodSync(universalPath, 0o755);
+		artifacts.push({ name: universalName, target: UNIVERSAL_TRIPLE, path: universalPath });
+
+		// The same three-file law the kernel's staging obeys (see the header
+		// note): each arch's compile step resolves externalBin against its OWN
+		// triple, and only the bundle copy step takes the universal name — only
+		// the universal file present fails with `resource path ... doesn't exist`.
+		// The thin slices are THINNED out of the verified universal rather than
+		// copied, so a fat binary can never sit under a thin name, and each is
+		// arch-checked before it earns a record entry.
+		for (const target of TARGETS) {
+			const thinName = `${sidecarName}-${target.triple}`;
+			const thinPath = join(STAGED_DIR, thinName);
+			rmSync(thinPath, { force: true });
+			const thin = run('lipo', ['-thin', target.arch, universalPath, '-output', thinPath]);
+			if (thin.status !== 0) {
+				console.error(`[stage] lipo -thin ${target.arch} failed for ${sidecarName}: ${output(thin)}`);
+				process.exit(1);
+			}
+			chmodSync(thinPath, 0o755);
+			const thinArchs = machoArchs(thinPath);
+			if (thinArchs.length !== 1 || thinArchs[0] !== target.arch) {
+				console.error(
+					`[stage] ${thinPath} carries [${thinArchs.join(' ')}], expected exactly [${target.arch}]`
+				);
+				process.exit(1);
+			}
+			artifacts.push({ name: thinName, target: target.triple, path: thinPath });
+		}
 	}
 
 	// The record is written LAST, after every artifact exists. A reader that

@@ -21,7 +21,8 @@
 	"bundle": {
 		"externalBin": [
 			"binaries/brain-server",
-			"binaries/brain-afm"
+			"binaries/brain-afm",
+			"binaries/shell-vision"
 		],
 		"resources": [
 			"binaries/SIDECAR_PROVENANCE.json"

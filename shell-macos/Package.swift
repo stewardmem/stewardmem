@@ -20,7 +20,8 @@ let package = Package(
     platforms: [.macOS(.v15)],
     products: [
         .library(name: "AppleFMProbe", targets: ["AppleFMProbe"]),
-        .executable(name: "brain-afm", targets: ["brain-afm"])
+        .executable(name: "brain-afm", targets: ["brain-afm"]),
+        .executable(name: "shell-vision", targets: ["shell-vision"])
     ],
     dependencies: [
         // The MLX tier (CG-10): the bridge child's `.mlx` session kind
@@ -46,6 +47,26 @@ let package = Package(
                 "AppleFMProbe",
                 .product(name: "MLXFMProbe", package: "shell-macos-mlx"),
             ],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        // The OCR sidecar (IMPROVE05): one-shot per document, the
+        // extract-document lifecycle with brain-afm's JSONL framing. No
+        // package dependencies — Vision and CoreGraphics are system
+        // frameworks; nothing here touches the network or a model provider.
+        // The framing tests spawn the built binary (the honest wire) rather
+        // than importing it — a hyphenated executable name has no importable
+        // module, and the wire is the contract under test.
+        .executableTarget(
+            name: "shell-vision",
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
+            name: "shell-visionTests",
+            dependencies: ["shell-vision"],
+            // The fixture corpus is read from the SOURCE tree at #filePath
+            // (the apple-verified-quotes.txt precedent): corpus data the
+            // tests compare against stays next to the reviewer.
+            exclude: [],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(
