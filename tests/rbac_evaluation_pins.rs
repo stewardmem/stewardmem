@@ -992,12 +992,13 @@ fn r47_rbac_adds_no_table_no_stamp_no_dependency() {
         .collect();
     assert_eq!(
         names.len(),
-        55,
-        "the dependency count is 55 — the oracle is a const table and pure, needing no crate \
+        57,
+        "the dependency count is 57 — the oracle is a const table and pure, needing no crate \
          functions; the ceiling is re-pinned by each round that legitimately adds one (the \
          knowledge-version axis extraction moved it 52 → 53 with the brain-evolve-core \
          workspace path edge; the pack round moved it 53 → 55 with blake2 + flate2, both \
-         already in the lock as transitives) (found {}: {names:?})",
+         already in the lock as transitives; IMPROVE04 moved it 55 → 57 with pdf-extract + \
+         lopdf — one new crate in the graph, the deny gate's named act) (found {}: {names:?})",
         names.len()
     );
     // The completeness half: the guard must not pass on an empty round.
