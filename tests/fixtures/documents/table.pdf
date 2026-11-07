@@ -1,0 +1,61 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 1053 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 54.00 720.00 Tm
+(Table: Retrieval Legs) Tj
+/F1 10 Tf
+1 0 0 1 54.00 692.00 Tm
+(leg          source            cost        notes) Tj
+1 0 0 1 54.00 678.00 Tm
+(lexical      FTS5 index        O\(terms\)    exact + phrase matches) Tj
+1 0 0 1 54.00 664.00 Tm
+(semantic     vec0 int8         O\(k\)        cosine over quantized rows) Tj
+1 0 0 1 54.00 650.00 Tm
+(graph        typed edges       O\(hops\)     two-hop paths, labelled) Tj
+1 0 0 1 54.00 636.00 Tm
+(fusion       RRF               O\(legs\)     reciprocal rank merge) Tj
+/F1 10 Tf
+1 0 0 1 54.00 608.00 Tm
+1 0 0 1 54.00 594.00 Tm
+(Table: Lifecycle Verdicts) Tj
+1 0 0 1 54.00 580.00 Tm
+(verdict      stored            retrieved   operator surface) Tj
+1 0 0 1 54.00 566.00 Tm
+(clean        yes               yes         none) Tj
+1 0 0 1 54.00 552.00 Tm
+(quarantine   yes               no          review queue) Tj
+1 0 0 1 54.00 538.00 Tm
+(reject       no                no          refusal code) Tj
+1 0 0 1 54.00 524.00 Tm
+(pending      proposal only     no          HITL gate) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000001346 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1416
+%%EOF

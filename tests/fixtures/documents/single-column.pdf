@@ -1,0 +1,128 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 5 0 R 7 0 R] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 9 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 1169 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 54.00 720.00 Tm
+(Local-First Memory for Agents) Tj
+1 0 0 1 54.00 706.00 Tm
+1 0 0 1 54.00 692.00 Tm
+(The kernel stores what an agent learns. Every write crosses the same) Tj
+1 0 0 1 54.00 678.00 Tm
+(gate: the injection screen reads the text, the trust label bounds its) Tj
+1 0 0 1 54.00 664.00 Tm
+(provenance, and the audit chain records the write without the bytes.) Tj
+1 0 0 1 54.00 650.00 Tm
+1 0 0 1 54.00 636.00 Tm
+(Recall is a fusion of three legs. The lexical leg matches exact terms) Tj
+1 0 0 1 54.00 622.00 Tm
+(through a full-text index. The semantic leg embeds the query and ranks) Tj
+1 0 0 1 54.00 608.00 Tm
+(vectors by cosine distance. The graph leg walks typed relationships so) Tj
+1 0 0 1 54.00 594.00 Tm
+(a two-hop answer can cite the path it walked.) Tj
+1 0 0 1 54.00 580.00 Tm
+1 0 0 1 54.00 566.00 Tm
+(Nothing in the hot path calls a model provider. Embeddings are local,) Tj
+1 0 0 1 54.00 552.00 Tm
+(deterministic, and zero-token; the ranking is a pure function of the) Tj
+1 0 0 1 54.00 538.00 Tm
+(stored rows. A recall that cannot run offline is a recall that has) Tj
+1 0 0 1 54.00 524.00 Tm
+(already failed its own posture.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 9 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 993 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 54.00 720.00 Tm
+(The Write Gate) Tj
+1 0 0 1 54.00 706.00 Tm
+1 0 0 1 54.00 692.00 Tm
+(An agent write is a proposal until a human approves it. The proposal) Tj
+1 0 0 1 54.00 678.00 Tm
+(queue is the only promotion path: no insert may bypass it, and the) Tj
+1 0 0 1 54.00 664.00 Tm
+(behavioral pins prove the negative by counting rows after a write.) Tj
+1 0 0 1 54.00 650.00 Tm
+1 0 0 1 54.00 636.00 Tm
+(Provenance rides every row. The source label is a bounded vocabulary,) Tj
+1 0 0 1 54.00 622.00 Tm
+(the owner stamp records the principal, and the origin field derives) Tj
+1 0 0 1 54.00 608.00 Tm
+(from the label so an agent cannot forge human authorship.) Tj
+1 0 0 1 54.00 594.00 Tm
+1 0 0 1 54.00 580.00 Tm
+(Quarantine is the middle verdict. A flagged chunk is stored but never) Tj
+1 0 0 1 54.00 566.00 Tm
+(retrieved by default: it carries no vector, so the ANN top-k cannot) Tj
+1 0 0 1 54.00 552.00 Tm
+(surface it. The reviewer sees the verdict without a round trip.) Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 9 0 R >> >> /Contents 8 0 R >>
+endobj
+8 0 obj
+<< /Length 759 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 54.00 720.00 Tm
+(Determinism as a Product Law) Tj
+1 0 0 1 54.00 706.00 Tm
+1 0 0 1 54.00 692.00 Tm
+(Same input bytes, same output bytes. The law applies to extraction,) Tj
+1 0 0 1 54.00 678.00 Tm
+(to embedding, to ranking, and to every golden the tests pin. A path) Tj
+1 0 0 1 54.00 664.00 Tm
+(that cannot be re-run into the same bytes is a path that cannot be) Tj
+1 0 0 1 54.00 650.00 Tm
+(audited, and an unaudited path does not ship.) Tj
+1 0 0 1 54.00 636.00 Tm
+1 0 0 1 54.00 622.00 Tm
+(The fence is the advisory layer around untrusted context. Storage) Tj
+1 0 0 1 54.00 608.00 Tm
+(stays verbatim; the strips compose at the boundary, and the sentinel) Tj
+1 0 0 1 54.00 594.00 Tm
+(vocabulary has exactly one definition in the tree.) Tj
+ET
+endstream
+endobj
+9 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000127 00000 n 
+0000000253 00000 n 
+0000001474 00000 n 
+0000001600 00000 n 
+0000002644 00000 n 
+0000002770 00000 n 
+0000003580 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R >>
+startxref
+3650
+%%EOF

@@ -1,0 +1,117 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 7 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 1565 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 54.00 720.00 Tm
+(Left Column: Architecture) Tj
+1 0 0 1 54.00 706.00 Tm
+1 0 0 1 54.00 692.00 Tm
+(The server is a single binary. The HTTP layer owns the routes, the) Tj
+1 0 0 1 54.00 678.00 Tm
+(handlers own the semantics, and the storage layer owns the rows.) Tj
+1 0 0 1 54.00 664.00 Tm
+1 0 0 1 54.00 650.00 Tm
+(Each layer is replaceable behind its seam. The router merges) Tj
+1 0 0 1 54.00 636.00 Tm
+(sub-routers; the handlers call services; the services touch SQLite) Tj
+1 0 0 1 54.00 622.00 Tm
+(through one pool. Nothing reaches across two layers at once.) Tj
+1 0 0 1 54.00 608.00 Tm
+1 0 0 1 54.00 594.00 Tm
+(The design keeps the memory envelope small. The hot path allocates) Tj
+1 0 0 1 54.00 580.00 Tm
+(bounded buffers and the pools cap their connections.) Tj
+/F1 10 Tf
+1 0 0 1 312.00 720.00 Tm
+(Right Column: Operations) Tj
+1 0 0 1 312.00 706.00 Tm
+1 0 0 1 312.00 692.00 Tm
+(Operands are verbs, not daemons. The operator runs a command,) Tj
+1 0 0 1 312.00 678.00 Tm
+(reads the exit code, and closes the terminal.) Tj
+1 0 0 1 312.00 664.00 Tm
+1 0 0 1 312.00 650.00 Tm
+(Backups are file copies. Restore is the copy run backward. The) Tj
+1 0 0 1 312.00 636.00 Tm
+(migration rehearsal replays a snapshot into a scratch database) Tj
+1 0 0 1 312.00 622.00 Tm
+(before the live schema moves, so the upgrade path is measured,) Tj
+1 0 0 1 312.00 608.00 Tm
+(not hoped for.) Tj
+1 0 0 1 312.00 594.00 Tm
+1 0 0 1 312.00 580.00 Tm
+(Every alert names its remedy. A page without a runbook is a) Tj
+1 0 0 1 312.00 566.00 Tm
+(page that will page again.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 7 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 1075 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 54.00 720.00 Tm
+(Left Column: Verification) Tj
+1 0 0 1 54.00 706.00 Tm
+1 0 0 1 54.00 692.00 Tm
+(The suite is the largest artifact. Its shape is measured, its) Tj
+1 0 0 1 54.00 678.00 Tm
+(classes are derived by a rule, and the census is re-runnable.) Tj
+1 0 0 1 54.00 664.00 Tm
+1 0 0 1 54.00 650.00 Tm
+(A pin without a control arm is a check that cannot fail. The) Tj
+1 0 0 1 54.00 636.00 Tm
+(negative side ships with every positive claim.) Tj
+/F1 10 Tf
+1 0 0 1 312.00 720.00 Tm
+(Right Column: Economics) Tj
+1 0 0 1 312.00 706.00 Tm
+1 0 0 1 312.00 692.00 Tm
+(Latency is a budget. The recall budget is single-digit) Tj
+1 0 0 1 312.00 678.00 Tm
+(milliseconds on the edge profile, and every added stage must) Tj
+1 0 0 1 312.00 664.00 Tm
+(state its cost before it lands.) Tj
+1 0 0 1 312.00 650.00 Tm
+1 0 0 1 312.00 636.00 Tm
+(Storage is the scarcest resource on the small boxes. The vector) Tj
+1 0 0 1 312.00 622.00 Tm
+(store quantizes to int8 plus a binary sidecar and keeps the) Tj
+1 0 0 1 312.00 608.00 Tm
+(float32 rows only for the backfill window.) Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000001864 00000 n 
+0000001990 00000 n 
+0000003117 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+3187
+%%EOF
