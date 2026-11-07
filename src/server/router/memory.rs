@@ -2425,6 +2425,58 @@ pub async fn ingest_document(
     //    the chunk boundaries, so page provenance rides the stored text).
     let chunks = chunker::chunk_markdown(&markdown);
 
+    // Seatbelt (the HITL gate): under the review posture the document ingest
+    // PROPOSES instead of inserting — one proposal per chunk (capped), no
+    // `knowledge` row, no vector, nothing auto-promoted. A PDF is NOT a new
+    // promotion path (DI-4; the case_run.rs:588-611 no-auto-publish pattern
+    // applied to the document path).
+    if crate::handlers::effective_write_posture(&principal.0) == "review" {
+        const MAX_REVIEW_CHUNKS: usize = 50;
+        if chunks.len() > MAX_REVIEW_CHUNKS {
+            return Err(document_error(
+                axum::http::StatusCode::BAD_REQUEST,
+                "too_many_chunks_for_review",
+                format!(
+                    "too_many_chunks_for_review (max 50 per document under review posture; got {})",
+                    chunks.len()
+                ),
+            ));
+        }
+        let mut proposal_ids = Vec::with_capacity(chunks.len());
+        for chunk in &chunks {
+            let p = crate::handlers::gate::create_proposal(
+                state.clone(),
+                principal.0.clone(),
+                crate::handlers::gate::ProposalRequest {
+                    content: chunk.text.clone(),
+                    kind: "fact".to_string(),
+                    source: Some(source.clone()),
+                    authority: None,
+                    observed_at: None,
+                    domain: Some(domain.clone()),
+                    title: None,
+                    source_prompt: None,
+                    origin_context: None,
+                },
+            )
+            .await
+            .map_err(|e| HandlerError::internal(e.inner.message))?;
+            proposal_ids.push(p.id);
+        }
+        return Err(HandlerError {
+            status: axum::http::StatusCode::ACCEPTED,
+            inner: crate::handlers::ApiError::new(
+                "proposal_pending",
+                serde_json::json!({
+                    "success": true,
+                    "status": "proposal_pending",
+                    "proposal_ids": proposal_ids,
+                })
+                .to_string(),
+            ),
+        });
+    }
+
     // 6. embeddings (spawn_blocking, the markdown door's shape).
     let chunk_texts: Vec<String> = chunks.iter().map(|c| c.text.clone()).collect();
     let model = Arc::clone(&state.model);
