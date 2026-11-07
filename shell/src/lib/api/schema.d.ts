@@ -220,6 +220,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ingest/document": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ingest a PDF document (Tier 0 text-layer extraction, requires title)
+         * @description IMPROVE04. Base64-bounded JSON under the shared 1 MiB cap (no multipart). The PDF's text layer becomes page-anchored annotated markdown (docs/DOCUMENT_INGESTION_CONTRACT.md): a machine-checkable header (sha256, source, pages, tier, extracted, extractor, layout) plus one ## Page N block per page closed by an anchor comment. Deterministic zero-token extraction; no LLM; the extracted text crosses the existing doors only (screen, trace strip, dedupe, trust-label bounds, HITL posture). Tier 0 never claims layout verified. Named refusals: document_too_large (413), invalid_document (400), no_text_layer (422), document_parse_incomplete (422), unsupported_tier (400), document_extraction_unavailable (503 — the isolation child is not installed).
+         */
+        post: operations["ingestDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/graph/entity/{name}": {
         parameters: {
             query?: never;
@@ -6257,6 +6277,75 @@ export interface operations {
                         id?: number;
                     };
                 };
+            };
+        };
+    };
+    ingestDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description base64 of the PDF bytes (base64-in-JSON, the auth.rs idiom) */
+                    data: string;
+                    /** @description Stored title (the chunker's title law) */
+                    title: string;
+                    /** @description Trust label (defaults to 'document'; <= 64 bytes; closed vocabulary for token principals) */
+                    source?: string | null;
+                    /** @description Target domain (defaults to 'global') */
+                    domain?: string | null;
+                    /**
+                     * @description Tier 0 'text-layer' is the default; 'docling' is the Tier-2 variant (converter probe)
+                     * @enum {string|null}
+                     */
+                    tier?: "text-layer" | "docling" | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Ingest result (status created|duplicate; markdown is the annotated contract output) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success?: boolean;
+                        status?: string;
+                        document_id?: number;
+                        /** @description sha256 of the source PDF bytes */
+                        sha256?: string;
+                        tier?: string;
+                        /** @description name/version, e.g. pdf-extract/0.12.1 */
+                        extractor?: string;
+                        pages?: number;
+                        layout_unverified?: boolean;
+                        chunk_ids?: number[];
+                        entries_added?: number;
+                        duplicates_skipped?: number;
+                        quarantined_chunk_ids?: number[];
+                        /** @description The annotated markdown (the contract output) */
+                        markdown?: string;
+                    };
+                };
+            };
+            /** @description document_too_large — the request exceeds the shared cap (named, never truncated) */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description no_text_layer (image-only scan) or document_parse_incomplete — both named */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

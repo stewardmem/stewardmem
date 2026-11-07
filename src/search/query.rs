@@ -312,7 +312,17 @@ pub enum LegFilter {
 /// ponytail: this mirrors the live `k.source` / `v.source` column values. The
 /// columns are the source of truth; this is the parser's allow-list. If a new
 /// ingest kind is added, extend it here.
-pub const INGEST_KINDS: &[&str] = &["memory", "markdown", "structured", "manual", "vault"];
+pub const INGEST_KINDS: &[&str] = &[
+    "memory",
+    "markdown",
+    "structured",
+    "manual",
+    "vault",
+    // The document-ingest kind (IMPROVE04): the extracted text of a PDF
+    // ingested via POST /ingest/document. Recall can scope to it like any
+    // other kind.
+    "document",
+];
 
 /// Parse a raw `source` string into a [`SourceFilter`]. Lowercases nothing —
 /// values are case-sensitive (the stored column values are lowercase). Empty

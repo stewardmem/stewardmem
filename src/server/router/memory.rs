@@ -54,6 +54,7 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/v1/embeddings", post(embeddings))
         .route("/ingest/markdown", post(ingest_markdown))
+        .route("/ingest/document", post(ingest_document))
         .route("/reindex", post(reindex))
         .route("/get/{id}", get(get_chunk))
         .route("/multi-get", post(multi_get))
@@ -208,6 +209,10 @@ const ADD_SOURCES_FOR_JWT: &[&str] = &[
     "markdown",
     "structured",
     "vault",
+    // The document-ingest kind (IMPROVE04): chunks extracted from a PDF via
+    // POST /ingest/document. `origin_for_source("document")` derives
+    // `imported` — an uploaded document is not a trusted local write.
+    "document",
     // Connector family kinds (see src/connector/kind.rs::CONNECTOR_KINDS).
     "github",
     "crm",
@@ -2110,6 +2115,593 @@ pub(crate) async fn ingest_markdown(
         "edges_skipped": edges_skipped,
         "total_chunks": total_chunks
     })))
+}
+
+// ── POST /ingest/document (IMPROVE04, Tier 0) ───────────────────────────────
+// The contract is docs/DOCUMENT_INGESTION_CONTRACT.md; the pure extraction +
+// emit + row core is src/ingest_document.rs. THIS handler is the door
+// composition: everything extracted crosses the EXISTING doors — the AuthZ
+// write gate, the capacity guard, the reasoning-trace strip, the injection
+// screen, dedupe, the trust-label bounds, the HITL posture — and a PDF is
+// NOT a new promotion path. The shared 1 MiB body cap bounds the request
+// (base64-in-JSON is the existing idiom; there is no multipart machinery in
+// the tree); an over-cap request refuses NAMED, never truncates.
+
+/// The document-ingest payload. `data` is base64 of the PDF bytes.
+#[derive(Deserialize)]
+pub(crate) struct DocumentPayload {
+    /// base64 of the PDF bytes (base64-in-JSON, the `auth.rs` idiom).
+    data: String,
+    /// the stored title (the chunker's title law — required, like the
+    /// markdown door).
+    title: String,
+    /// the trust label. Defaults to `document` (a new ingest kind — added to
+    /// `ADD_SOURCES_FOR_JWT` + `search::query::INGEST_KINDS`; origin derives
+    /// to `imported` via `origin_for_source`).
+    #[serde(default)]
+    source: Option<String>,
+    /// target domain (defaults to `global`).
+    #[serde(default)]
+    domain: Option<String>,
+    /// Tier selection. Tier 0 (`text-layer`) is the DEFAULT and needs zero
+    /// configuration. `docling` is the Tier-2 variant (S4's seam); any other
+    /// value is a named refusal.
+    #[serde(default)]
+    tier: Option<String>,
+}
+
+fn document_error(
+    status: axum::http::StatusCode,
+    code: &'static str,
+    message: String,
+) -> crate::handlers::HandlerError {
+    crate::handlers::HandlerError {
+        status,
+        inner: crate::handlers::ApiError::new(code, message),
+    }
+}
+
+pub async fn ingest_document(
+    State(state): State<Arc<AppState>>,
+    principal: crate::handlers::auth::OptPrincipal,
+    body: Body,
+) -> Result<Json<serde_json::Value>, crate::handlers::HandlerError> {
+    use crate::handlers::HandlerError;
+    use axum::body::to_bytes;
+
+    // AuthZ write gate — the primary-door shape (proper 403, like the
+    // markdown door). `None` principal (no JWT) = superuser.
+    crate::handlers::authorize(&principal.0, crate::auth::Action::Write, "", "global").map_err(
+        |e| HandlerError {
+            status: axum::http::StatusCode::FORBIDDEN,
+            inner: e.inner,
+        },
+    )?;
+    // capacity guard — proper 507 (the primary-door shape).
+    crate::handlers::guard_capacity(&state)?;
+
+    // Read the body UNDER the shared cap ourselves so the over-cap refusal
+    // is NAMED (the tower layer's generic 413 would name nothing). The
+    // to_bytes error is the cap firing — the DI-6 refusal. Never truncates:
+    // an error is an error, the bytes are not read.
+    let raw = to_bytes(body, config::MAX_REQUEST_SIZE).await.map_err(|_| {
+        document_error(
+            axum::http::StatusCode::PAYLOAD_TOO_LARGE,
+            "document_too_large",
+            format!(
+                "document exceeds the shared request cap ({} bytes); scan-grade PDFs are a plan-05/06 surface",
+                config::MAX_REQUEST_SIZE
+            ),
+        )
+    })?;
+    let payload: DocumentPayload = serde_json::from_slice(&raw).map_err(|e| {
+        document_error(
+            axum::http::StatusCode::BAD_REQUEST,
+            "invalid_document",
+            format!("request body is not a valid document payload: {e}"),
+        )
+    })?;
+
+    // Tier selection. S2 lands Tier 0 only; S4 wires the `docling` variant
+    // to the converter probe.
+    let tier = payload
+        .tier
+        .clone()
+        .unwrap_or_else(|| crate::ingest_document::TIER_TEXT_LAYER.to_string());
+    if tier != crate::ingest_document::TIER_TEXT_LAYER {
+        return Err(document_error(
+            axum::http::StatusCode::BAD_REQUEST,
+            "unsupported_tier",
+            format!(
+                "tier {tier:?} is not available in this build; supported: {}",
+                crate::ingest_document::TIER_TEXT_LAYER
+            ),
+        ));
+    }
+
+    // decode base64 → the untrusted bytes. Invalid base64 is a named refusal
+    // (an attacker-controlled payload must not surface as a bare 500).
+    use base64::Engine as _;
+    let pdf_bytes = base64::engine::general_purpose::STANDARD
+        .decode(payload.data.trim())
+        .map_err(|e| {
+            document_error(
+                axum::http::StatusCode::BAD_REQUEST,
+                "invalid_document",
+                format!("data is not valid base64: {e}"),
+            )
+        })?;
+    if pdf_bytes.is_empty() {
+        return Err(document_error(
+            axum::http::StatusCode::BAD_REQUEST,
+            "invalid_document",
+            "data decodes to zero bytes".to_string(),
+        ));
+    }
+
+    // trust-label bounds (the same law /add enforces — a short LABEL, never
+    // prose; the closed vocabulary for token-authenticated principals).
+    let source = payload
+        .source
+        .clone()
+        .unwrap_or_else(|| "document".to_string());
+    if source.len() > crate::handlers::MAX_SOURCE {
+        return Err(document_error(
+            axum::http::StatusCode::BAD_REQUEST,
+            "invalid_document",
+            format!("source exceeds {} bytes", crate::handlers::MAX_SOURCE),
+        ));
+    }
+    if principal.0.is_some() && !ADD_SOURCES_FOR_JWT.contains(&source.as_str()) {
+        return Err(document_error(
+            axum::http::StatusCode::FORBIDDEN,
+            "invalid_document",
+            format!(
+                "invalid source: '{source}' is not allowed for token-authenticated principals; allowed: {}",
+                ADD_SOURCES_FOR_JWT.join("|")
+            ),
+        ));
+    }
+    // the title law (the markdown door's bounds).
+    let title = payload.title.trim().to_string();
+    if title.is_empty() {
+        return Err(document_error(
+            axum::http::StatusCode::BAD_REQUEST,
+            "invalid_document",
+            "Title is required".to_string(),
+        ));
+    }
+    if title.len() > 500 {
+        return Err(document_error(
+            axum::http::StatusCode::BAD_REQUEST,
+            "invalid_document",
+            "Title too long (max 500 chars)".to_string(),
+        ));
+    }
+    let domain = payload
+        .domain
+        .clone()
+        .filter(|d| !d.trim().is_empty())
+        .unwrap_or_else(|| "global".to_string());
+    let owner = crate::handlers::gate::content_owner_stamp(&principal.0);
+
+    // sha of the SOURCE bytes (the `doc:` header field's authority).
+    let sha = crate::ingest_document::sha256_hex(&pdf_bytes);
+
+    // duplicate path: same sha → re-derive the pinned markdown with the
+    // ROW's extracted stamp (a re-serve is not a re-extraction — DI-1's
+    // rule keeps the round-trip byte-identical) and verify it against the
+    // row. No new chunks: the stored rows already hold this document.
+    let existing = state
+        .pool
+        .get()
+        .map_err(|e| HandlerError::internal(e.to_string()))
+        .and_then(|conn| {
+            crate::ingest_document::find_document_by_sha(&conn, &sha)
+                .map_err(|e| HandlerError::internal(e.to_string()))
+        });
+    if let Ok(Some(row)) = existing {
+        let derived = rederive_document_markdown(&pdf_bytes, &row).map_err(|e| {
+            document_error(
+                axum::http::StatusCode::CONFLICT,
+                "document_row_mismatch",
+                format!("stored document can no longer be re-derived byte-identically: {e}"),
+            )
+        })?;
+        return Ok(Json(serde_json::json!({
+            "success": true,
+            "status": "duplicate",
+            "document_id": row.id,
+            "sha256": row.sha256,
+            "tier": row.tier,
+            "extractor": format!("{}/{}", row.extractor, row.extractor_version),
+            "pages": row.pages,
+            "layout_unverified": row.layout_unverified,
+            "chunk_ids": [],
+            "markdown": derived,
+        })));
+    }
+
+    // ── Tier-0 extraction — THE ISOLATED PARSE. The parse runs in the
+    // extract-document CHILD process: pdf-extract is expect()-heavy on
+    // hostile (and merely unusual) input — measured 2026-11-07, a legitimate
+    // arXiv paper panics it — and this server's release profile runs
+    // panic = "abort" (the F-50a posture), so an in-process parse panic
+    // would be a PROCESS DEATH: one request, no recovery. The child's abort
+    // kills only the child; the parent answers a NAMED refusal. There is NO
+    // in-process fallback: an extraction lane that can kill the server is
+    // worse than a lane that refuses. The child itself enforces the cap and
+    // answers no_text_layer deterministically (exit 9).
+    let extracted = {
+        let child_exe = crate::ingest_document::resolve_child_exe().ok_or_else(|| {
+            document_error(
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                "document_extraction_unavailable",
+                "the extract-document isolation child is not installed beside the server; Tier 0 refuses rather than parse untrusted bytes in-process".to_string(),
+            )
+        })?;
+        let pdf = pdf_bytes.clone();
+        task::spawn_blocking(move || {
+            crate::ingest_document::extract_pages_via_child(&child_exe, &pdf)
+        })
+        .await
+        .map_err(|_| {
+            document_error(
+                axum::http::StatusCode::BAD_REQUEST,
+                "invalid_document",
+                "the extraction task could not complete".to_string(),
+            )
+        })?
+    };
+    let extracted = match extracted {
+        Ok(doc) => doc,
+        Err(crate::ingest_document::ChildExtractError::NoTextLayer) => {
+            return Err(document_error(
+                axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+                "no_text_layer",
+                "the PDF has no text layer (image-only scan); Tier 0 extracts text layers only — scan-grade OCR is a plan-05/06 surface".to_string(),
+            ));
+        }
+        Err(crate::ingest_document::ChildExtractError::ChildFailed) => {
+            return Err(document_error(
+                axum::http::StatusCode::BAD_REQUEST,
+                "invalid_document",
+                "the bytes do not parse as a PDF (the isolated extractor refused them)".to_string(),
+            ));
+        }
+        Err(crate::ingest_document::ChildExtractError::ChildMissing) => {
+            return Err(document_error(
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                "document_extraction_unavailable",
+                "the extract-document isolation child is not installed beside the server; Tier 0 refuses rather than parse untrusted bytes in-process".to_string(),
+            ));
+        }
+    };
+
+    // ── the doors, in the door order ──
+    // 1. the reasoning-trace strip, PER PAGE (the same pre-insert strip /add
+    //    applies — a <think> span inside a PDF does not survive ingest; and
+    //    because the strip runs before the anchors exist, a hostile page
+    //    cannot swallow its own anchor).
+    let stripped_pages: Vec<String> = extracted
+        .pages
+        .iter()
+        .map(|p| hygiene::strip_reasoning_blocks(p))
+        .collect();
+    let stripped_doc = crate::ingest_document::ExtractedDocument {
+        pages: stripped_pages,
+    };
+    // 2. the deterministic emitter (the clock lands HERE — the only
+    //    volatile field in the output).
+    let extracted_utc = chrono::Utc::now().to_rfc3339();
+    let markdown = crate::ingest_document::emit_annotated_markdown(
+        &stripped_doc,
+        &sha,
+        &source,
+        &tier,
+        &extracted_utc,
+        crate::ingest_document::LAYOUT_UNVERIFIED,
+    );
+    // 3. fail-closed self-check: the route refuses to ship its own malformed
+    //    output (DI-2's enforcement point).
+    crate::ingest_document::verify_anchor_contract(&markdown, extracted.pages.len())
+        .map_err(|e| HandlerError::internal(format!("anchor contract violated: {e}")))?;
+    // 4. the injection screen — the FULL two-layer screen, the markdown
+    //    door's verdict semantics (Reject → refusal; Quarantine → every
+    //    inserted chunk flagged, no vector).
+    let screen_result = screen::screen(&markdown, &title);
+    if screen_result == screen::ScreenResult::Reject {
+        return Err(document_error(
+            axum::http::StatusCode::BAD_REQUEST,
+            "invalid_document",
+            "Input contains suspicious patterns".to_string(),
+        ));
+    }
+    let quarantine_flagged = screen_result == screen::ScreenResult::Quarantine;
+
+    let markdown_sha = crate::ingest_document::sha256_hex(markdown.as_bytes());
+    let page_count = extracted.pages.len();
+    // 5. the chunker (the markdown door's chunker — "## Page N" headings are
+    //    the chunk boundaries, so page provenance rides the stored text).
+    let chunks = chunker::chunk_markdown(&markdown);
+
+    // 6. embeddings (spawn_blocking, the markdown door's shape).
+    let chunk_texts: Vec<String> = chunks.iter().map(|c| c.text.clone()).collect();
+    let model = Arc::clone(&state.model);
+    let embeddings = task::spawn_blocking(move || {
+        let refs: Vec<&str> = chunk_texts.iter().map(String::as_str).collect();
+        model.encode(&refs)
+    })
+    .await
+    .map_err(|_| HandlerError::internal("Embedding task failed".to_string()))?;
+    if embeddings.len() != chunks.len() {
+        return Err(HandlerError::internal(
+            "Embedding count mismatch".to_string(),
+        ));
+    }
+
+    // 7. the write: document row + chunks + vec0 + source linkage + audit,
+    //    one tx — the document row commits or rolls back WITH its chunks.
+    let write_result = {
+        let pool = state.pool.clone();
+        let sha_for_row = sha.clone();
+        let tier_for_row = tier.clone();
+        let source_for_row = source.clone();
+        let domain_for_row = domain.clone();
+        let owner_for_row = owner.clone();
+        let utc_for_row = extracted_utc.clone();
+        let markdown_sha_for_row = markdown_sha.clone();
+        let title_for_row = title.clone();
+        task::spawn_blocking(move || -> Result<DocumentIngestOutcome, HandlerError> {
+            let mut conn = pool
+                .get()
+                .map_err(|e| HandlerError::internal(e.to_string()))?;
+            let tx = conn
+                .transaction()
+                .map_err(|e| HandlerError::internal(e.to_string()))?;
+            let outcome = write_document_ingest(
+                &tx,
+                &crate::ingest_document::DocumentRow {
+                    id: 0,
+                    sha256: sha_for_row,
+                    title: title_for_row,
+                    tier: tier_for_row,
+                    extractor: crate::ingest_document::EXTRACTOR_NAME.to_string(),
+                    extractor_version: crate::ingest_document::EXTRACTOR_VERSION.to_string(),
+                    pages: page_count as i64,
+                    layout_unverified: true,
+                    source: source_for_row,
+                    domain: domain_for_row,
+                    owner: owner_for_row,
+                    extracted_utc: utc_for_row,
+                    markdown_sha256: markdown_sha_for_row,
+                },
+                &chunks,
+                &embeddings,
+                quarantine_flagged,
+            )
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
+            tx.commit()
+                .map_err(|e| HandlerError::internal(e.to_string()))?;
+            Ok(outcome)
+        })
+        .await
+        .map_err(|_| HandlerError::internal("Task join error".to_string()))??
+    };
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "status": "created",
+        "document_id": write_result.document_id,
+        "sha256": sha,
+        "tier": tier,
+        "extractor": format!("{}/{}", crate::ingest_document::EXTRACTOR_NAME, crate::ingest_document::EXTRACTOR_VERSION),
+        "pages": page_count,
+        "layout_unverified": true,
+        "chunk_ids": write_result.chunk_ids,
+        "entries_added": write_result.inserted,
+        "duplicates_skipped": write_result.duplicates,
+        "quarantined_chunk_ids": write_result.quarantined_chunk_ids,
+        "markdown": markdown,
+    })))
+}
+
+/// What a document write produced (the response fields the closure returns).
+struct DocumentIngestOutcome {
+    document_id: i64,
+    chunk_ids: Vec<i64>,
+    inserted: usize,
+    duplicates: usize,
+    quarantined_chunk_ids: Vec<i64>,
+}
+
+/// Re-derive a stored document's markdown from its source bytes, under the
+/// ROW's extracted stamp (the duplicate path). Deterministic: the same bytes
+/// with the same extractor version re-produce the pinned artifact
+/// byte-for-byte. The caller then verifies the header against the row's
+/// pinned fields via `verify_document_header` — a re-serve that no longer
+/// matches the row (an extractor moved under a stored document) refuses
+/// named.
+fn rederive_document_markdown(
+    pdf_bytes: &[u8],
+    row: &crate::ingest_document::DocumentRow,
+) -> Result<String, String> {
+    // the same isolated boundary as the create path — the duplicate
+    // re-derivation parses the same untrusted bytes.
+    let exe = crate::ingest_document::resolve_child_exe()
+        .ok_or("the extract-document isolation child is not installed")?;
+    let extracted = crate::ingest_document::extract_pages_via_child(&exe, pdf_bytes)
+        .map_err(|e| format!("isolated extraction failed: {e:?}"))?;
+    let stripped_pages: Vec<String> = extracted
+        .pages
+        .iter()
+        .map(|p| hygiene::strip_reasoning_blocks(p))
+        .collect();
+    let stripped_doc = crate::ingest_document::ExtractedDocument {
+        pages: stripped_pages,
+    };
+    let markdown = crate::ingest_document::emit_annotated_markdown(
+        &stripped_doc,
+        &row.sha256,
+        &row.source,
+        &row.tier,
+        &row.extracted_utc,
+        // Tier 0 stored this row, so the layout posture is the Tier-0 one.
+        crate::ingest_document::LAYOUT_UNVERIFIED,
+    );
+    crate::ingest_document::verify_document_header(&markdown, row)?;
+    Ok(markdown)
+}
+
+/// The document write, one tx: the document row, the chunk rows (the
+/// markdown-door semantics: dedupe, vec0 int8+binary, quarantine flag), the
+/// `sources` linkage under `document://{sha}` so recall provenance resolves,
+/// and the audit record. The document row commits or rolls back WITH its
+/// chunks — a visible chunk whose row is missing is a found bug.
+fn write_document_ingest(
+    tx: &rusqlite::Transaction<'_>,
+    row: &crate::ingest_document::DocumentRow,
+    chunks: &[chunker::Chunk],
+    embeddings: &[Vec<f32>],
+    quarantine_flagged: bool,
+) -> Result<DocumentIngestOutcome, anyhow::Error> {
+    // the document row first — the chunks' provenance anchor.
+    let document_id = crate::ingest_document::insert_document_row(tx, row)?;
+
+    let mut inserted_ids: Vec<i64> = Vec::with_capacity(chunks.len());
+    let mut quarantined_ids: Vec<i64> = Vec::new();
+    let mut inserted = 0usize;
+    let mut duplicates = 0usize;
+    let mut first_id = 0i64;
+
+    for (idx, chunk) in chunks.iter().enumerate() {
+        // plain xxh3 content hash (no source_path namespacing): the document
+        // door's chunks dedupe against the WHOLE corpus — the existing door's
+        // semantics. A page whose text already exists is a duplicate, not a
+        // second row.
+        let content_hash = format!("{:016x}", xxh3_64(chunk.text.as_bytes()));
+        let exists: i64 = tx
+            .query_row(
+                "SELECT COUNT(*) FROM knowledge WHERE content_hash = ?1 AND domain = ?2",
+                rusqlite::params![&content_hash, &row.domain],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        if exists > 0 {
+            duplicates += 1;
+            continue;
+        }
+        tx.execute(
+            "INSERT INTO knowledge
+               (title, content, source, content_hash, document_id, chunk_index,
+                heading_path, line_start, line_end, pii, owner, origin, domain, governance_hash)
+             VALUES (?1, ?2, 'document', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            rusqlite::params![
+                &row.title,
+                &chunk.text,
+                &content_hash,
+                // the document grouping key IS the content sha — chunks point
+                // at the documents row by its unique key.
+                &row.sha256,
+                idx as i64,
+                &chunk.heading_path,
+                chunk.line_start as i64,
+                chunk.line_end as i64,
+                crate::gate::pii_flag(&row.title, &chunk.text)
+                    || crate::gate::pii_flag(&chunk.heading_path, ""),
+                &row.owner,
+                crate::gate::origin_for_source(Some(&row.source)),
+                &row.domain,
+                crate::service::ingest::governance_hash(
+                    row.owner.as_deref(),
+                    "private",
+                    &row.domain,
+                ),
+            ],
+        )?;
+        let k_id = tx.last_insert_rowid();
+        if first_id == 0 {
+            first_id = k_id;
+        }
+        inserted_ids.push(k_id);
+        // the vec0 write, fail-loud: a chunk stored without its vector is
+        // silently degraded (the markdown-door law). Quarantined chunks get
+        // NO vector — the same gate as every other surface (the ANN top-k
+        // must not surface a flagged row).
+        let emb = &embeddings[idx];
+        if !quarantine_flagged {
+            tx.execute(
+                "INSERT INTO vec_knowledge(knowledge_id, embedding_int8, embedding_bit, source, created_at)
+                 VALUES (?1, vec_quantize_int8(?2, 'unit'), vec_quantize_binary(?2), 'document', datetime('now'))",
+                rusqlite::params![k_id, emb.as_bytes()],
+            )?;
+        }
+        inserted += 1;
+    }
+
+    // quarantine flag IN-TX, fail-closed: a screen hit that MUST be flagged
+    // is never stored clean (the /ingest/memory law).
+    if quarantine_flagged {
+        for id in &inserted_ids {
+            tx.execute("UPDATE knowledge SET flagged = 1 WHERE id = ?1", [id])?;
+        }
+        quarantined_ids.extend(inserted_ids.iter().copied());
+    }
+
+    // the sources linkage: one canonical source row per document
+    // (`document://{sha}`), one revision (the markdown IS the revision), the
+    // chunks linked. Fail-loud: an orphan chunk with no source linkage is a
+    // real bug (the vault-door law).
+    if !inserted_ids.is_empty() {
+        let source_uri = format!("document://{}", row.sha256);
+        let source_id =
+            sources::upsert_source(tx, &source_uri, sources::KIND_DOCUMENT, Some(&row.title))?;
+        let revision = sources::compute_revision(&row.markdown_sha256);
+        let outcome = sources::upsert_revision(
+            tx,
+            source_id,
+            &revision,
+            Some(&row.sha256),
+            inserted_ids.len(),
+            0,
+        )?;
+        let revision_id = match outcome {
+            sources::RevisionOutcome::Unchanged(id)
+            | sources::RevisionOutcome::Created { id, .. } => id,
+        };
+        sources::link_chunks(tx, source_id, revision_id, &inserted_ids)?;
+        // evidence stamp: the document's extraction event is the observation.
+        // AUTHORITY_VAULT (0.8, the unverified-external factor) — an imported
+        // document is not a trusted local write; the confidence factor treats
+        // it like other imported content.
+        sources::stamp_evidence(
+            tx,
+            first_id,
+            &row.extracted_utc,
+            None,
+            None,
+            sources::AUTHORITY_VAULT,
+        )?;
+    }
+
+    // audit: hash-only, INSIDE the tx (the crash-window law — the write and
+    // its evidence commit or roll back together).
+    crate::audit::record(
+        tx,
+        crate::audit::AuditKind::Ingest,
+        "api",
+        &row.sha256,
+        crate::audit::AuditStatus::Ok,
+        "document",
+    );
+
+    Ok(DocumentIngestOutcome {
+        document_id,
+        chunk_ids: inserted_ids,
+        inserted,
+        duplicates,
+        quarantined_chunk_ids: quarantined_ids,
+    })
 }
 
 /// pure DB-write for a markdown ingest. Extracted from `ingest_markdown`

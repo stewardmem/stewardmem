@@ -330,6 +330,25 @@ tokenizers = { version = "0.23.2", optional = true, default-features = true }
 # above carries the invariant + the version-verification date.
 rayon = { version = "1.12", optional = true }
 
+# Tier-0 PDF text-layer extraction (IMPROVE04, v1.29.44). Pure Rust, no model,
+# no external binary — the deterministic zero-token always-available tier.
+# `pdfium-render` was EXCLUDED at plan time: it binds the pdfium C library, a
+# native binary that violates the always-available law. The extraction crate
+# entered through the improve03 deny gate (the lock delta is the named act;
+# `cargo deny check` ran green after the update — see IMPROVE04_EVIDENCE).
+# Threat model on its tree (RUSTSEC-2026-0187, the untrusted-bytes class):
+# the Tier-0 parse consumes untrusted bytes behind the shared 1 MiB body cap,
+# same bytes → same output, and the parse never runs in the recall hot path.
+pdf-extract = "0.12.1"
+# Declared directly (not left transitive under pdf-extract) for the page-count
+# cross-check in `src/ingest_document.rs`: pdf-extract's by-pages loop STOPS at
+# the first page that errors, so a hostile PDF could silently lose pages. The
+# cross-check compares the observed page count against the parsed tree and
+# refuses named instead of emitting a short document. Pinned to the same ^0.42
+# band pdf-extract requires, so the lock resolves ONE lopdf (0.42.0 — the
+# RUSTSEC-2026-0187 patched band).
+lopdf = "0.42"
+
 [dev-dependencies]
 tempfile = "3.27.0"
 # Router-level middleware tests (`Router::oneshot`). Already in the lock as an

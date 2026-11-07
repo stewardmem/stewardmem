@@ -3226,6 +3226,41 @@ pub fn run_migration_with_store_dim(
         }
     }
 
+    // ── v1.29.44 "Document Ingestion" (IMPROVE04): the document row. ────
+    // One row per ingested PDF, keyed by content sha256 — the provenance
+    // anchor every chunk the document produced cites. This is a CONTENT
+    // KIND, not new lifecycle machinery: quarantine, verifiable deletion,
+    // and the HITL gate are inherited through the existing knowledge rows
+    // the document's chunks land in. Tier 0 NEVER claims layout verified —
+    // `layout_unverified` is 1 at Tier 0 by construction and the header/
+    // row check (`ingest_document::verify_document_header`) fails a header
+    // that claims otherwise. `markdown_sha256` pins the emitted markdown
+    // (with the row's `extracted` stamp) so a re-serve is provably the
+    // same bytes.
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS documents (
+             id                INTEGER PRIMARY KEY,
+             sha256            TEXT NOT NULL UNIQUE,
+             title             TEXT NOT NULL,
+             tier              TEXT NOT NULL,
+             extractor         TEXT NOT NULL,
+             extractor_version TEXT NOT NULL,
+             pages             INTEGER NOT NULL,
+             layout_unverified INTEGER NOT NULL DEFAULT 1,
+             source            TEXT NOT NULL,
+             domain            TEXT NOT NULL DEFAULT 'global',
+             owner             TEXT,
+             extracted_utc     TEXT NOT NULL,
+             markdown_sha256   TEXT NOT NULL,
+             created_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+         );",
+        [],
+    )?;
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_documents_domain ON documents(domain);",
+        [],
+    )?;
+
     db.execute(
         "INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1.32.29')
          ON CONFLICT(key) DO UPDATE SET value = '1.32.29';",

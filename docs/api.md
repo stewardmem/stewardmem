@@ -23,6 +23,7 @@ machine-readable contract is at **`GET /openapi.yaml`** at runtime and
 | POST | `/v1/embeddings` | OpenAI-compatible embeddings endpoint |
 | POST | `/ingest/memory` | Structured memory ingest. The response carries `quarantined_chunk_ids` (additive): the rows the write-time injection screen flagged, so the caller sees the verdict without a `/quarantine` round-trip |
 | POST | `/ingest/markdown` | Markdown ingest + graph extraction |
+| POST | `/ingest/document` | PDF ingest, Tier 0 (IMPROVE04): base64-bounded JSON under the shared 1 MiB cap; deterministic text-layer extraction → page-anchored annotated markdown (`docs/DOCUMENT_INGESTION_CONTRACT.md`). Deterministic zero-token; no LLM; the extracted text crosses the existing doors only (screen, trace strip, dedupe, trust-label bounds, HITL). Named refusals: `document_too_large` (413), `invalid_document` (400), `no_text_layer` (422), `document_parse_incomplete` (422), `unsupported_tier` (400). Tier 0 never claims layout verified |
 | POST | `/ingest` | Structured ingest (explicit entities/relations). Since v1.28.74 accepts optional `origin_context: "owner"\|"channel"` — absent = owner (byte-compat); `channel` stores the row with origin `channel-capture` (recall labels it; the plugin can exclude); any other value is `400` |
 | POST | `/sources/reconcile` · DELETE `/sources/{id}` | Sweep deleted sources / retire a source |
 | POST | `/recall` | Structured recall — the primary endpoint |

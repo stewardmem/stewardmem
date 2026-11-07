@@ -27,6 +27,13 @@ pub const KIND_VAULT: &str = "vault";
 /// (reconcile is kind-scoped — see `reconcile`).
 pub const KIND_MANUAL: &str = "manual";
 
+/// The document-ingest kind (IMPROVE04). 'document' = the extracted text of a
+/// PDF ingested via `POST /ingest/document`. Distinct from `vault` and
+/// `manual` so a vault reconcile never touches document chunks (reconcile is
+/// kind-scoped); stringly-typed like its siblings — future connectors add a
+/// kind without a schema change.
+pub const KIND_DOCUMENT: &str = "document";
+
 /// Compute the source-level revision hash from the full raw content. This is
 /// distinct from the per-chunk `content_hash` (which is namespaced per
 /// source_path): the revision summarizes the whole document, so a change

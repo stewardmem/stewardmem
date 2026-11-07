@@ -43,8 +43,11 @@ ground record.
 One HTML comment immediately at the top of the emitted markdown, two physical
 lines, `|`-separated `key: value` fields. After parsing, whitespace around
 keys/values is trimmed; the comment's leading `<!--` and trailing `-->` are
-stripped; the newline between the two physical lines folds into a space before
-the split, so the field set is order-checked by key, not by column.
+stripped; **each physical line splits on `|` independently** and the field set
+is the union across lines, order-checked by key, not by column. (Measured
+during S2: folding the newline into one string merges the last field of line
+one into the first of line two — `tier:` swallowed `extracted:` — so the
+per-line split is the parse the pins test.)
 
 | Field | Rule |
 |---|---|

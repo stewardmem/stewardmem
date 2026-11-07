@@ -173,6 +173,12 @@ pub mod graph_read;
 pub mod handlers;
 pub mod http_limit;
 pub mod hygiene;
+/// Document ingestion core (IMPROVE04): the Tier-0 PDF → annotated-markdown
+/// contract — deterministic extraction, page anchors, the document row, the
+/// DI-2/DI-3 checks. The route that composes the doors lives in
+/// `server::router::memory` (`POST /ingest/document`); this module holds the
+/// pure core and the row machinery. See `docs/DOCUMENT_INGESTION_CONTRACT.md`.
+pub mod ingest_document;
 pub mod integrity;
 pub mod legal_hold;
 pub mod linker;

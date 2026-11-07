@@ -8755,8 +8755,17 @@ Final paragraph after the rule.";
         // must be recomputed in the same tx as the move. A named act, not
         // drift; the three new shapes live in write_markdown_ingest's move
         // arm, not in new surfaces.
+        // 52 -> 56: IMPROVE04 — POST /ingest/document landed the document
+        // write in the router: write_document_ingest adds four shapes
+        // (the chunk dedupe query_row, the knowledge INSERT execute, the
+        // vec0 INSERT execute, and the quarantine-flag UPDATE execute); the
+        // documents-row INSERT and the find-by-sha lookup live behind
+        // ingest_document.rs (their shapes count there, not here). A named
+        // act, not drift — the F4-08 migration to the service layer remains
+        // staged; the document write lands beside its sibling
+        // (write_markdown_ingest) until that migration moves it.
         assert_eq!(
-            count, 52,
+            count, 56,
             "the router's rusqlite call-shape census moved — F4-08's staged              migration requires the delta to be a named act (update this              census in the same commit as the SQL change)"
         );
     }
@@ -22792,8 +22801,12 @@ mod r42_authority_bindings {
             .collect();
         assert_eq!(
             names.len(),
-            55,
-            "the dependency ceiling is 55 — the knowledge-version axis extraction (R5) moved \
+            57,
+            "the dependency ceiling is 57 — IMPROVE04 (2026-11-07) moved it 55 → 57 with \
+             pdf-extract + lopdf: lopdf was already a lock transitive (declared directly for \
+             the page-count cross-check), so ONE new crate enters the graph — the deny \
+             gate's named act, `cargo deny check` green after the update. Prior history: \
+             the knowledge-version axis extraction (R5) moved \
              it from 52 by adding brain-evolve-core as a workspace path edge; C2 (plan 28) \
              moved it 53 → 55 with blake2 + flate2, both ALREADY in the lock as transitives, \
              declared directly for the pack key's verifier and the pack archive's gzip \
@@ -23575,8 +23588,10 @@ mod r43_releases {
             .collect();
         assert_eq!(
             names.len(),
-            55,
-            "the dependency count is 55 — the knowledge-version axis extraction (R5) moved the \
+            57,
+            "the dependency count is 57 — IMPROVE04 (2026-11-07) moved it 55 → 57 with \
+             pdf-extract + lopdf (one new crate in the graph — the deny gate's named act); \
+             prior history: the knowledge-version axis extraction (R5) moved the \
              ceiling from 52 by adding brain-evolve-core as a workspace path edge; C2 (plan 28) \
              moved it 53 → 55 with blake2 + flate2 (both already in the lock as transitives) \
              (found {names:?})"
@@ -24193,8 +24208,10 @@ mod r44_outcomes {
             .collect();
         assert_eq!(
             names.len(),
-            55,
-            "the dependency count is 55 — the knowledge-version axis extraction (R5) moved the \
+            57,
+            "the dependency count is 57 — IMPROVE04 (2026-11-07) moved it 55 → 57 with \
+             pdf-extract + lopdf (one new crate in the graph — the deny gate's named act); \
+             prior history: the knowledge-version axis extraction (R5) moved the \
              ceiling from 52 by adding brain-evolve-core as a workspace path edge; the read \
              model itself needs no new crate; C2 (plan 28) moved it 53 → 55 with blake2 + \
              flate2 (both already in the lock as transitives) \

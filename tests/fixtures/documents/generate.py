@@ -308,6 +308,69 @@ SCAN_PAGES = [
     (image_page_stream(54, 200, 504, 500), {"image": True}),
 ]
 
+# ── hostile-font-panic.pdf ──────────────────────────────────────────────────
+# The isolation-boundary fixture (IMPROVE04, measured 2026-11-07): a font
+# whose ToUnicode CMap covers only 'A', with NO /Encoding fallback, over text
+# that uses 'B'. pdf-extract's decode_char hits its `expect("missing unicode
+# map and encoding")` and PANICS — the exact RUSTSEC-2026-0187 class
+# (uncatchable parser death on untrusted bytes; a legitimate arXiv paper,
+# 2610.28425, trips the same expect). Under the release profile's
+# panic = "abort" an in-process parse would kill the server; the child
+# (extract-document) dies alone and the route refuses NAMED. The pin: this
+# fixture must produce a named refusal, never a crash.
+HOSTILE_CMAP = (
+    "/CIDInit /ProcSet findresource begin\n"
+    "12 dict begin\n"
+    "begincmap\n"
+    "1 begincodespacerange\n<00> <FF>\nendcodespacerange\n"
+    "1 beginbfchar\n<41> <0041>\nendbfchar\n"
+    "endcmap\n"
+    "CMapName currentdict /CMap defineresource end\n"
+    "end\n"
+    "end\n"
+)
+
+
+def hostile_stream() -> str:
+    content = "BT /F1 10 Tf 54 720 Td (B) Tj ET"
+    return content, HOSTILE_CMAP
+
+
+def build_hostile_pdf() -> bytes:
+    content, cmap = hostile_stream()
+    out = bytearray(b"%PDF-1.4\n")
+    offsets: list[int] = []
+
+    def emit(no: int, body: str, payload: bytes | None = None) -> None:
+        offsets.append(len(out))
+        out.extend(f"{no} 0 obj\n{body}\n".encode("ascii"))
+        if payload is not None:
+            out.extend(payload)
+            out.extend(b"\nendstream\nendobj\n")
+        else:
+            out.extend(b"endobj\n")
+
+    emit(1, "<< /Type /Catalog /Pages 2 0 R >>")
+    emit(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
+    emit(
+        3,
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        "/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    )
+    emit(4, "<< /Type /Font /Subtype /Type1 /BaseFont /MyCustomFont /ToUnicode 6 0 R >>")
+    emit(5, f"<< /Length {len(content.encode('ascii'))} >>\nstream", content.encode("ascii"))
+    emit(6, f"<< /Length {len(cmap.encode('ascii'))} >>\nstream", cmap.encode("ascii"))
+    emit(7, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    xref_at = len(out)
+    out.extend(f"xref\n0 8\n".encode("ascii"))
+    out.extend(b"0000000000 65535 f \n")
+    for off in offsets:
+        out.extend(f"{off:010} 00000 n \n".encode("ascii"))
+    out.extend(
+        f"trailer\n<< /Size 8 /Root 1 0 R >>\nstartxref\n{xref_at}\n%%EOF\n".encode("ascii")
+    )
+    return bytes(out)
+
 
 def main() -> None:
     fixtures = {
@@ -316,6 +379,7 @@ def main() -> None:
         "table.pdf": build_pdf([(page_stream(TABLE_PAGE), {})]),
         "footnotes.pdf": build_pdf([(page_stream(p), {}) for p in FOOTNOTE_PAGES]),
         "scanned.pdf": build_pdf(SCAN_PAGES),
+        "hostile-font-panic.pdf": build_hostile_pdf(),
     }
     manifest = []
     for name in sorted(fixtures):

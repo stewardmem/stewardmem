@@ -113,6 +113,24 @@ const KNOWN_ERRORS: &[(&str, &str, &str, &str)] = &[
         "display",
     ),
     ("WfmError", "bin_common/wfm_import.rs", "service", "display"),
+    // IMPROVE04's extraction core. `service` category: the extraction
+    // service's failure contract. Both render fixed-prefix strings — the
+    // parse-error text (DocumentExtractError::InvalidPdf) is parser
+    // diagnostic output (the ChatSessionError/rusqlite-text precedent), and
+    // ChildExtractError's variants are literals by construction (the
+    // child's internals are unknowable from the parent's seat).
+    (
+        "DocumentExtractError",
+        "ingest_document.rs",
+        "service",
+        "display",
+    ),
+    (
+        "ChildExtractError",
+        "ingest_document.rs",
+        "service",
+        "display",
+    ),
     // The drift census's operator-facing error. `service` category: it is a
     // cadence job's failure contract, and every variant is a fixed-prefix
     // string with the offending value interpolated by the CONSTRUCTOR, never by

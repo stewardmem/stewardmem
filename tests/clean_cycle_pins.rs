@@ -395,12 +395,15 @@ fn r48_adds_no_table_no_stamp_no_dependency() {
         .collect();
     assert_eq!(
         names.len(),
-        55,
-        "the dependency count is 55 — R48 added no crate; each later round that legitimately \
+        57,
+        "the dependency count is 57 — R48 added no crate; each later round that legitimately \
          adds one re-pins the ceiling (the knowledge-version axis extraction moved it \
          52 → 53 with the brain-evolve-core workspace path edge; C2 moved it 53 → 55 with \
          blake2 + flate2 — both ALREADY in the lock as transitives, declared directly for \
-         the pack key's verifier and the pack archive's gzip framing, zero new crates) \
+         the pack key's verifier and the pack archive's gzip framing, zero new crates; \
+         IMPROVE04 moved it 55 → 57 with pdf-extract + lopdf — lopdf was ALREADY in the \
+         lock as pdf-extract's transitive, declared directly for the page-count \
+         cross-check, so the graph gains ONE new crate — the deny gate's named act) \
          (found {}: {names:?})",
         names.len()
     );
@@ -431,13 +434,16 @@ fn r48_the_route_tables_are_unchanged() {
     // create-loop suite's `route_tables_count_six_more_rows_than_the_prior_freeze`,
     // which states the same property positively and cannot be satisfied by
     // deleting rows.
-    const OPEN_ROUTES: usize = 221;
+    const OPEN_ROUTES: usize = 222;
     // +4 rows (208): the chat session store — the listing GET, the turn-page
     // GET, and the {session} path carrying PATCH rename (Write) and DELETE
     // erase (Read, the erasure posture) — a named act, not drift.
     // +1 row (221/209): the hand-down act — Admin-only, behind the
     // conformance precondition — a named act, not drift.
-    const OPEN_GATES: usize = 209;
+    // +1 row (222/210): IMPROVE04's POST /ingest/document (Write) — the
+    // document-ingestion core; openapi.yaml + docs/api.md updated in the
+    // same commit — a named act, not drift.
+    const OPEN_GATES: usize = 210;
 
     let guards = read_repo("src/server/router/route_guards.rs");
     let between = |start: &str| -> String {
