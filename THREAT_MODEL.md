@@ -4,9 +4,14 @@
 + Cheat Sheet Series (Context7-verified 2026-07-26), NIST SP 800-63B (digital
 identity), NIST SP 800-207 (zero-trust architecture).
 
-**Coverage current through:** R117 (2026-10-12), including the observed
+**Coverage current through:** R152 (2026-11-07), including the observed
 operator-managed volume-encryption boundary for plaintext SQLite files and
-the scheduled retirement of the public plain-HTTP bind opt-in.
+the scheduled retirement of the public plain-HTTP bind opt-in; the R152
+refresh adds the dependency-policy gate, the supply-chain provenance row,
+the CSP-vs-advisory resolution, the agent-harness taxonomy coverage check,
+and the post-quantum tracked row (the agentic classes live in
+[`OWASP_AGENTIC_2026.md`](OWASP_AGENTIC_2026.md)'s 2026-11-07 addendum,
+re-mapped against ATLAS v6.1.0).
 Per-release detail lives in `CHANGELOG.md` and the close-out in `docs/AUDIT.md`.
 **Stamp policy:** every release that moves a security-relevant row in this
 file moves this stamp in the same commit — staleness is self-declaring by the
@@ -70,6 +75,29 @@ model, not a substitute.
 4. **brain-server → peer brain-server** (A2A, v3.7) — untrusted; mTLS + JWS
    verified, scoped capability, data residency allowlist.
 
+### The agent-harness taxonomy coverage check (R152, 2026-11-07)
+
+The harness decomposition of arXiv:2610.40917 (PREPRINT — "eight functional
+components", https://arxiv.org/abs/2610.40917) run against THIS system's
+boundaries as a coverage checklist. The paper's evidence base is coding
+agents; the transfer here is class-level, stated per component as
+covered / partial / open, with the open items owned:
+
+| Component (arXiv:2610.40917) | Coverage | The boundary evidence |
+|---|---|---|
+| Orchestration and planning | covered | the governed workflow loop is a deterministic pipeline engine: config-declared stage list (bounded, order-checked), typed escalation records, the mode law at the gate — a DecisionModel proposes, only the gate disposes (exploratory runs are promotion-incapable) |
+| Context and memory | covered | every ingest path is screened + quarantined; provenance (`origin`) is carried on every path into context (v1.29.13); UMP integrity blocks pin record bytes; supersession expiry. *Partial inside covered:* at-rest encryption is the operator's volume boundary (trust boundary 3 above) |
+| Tool and action interfaces | covered | first-party MCP only; the catalog is sha256-pinned per tool and reconciled every run, fingerprint-moved tools hard-blocked until re-acknowledged, pin acks Ed25519-signed (v1.28.80); tools are thin typed proxies over a validated API |
+| Operational knowledge | partial | the server loads NO agent-editable instruction files (the class the paper names "between the prompt and long-term memory") — but the operator's own project-instruction files on the host are outside the kernel's write path and are the operator's trust domain, stated here as the boundary rather than silently assumed |
+| Sandboxing | covered | the ONE exec seam is loop-mediated behind OS boundaries: deny-default `sandbox-exec` profiles (macOS), target-gated Landlock (Linux), fail-closed on unavailable backend, `Drop`-kills-and-reaps on every path out (v1.28.75/.92) |
+| The permission model | covered | the authz action matrix at every non-public handler (test-pinned route-by-route); capability tokens verbs×scope, not grantable for admin; Rule of Two approval; digest-bound approval (v1.27.12); optional quorum (v1.28.80) |
+| Verification, evaluation, and observability | partial | hash-chained append-only audit + read-event audit + per-gate decision audit + per-run decision traces (replayable under recorded conditions); κ/agreement metrics are DATA for the operator — the machine never auto-gates. *Open:* external SIEM export is operator-side (the audit export API is the seam) — owned: ops |
+| Execution runtime and lifecycle | partial | bounded webhook queue + idempotency; proposal TTL auto-reject; recall clamps; `spawn_blocking` DB isolation; the `bench --envelope` ship gate. *Open:* per-principal consumption quotas — owned: v2.0 "Cortex" |
+
+A disclosure note the paper would endorse: the two "partial" rows are the
+two components whose remaining gap is an OPERATOR-side boundary, not a
+kernel one — they are owned and dated, not omitted.
+
 ---
 
 ## 2. STRIDE per asset
@@ -123,6 +151,8 @@ model, not a substitute.
 | **E**levation of privilege | Dep with CVE pre-auth | Pin versions; `cargo audit --deny warnings` in CI | ✅ |
 | **T**ampering | Timing sidechannel on RSA private-key ops (`rsa` crate, RUSTSEC-2023-0071 "Marvin") | No fixed release exists anywhere (verified 2026-08-04: `rsa` 0.10.0-rc.18 and `jsonwebtoken` 11 both still affected). Accepted with documentation in `.cargo/audit.toml`: local-daemon timing model (attacker with local timing access already owns the machine), keys at 0600, EdDSA (Ed25519) keys avoid RSA entirely and are supported since v1.2 | audit.toml ignore + docs |
 | **T**ampering | Unsound `glib::VariantStrIter` iterator (RUSTSEC-2024-0429 / GHSA-wrw7-89jp-8q8g) in the shell's Linux backend | Fixed only in glib ≥ 0.20; shell/client pin glib 0.18.5 via tauri 2 → gtk 0.18 (no tauri 2.x allows the bump — needs GTK4, tauri#12561). VariantStrIter unused by brain-shell's single D7 command; Linux-only load path. Dependabot alert #3 dismissed `tolerable_risk` 2026-09-23 | audit.toml ignore + Dependabot dismiss |
+| **T**ampering | The dependency surface drifts: a vulnerability-class advisory lands with no triage home, or a policy change (license, ban, source) enters the graph unreviewed (the R152 gap: no license/ban/source gate existed) | TWO complementary lanes over EVERY tracked lockfile (8 workspaces): `cargo audit` (RustSec DB, waivers documented in `.cargo/audit.toml`, staleness machine-checked by the `no_ignored_advisory_is_fixed_in_the_current_lock` pin) + the NEW `cargo deny` policy gate (`deny.toml`: the license allowlist the commercial module can defend, bans, sources; advisories deny-by-default with `unused-ignored-advisory = "deny"` — a waiver is a NAMED ACT with its review date in the reason, and a STALE waiver fails: the Exclusion Ratchet countermeasure, arXiv:2608.31062, https://arxiv.org/abs/2608.31062). `cargo machete` watches unused deps; `pnpm audit --prod --audit-level high` guards the shell's npm surface (the dev-dep residual measured + decided 2026-11-07: 1 LOW, dev-toolchain-only, re-verify by 2027-02-07 — see `plans/improvements/IMPROVE03_EVIDENCE_2026-11-07.md`) | CI `audit` + `deny` jobs ✅ |
+| **T**ampering | A sidecar binary or updater artifact is swapped, rebuilt from unknown source, or shipped without its build record | `shell/src-tauri/binaries/SIDECAR_PROVENANCE.json` seals the kernel identity (kernel_commit, kernel_version, built_at, artifacts — the bundle must ship it; the pin test asserts the macOS overlay references it); the sidecar/updater pin family (40 tests in `sidecar_pins.rs` + 6 in `updater_pins.rs`, measured 2026-11-07) gates the updater signature chain, consent, the 0700 auth file, provenance sealing, and the attach/kill lifecycle; the updater verifies a MINISIGN signature against the ONE pinned public key (public halves only in the tree — no private key ships) | ✅ |
 
 ### Asset 5: Network transport
 
@@ -133,6 +163,7 @@ model, not a substitute.
 | **R**epudiation | "I didn't send that request" | `x-request-id` for tracing; JWS for A2A non-repudiation | ✅/🚧 |
 | **I**nformation disclosure | Eavesdropper reads traffic | TLS 1.3 terminates at the operator's reverse proxy (the server itself is loopback HTTP); HSTS is a proxy-layer header | ✅ |
 | **D**enial of service | SYN flood / slowloris | Proxy handles; per-IP rate limit; per-tenant rate limit (v2.1) | ✅/🚧 |
+| **E**levation of privilege | Compromised webview content (XSS in the shell's renderer) escalates toward kernel access or OS commands | The strict CSP block (`tauri.conf.json` `security.csp`: `'self'` across default/script/style/font/base-uri/form-action/worker-src, `object-src 'none'`, `frame-ancestors 'none'`; `img-src 'self' data:` — images only). CVE-2026-95626 resolution (recorded 2026-11-07, https://nvd.nist.gov/vuln/detail/CVE-2026-95626 / GHSA-757j-xrg3-9g6p): the nonce-bypass precondition is `data:`/`blob:` in `script-src` — ABSENT here (`script-src 'self'`), tauri 2.12.5 / updater 2.14.1 measured in the lockfile. The webview reaches the kernel only over the pinned loopback origin through the page's own fetch; NO shell/fs/http/process plugin is installed (a planted `shell:open` fails the TAURI BUILD — "Permission shell:open not found" — and any capability drift beyond the exact two-permission set reds `the_shell_has_no_shell_plugin`; both layers red-proven 2026-11-07). The 2026-dated precedent this answers: CVE-2026-17497 (NoteGen `shell:allow-execute` → OS commands, https://nvd.nist.gov/vuln/detail/CVE-2026-17497) | ✅ |
 | **E**levation of privilege | — | (no transport-level privilege concept) | n/a |
 
 ---
@@ -260,6 +291,23 @@ a `ponytail:` comment naming the ceiling and upgrade path.
    v1.28.85 — the "≤60s negative cache" claim was debunked; re-stamped T7-03,
    seventh pass). Accepted residual: registry unavailability fails CLOSED
    (the request is denied) — an availability cost, not a security window.
+
+7. **Post-quantum: tracked** (R152, 2026-11-07). The updater's artifact
+   signature is minisign over Ed25519 — the CLASSICAL lane
+   (`updater_pins.rs`: the plugin's own minisign verification against the
+   ONE pinned public key, public halves only in the tree). NIST's post-
+   quantum transition guidance (https://csrc.nist.gov/pubs/ir/8547/ipd —
+   NIST IR 8547 initial public draft, the transition-to-PQC document) and
+   CISA's PQC resources for vendors
+   (https://www.cisa.gov/quantum — the CISA post-quantum hub, incl. the
+   migration/vendor-questionnaire guidance)
+   now, decrypt later" does not threaten the updater's INTEGRITY use the
+   way it threatens confidentiality, but a forged-update path is
+   forward-relevant. Status: `post-quantum: tracked` — the scheme is
+   recorded here, the migration (e.g. a hybrid/dilithium-class signer in
+   tauri-plugin-updater) is a FUTURE NAMED ACT requiring an upstream
+   scheme change, recorded not built. Revisit trigger: tauri-plugin-updater
+   shipping a PQ or hybrid signature option.
 
 ---
 

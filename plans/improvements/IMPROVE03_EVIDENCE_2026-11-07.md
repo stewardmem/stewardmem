@@ -212,3 +212,104 @@ it does not build):**
   XSS → RCE), and §2.1's two-layer red-proof is our answer to that class:
   no shell plugin exists to grant, and the exact-set pin reds any capability
   drift.
+
+---
+
+## 3 · S3 — the two-file refresh
+
+### 3.1 The ATLAS re-map (docs/OWASP_AGENTIC_2026.md, the 2026-11-07 addendum)
+
+The addendum follows the file's own dated-addendum pattern and carries:
+
+- **The re-map, commit-pinned**: ATLAS v6.1.0 / v2026.10 at
+  `f56c1468731d6428e5bf875263b4643b46d67437` (released 2026-10-28) — 1 matrix,
+  16 tactics, **129 techniques, 92 sub-techniques, 44 mitigations, 77 case
+  studies**. Mapped at the CLASS level our rows track (injection/memory
+  poisoning, privilege abuse, supply chain, execution, trust exploitation);
+  the per-technique walk over all 129 is recorded as a FUTURE NAMED ACT, not
+  an omission. Measured honesty: a first draft of the A-table had rows
+  without source URLs — the AD-3 scan caught them before commit and the rows
+  now each carry their ATLAS-matrix/research URL.
+- **The 2026 incident classes** (6 rows, each source URL + landed mitigation):
+  RubyGems agentic spam-publishing (the registry/doc-pipeline abuse),
+  Chainalysis ("offensive agentic techniques", disclosed 2026-10-30), the
+  Hugging Face misalignment disclosure, the **Argentine health-sector
+  agentic campaign** (≥15 health orgs, clinical records — the incident class
+  for a clinical-documentation product; CrowdStrike 2026-10-21), VAPOR PANDA
+  (AI-driven ARTEX espionage), the Alibaba ROME agent defection (reverse SSH
+  tunnel + GPU diversion; arXiv:2512.24873 v3).
+- **The MCP-surface classes**: tool poisoning (2611.03555), Log-To-Leak
+  (2610.36108), the destructive-approval split (2611.02527), capability
+  laundering (2610.22301) — each mapped to the shipped control (the catalog
+  pins, the tool-result envelope, the digest-bound approval, verbs×scope
+  tokens).
+- **The memory-persistence classes**: the disclosure ratchet (2610.28315 —
+  its response-stage suppression is our carried-provenance exclude posture),
+  HABIT-Bench (2610.24520), sticky collusion (2610.39660), intervention-
+  history sabotage (2610.26935), AutoRedClaw (2610.27244).
+- **Skill/approval classes**: CoSA (2610.35082), When Approval Becomes
+  Execution (2610.23077), and the evaluator-blind-spot row (2610.34777)
+  citing the fence law verbatim: **the advisory layer is not the defense —
+  the deterministic gates are.**
+- **The OpenClaw study (2610.35451), answered-vs-open, PREPRINT-stamped**:
+  all 8 weakness categories (O1–O8, with their CWE classes and corpus
+  percentages), the 6 failure mechanisms, and the M1–M7 mitigation families —
+  each row answered (the shipped control) or open (the named owner: the v2.0
+  "Cortex" ceilings, the operator-side boundaries), with the honesty note
+  that the transfer is class-level (incident corpus, preprint, not our
+  stack, not reproduced exploits).
+
+### 3.2 THREAT_MODEL.md (R152)
+
+- **The stamp moved** (the same commit as the rows): R117 (2026-10-12) →
+  **R152 (2026-11-07)** — the next free round number (the changelog's
+  highest was R151). The old stamp is gone, not forked (asserted by the
+  pin).
+- **Asset 4 (Binary/supply chain) +2 rows**: the dependency-surface row
+  (the two lanes over every lockfile: audit + the NEW deny policy gate with
+  the dated-waiver law; machete; the pnpm prod gate + the measured dev-dep
+  residual decision) and the supply-chain provenance row
+  (SIDECAR_PROVENANCE.json sealed kernel identity + the sidecar/updater pin
+  family — **46 tests measured** (40 + 6), correcting the plan's "21" —
+  + the minisign chain).
+- **Asset 5 (Network transport) +1 row**: the webview-XSS elevation row —
+  the strict CSP block vs CVE-2026-95626 (the `data:`/`blob:`-in-`script-src`
+  precondition is ABSENT in our config), the two-layer capability-pin
+  red-proof, and CVE-2026-17497 recorded as the 2026-dated precedent.
+- **§1 + the harness-taxonomy coverage check** (arXiv:2610.40917, PREPRINT,
+  the eight components verbatim from the paper's Table 1/Fig. 1 — measured,
+  not paraphrased): Orchestration and planning · Context and memory · Tool
+  and action interfaces · Operational knowledge · Sandboxing · The
+  permission model · Verification/evaluation/observability · Execution
+  runtime and lifecycle — **6 covered / 2 partial**, with the two partials
+  owned (the operator trust domain; the v2.0 "Cortex" ceilings) and stated
+  as decisions.
+- **§4 + the PQC tracked row** (`post-quantum: tracked`): the updater's
+  minisign/Ed25519 is the classical lane; NIST IR 8547 (transition draft)
+  + the CISA PQC hub are cited (both URLs verified resolving 2026-11-07 —
+  the first CISA URL guessed from memory 404'd and was corrected); harvest-
+  now-decrypt-later does not threaten the updater's INTEGRITY use the way
+  it threatens confidentiality; migration is a future named act with the
+  revisit trigger (tauri-plugin-updater shipping a PQ/hybrid signer).
+
+### 3.3 The AD-3 structural pin (src/docs_truth.rs)
+
+`the_2026_threat_model_rows_carry_sources_and_both_stamps_moved` — the
+docs_truth pattern (source scan, not sentiment):
+
+- the 2026-11-07 addendum section: the ATLAS commit string + all four counts
+  appear; **every DATA row carries a source URL** (header rows are excluded
+  by markdown's own rule — the row directly above a separator; measured
+  during authoring: the first A-table draft had URL-less rows and the scan
+  caught them); the OpenClaw PREPRINT stamp + the fence-law sentence appear.
+- THREAT_MODEL.md: the stamp carries exactly `R152 (2026-11-07)` AND the
+  old `R117 (2026-10-12)` is GONE (move, not fork); the four load-bearing
+  rows pinned by name (deny.toml, SIDECAR_PROVENANCE.json, CVE-2026-95626,
+  post-quantum: tracked); the eight taxonomy component names present.
+
+**Red-first proof**: the test was landed BEFORE the docs —
+run 1: `panicked at src/docs_truth.rs:1421: OWASP_AGENTIC_2026.md must keep
+its 2026-11-07 addendum section` (red);
+run 2 (addendum landed, stamp unmoved): red at the stamp assert;
+run 3 (both docs refreshed): **green**. The pin cannot be satisfied by
+sentiment — it re-derives from the two files on every kernel test run.

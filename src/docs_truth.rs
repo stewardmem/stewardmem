@@ -1400,4 +1400,136 @@ mod pins {
             "pia-finance must carry the witnessed proof, not an assumed one"
         );
     }
+
+    /// AD-3 (improve03, 2026-11-07): every NEW threat-model row in the 2026-11-07
+    /// refresh carries its source URL, the ATLAS v6.1.0 commit + counts appear,
+    /// and BOTH stamps moved with the rows — the docs' own stamp policies say a
+    /// moved row with an unmoved stamp is a promise the tree no longer makes.
+    ///
+    /// Source-scan, not sentiment: a row's `http` substring is the pin. The
+    /// ATLAS commit string is the pin for the version claim (the plan's counts
+    /// were re-verified against it 2026-11-07); the counts ride beside it. The
+    /// stamp assertion is exact (R152), so a future editor cannot satisfy it by
+    /// deleting the old stamp alone.
+    #[test]
+    fn the_2026_threat_model_rows_carry_sources_and_both_stamps_moved() {
+        // ── OWASP_AGENTIC_2026.md: the 2026-11-07 addendum ──────────────
+        let agentic = doc("docs/OWASP_AGENTIC_2026.md");
+        let after = agentic
+            .split("### Dated addendum — 2026-11-07 (ATLAS v6.1.0 re-map + the 2026 incident and research classes)")
+            .nth(1)
+            .expect("OWASP_AGENTIC_2026.md must keep its 2026-11-07 addendum section");
+        let section = &after[..after
+            .find("\n## ")
+            .unwrap_or_else(|| panic!("the 2026-11-07 addendum must have an end"))];
+
+        // The ATLAS version claim is commit-pinned, and the counts ride with it.
+        assert!(
+            section.contains("f56c1468731d6428e5bf875263b4643b46d67437"),
+            "the addendum must cite the ATLAS v6.1.0 commit — a matrix version \
+             without its commit is a version claim nobody can re-verify"
+        );
+        for count in [
+            "129 techniques",
+            "92 sub-techniques",
+            "44 mitigations",
+            "77 case studies",
+        ] {
+            assert!(
+                section.contains(count),
+                "the addendum must carry the ATLAS count `{count}` — the numbers \
+                 ARE the re-map's ground"
+            );
+        }
+
+        // Every DATA row in the new section carries a source URL. Separator
+        // rows (|---|) are structure, and so are header rows — the row
+        // directly ABOVE a separator (markdown's own header rule); every
+        // other pipe-row is a claim and must carry its source.
+        let sec_lines: Vec<&str> = section.lines().collect();
+        let is_sep = |l: &str| {
+            let t = l.trim().trim_start_matches('|').trim();
+            t.starts_with("---")
+        };
+        let rows = sec_lines
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| l.trim_start().starts_with('|') && !is_sep(l))
+            .filter(|(i, _)| {
+                sec_lines
+                    .get(i + 1)
+                    .map(|next| !is_sep(next))
+                    .unwrap_or(true)
+            })
+            .map(|(_, l)| *l)
+            .collect::<Vec<_>>();
+        assert!(
+            rows.len() >= 20,
+            "the addendum's row population collapsed ({}) — the refresh is a \
+             table of sourced rows, not a paragraph",
+            rows.len()
+        );
+        for row in &rows {
+            assert!(
+                row.contains("http"),
+                "an addendum row carries no source URL: {row}\n\
+                 every new threat-model row is a claim someone must be able to \
+                 re-verify — the URL is the re-verification"
+            );
+        }
+
+        // The two named anchors of the research read: the OpenClaw study is
+        // PREPRINT-stamped, and the evaluator-blind-spot row cites the fence law.
+        assert!(
+            section.contains("PREPRINT"),
+            "the OpenClaw read must be PREPRINT-stamped — a preprint cited \
+             without the stamp reads as peer-reviewed"
+        );
+        assert!(
+            section.contains("the advisory layer is not the defense"),
+            "the evaluator-blind-spot row must cite the fence law by its shape"
+        );
+
+        // ── THREAT_MODEL.md: the rows and the moved stamp ───────────────
+        let threat = doc("THREAT_MODEL.md");
+        assert!(
+            threat.contains("**Coverage current through:** R152 (2026-11-07)"),
+            "THREAT_MODEL's stamp did not move with the rows — the stamp policy \
+             makes a moved row with an unmoved stamp a self-declared lie"
+        );
+        assert!(
+            !threat.contains("R117 (2026-10-12)"),
+            "the old R117 stamp is still present — move it, do not fork it"
+        );
+        for (needle, what) in [
+            ("deny.toml", "the dependency-surface row"),
+            ("SIDECAR_PROVENANCE.json", "the supply-chain row"),
+            ("CVE-2026-95626", "the CSP row"),
+            ("post-quantum: tracked", "the PQC row"),
+        ] {
+            assert!(
+                threat.contains(needle),
+                "THREAT_MODEL.md lost {what} ({needle}) — the 2026-11-07 refresh's \
+                 load-bearing rows are pinned by name"
+            );
+        }
+        // The harness-taxonomy check names all eight components of arXiv:2610.40917.
+        for component in [
+            "Orchestration and planning",
+            "Context and memory",
+            "Tool and action interfaces",
+            "Operational knowledge",
+            "Sandboxing",
+            "The permission model",
+            "Verification, evaluation, and observability",
+            "Execution runtime and lifecycle",
+        ] {
+            assert!(
+                threat.contains(component),
+                "the harness-taxonomy check must name the component \
+                 `{component}` (arXiv:2610.40917) — a coverage check that \
+                 skips a component cannot say `covered`"
+            );
+        }
+    }
 }

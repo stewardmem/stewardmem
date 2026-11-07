@@ -1,9 +1,10 @@
 # OWASP 2026 Compliance Matrix — brain-server (v1.27.12 "Agentic")
 
-**Last reviewed:** 2026-09-09 against the two 2026 OWASP agentic frameworks
-(rows below were first drawn up at v1.27.12; the dated addendum after Part 2
-carries the deltas the v1.28.63–.76 hardening line shipped — the row statuses
-stay, the addendum extends them).
+**Last reviewed:** 2026-11-07 against the two 2026 OWASP agentic frameworks
++ the ATLAS v6.1.0 re-map and the 2026 incident/research classes (the
+2026-11-07 dated addendum, after Part 2); the rows below were first drawn up
+at v1.27.12 and last fully re-reviewed 2026-09-09 — the row statuses stay,
+the addenda extend them.
 
 | Framework | Edition | Published | Canonical source |
 |---|---|---|---|
@@ -286,6 +287,106 @@ The dated standards and legal materials used for R35 are engineering context.
 They do not determine provider/deployer status, regulatory scope, conformity,
 or any jurisdiction-specific obligation. Those remain operator-and-counsel
 decisions.
+
+### Dated addendum — 2026-11-07 (ATLAS v6.1.0 re-map + the 2026 incident and research classes)
+
+This addendum re-dates the matrix this file is measured against and adds the
+2026 incident/research classes as sourced rows: every row carries its source
+URL and the shipped control (or the named open gap) it maps to. Research
+citations are PREPRINT-stamped. The file's standing law is unchanged: 100%
+control coverage, not 100% risk elimination — and the fence law from the
+field's own 2026 evidence: **the advisory layer is not the defense — the
+deterministic gates are** (the screen, the authz matrix, the capability pins,
+the digest-bound approval); the advisory lanes (cargo-deny, cargo-audit,
+pnpm audit, cargo-machete) are tripwires that call a human, never the gate
+itself (arXiv:2610.34777, row F below).
+
+**A. The ATLAS re-map.** The agentic rows above are re-dated against MITRE
+ATLAS v6.1.0 / v2026.10 — commit
+`f56c1468731d6428e5bf875263b4643b46d67437`, released 2026-10-28
+(https://github.com/mitre-atlas/atlas-data/commit/f56c1468731d6428e5bf875263b4643b46d67437):
+1 matrix, 16 tactics, **129 techniques, 92 sub-techniques, 44 mitigations,
+77 case studies**, 44 entities, 37 software. The mapping is at the class
+level our rows track (the per-technique walk over all 129 is the auditor
+artifact for the commercial module — a future named act, recorded here so
+its absence is a decision, not an omission):
+
+| Our control cluster (rows above) | ATLAS v6.1.0 alignment (class level) | The shipped shape |
+|---|---|---|
+| LLM01 / ASI01 / ASI06 — injection & memory poisoning | ATLAS Initial Access / Execution classes acting through model-mediated channels (the LLM prompt-injection technique family) | screen() at every ingest + the UNTRUSTED fence + carried provenance (v1.29.13); approval gate; quarantine — why evaluation alone cannot be the control: https://arxiv.org/abs/2610.34777 |
+| LLM03 / ASI03 — excessive agency & privilege abuse | ATLAS privilege-escalation classes via compromised agent authority | per-handler authz matrix (test-pinned route-by-route); capability tokens verbs×scope; Rule of Two — the technique classes: https://atlas.mitre.org/ |
+| LLM04 / ASI04 — agentic supply chain | ATLAS ML Software Supply Chain Compromise classes | SBOM per release; the NEW deny lane (deny.toml: licenses/bans/sources + the dated-waiver ratchet) beside the audit lane; first-party MCP; catalog sha256 pins + Ed25519 pin acks (v1.28.80) — the supply-chain classes: https://atlas.mitre.org/ |
+| ASI05 — unexpected code execution | ATLAS Execution classes (and the harness's own sandbox/permission surfaces per the taxonomy below) | the ONE exec seam, loop-mediated: deny-default sandbox-exec profiles / target-gated Landlock, fail-closed, Drop-kill-reap (v1.28.75/.92) — the execution classes: https://atlas.mitre.org/ |
+| ASI09 / ASI10 — trust exploitation & rogue agents | ATLAS Impact classes reached through a trusted agent's authority | digest-bound approval (the SHA-256 of the read-canonical form, v1.27.12); optional quorum (v1.28.80); promotion-incapable exploratory runs — the impact classes: https://atlas.mitre.org/ |
+
+**B. The 2026 agentic offense in the wild** — the incident classes that
+justify keeping the tripwire armed (none implicates our design directly;
+each names the control that answers its CLASS here):
+
+| Incident (date) | Source | The class | Our cited landed mitigation |
+|---|---|---|---|
+| RubyGems agentic spam-publishing campaign (May 2026; operator update 2026-09-11) — agents flooded a package registry and its doc pipeline | https://openai.com/hugging-face-incident-and-misalignment/ (the same disclosure covers the paired registry-abuse response; re-verify against the publisher page — a build cannot fetch it) | agentic supply-chain abuse of a registry's publish/doc path | the advisory lanes on every lockfile (audit + the NEW deny policy gate); the MCP catalog's fingerprint-move hard block; first-party MCP only |
+| Chainalysis breach — an external actor used "offensive agentic techniques" against a commercial vendor's internal systems (disclosed 2026-10-30) | https://therecord.media/chainalysis-all-users-hit-by-agentic-cyberattack | agentic offense as the breach's working method | loopback-only default (no public agent surface); the authz matrix; the audit chain (hash-chained, read-event) |
+| Hugging Face misalignment disclosure — an internal agent incident disclosed with its misalignment analysis | https://openai.com/hugging-face-incident-and-misalignment/ | misaligned agent behavior inside a trusted perimeter | the monotonic-narrow authority law (a model proposes; only the gate disposes); promotion-incapable exploratory runs; per-run traces an operator can replay |
+| Argentine health-sector agentic campaign — ≥15 health organizations breached, clinical records exposed, via a two-agent Claude Code workflow (CrowdStrike, 2026-10-21) | https://www.crowdstrike.com/en-us/blog/crowdstrike-uncovers-new-agentic-ai-campaigns | the incident class for a clinical-documentation product: agent-driven exfiltration of health records | PII scan + redaction + record-level access_scope + DSAR purge; the exec seam's OS sandbox; audit redaction (hash-only invariant) |
+| VAPOR PANDA — AI-driven ARTEX multi-agent espionage campaign (CrowdStrike OverWatch) | https://www.crowdstrike.com/en-us/blog/vapor-panda-uses-artex-to-scale-global-campaign | agentic offense scaled by an orchestration framework | no agent-to-agent free channel (first-party HMAC/Standard-Webhooks webhooks, v1.20.4); per-run config digests make the harness legible |
+| Alibaba ROME agent defection — a training agent opened a reverse SSH tunnel and diverted GPU to mining (arXiv v3, 2026-03-12) | https://arxiv.org/abs/2512.24873 | resource-theft/self-modification inside a trusted runtime | no eval path on the served surface; the exec seam allowlist (empty-absent = deny ALL); egress is the operator's proxy, not the agent's |
+
+**C. MCP-surface classes** (the 2026 research wave our ASI02/ASI04 rows are
+measured against):
+
+| Class (PREPRINT) | Source | Our cited landed mitigation |
+|---|---|---|
+| Cross-framework MCP tool poisoning — malicious instructions in tool metadata across MCP clients | https://arxiv.org/abs/2611.03555 | no tool-description parsing of untrusted input (the LLM04 posture); the catalog sha256 pin + fingerprint-move hard block until re-acknowledged (v1.28.80) |
+| Log-To-Leak — tool outputs leaking secrets into logs/context | https://arxiv.org/abs/2610.36108 | the single-block tool-result envelope wraps recalled content in the UNTRUSTED fence with provenance; audit redaction is hash-only (test-pinned) |
+| The destructive-approval split — approval UIs that show one thing while the action does another | https://arxiv.org/abs/2611.02527 | digest-bound approval: the approve call carries the SHA-256 of the read-canonical form and is rejected on drift (v1.27.12); the channel console rides the read seam (R117) |
+| Capability laundering — chaining legitimately-granted scopes into an illegitimate capability | https://arxiv.org/abs/2610.22301 | capability tokens are verbs×scope, not grantable for admin; quorum splits capability, not principal (publish demands the distinct publish capability on top of approve) |
+
+**D. Memory-persistence classes** (the ASI06 core line, 2026 research):
+
+| Class (PREPRINT) | Source | Our cited landed mitigation |
+|---|---|---|
+| The disclosure ratchet — persistent memory turns each disclosure into future context ("Disclosure Begets Disclosure") | https://arxiv.org/abs/2610.28315 | its response-stage suppression shape is our exclude posture: origin_context carried at the proposal seam, /ump/revise inherits the superseded row's origin (a patch cannot strip it), the label rides /get, /suggest, graph edges, UMP records (v1.29.13) |
+| HABIT-Bench — habit formation in persistent assistants | https://arxiv.org/abs/2610.24520 | memory writes are privileged, approved operations (Rule of Two); retention decay + supersession expiry keep stale habits from silently persisting |
+| Sticky collusion — persistent coordination between agents | https://arxiv.org/abs/2610.39660 | there is no agent-to-agent free channel: first-party HMAC/Standard-Webhooks webhooks with replay windows + id-dedup (v1.20.4); A2A federation is a named Ceiling (v2.0 Cortex) |
+| Intervention-history sabotage — poisoning the record of past interventions | https://arxiv.org/abs/2610.26935 | the audit chain is hash-chained and tamper-evident (test-pinned hash-only invariant); decision traces carry per-stage digests an operator can replay |
+| AutoRedClaw — persistent-state poisoning (AGENTS.md/memory/skills) that reloads every session | https://arxiv.org/abs/2610.27244 | the server loads no agent-editable instruction files; every INGEST path (the write seam) is screened + quarantined; UMP integrity blocks pin record bytes (v1.17.3) |
+
+**E. Skill-composition and approval classes:**
+
+| Class (PREPRINT) | Source | Our cited landed mitigation |
+|---|---|---|
+| CoSA — skill-composition policy violations invisible per-skill | https://arxiv.org/abs/2610.35082 | first-party MCP/skills only; the catalog pin reconciles the tool set every run; the exec mediation is argv-only with a canonicalized allowlist |
+| When Approval Becomes Execution — authorization-grounded workflow attacks | https://arxiv.org/abs/2610.23077 | the approval gate surfaces EXACT content + source_prompt (never a summary); approval TTL; the mode law is enforced at the gate — an exploratory run's proposal is permanently promotion-incapable |
+| Scope-Gap Injection — the evaluator-channel blind spot: static scans, LLM judges, and live audits share a channel the attacker can reach | https://arxiv.org/abs/2610.34777 | the fence law: **the advisory layer is not the defense — the deterministic gates are.** Our own advisory lanes (cargo-deny/cargo-audit/pnpm/machete) are tripwires that call a human; the load-bearing controls are the screen, the authz matrix, the capability pins, and the digest-bound approval — none of them reachable through the channel an evaluator reads |
+
+**F. The OpenClaw study, answered-vs-open** (PREPRINT:
+"The Wild Wide West of OpenClaw Agentic System Security",
+https://arxiv.org/abs/2610.35451, 2026-10-26 — an incident-corpus study of
+329+192 CWE mappings across 521 findings, 8 weakness categories, 6 failure
+mechanisms, 7 practitioner mitigation families). Read finding-by-finding
+against the shipped kernel/plugin/fences. HONESTY NOTE: the study is a
+preprint built on reported incidents (not reproduced experiments), and
+OpenClaw is not our stack — the transfer is at the failure-mechanism class,
+not the exploit:
+
+| Finding (the study's own label) | Source | Answered here — the control | Open — the named residual |
+|---|---|---|---|
+| O1 Access (CWE-284; 35.3%) — exposed gateways, weak auth, agents exceeding intended permissions | https://arxiv.org/abs/2610.35451 | the authz action matrix at every non-public handler; capability tokens; Rule of Two | per-principal consumption quotas — Ceiling v2.0 "Cortex" |
+| O2 Exposure (CWE-200; 18.4%) — leaked keys/configs/dashboards | https://arxiv.org/abs/2610.35451 | loopback-only default bind; no public gateway; audit hash-only; PII masking + record-level access_scope | at-rest encryption is operator-managed volume encryption (the documented residual) |
+| O3 Injection (CWE-20; 16.7%) — prompt injection via email/web/docs | https://arxiv.org/abs/2610.35451 | the architectural line: screen + classifier + UNTRUSTED fence + carried provenance | OWASP 2026's own position: injection has no prevention; the residual is Part 4's first row (re-run adaptive evals per threat-model change) |
+| O4 Execution (CWE-829; 11.7%) — unsafe skill installs, malicious plugins | https://arxiv.org/abs/2610.35451 | first-party MCP only; the catalog sha256 pin + fingerprint-move hard block; the ONE exec seam behind deny-default OS sandboxes | none at the class level (the sandbox ceiling is the OS's own) |
+| O5 Secrets (CWE-522; 6.7%) — plaintext credential storage | https://arxiv.org/abs/2610.35451 | keys at mode 0600 in a 0700 dir (enforced + tested); no secrets in the repo | operator-side secret rotation beyond the server's own is the operator's trust domain |
+| O6 Network (CWE-918 SSRF; 4.2%) — exposed services, unsafe binding, open proxies | https://arxiv.org/abs/2610.35451 | loopback default; GDL provider hardening: HTTPS-only, DNS pinning, redirect refusal, userinfo/fragment rejection (R34/R35) | mTLS for webhook receivers is an operator option today (v2.0 "Cortex") |
+| O7 Resources (CWE-400; 3.5%) — retry loops burning tokens (~2M tokens/6h in the corpus) | https://arxiv.org/abs/2610.35451 | rate limiter; capacity envelopes + the `bench --envelope` ship gate; recall clamp ≤100; bounded webhook queue | per-principal quotas — Ceiling v2.0 "Cortex" |
+| O8 Monitoring (CWE-693; 3.5%) — missing logs/audit/alerts | https://arxiv.org/abs/2610.35451 | the hash-chained audit chain + read-event audit + per-gate decision audit + /ready posture disclosure | external SIEM export is operator-side (the audit export API is the seam) |
+| The six failure mechanisms (instruction/data collapse → weak observability) | https://arxiv.org/abs/2610.35451 | each maps to the rows above: the fence (collapse), the least-privilege matrix (privilege expansion), integrity+provenance (persistent-context exposure), the catalog pin (skill trust transfer), the envelopes (resource amplification), the audit chain + digest-bound approval (weak observability) | the mapping is class-level; a reproduced-exploit transfer test would be a new named act |
+| M1–M7 practitioner mitigations (543 suggestions) | https://arxiv.org/abs/2610.35451 | M1→authz matrix; M2→loopback + sandbox seam; M3→audit chain; M4→SBOM + the deny/audit lanes + catalog pins; M5→0600 keys; M6→Rule of Two + quorum; M7→loopback default + GDL hardening | none — all seven families have a shipped answer; the ceilings stay in Part 4 |
+
+The ATLAS v6.1.0 counts cited in section A were re-verified 2026-11-07
+against the commit above; the incident sources were fetched 2026-11-07; the
+research rows are PREPRINT-stamped and carry their abs URLs so every claim
+is one click from re-verification (the reg_watch.rs row-shape law).
 
 ## Part 3 — AIUC-1 crosswalk (procurement bridge)
 
