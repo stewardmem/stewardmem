@@ -184,10 +184,20 @@ measured, then locked.
 
 - `cargo fmt --check` clean · `cargo clippy --all-targets` 0 warnings (and
   `-D warnings` per lane below).
-- Kernel battery: see the lane log below (the S2/S3/S4 re-runs).
+- Kernel battery: **3,847 passed / 0 failed** (`cargo test --features bench`,
+  the final tree — the two verify-after catches below are fixed and included).
 - Six feature lanes (`compliance-pack · multivec · injection-classifier ·
-  neural-embed · loom · rerank-tier`): clippy + test per lane — results in
-  the run record appended below.
+  neural-embed · loom · rerank-tier`): **clippy 0 warnings + 0 failed on
+  every lane** — compliance-pack 3,865 · multivec 3,858 ·
+  injection-classifier 3,864 · neural-embed 3,858 · loom 3,859 ·
+  rerank-tier 3,867.
+- **The two verify-after catches** (both ceiling pins this round's additions
+  moved, each fixed as its own named-act commit and included in the green
+  runs above): the FOURTH dependency-ceiling pin (`r47_rbac_adds_no_table_…`
+  in tests/rbac_evaluation_pins.rs, 55 → 57 — commit `8b7e9a72`), and the
+  write-discipline frozen DEFERRED inventory (memory.rs 4 → 5 — the document
+  write is the same single-writer ingest seam shape as its sibling; commit
+  `f47fc3c2`).
 - `cargo deny check` — the ROOT full check (advisories included) green;
   the 8-workspace policy loop green:
   `.` · `./crates` · `./fuzz` · `./client` · `./tools/channel-bridge` ·
@@ -224,9 +234,11 @@ guessing.
 ## 8 · The census + the badge
 
 Census: `docs/test-census.md` re-derived at each step (final derivation in
-the tree; `--check` green). The badge: the README test badge follows
-`scripts/badges.sh`'s platform-normalized derivation — see the run record
-appended below for the derived number and the README bump.
+the tree; `--check` green). The badge: **3,835 → 3,865** — derived by
+`scripts/badges.sh --verify-count` on the final tree (the platform-
+normalized skip set; the derivation ERR'd on the stale 3,835 first — the
+drift is the proof the derivation runs — then green after the README bump;
+`--selfcheck` clean).
 
 ## 9 · The exit criteria, checked
 
