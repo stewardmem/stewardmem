@@ -72,7 +72,11 @@ const DEFERRED_BASELINE: &[(&str, usize)] = &[
     ("src/migrate_merge.rs", 1),
     ("src/migration.rs", 2),
     ("src/server/bootstrap.rs", 1),
-    ("src/server/router/memory.rs", 4),
+    // +1 (5): IMPROVE04's document write (write_document_ingest) — the same
+    // single-writer ingest seam shape as its sibling write_markdown_ingest
+    // (whose sites are inside this count); the dedupe COUNT + INSERTs are
+    // guard reads in one writer's tx, not a read-modify-write transition.
+    ("src/server/router/memory.rs", 5),
     ("src/service/domains_admin.rs", 1),
     ("src/service/lifecycle/purge.rs", 1),
     ("src/webhook.rs", 1),
