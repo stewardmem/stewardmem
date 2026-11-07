@@ -79,6 +79,14 @@ in-range versions with zero known vulnerabilities.
 - the docs told the truth again: loop budgets, phase exceptions, provider
   kinds, version history (277/277 releases), and the gate register now
   match the code they describe.
+- the frozen reflection holdout split is unkeyed by construction
+  (ec2f0b9a): `partition_for_run` no longer rides the keyed audit hash,
+  so a keyed kernel folds the same frozen split as a keyless one — on
+  keyed deployments the corpus partition moves ONCE, to the frozen
+  golden the pins hold; and the merge tests fence the process chain key
+  so the suite can no longer fail by scheduling (the bench,migrate
+  derivation is green again; the test badge re-derived 3810 → 3811,
+  which is the number this tree's run actually returns).
 
 ### Engineering record
 
@@ -104,6 +112,7 @@ in-range versions with zero known vulnerabilities.
 - Candidate commits shipped in this range, one line each (engineering
   records, no user note):
 
+  - ec2f0b9a fix(audit): the frozen reflection split is unkeyed by construction; the merge tests fence the process chain key
   - c9e93478 Dependency update round: in-range shell bumps (zag, lucide, shadcn, tauri, eslint, vitest, svelte), bundle band named act, fuzz audit posture mirror
   - 73b3e768 Badge re-derived (3655 -> 3810, CG test growth) + sidecar per-arch stage (x86_64 tiers off: ort ships no x86_64 mac prebuilt)
   - 039d99d6 Dependabot: override minimatch to 11.0.5 (globparts DoS, fixed upstream; shell suite/build/lint/check green)
