@@ -1340,6 +1340,124 @@ mod tests {
         );
     }
 
+    /// TB-2, the BEHAVIORAL half (IMPROVE01 S2, the round's core): the
+    /// answer cache keys on the COMPOSED wire prompt — two turns with an
+    /// IDENTICAL user message but DIFFERENT grounding (the fence content
+    /// differs) produce different keys, so the second turn can never be
+    /// served the first's cached answer. The composition is the turn path's
+    /// own: `fence_hits` over the recalled hits, then
+    /// `{fenced_context}\n\n{message}` — the exact shape the bridge
+    /// receives — hashed with the turn path's PROMPT_VERSION. The hit here
+    /// differs from its sibling by CONTENT ONLY (same id, domain, score):
+    /// the key difference is attributable to the fence body alone.
+    /// Red-proof (evidence file): keying on the bare message collides the
+    /// two turns into one entry — the second turn WOULD hit — and that
+    /// mutant is the found bug this pin exists to catch.
+    #[test]
+    fn the_cache_key_differs_when_the_grounding_differs_for_an_identical_message() {
+        let message = "what is the verdict?";
+        let mut hit_a = result(11);
+        hit_a.content = "grounding A: the claim holds per source X".into();
+        let mut hit_b = result(11);
+        hit_b.content = "grounding B: the claim fails per source Y".into();
+        let compose = |fenced: &str| format!("{fenced}\n\n{message}");
+        let prompt_a = compose(&fence_hits(&[(hit_a, "global".to_owned())]));
+        let prompt_b = compose(&fence_hits(&[(hit_b, "global".to_owned())]));
+        assert_ne!(
+            prompt_a, prompt_b,
+            "the compositions themselves differ — the fence body is the only varying byte"
+        );
+        let key = |prompt: &str| {
+            crate::service::chat_answer_cache::ChatAnswerCache::key(
+                Some("qwen3-8b-4bit"),
+                PROMPT_VERSION,
+                prompt,
+            )
+        };
+        let cache = crate::service::chat_answer_cache::ChatAnswerCache::new();
+        cache.store(
+            key(&prompt_a),
+            crate::service::chat_answer_cache::CachedAnswer {
+                text: "grounding A's answer".into(),
+                tier: "mlx_native".into(),
+                abstain: false,
+                claims: vec![],
+            },
+        );
+        assert!(
+            cache.get(&key(&prompt_b)).is_none(),
+            "differing grounding ⇒ different key ⇒ NO hit — a hit launders \
+             grounding A's answer into grounding B's turn"
+        );
+        assert_eq!(
+            cache.get(&key(&prompt_a)).unwrap().text,
+            "grounding A's answer",
+            "the identical composition IS the same greedy computation (the hit law)"
+        );
+        // The no-grounding arm composes too: its notice makes a distinct
+        // key against the grounded turn for the SAME message.
+        let prompt_none =
+            compose("(no memory matched this question — say so plainly if it matters)");
+        assert!(
+            cache.get(&key(&prompt_none)).is_none(),
+            "the zero-grounding turn is its own key, never the grounded turn's"
+        );
+    }
+
+    /// TB-2, the STRUCTURAL half (IMPROVE01 S2, the M-4 pattern): the key
+    /// call consumes the SAME `prompt` binding the bridge turn carries —
+    /// one composition in the turn path, no re-binding between the
+    /// composition and the key, and the bridge construction's `prompt`
+    /// field is that binding. Comment-stripped and needle-split so this
+    /// test's own text is not the hit (the GDL pin's dodge). Red-proof
+    /// (evidence file): key on the bare message → this pin reds by name.
+    #[test]
+    fn the_cache_key_consumes_the_composed_wire_prompt_the_bridge_receives() {
+        let source =
+            std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/handlers/chat.rs"))
+                .expect("this module is in the tree");
+        let code: String = source
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let composition = code
+            .find("let prompt = if fenced_context.is_empty()")
+            .expect("the composed wire prompt is bound in the turn path");
+        let key_call = code
+            .find(concat!(
+                "service::chat_answer_cache::ChatAnswer",
+                "Cache::key("
+            ))
+            .expect("the cache key is built in the turn path");
+        let key_args = &code[key_call..(key_call + 220).min(code.len())];
+        assert!(
+            key_args.contains("&prompt"),
+            "the cache key hashes the composed wire prompt variable — keying \
+             on anything narrower (the bare message) is the found bug: \
+             {key_args:?}"
+        );
+        let after_composition = composition + "let prompt = if fenced_context.is_empty()".len();
+        let between = &code[after_composition..key_call];
+        assert!(
+            !between.contains("let prompt"),
+            "the composed prompt flows to the key un-re-bound: {between:?}"
+        );
+        let bridge = code
+            .find(concat!("bridge\n        .turn(", "BridgeTurn {"))
+            .expect("the bridge turn exists");
+        assert!(
+            composition < key_call && key_call < bridge,
+            "the ORDER law: composition < key < bridge turn"
+        );
+        let bridge_body = &code[bridge..(bridge + 240).min(code.len())];
+        assert!(
+            bridge_body.contains("prompt,"),
+            "the bridge turn carries the same `prompt` binding (shorthand \
+             field init): {bridge_body:?}"
+        );
+    }
+
     /// THE ABSTAIN GATE (LL-04 §1.3): zero hits from a calibrated
     /// low-confidence abstention or a degraded recall → the kernel answers
     /// deterministically and the bridge is never asked for prose. Any other
