@@ -52,16 +52,36 @@ pub(crate) const NEAR_DUP_TEXT_CAP: usize = 8192;
 /// partition mapping (a pure run-id function).
 pub(crate) const CORPUS_EXPORT_EPOCH: u32 = 1;
 
+/// The adversarial-contradiction marker's literal, defined ONCE. A macro
+/// because `concat!` takes literals only: both the marker constant and the
+/// tuple fallback derive from this single literal, so a marker-value change
+/// carries the fallback with it at compile time (the corpus/tuple law
+/// freezes the derived VALUES — the frozen-value pin asserts the bytes).
+macro_rules! adversarial_contradicted_marker {
+    () => {
+        "adversarial re-check contradicted"
+    };
+}
+
 /// Kernel-authored markers inside `gdl_gate` error strings. The errors are
 /// law constants minted by the gates, never model text, so matching on
 /// them is deterministic and un-forgeable by an agent.
 pub(crate) const MARKER_NO_SEARCH_HIT: &str = "L9";
 pub(crate) const MARKER_RED_FLAG_LOCK: &str = "T10";
 pub(crate) const MARKER_SECOND_VERIFICATION: &str = "second verification absent or";
-pub(crate) const MARKER_ADVERSARIAL_CONTRADICTED: &str = "adversarial re-check contradicted";
+pub(crate) const MARKER_ADVERSARIAL_CONTRADICTED: &str = adversarial_contradicted_marker!();
 pub(crate) const MARKER_OPEN_CONTRADICTIONS: &str = "open contradictions must be dispositioned";
-const ADVERSARIAL_CONTRADICTED_FALLBACK: &str =
-    "A4: adversarial re-check contradicted the confirmed hypothesis";
+/// The fallback error string for the adversarial-contradiction tuple when
+/// no gate event matched the marker (the machine's own summary — the
+/// corpus/tuple law freezes its VALUE). Derived from the SAME single
+/// literal as [`MARKER_ADVERSARIAL_CONTRADICTED`] by compile-time `concat!`
+/// so the marker literal exists exactly once in this file: the coupling,
+/// not a copy, and the source-scan pin (TB-3) holds.
+pub(crate) const ADVERSARIAL_CONTRADICTED_FALLBACK: &str = concat!(
+    "A4: ",
+    adversarial_contradicted_marker!(),
+    " the confirmed hypothesis"
+);
 
 // ── the frozen holdout split ────────────────────────────────────────────────
 
@@ -1143,6 +1163,55 @@ mod tests {
         assert!(!body.contains("f32"), "ints only in the filter region");
         assert!(!body.contains("f64"), "ints only in the filter region");
         assert!(body.contains("NEAR_DUP_TOKEN_JACCARD_EPSILON_NUM"));
+    }
+
+    /// TB-3, the VALUE law (IMPROVE01 S3): the fallback's compile-time
+    /// derivation from the marker constant is byte-identical to the frozen
+    /// corpus value — the coupling changed in the dedup, the bytes did not
+    /// (the tuples already derived depend on today's strings).
+    #[test]
+    fn the_adversarial_fallback_value_is_frozen() {
+        assert_eq!(
+            ADVERSARIAL_CONTRADICTED_FALLBACK,
+            "A4: adversarial re-check contradicted the confirmed hypothesis"
+        );
+    }
+
+    /// TB-3, the STRUCTURAL pin (IMPROVE01 S3, the M-4 pattern): the
+    /// production body of this file contains NO string-literal gate marker
+    /// outside the hoisted constants — each marker literal appears exactly
+    /// once, inside its `const` definition, and the fallback derives by
+    /// `concat!` (the coupling, not a copy). Comment-stripped (the S1
+    /// vacuity lesson) and scoped to the production body: the test module
+    /// BELOW mints gate-error PROSE fixtures with marker substrings inline —
+    /// those are the frozen corpus (the tuple law), deliberately literal,
+    /// deliberately out of this scan.
+    #[test]
+    fn no_string_literal_gate_markers_outside_the_hoisted_constants() {
+        let full = include_str!("reflection.rs");
+        let body: String = full
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap()
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        for marker in [
+            MARKER_NO_SEARCH_HIT,
+            MARKER_RED_FLAG_LOCK,
+            MARKER_SECOND_VERIFICATION,
+            MARKER_ADVERSARIAL_CONTRADICTED,
+            MARKER_OPEN_CONTRADICTIONS,
+        ] {
+            assert_eq!(
+                body.matches(marker).count(),
+                1,
+                "the marker literal `{marker}` must exist exactly once in the \
+                 production body — inside its hoisted constant; any other \
+                 occurrence is string coupling (the drift TB-3 exists to close)"
+            );
+        }
     }
 
     #[test]
