@@ -573,10 +573,7 @@ pub fn find_document_by_sha(
             markdown_sha256: r.get(12)?,
         })
     })?;
-    match rows.next() {
-        Some(row) => row.map(Some),
-        None => Ok(None),
-    }
+    rows.next().transpose()
 }
 
 #[cfg(test)]
