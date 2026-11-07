@@ -26,48 +26,59 @@ in-range versions with zero known vulnerabilities.
 
 ### Release notes
 
-- **New: cases now test hypotheses in evidence order.** The differential is
-  ranked once, deterministically, from re-derived evidence axes — the plan
-  order follows the rank, and the plan strip shows it.
-- **New: a case that fails verification may re-enter — preregistered and
-  dormant until measured.** The back edge exists with four admission arms
-  and a bound of zero, so today it refuses always and the terminal is
+**New**
+
+- cases now test hypotheses in evidence order: the differential is ranked
+  once, deterministically, from re-derived evidence axes — the plan order
+  follows the rank, and the plan strip shows it.
+- a case that fails verification may re-enter — preregistered and dormant
+  until measured: the back edge exists with four admission arms and a
+  bound of zero, so today it refuses always and the terminal is
   byte-identical to the forward-only law.
-- **New: one ticket, several problems, several runs.** Intake may split a
+- one ticket, several problems, several runs: intake may split a
   multi-issue case into real sibling runs, one level deep, each resolving
   independently; single-issue cases are byte-identical to before.
-- **New: verified procedures executable by the lowest tier.** An Admin hand-down
+- verified procedures executable by the lowest tier: an Admin hand-down
   behind a passing conformance receipt seals a resolved case; matching
   cases execute the sealed steps with no authored hypotheses, and a step
   that leaves the record escalates at the execute phase by name.
-- **Improvements: eval receipts carry intervals, not just points.** The
-  near-dup-free export and the paired bootstrap ride beside the headline
-  metrics; advisory columns (certainty, re-entry count, split count,
-  hand-down match/deviation/conformance) record per run.
-- **Improvements: recall orders by trust.** Published knowledge outranks
-  approved, which outranks raw, inside the equal-score bucket — never
-  blended; contradicted feedback pulls affected rows forward for review.
-- **Improvements: chat follow-ups stay grounded.** A topic-less follow-up
-  carries the session's topic and prior evidence instead of abstaining;
-  abstention files one bounded capture proposal.
-- **Improvements: the on-device tiers are tuned and measured.** AFM prewarm,
-  seeded transcripts, versioned prompts, few-shot abstention (measured
-  abstention 0/10 → 6/10 on the live battery), the greedy lock, and local-only
-  feedback capture; the MLX multi-turn break is fixed at the engine
-  (swift-jinja floor), with a measured-green tier roster.
-- **New: the rerank tier is armed and honest — OFF by default.** The kernel
-  warms on flag, echoes its true state, reorders by rerank score with full
+- the rerank tier is armed and honest — OFF by default: the kernel warms
+  on flag, echoes its true state, reorders by rerank score with full
   provenance; the app's setting writes only kernels it owns; nothing can
   arm it in the store edition.
-- **Security fixes: dependency posture to today's latest.** `minimatch`
-  overridden to `11.0.5` (globparts denial of service, upstream-fixed);
-  in-range Rust and shell bumps across the tree; `cargo audit` and
-  `pnpm audit` clean (accepted risks — unpatched `rsa` Marvin, unreachable
-  `crypto-bigint` 0.5 line, distrusted-root shim false positive — are
-  documented where they live, not hidden).
-- **Bug fixes: the docs told the truth again.** Loop budgets, phase
-  exceptions, provider kinds, version history (277/277 releases), and the
-  gate register now match the code they describe.
+
+**Improvements**
+
+- eval receipts carry intervals, not just points: the near-dup-free
+  export and the paired bootstrap ride beside the headline metrics;
+  advisory columns (certainty, re-entry count, split count, hand-down
+  match/deviation/conformance) record per run.
+- recall orders by trust: published knowledge outranks approved, which
+  outranks raw, inside the equal-score bucket — never blended;
+  contradicted feedback pulls affected rows forward for review.
+- chat follow-ups stay grounded: a topic-less follow-up carries the
+  session's topic and prior evidence instead of abstaining; abstention
+  files one bounded capture proposal.
+- the on-device tiers are tuned and measured: AFM prewarm, seeded
+  transcripts, versioned prompts, few-shot abstention (measured
+  abstention 0/10 → 6/10 on the live battery), the greedy lock, and
+  local-only feedback capture; the MLX multi-turn break is fixed at
+  the engine (swift-jinja floor), with a measured-green tier roster.
+
+**Security fixes**
+
+- dependency posture to today's latest: `minimatch` overridden to
+  `11.0.5` (globparts denial of service, upstream-fixed); in-range Rust
+  and shell bumps across the tree; `cargo audit` and `pnpm audit` clean
+  (accepted risks — unpatched `rsa` Marvin, unreachable `crypto-bigint`
+  0.5 line, distrusted-root shim false positive — are documented where
+  they live, not hidden).
+
+**Bug fixes**
+
+- the docs told the truth again: loop budgets, phase exceptions, provider
+  kinds, version history (277/277 releases), and the gate register now
+  match the code they describe.
 
 ### Engineering record
 
