@@ -13,6 +13,60 @@ measured. Those records are kept as they were written (this file is
 append-only), and their heading says `Unreleased` because that is what they
 were when the round landed — not because the work is still unreleased.
 
+## [Unreleased] — the closing-gaps loop lanes land: ranked, re-entering, splitting, handing down (CG-03 → CG-07, 2026-11-06, kernel touched and named)
+
+Seven loop lanes' code, merged to `main` in the CG-03→04→05→06→07 pattern
+(`215ba0e8` → `b049b455`). Each lane re-measured its ground, landed one
+commit per step, red-proved every pin, and re-derived the completeness
+registers; receipts live in the plans repo (`CG03…CG07_EVIDENCE`).
+
+- **CG-03 ranked differential.** `Hypothesis.rank: Option<u16>`, computed
+  once in `apply` from per-hypothesis re-derived axes (never the case
+  grade, never `confidence`, integer score only), stored in rank order;
+  the Plan gate binds plan order to rank order; the strip renders
+  `H{rank}:`. Legacy states parse to `None`, never backfilled.
+- **CG-04 bounded re-hypothesis.** The machine's first back edge
+  (Verify → Hypothesize) landed preregistered: the observed Verify-failure
+  rate was unmeasurable (0/0), so `MAX_REHYPOTHESES = 0` fail-closed — the
+  edge exists mechanically (four admission arms, ordinals at `7 + 4·count`)
+  and refuses always today; the terminal is byte-identical to the
+  forward-only law.
+- **CG-05 multi-issue intake.** Model-proposed decomposition, gate-disposed;
+  the split act inserts N−1 real sibling runs inside the Intake transition's
+  transaction (one level only; parent resolves independently). Single-issue
+  intakes are byte-identical.
+- **CG-06 labeling round + eval hygiene (code-half).** Render-time near-dup
+  law + frozen holdout epoch; pure paired bootstrap riding beside both eval
+  receipts (never inside a gate). The κ gate stays UNMEASURED at n=0
+  (`NO_KAPPA` + reason) — the human half (two named principals) is the owed
+  future act.
+- **CG-07 hand-down (code-half).** A resolved case sealed behind a passing
+  conformance receipt (`POST /workflow/hand-down`, Admin) becomes
+  executable by L1: containment match at Intake, sealed plan injected,
+  `next_phase = Act`, zero authored hypotheses, `phase_owner` byte-stable;
+  a step leaving the sealed record routes to `Escalated{Act}` (no new
+  outcome variant). Match/deviation rates are unmeasured at n=0 (no
+  resolved source cases in the pilot corpus).
+- **Loop truth audit.** The GDL docs were corrected against source
+  (budget `336` → `11,961 = 3 × 3,987` live p99; "never skips" → the named
+  phase-jump/back-edge exceptions; agent loop 12 modules, HTTP + AFM-stdio
+  provider kinds; SECURITY/THREAT_MODEL hand-down surface; gate-register
+  CG rows) and SECURITY's version history backfilled from this file
+  (277/277 releases covered).
+- **Dependency posture.** `minimatch` overridden to `11.0.5` (globparts DoS,
+  upstream-fixed; shell suite/build/lint/check green); `deepmerge`
+  dismissed as tolerable risk (transitive build-time only, upstream has no
+  patched release); fuzz lock refreshed onto the root audit posture;
+  in-range shell + Rust bumps applied (bundle band moved as the named act:
+  233,200 → 235,144 gzipped); test badge re-derived `3,655` → `3,810`.
+  The x86_64 sidecar stage now tiers off (`bench,migrate`, no `rerank-tier`
+  — ort ships no x86_64 macOS prebuilt); arm64 keeps the full shipped set.
+
+Lanes at the round's close: kernel lib 2710 passed / 0 failed / 2 ignored,
+`main_suite` 352 passed (comments pin green after label cleanup), vitest
+404 passed / 2 skipped, svelte-check 0/0, eslint clean, e2e 7 passed /
+1 skipped; version lockstep stays 1.29.42 until the release cut.
+
 ## [1.29.42] — 2026-11-03 — the update path works again: old apps update, the import card lands in the store the kernel actually serves
 
 This release repairs the two paths R150's pre-flight measured broken on a
