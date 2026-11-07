@@ -85,5 +85,5 @@ It's a loop whose every effect is mediated, counted, audited, and settled on
 terms the *operator* wrote down first.
 
 *Mechanism detail lives in the [API reference](../api.md) (workflow routes +
-hostcall mediations) and [`SECURITY.md`](../../SECURITY.md); the proof walk-through is
+hostcall mediations) and [`SECURITY.md`](../security.md); the proof walk-through is
 [`docs/trust/proof-map.md`](../trust/proof-map.md).*

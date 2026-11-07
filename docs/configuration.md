@@ -238,4 +238,4 @@ server process — so they sit outside the main table.
 `BENCH_*` harness knobs (`BENCH_SCALES`, `BENCH_SEARCHES`, `BENCH_CLIENTS`,
 `BENCH_SEED`, `BENCH_ENVELOPE`, …) are documented in the `bench` binary's
 own header (`src/bin/bench.rs`) with worked invocations in
-[`BENCHMARKS.md`](../BENCHMARKS.md).
+[`BENCHMARKS.md`](https://github.com/stewardmem/stewardmem/blob/main/BENCHMARKS.md).

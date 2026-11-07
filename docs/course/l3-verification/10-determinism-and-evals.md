@@ -57,4 +57,4 @@ showing you itself.
 
 ## Course complete
 
-Back to the [course index](../README.md).
+Back to the [course index](../index.html).

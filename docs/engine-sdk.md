@@ -6,7 +6,7 @@ brain-server binary. The server is the first host adapter; the same contract
 lets any transactional backend drive a workflow core.
 
 Authoritative detail lives in the crate's own
-[`README.md`](../crates/brain-engine-sdk/README.md); this page is the map.
+[`README.md`](https://github.com/stewardmem/stewardmem/blob/main/crates/brain-engine-sdk/README.md); this page is the map.
 
 ## Surface
 

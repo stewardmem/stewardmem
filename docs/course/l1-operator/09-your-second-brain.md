@@ -52,4 +52,4 @@ brain anchor                # record the line somewhere off-host
 
 ## Next
 
-This is the last L1 lesson. [Back to the course index](../README.md).
+This is the last L1 lesson. [Back to the course index](../index.html).

@@ -46,4 +46,4 @@ exactly this: pick the tier, boot it, smoke it.
 ## Next
 
 [Lesson 8's capstone](08-when-things-look-wrong.md) plus this one is the
-edge exam. [Back to the course index](../README.md).
+edge exam. [Back to the course index](../index.html).

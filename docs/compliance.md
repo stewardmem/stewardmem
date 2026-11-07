@@ -4,7 +4,7 @@
 > 2026-10-25 (the three public notices reconciled, the Art 2(12) open-source
 > analysis added, opt-in controls labelled as such — COMPLIANCE.md §6.6, §7.1) — the 1.29.x governed
 > model-identity line (digest-pinned model registry, decision-run/evaluation
-> records) rides the same compliance evidence base. Root mirror: [COMPLIANCE.md](../COMPLIANCE.md).
+> records) rides the same compliance evidence base. Root mirror: [COMPLIANCE.md](https://github.com/stewardmem/stewardmem/blob/main/COMPLIANCE.md).
 
 StewardMem is a single-node, loopback-first memory component for an AI system.
 This page summarizes its compliance posture for buyers and procurement. It is a

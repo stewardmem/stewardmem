@@ -97,5 +97,5 @@ than argue. Meet them there.
 
 ## Course complete
 
-Back to [the course index](../README.md), or straight to the
+Back to [the course index](../index.html), or straight to the
 [reproduce script](../../trust/reproduce.md) for one more pass.

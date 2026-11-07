@@ -64,6 +64,6 @@ this server does exists to make those five paths trustworthy at scale.
 
 ## Course complete
 
-Back to the [course index](../README.md), or read the
+Back to the [course index](../index.html), or read the
 [architecture page](../../architecture.md) and the
 [agent loop page](../../agentloop.md) with your new eyes.

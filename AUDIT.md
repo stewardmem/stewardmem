@@ -977,7 +977,7 @@ follow-through on the residual-risk review, not an audit's findings).
 
 ## 2026-10-04 — v1.29.2 eighth-pass full-spectrum audit (F8/D8/R8/P8/K8/S8/L8/T8)
 
-Report: **[`docs/audit8/`](audit8/README.md)** (9 files). Scope: brain-server v1.29.2 HEAD
+Report: **[`docs/audit8/`](audit8/index.html)** (9 files). Scope: brain-server v1.29.2 HEAD
 `e9c71919` × openclaw fork `1d2d29b22` (0 behind / **90** ahead, plugin 0.6.10). Fresh eyes —
 prior reports not read.
 

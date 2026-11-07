@@ -10,7 +10,7 @@ A server that stores knowledge for an AI agent and hands the right facts
 back at the right moment, deterministically. StewardMem is one: a
 single self-hosted Rust binary over one SQLite file. The agent asks, the
 server recalls, nothing in between non-deterministically decides
-anything. See [the course](README.md) or
+anything. See [the course](index.html) or
 [the audiences page](../audiences.md).
 
 ## Is this RAG?

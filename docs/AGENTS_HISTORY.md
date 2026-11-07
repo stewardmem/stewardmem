@@ -10085,7 +10085,7 @@ silently repaired in an archive.)
 > here, R71 is the fork, R72 shipped). Theme: **the register disagrees with the
 > code.** Findings **S8-06**, **S8-09**, **L8-02**, **L8-03**, and the
 > **F8-01…F8-10 register drift** from
-> [`docs/audit8/`](docs/audit8/README.md). **No authz change**, no new route, **no
+> [`docs/audit8/`](audit8/index.html). **No authz change**, no new route, **no
 > wire change**, no new dependency edge, no schema change (**1.32.26** unchanged).
 >
 > **(1) The register was THREE RELEASES stale, and every one of the ten rows was
@@ -10237,7 +10237,7 @@ silently repaired in an archive.)
 > own header documents as having occurred six times. Findings **R8-01, R8-02,
 > **R8-03**,
 > **S8-11**, **L8-01** (HIGH), **L8-06**, **L8-07**, **P8-01** from
-> [`docs/audit8/`](audit8/README.md). **No authz change**, no new route, no new
+> [`docs/audit8/`](audit8/index.html). **No authz change**, no new route, no new
 > dependency edge, no schema change (**1.32.26** unchanged).
 >
 > **(1) THREE of the audit's eight premises were WRONG, and that is the round's
@@ -10340,7 +10340,7 @@ silently repaired in an archive.)
 > **the cheap enforcement wins — six seams where the machine was right for the
 > wrong reason, or right by luck.** Findings **F8-03** (HIGH), **F8-04**,
 > **F8-06** (MEDIUM), **F8-07**, **F8-09**, **F8-10** (LOW) from
-> [`docs/audit8/`](docs/audit8/README.md). **No authz change**:
+> [`docs/audit8/`](audit8/index.html). **No authz change**:
 > `git diff src/authz/` is **empty**, no new route, no wire field, no new
 > dependency edge, no schema change (**1.32.26** unchanged).
 >
@@ -10477,7 +10477,7 @@ silently repaired in an archive.)
 > approved proposals behind them, because its only reach into `proposals` was a
 > literal `content LIKE '%subject%'` and a candidate body almost never contains
 > its owner's identity. Finding **F8-08** (HIGH, drill-proven) from
-> [`docs/audit8/`](docs/audit8/README.md). **No authz change**:
+> [`docs/audit8/`](audit8/index.html). **No authz change**:
 > `git diff src/authz/` is **empty**, no new route, no wire field, no new
 > dependency edge.
 >
@@ -10609,7 +10609,7 @@ silently repaired in an archive.)
 > **the machine checks under-delivered** — three guards/pins passed while their
 > subject was violated, or asserted a property they could not fail. Findings
 > **F8-01** (HIGH), **F8-02** (HIGH), **F8-05** (MEDIUM) from
-> [`docs/audit8/`](docs/audit8/README.md). **No runtime authorization behaviour
+> [`docs/audit8/`](audit8/index.html). **No runtime authorization behaviour
 > changes**: `git diff src/authz/policy.rs` is **empty**, and the authz half is
 > prose plus pins.
 >
