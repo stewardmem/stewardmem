@@ -1740,16 +1740,47 @@ mod tests {
     // source file, watching the pin fail, and restoring from the round's own
     // copy (never git) — recorded in the round's records.
 
+    /// RAII fence over the process-global audit chain key, held for the
+    /// whole of each merge scenario. The chain key is process state: the
+    /// audit module's own keyed tests open and close keyed windows, and the
+    /// kernel-booted pin below INSTALLS a fixture key mid-test — a merge
+    /// act whose write-then-assert hash pair straddles such a moment reads
+    /// one form at the write and another at the assert and fails by
+    /// scheduling, not by defect. The fence serializes against every key
+    /// mutator (the audit module's gate), pins keyless at entry so no
+    /// earlier leak can re-key the scenario, and clears on drop so the
+    /// pin's fixture key cannot outlive its test.
+    struct ChainKeyFence {
+        _gate: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl Drop for ChainKeyFence {
+        fn drop(&mut self) {
+            crate::audit::set_chain_key_for_test(None);
+        }
+    }
+
+    fn fence_chain_key() -> ChainKeyFence {
+        let gate = crate::audit::key_gate_for_test();
+        crate::audit::set_chain_key_for_test(None);
+        ChainKeyFence { _gate: gate }
+    }
+
     /// A fixture source store with current-schema tables: rows to land, a
     /// tombstone-bound row, a duplicate (by content_hash+domain), rows with
     /// provenance, and a small entity graph.
     struct MergeFixture {
         _dir: tempfile::TempDir,
+        _chain: ChainKeyFence,
         source: PathBuf,
         target: PathBuf,
     }
 
     fn build_merge_fixture() -> MergeFixture {
+        // The fence is acquired BEFORE any store is built: a key visible to
+        // a concurrently-running fresh-store bootstrap would stamp a keyed
+        // epoch the scenario never chose.
+        let _chain_guard = fence_chain_key();
         let dir = tempfile::tempdir().expect("tempdir");
         let source = dir.path().join("source.db");
         let target = dir.path().join("target.db");
@@ -1812,6 +1843,7 @@ mod tests {
         }
         MergeFixture {
             _dir: dir,
+            _chain: _chain_guard,
             source,
             target,
         }
@@ -2121,8 +2153,12 @@ mod tests {
         // rows). The merge loads the key from the TARGET's side — the boot's
         // own ladder, env → the file beside the target — so the act stays
         // auditable on the kernel's chain. (A chain whose key file is gone
-        // is already broken; the loader mints no replacement.)
-        let _gate = audit::key_gate_for_test();
+        // is already broken; the loader mints no replacement.) The
+        // fixture's ChainKeyFence already holds the audit module's key
+        // gate — an explicit gate here would self-deadlock — and pins
+        // keyless at entry, so the loader's file-arm install below is the
+        // ONLY key this scenario ever sees; the fence's drop clears it
+        // afterwards.
         let f = build_merge_fixture();
         // The boot's chain state: a 0600 key beside the store, the epoch
         // stamped hmac256 (what the boot's bootstrap writes).

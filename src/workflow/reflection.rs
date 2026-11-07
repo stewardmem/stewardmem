@@ -13,6 +13,7 @@
 
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 /// The frozen holdout fraction (percent). Pinned: the split function maps
 /// run ids deterministically, so exports are stable across versions and
@@ -94,7 +95,15 @@ impl Partition {
 /// hex digits of the versioned digest fold to a number; a value under the
 /// holdout percent is holdout. Stable across exports and versions.
 pub(crate) fn partition_for_run(run_id: i64) -> Partition {
-    let hex = crate::audit::hash(&format!("reflection-split-v1:{run_id}"));
+    // The digest is computed here, plain and unkeyed — never through
+    // `audit::hash`, whose keyed arm (HMAC under the process chain key)
+    // would fold a DIFFERENT split on every keyed deployment and move the
+    // frozen holdout set per process state instead of staying a pure
+    // function of the run id. The bytes are the unkeyed form the golden
+    // table in the pins was measured at; the domain separator keeps the
+    // preimage distinct from every other digest use.
+    let digest = Sha256::digest(format!("reflection-split-v1:{run_id}").as_bytes());
+    let hex = crate::audit::hex_encode(&digest);
     let mut acc = 0u32;
     for b in hex.bytes().take(8) {
         let d = match b {
