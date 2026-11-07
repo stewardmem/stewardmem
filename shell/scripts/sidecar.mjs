@@ -125,12 +125,20 @@ function archName(cputype) {
  * shape.
  */
 export function stageBuildArgs(triple) {
+	// Per-arch feature set. The rerank tier's runtime (`ort-sys`) ships
+	// prebuilt binaries for aarch64-apple-darwin but NOT for
+	// x86_64-apple-darwin (its dist.tsv carries no x86_64 mac row) —
+	// the x86_64 leg building with `rerank-tier` fails deterministically
+	// at the ort build script. The tier compiles OFF on x86_64, which is
+	// a valid posture (the health echo reads `off` forever on a
+	// feature-less kernel); arm64 carries the full shipped set.
+	const features = triple.startsWith('x86_64') ? 'bench,migrate' : 'bench,migrate,rerank-tier';
 	return [
 		'build',
 		'--release',
 		'--locked',
 		'--features',
-		'bench,migrate,rerank-tier',
+		features,
 		'--bin',
 		'brain-server',
 		'--target',

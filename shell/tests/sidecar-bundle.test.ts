@@ -556,9 +556,19 @@ test('the_staged_kernel_compiles_the_shipped_feature_set', () => {
 		expect(args).toContain('--features');
 		const features = args[args.indexOf('--features') + 1] ?? '';
 		expect(features.split(',')).toEqual(expect.arrayContaining(['bench', 'migrate']));
-		expect(features.split(','), 'the CG-12 ship-set: the rerank tier rides by name').toContain(
-			'rerank-tier'
-		);
+		// The CG-12 ship-set: the rerank tier rides by name where the
+		// runtime ships a prebuilt for the arch — arm64 only. ort-sys
+		// carries no x86_64-apple-darwin prebuilt (its dist.tsv has no
+		// such row), so the x86_64 leg building with the tier fails at
+		// the ort build script; the tier compiles OFF there instead,
+		// which is a valid posture (the health echo reads `off`).
+		if (target.startsWith('x86_64')) {
+			expect(features.split(',')).not.toContain('rerank-tier');
+		} else {
+			expect(features.split(','), 'the CG-12 ship-set: the rerank tier rides by name').toContain(
+				'rerank-tier'
+			);
+		}
 		expect(args[args.indexOf('--bin') + 1]).toBe('brain-server');
 		expect(args[args.indexOf('--target') + 1]).toBe(target);
 	}
