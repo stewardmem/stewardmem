@@ -1,0 +1,117 @@
+# cargo-deny configuration — the dependency POLICY gate (v0.20.x).
+#
+# The tree had two advisory watchers (CI `cargo audit` over every tracked
+# lockfile — .cargo/audit.toml is its waiver file — and cargo-machete for
+# unused deps) and NO license/ban/source gate. License hygiene is a PRODUCT
+# requirement (the commercial module): a dependency graph whose licenses the
+# product cannot defend is a release blocker, not a warning. This file is
+# that gate, plus the advisory waiver path cargo-audit lacks.
+#
+# Shape: ONE root config, run per workspace over every directory holding a
+# Cargo.lock (the CI `audit` job's 8-workspace loop — separate workspace
+# nodes cannot share one cargo invocation). The two gates are complementary:
+# cargo-audit keeps its independent database, advisory DB and the documented
+# warning-class triage; cargo-deny adds the policy teeth.
+#
+# ── The waiver law (arXiv:2608.31062, The Exclusion Ratchet) ───────────────
+# Exclusions accumulate; curation does not converge. So: a waiver here is a
+# NAMED ACT — `{ id = "RUSTSEC-…", reason = "… review by YYYY-MM-DD …" }` —
+# the review date rides in the reason text, and
+# `unused-ignored-advisory = "deny"` fails the check the moment a waiver's
+# advisory leaves the graph: a stale waiver cannot hide. The list starts
+# EMPTY because the 2026-11-07 baseline triage measured ZERO
+# vulnerability-class findings across all 8 lockfiles; the warning-class
+# findings (unmaintained/unsound/yanked) are triaged in .cargo/audit.toml
+# with machine-evaluated staleness (the
+# `no_ignored_advisory_is_fixed_in_the_current_lock` pin) — duplicating them
+# here would ratchet two waiver lists against each other.
+#
+# The cross-workspace constraint, MEASURED 2026-11-07 (not a guess): the
+# unused detector is PER-RUN — one config runs against eight different
+# graphs, and a waiver whose advisory is absent from a run's graph fails
+# that run with `error[advisory-not-detected]`. The root and fuzz graphs
+# carry both waived advisories; the six satellite workspaces carry neither.
+# So the CI shape is: the FULL check (advisories included) runs at the ROOT
+# workspace — where the detector's semantics and the graph agree — and the
+# POLICY checks (licenses/bans/sources, the sections that need per-workspace
+# coverage) run in the audit job's 8-workspace loop. The six satellites'
+# advisory coverage stays with the audit lane (all 8 lockfiles,
+# .cargo/audit.toml waivers, the staleness pin's union semantics). A
+# consequence that is the ratchet working: a root deny.toml waiver must
+# match an advisory in the ROOT graph or the root run itself reds.
+
+[advisories]
+# Vulnerability-class advisories deny unconditionally (no field exists —
+# that IS the gate). The scoped levels below are the only knobs.
+#
+# unmaintained = "workspace": a DIRECT dependency that is unmaintained is
+# OUR choice and must be a named act (this check reds); a TRANSITIVE one is
+# upstream's. Measured 2026-11-07: every unmaintained crate in every tracked
+# lockfile (paste, proc-macro-error, zbus_names, zvariant, zvariant_derive,
+# atomic-polyfill, bincode, proc-macro-error2) is transitive-only, so this
+# is green today and carries teeth for the next direct-dep choice. The
+# transitive warning-class triage is .cargo/audit.toml's job.
+unmaintained = "workspace"
+# unsound = "workspace" is the tool default, pinned explicitly: glib 0.18.5
+# (RUSTSEC-2024-0429) is transitive everywhere it appears (tauri → gtk), and
+# the audit.toml entry owns that decision.
+unsound = "workspace"
+yanked = "warn"
+unused-ignored-advisory = "deny"
+ignore = [
+    # The two 2026-11-07 triage waivers — BOTH root/fuzz-graph-only, both
+    # carried over from .cargo/audit.toml's documented triage (the full
+    # rationale lives there; these carry the review dates):
+    { id = "RUSTSEC-2023-0071", reason = "rsa Marvin Attack — no fixed upstream (rsa 0.10.0-rc.18 via jsonwebtoken 11 + our own keygen); loopback single-tenant threat model, 0600 keys, EdDSA available; re-verify when rsa/jsonwebtoken ship a fix. Review by 2027-02-07" },
+    { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5.5 timing variability — the reachable 0.7 copy was bumped to 0.7.7; the 0.5.5 copy is unreachable ECDSA code (RS256-pinned jsonwebtoken, no ES256/384 verify); re-check when elliptic-curve/p256 0.14 lands. Review by 2027-02-07" },
+]
+
+[licenses]
+version = 2
+# The allowlist the commercial module can defend: permissive-family atomics
+# plus the four deliberate exceptions, each with its reason. SPDX `OR`
+# expressions are satisfied through their allowed branch — the module
+# CHOOSES the permissive alternative (e.g. r-efi's `MIT OR Apache-2.0 OR
+# LGPL-2.1-or-later` rides the MIT branch; LGPL needs no entry and gets no
+# entry). Anything outside this list reds the gate: a new license is a named
+# act, evaluated here before it enters the graph.
+allow = [
+    # The permissive family (OSI-approved, commercial-defensible).
+    "Apache-2.0",
+    "MIT",
+    "ISC",
+    "BSD-1-Clause",   # ride-along OR branch (e.g. getrandom 0.2-era stacks)
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "0BSD",
+    "Zlib",
+    "Unlicense",      # public-domain-equivalent (aho-corasick, memchr, walkdir)
+    "CC0-1.0",        # public-domain-equivalent (blake3, base16, constant_time_eq)
+    "BSL-1.0",        # Boost — permissive (ryu, xxhash-rust)
+    "Unicode-3.0",    # the ICU data/license (unicode-ident, icu_*)
+    # The deliberate exceptions — each evaluated, kept, and dated here:
+    "NCSA",                    # (MIT OR Apache-2.0) AND NCSA — libfuzzer-sys, fuzz workspace only, never shipped
+    "MPL-2.0",                 # file-level weak copyleft, linkable (cssparser stack, hpke-rs)
+    "CDLA-Permissive-2.0",     # DATA license for the webpki root store (webpki-roots), not code
+    "AGPL-3.0-only",           # FIRST-PARTY: tools/signal-gateway declares it; libsignal-* is the canonical Signal protocol stack it binds. A third-party AGPL addition is a NEW named act, never covered by this entry
+    "Apache-2.0 WITH LLVM-exception", # the rustc-shipped standard library + blake3's dual branch — the WITH expression is allowed whole (0.20.x rejects a bare exception id)
+]
+
+[bans]
+# Defaults, pinned: multi-version dupes warn (visibility without churn —
+# the graph carries several deliberate semver-incompatible pairs), no crate
+# is banned yet. A ban is a named act: add `deny = [...]`, watch it red,
+# fix, then keep the ban.
+multiple-versions = "warn"
+deny = []
+skip = []
+skip-tree = []
+
+[sources]
+# Defaults, pinned: crates.io is the only registry, git sources warn and
+# each one is reviewed against its pin. A new registry or git source is a
+# named act.
+unknown-registry = "warn"
+unknown-git = "warn"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

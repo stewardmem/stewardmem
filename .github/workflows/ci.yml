@@ -936,6 +936,47 @@ jobs:
           done
           test "$found" -eq 0
 
+  deny:
+    name: cargo deny
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # The dependency POLICY gate (deny.toml) — the audit job above watches
+    # for known vulnerabilities; this one enforces the graph's POLICY: the
+    # license allowlist the commercial module must be able to defend, crate
+    # bans, and registry/source restrictions. Same binary-cache +
+    # version-pin pattern as the audit job. The FULL check (advisories
+    # included) runs at the ROOT workspace only — MEASURED 2026-11-07:
+    # cargo-deny's unused-waiver detector (`unused-ignored-advisory =
+    # "deny"`) is per-run, so a waiver whose advisory is absent from a
+    # workspace's graph reds THAT run (`error[advisory-not-detected]`);
+    # the two waived advisories live in the root+fuzz graphs. The six
+    # satellite workspaces' advisory coverage stays with the audit job's
+    # all-lockfile loop (+ .cargo/audit.toml, whose waivers the
+    # `no_ignored_advisory_is_fixed_in_the_current_lock` pin
+    # machine-checks). The waiver law — dated reasons only, stale waivers
+    # fail — lives in deny.toml.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: cache cargo-deny binary
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/bin/cargo-deny
+          key: cargo-deny-0.20.2
+      - name: Install cargo-deny (skipped on cache hit)
+        run: command -v cargo-deny >/dev/null 2>&1 || cargo install cargo-deny --version 0.20.2 --locked
+      - name: Deny every tracked workspace (policy per workspace, advisories at the root)
+        run: |
+          set -e
+          found=0
+          for lock in $(find . -name Cargo.lock -not -path '*/target/*'); do
+            ws=$(dirname "$lock")
+            if [ "$ws" = "." ]; then checks="advisories licenses bans sources"; else checks="licenses bans sources"; fi
+            echo "::group::cargo deny check $checks ($ws)"
+            (cd "$ws" && cargo deny check $checks) || found=1
+            echo "::endgroup::"
+          done
+          test "$found" -eq 0
+
   lipstyk:
     # v1.27.27 "Seal" M5 — the de-slop watchdog: no NEW code may add a
     # lipstyk diagnostic. Diff-scoped (changed lines only) against the PR
