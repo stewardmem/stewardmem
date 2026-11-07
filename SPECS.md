@@ -68,7 +68,7 @@ AI agent running on a Jetson Nano (4 GB RAM, ARM Cortex-A57).
 
 ## 2. Package & Dependencies
 
-From `Cargo.toml` (`name = "brain-server"`, `version = "1.29.42"`, `edition = "2024"`):
+From `Cargo.toml` (`name = "brain-server"`, `version = "1.29.43"`, `edition = "2024"`):
 
 | Purpose | Crate | Version |
 |---|---|---|
