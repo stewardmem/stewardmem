@@ -1063,7 +1063,10 @@ describe('the envelope law', () => {
 		// the CG-12 write round): the owned choice (the flip + the disclosed
 		// one-time download + 5 message keys × five locales) → 233,200
 		// gzipped (+717): named act, midpoint moves, register carries it.
-		const R0_BASELINE = 233_200;
+		// AND AGAIN (2026-11-06, the dependency-update round): in-range
+		// bumps across the shell tree (no surface change) → 235,144
+		// gzipped (+1,944): named act, midpoint moves, register carries it.
+		const R0_BASELINE = 235_144;
 		const BAND = 512;
 		expect(
 			Math.abs(total - R0_BASELINE),

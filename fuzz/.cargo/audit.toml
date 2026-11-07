@@ -1,0 +1,149 @@
+# cargo-audit configuration (consumed by the CI `cargo audit` job).
+#
+# RUSTSEC-2023-0071 (rsa 0.9.10 "Marvin Attack", timing sidechannel on RSA
+# private-key operations, severity 5.9) — accepted with documentation:
+#
+# 1. NO fixed version exists anywhere. Verified 2026-08-24: jsonwebtoken 11
+#    still depends on rsa ^0.9 internally for RS256 verify (we ship rsa
+#    0.10.0-rc.18 for our own keygen; it still carries no Marvin fix).
+# 2. Threat model: brain-server mints/verifies JWTs for its own local daemon
+#    (loopback, single-tenant default). The advisory's own workaround is that
+#    local use on a non-compromised computer is acceptable.
+# 3. Defense in depth: signing keys are PEM files at mode 0600 in a 0700 dir
+#    (enforced + tested); deployments minimizing RSA exposure can issue
+#    EdDSA (Ed25519) keys, supported since v1.2.0.
+#
+# ── Unmaintained transitive crates (informational; zero known vulns) ──────
+#
+# RUSTSEC-2024-0436 (paste, proc-macro): archived upstream; successor is
+# `pastey`. Enters ONLY via `tokenizers` (Hugging Face, actively maintained —
+# 0.23.1 is current and still uses paste). Compile-time codegen macro: zero
+# runtime surface. Every consumer of HF tokenizers carries this warning today;
+# it clears when tokenizers migrates to pastey. NOT removable locally — our
+# direct tokenizers 0.23 and model2vec-rs' pinned 0.21 both use it.
+#
+# RUSTSEC-2025-0119 (number_prefix): unmaintained formatting helper used by
+# indicatif 0.17. Chain: model2vec-rs 0.2.1 → hf-hub ^0.4 → indicatif ^0.17.
+# indicatif 0.18 dropped it, and hf-hub 0.5/1.0 use indicatif ^0.18 — the fix
+# lands when model2vec-rs bumps hf-hub. model2vec-rs itself is ACTIVELY
+# maintained (MinishLab, 0.2.1 published 2026-05). Not droppable: it is the
+# default edge/Jetson embedder (`potion-retrieval-32M`) and fastembed ships NO
+# model2vec/static-model equivalent — swapping embedders would invalidate the
+# retrieval-quality golden pins and the recall floors.
+#
+# RUSTSEC-2024-0429 (glib 0.18.5 VariantStrIter unsoundness / GHSA-wrw7-89jp-8q8g):
+# fixed ONLY in glib ≥ 0.20.0. The shell (and client) lockfiles pin
+# glib 0.18.5 via tauri 2.x → gtk 0.18 → glib ^0.18 (Linux backend only;
+# macOS/Windows do not load this code). No tauri 2.x release allows glib 0.20 —
+# it needs the GTK4 / gtk 0.20 migration (tauri-apps/tauri#12561). Our shell
+# has exactly one command (D7 token env pass-through) and never calls
+# VariantStrIter / GVariant child iteration. Accepted as tolerable risk;
+# Dependabot alert #3 dismissed 2026-09-23 on the same grounds.
+#
+# RUSTSEC-2026-0367 / 0368 / 0369 (zip 4.6.1): the ZIP extractor's one-shot
+# `extract()` — SUID/SGID bits preserved, symlink targets escaping the
+# destination directory, and Unix permissions applied through symlinks.
+#
+# WINDOWS-ONLY IN OUR GRAPH. tauri-plugin-updater 2.14 declares `zip` under
+# `[target.'cfg(target_os = "windows")'.dependencies]` (optional,
+# `version = "4"`), and the shell enables no plugin features
+# (`tauri-plugin-updater = { version = "2.14", features = [] }`), so
+# `cargo tree -i zip` on macOS prints NOTHING — the crate is not even
+# COMPILED on the platform we ship. The plugin's macOS and Linux paths
+# extract with `tar` + `flate2` (GzDecoder + tar::Archive), which is the tgz
+# the updater already ships; `zip` is only the Windows artifact path. There
+# is no Windows build and no Windows CI lane, so nothing we publish builds
+# the vulnerable code.
+#
+# The fix IS available upstream (zip >= 9.0.0), but the plugin's `zip = "4"`
+# requirement cannot reach it — 9.0.0 does not satisfy it — so the bump
+# needs a tauri-plugin-updater release first. That is the re-check trigger.
+#
+# RUSTSEC-2026-0381 (webpki-roots 0.26.11): the bundled root certificates
+# allowed a certificate path through the DISTRUSTED `emSign ECC Root CA - G3`
+# intermediate, whose private key is now public (CVE-2026-111943). The fix
+# (webpki-roots 1.0.10) DROPS that root.
+#
+# A FALSE POSITIVE, and the measurement is the only thing that makes it one.
+# The 0.26.11 release is a SEMVER SHIM, not a root bundle: its source is
+# `pub use parent::TLS_SERVER_ROOTS;` over a dependency on `webpki-roots` v1,
+# so it compiles in NO roots of its own — every root it serves comes from the
+# v1 crate the lockfile resolves. Measured 2026-10-21: `emSign ECC Root CA -
+# G3` appears 4x in webpki-roots 1.0.8/1.0.9's bundle and 0x in 1.0.10's, and
+# every tracked lockfile that carries the shim resolves its parent to
+# webpki-roots 1.0.10 — the FIXED release. cargo-audit compares the shim's
+# VERSION NUMBER (0.26.11) against the advisory's `patched = [">= 1.0.10"]`,
+# finds 0.26.11 < 1.0.10, and reports a vulnerability the artifact does not
+# carry.
+#
+# NOT FIXABLE BY A RE-LOCK, which is the load-bearing fact behind the ignore.
+# The 0.26.x line ENDS at 0.26.11 (upstream moved to 1.x), and the shim has
+# exactly two consumers in this repo: `ureq` 2.12.1 (root workspace: via
+# model2vec-rs 0.3.0 -> hf-hub 0.4.3; channel-bridge: via tokio-tungstenite
+# 0.30.0). ureq's LAST 2.x release still requires `webpki-roots ^0.26`, and
+# model2vec-rs 0.3.0 — the newest published — requires BOTH `hf-hub ^0.4` and
+# `ureq ^2` directly, so the shim cannot leave any tracked lockfile today.
+#
+# RUSTSEC-2026-0387 (crypto-bigint: multiple timing-variability issues in
+# operations intended to be constant-time; published 2026-10-23 — the day
+# AFTER v1.29.30 shipped green, which is why this entry did not exist for
+# that tag). Found by the v1.29.31 tag's own CI, before anything published
+# (release.yml fail-closed on the red matrix).
+#
+# TWO copies were in the root lock, and they are NOT the same story:
+#
+# 1. crypto-bigint 0.7.5 (rsa 0.10.0-rc.19 / crypto-primes 0.7.2 — the
+#    server's own keygen) — UPDATED FOR REAL to 0.7.7 (the fixed release,
+#    >= 0.7.6; ctutils rode along 0.4.4 -> 0.4.5). This entry's ignore never
+#    matches that copy again.
+# 2. crypto-bigint 0.5.5 — the one this ignore is FOR, and it is UNREACHABLE
+#    CODE: the chain is jsonwebtoken 11.1.0 -> ecdsa 0.16.9 / p256 0.13.2 /
+#    p384 0.13.1 -> elliptic-curve 0.13.8 -> crypto-bigint 0.5.5, and
+#    jsonwebtoken only enters the elliptic-curve code when verifying
+#    ES256/ES384 keys. This server pins RSA: `src/auth/jwks.rs` sets
+#    `pinned_alg: Algorithm::RS256` (and `src/reg_watch.rs:474` documents
+#    the RS256/RS384/RS512 posture) — no ECDSA verification is ever
+#    performed, so the constant-time operations the advisory is about never
+#    run. Same threat-model context as the Marvin entry above: loopback,
+#    single-tenant default.
+#
+# NOT REMOVABLE BY A RE-LOCK (measured 2026-10-25): jsonwebtoken 11.1.0 is
+# the newest release and still requires p256/p384 ^0.13; elliptic-curve
+# 0.13.8 is the line's newest; `cargo update -p jsonwebtoken` and
+# `-p elliptic-curve -p p256 -p p384 -p ecdsa -p primeorder` each lock ZERO
+# packages. The 0.5 line has no fixed release — the advisory's solution is
+# >= 0.7.6 only.
+#
+# Re-check trigger: an elliptic-curve/p256 0.14 release (or a jsonwebtoken
+# release moving its ECDSA stack to crypto-bigint >= 0.7.6) — then this
+# ignore is pruned, not re-dated.
+#
+# Re-check triggers (any one → revisit these ignores):
+#   - model2vec-rs releases with hf-hub >= 0.5  (clears number_prefix)
+#   - tokenizers release without paste          (clears paste — root/fuzz path;
+#     the client has a SECOND paste path: image → exr → pulp, all latest, so it
+#     clears only when pulp/exr adopt pastey too)
+#   - a real vulnerability lands against either crate (re-evaluate posture)
+#   - tauri 2.x bumps gtk ≥ 0.19 / glib ≥ 0.20  (clears RUSTSEC-2024-0429)
+#   - tauri-plugin-updater releases whose `zip` requirement reaches >= 9.0.0
+#     (clears RUSTSEC-2026-0367/0368/0369)
+#   - ureq 3.x, or a model2vec-rs release dropping `ureq ^2`, drops the
+#     webpki-roots 0.26 shim (clears RUSTSEC-2026-0381)
+#
+# Re-check with: cargo audit (exit 0 required for green CI).
+[advisories]
+# Each ignore carries its crate inline: the staleness pin
+# (`no_ignored_advisory_is_fixed_in_the_current_lock`, tests/lock_discipline_pins.rs)
+# parses that annotation and fails when the crate is gone from every tracked
+# lockfile — a fixed-and-removed advisory must not stay suppressed forever.
+ignore = [
+    "RUSTSEC-2023-0071", # rsa — the Marvin timing model (X-C7); no fixed upstream
+    "RUSTSEC-2024-0436", # paste — clears when tokenizers drops paste (root, fuzz) AND when image→exr→pulp moves to pastey (client; pulp 0.22.3 is latest and still requires paste ^1)
+    "RUSTSEC-2024-0429", # glib — clears when tauri bumps gtk >= 0.19 / glib >= 0.20
+    "RUSTSEC-2025-0119", # number_prefix — clears when model2vec-rs ships hf-hub >= 0.5
+    "RUSTSEC-2026-0367", # zip — windows-only path in tauri-plugin-updater; the zip feature is off and no windows build ships; clears when the plugin's zip requirement reaches >= 9.0.0
+    "RUSTSEC-2026-0368", # zip — as above
+    "RUSTSEC-2026-0369", # zip — as above
+    "RUSTSEC-2026-0381", # webpki-roots
+    "RUSTSEC-2026-0387", # crypto-bigint — the 0.7 copy was UPDATED to 0.7.7 (the fixed release); the remaining 0.5.5 copy is unreachable ECDSA code under RS256-pinned jsonwebtoken; clears when elliptic-curve/p256 0.14 (or jsonwebtoken moving to crypto-bigint >= 0.7.6) — the 0.26.11 semver shim compiles in the FIXED 1.0.10 roots (4x emSign G3 in 1.0.9, 0x in 1.0.10); clears when ureq 3.x / model2vec-rs drops ureq ^2
+]
