@@ -50,9 +50,56 @@ pub(crate) const LABEL_VOCABULARY: &[&str] = &["agree", "disagree", "uncertain"]
 /// DATA on the cells — the machine never auto-gates on it.
 pub(crate) const KAPPA_BAR_UNITS: i32 = 7000;
 
+/// The conjunction's second bar (Gwet's AC1 ≥ 0.80), the preregistration's
+/// terminus rule's other arm. REPORTED AS DATA exactly like
+/// [`KAPPA_BAR_UNITS`] — the machine never auto-gates on it.
+pub(crate) const AC1_BAR_UNITS: i32 = 8000;
+
 /// The κ sentinel: no signed agreement yet (the SDK calibration
 /// convention).
 pub(crate) const NO_KAPPA: i32 = -1;
+
+/// The prevalence-flag value the report carries on a skewed cell (the
+/// preregistration's flag law, decided at n=0).
+pub(crate) const PREVALENCE_SKEWED: &str = "prevalence-skewed";
+
+/// The flag's band edges: a modal prevalence below 20% or above 80% marks
+/// the cell `prevalence-skewed` — the region where the paradox literature
+/// demonstrates κ's collapse (Feinstein & Cicchetti 1990; Gwet 2008).
+/// The >80% arm is the live one for this bench (over q categories the
+/// modal share cannot fall below 1/q, so the low arm is latent until the
+/// vocabulary ever widens past six labels — a dated addendum).
+pub(crate) const PREVALENCE_FLAG_LOW: f64 = 0.20;
+pub(crate) const PREVALENCE_FLAG_HIGH: f64 = 0.80;
+
+/// The cell's positive-class prevalence, operationalized (the
+/// preregistration §2): the pooled prevalence of the MODAL label — the
+/// per-label proportion over BOTH raters' labels on the joint set,
+/// maximized. This is the same πₖ the AC1 formula computes, and it is the
+/// dominance measure the kappa paradox responds to, whatever the dominant
+/// label is named (the vocabulary designates no positive class). Returns
+/// the flag value when the modal share leaves the band, `None` when it
+/// stays inside or when there are no labels (absence is not skew).
+pub(crate) fn prevalence_flag(rater_a: &[String], rater_b: &[String]) -> Option<&'static str> {
+    let pooled = rater_a.len() + rater_b.len();
+    if pooled == 0 {
+        return None;
+    }
+    let mut labels: Vec<&String> = rater_a.iter().chain(rater_b.iter()).collect();
+    labels.sort();
+    labels.dedup();
+    let mut modal = 0.0f64;
+    for label in &labels {
+        let count = rater_a.iter().filter(|a| *a == *label).count()
+            + rater_b.iter().filter(|b| *b == *label).count();
+        modal = modal.max(count as f64 / pooled as f64);
+    }
+    if modal < PREVALENCE_FLAG_LOW || modal > PREVALENCE_FLAG_HIGH {
+        Some(PREVALENCE_SKEWED)
+    } else {
+        None
+    }
+}
 
 /// Cohen's κ over label vectors, integer ten-thousandths. Degenerate
 /// inputs are named errors, never NaN (the eval_kappa precedent):
@@ -562,11 +609,13 @@ pub(crate) fn rater_queue(
     Ok(out)
 }
 
-/// One agreement cell: a slot pair's κ over the tuples both slots labeled
-/// inside one (domain, partition) group. A degenerate pair names itself —
-/// `NO_KAPPA` plus the κ function's own refusal string — and never
-/// pretends to agree. `meets_bar` is data for the operator's read, never
-/// a gate input.
+/// One agreement cell: a slot pair's κ AND Gwet's AC1 AND the raw
+/// agreement AND the prevalence flag over the tuples both slots labeled
+/// inside one (domain, partition) group — the preregistered metric SUITE,
+/// emitted together, never one number alone (KM-2). A degenerate pair
+/// names itself — `NO_KAPPA` in the failed metrics' own fields plus each
+/// function's own refusal string — and never pretends to agree.
+/// `meets_bar` is data for the operator's read, never a gate input.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct KappaCell {
     pub domain: String,
@@ -577,11 +626,18 @@ pub(crate) struct KappaCell {
     pub kappa_units: i32,
     pub kappa_note: Option<String>,
     pub meets_bar: bool,
+    pub ac1_units: i32,
+    pub ac1_note: Option<String>,
+    pub raw_agreement_units: i32,
+    pub prevalence_flag: Option<String>,
 }
 
 /// The κ report: every slot pair × every (domain, partition) group over
 /// the labeled set, latest-wins (superseded rows are history, never
-/// votes). Deterministic cell order: domain, partition, slot pair.
+/// votes). Deterministic cell order: domain, partition, slot pair. Every
+/// cell carries the preregistered metric SUITE together — κ, Gwet's AC1,
+/// the raw agreement, the prevalence flag — never one number alone (KM-2);
+/// the sign-form reads these cells side by side when the operator signs.
 pub(crate) fn kappa_report(conn: &rusqlite::Connection) -> Result<Vec<KappaCell>, String> {
     // Latest label per (run, digest, slot).
     let mut latest: std::collections::BTreeMap<(i64, String, u8), (String, i64)> =
@@ -670,18 +726,34 @@ pub(crate) fn kappa_report(conn: &rusqlite::Connection) -> Result<Vec<KappaCell>
                     }
                 }
                 let n_joint = va.len();
-                let (units, note, meets) = cohen_kappa_units(&va, &vb)
+                let (kappa_units, kappa_note, meets) = cohen_kappa_units(&va, &vb)
                     .map(|units| (units, None, units >= KAPPA_BAR_UNITS))
                     .unwrap_or_else(|reason| (NO_KAPPA, Some(reason), false));
+                let (ac1_units, ac1_note) = gwet_ac1_units(&va, &vb)
+                    .map(|units| (units, None))
+                    .unwrap_or_else(|reason| (NO_KAPPA, Some(reason)));
+                // The raw agreement the two metrics observe: NO_KAPPA when
+                // nothing is jointly labeled (absence is never dressed up
+                // as 0% or 100% — the K-1 posture).
+                let raw_agreement_units = if n_joint == 0 {
+                    NO_KAPPA
+                } else {
+                    let agrees = va.iter().zip(&vb).filter(|(a, b)| a == b).count();
+                    ((agrees as f64 / n_joint as f64) * 10_000.0).round() as i32
+                };
                 cells.push(KappaCell {
                     domain: domain.clone(),
                     partition: partition.clone(),
                     slot_a: a,
                     slot_b: b,
                     n_joint,
-                    kappa_units: units,
-                    kappa_note: note,
+                    kappa_units,
+                    kappa_note,
                     meets_bar: meets,
+                    ac1_units,
+                    ac1_note,
+                    raw_agreement_units,
+                    prevalence_flag: prevalence_flag(&va, &vb).map(str::to_string),
                 });
             }
         }
@@ -1256,5 +1328,122 @@ mod tests {
             "the κ fn's own refusal: {note}"
         );
         assert!(!cell.meets_bar);
+    }
+
+    /// The degenerate pair names BOTH metrics (KM-2's degenerate arm): the
+    /// AC1 field carries NO_KAPPA plus its own refusal string, the raw
+    /// agreement carries NO_KAPPA (absence is never dressed up as a
+    /// percentage), and no prevalence is claimed (absence is not skew).
+    #[test]
+    fn kappa_degenerate_pair_names_both_metrics() {
+        let mut conn = db();
+        let digest = seed_tuple(&conn, 32, "acme", "case-d2", "C2");
+        submit(&mut conn, 32, &digest, "agree", 0);
+        let cells = kappa_report(&conn).unwrap();
+        assert_eq!(cells.len(), 1);
+        let cell = &cells[0];
+        assert_eq!(cell.n_joint, 0);
+        assert_eq!(cell.ac1_units, NO_KAPPA);
+        let note = cell.ac1_note.as_deref().unwrap();
+        assert!(
+            note.contains("no ratings supplied"),
+            "the AC1 fn's own refusal: {note}"
+        );
+        assert!(
+            note.starts_with("ac1: "),
+            "the note names its metric: {note}"
+        );
+        assert_eq!(cell.raw_agreement_units, NO_KAPPA);
+        assert_eq!(cell.prevalence_flag, None);
+    }
+
+    /// KM-3: the prevalence flag fires on the skewed cell (9:1) and stays
+    /// silent on the balanced one — and the skewed cell IS the paradox on
+    /// display: raw agreement 90%, κ 0, AC1 8895, flagged. Hand arithmetic
+    /// for the skewed cell (9 agree/agree + 1 agree/disagree, slot0 all
+    /// agree, slot1 9 agree 1 disagree): observed 9/10; Pe(κ) = 1.0·0.9 =
+    /// 0.9 → κ 0; π_agree = 0.95, π_disagree = 0.05, Pe(γ) = 0.095 → AC1 =
+    /// 0.805/0.905 → 8895; modal pooled prevalence 0.95 > 0.80 → flagged.
+    /// The balanced cell (5 agree/agree + 5 disagree/disagree): raw 10000,
+    /// marginals 50/50 → modal 0.5, inside the band → silent.
+    #[test]
+    fn kappa_report_flags_the_skewed_cell_and_not_the_balanced_one() {
+        let mut conn = db();
+        // The skewed cell: 10 joint tuples, 9:1 — the paradox shape.
+        for i in 0..10 {
+            let digest = seed_tuple(&conn, 41, "skewed", &format!("case-s{i}"), "C2");
+            submit(&mut conn, 41, &digest, "agree", 0);
+            submit(
+                &mut conn,
+                41,
+                &digest,
+                if i < 9 { "agree" } else { "disagree" },
+                1,
+            );
+        }
+        // The balanced cell: 10 joint tuples, 50/50.
+        for i in 0..10 {
+            let digest = seed_tuple(&conn, 42, "balanced", &format!("case-b{i}"), "C2");
+            let label = if i < 5 { "agree" } else { "disagree" };
+            submit(&mut conn, 42, &digest, label, 0);
+            submit(&mut conn, 42, &digest, label, 1);
+        }
+        let cells = kappa_report(&conn).unwrap();
+        assert_eq!(cells.len(), 2, "two domains, one cell each");
+        let skewed = cells.iter().find(|c| c.domain == "skewed").unwrap();
+        let balanced = cells.iter().find(|c| c.domain == "balanced").unwrap();
+        // The paradox on display: high raw agreement, collapsed κ, stable
+        // AC1 — all three recorded together, flagged.
+        assert_eq!(skewed.raw_agreement_units, 9_000);
+        assert_eq!(skewed.kappa_units, 0);
+        assert_eq!(skewed.ac1_units, 8_895);
+        assert_eq!(
+            skewed.prevalence_flag.as_deref(),
+            Some(PREVALENCE_SKEWED),
+            "modal prevalence 0.95 leaves the band"
+        );
+        // The balanced cell: the flag stays silent.
+        assert_eq!(balanced.raw_agreement_units, 10_000);
+        assert_eq!(balanced.kappa_units, 10_000);
+        assert_eq!(balanced.ac1_units, 10_000);
+        assert_eq!(balanced.prevalence_flag, None);
+        // KM-2, behavioral arm: EVERY cell emitted the whole suite — both
+        // metrics, the raw agreement, and the flag field, populated or
+        // honestly refusing.
+        for cell in &cells {
+            let _ = (cell.kappa_units, cell.ac1_units, cell.raw_agreement_units);
+            assert!(
+                cell.kappa_note.is_some() || cell.kappa_units != NO_KAPPA,
+                "no silent κ"
+            );
+            assert!(
+                cell.ac1_note.is_some() || cell.ac1_units != NO_KAPPA,
+                "no silent AC1"
+            );
+        }
+    }
+
+    /// KM-2, structural arm: the cell's TYPE carries the whole suite and
+    /// the report handler's JSON map emits every one of its keys — read
+    /// off the source, so a key dropped from the wire reds here.
+    #[test]
+    fn kappa_cell_type_and_wire_carry_the_whole_suite() {
+        const CORE: &str = include_str!("kappa.rs");
+        const HANDLER: &str = include_str!("../handlers/kappa.rs");
+        for field in [
+            "kappa_units",
+            "ac1_units",
+            "raw_agreement_units",
+            "prevalence_flag",
+        ] {
+            assert!(
+                CORE.contains(&format!("pub {field}: ")),
+                "KappaCell must declare {field}"
+            );
+            assert!(
+                HANDLER.contains(&format!("\"{field}\"")),
+                "the report wire must emit {field}"
+            );
+        }
     }
 }

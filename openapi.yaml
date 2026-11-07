@@ -5293,7 +5293,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [reviewer_id, human_agreement_kappa_units]
+              required: [reviewer_id, human_agreement_kappa_units, human_agreement_ac1_units, human_agreement_raw_percent]
               additionalProperties: false
               properties:
                 reviewer_id:
@@ -5303,6 +5303,12 @@ paths:
                 human_agreement_kappa_units:
                   type: integer
                   description: "-1 sentinel (no human calibration yet) or 0..=10000"
+                human_agreement_ac1_units:
+                  type: integer
+                  description: "Gwet's AC1, the conjunction's second arm (KM-4: no single-metric signing — all three required)"
+                human_agreement_raw_percent:
+                  type: integer
+                  description: "-1 sentinel (not recorded) or 0..=100; the raw percent agreement, the conjunction's third arm"
       responses:
         "200":
           description: Signed; the record is on the audit chain
@@ -5314,7 +5320,7 @@ paths:
                   signed: { type: boolean }
                   month: { type: integer }
         "400":
-          description: reviewer_invalid or kappa_invalid
+          description: reviewer_invalid, kappa_invalid, ac1_invalid, or raw_percent_invalid
         "401":
           description: Not authenticated
         "403":
@@ -7904,15 +7910,22 @@ paths:
         "404": { description: No such assignment (probe-blind) }
   /workflow/kappa/report:
     get:
-      summary: The per-rater-pair κ report (DPO/admin dual gate + calibrate; audited)
+      summary: The per-rater-pair agreement report (DPO/admin dual gate + calibrate; audited)
       description: >
-        Cohen's κ over the labeled set, one cell per (domain × frozen
-        partition × slot pair), integer ten-thousandths, latest-wins over
-        superseded rows. A degenerate pair names itself (NO_KAPPA plus the
-        κ function's own refusal) and never pretends to agree.
-        `meets_bar` (κ ≥ 0.70) is REPORTED DATA for the operator's read —
-        the κ value never auto-gates anything. EVERY call lands an audit
-        row naming the principal and the counts.
+        The preregistered metric SUITE over the labeled set, one cell per
+        (domain × frozen partition × slot pair), integer ten-thousandths,
+        latest-wins over superseded rows. EVERY cell carries all four
+        together — Cohen's κ, Gwet's AC1, the raw agreement, the prevalence
+        flag — never one number alone (KM-2; the preregistration,
+        KAPPA_METRIC_PREREGISTRATION_2026-11-07, committed before any label
+        landed). A degenerate pair names itself (NO_KAPPA plus the failed
+        metric's own refusal) and never pretends to agree. The prevalence
+        flag marks the cells whose modal pooled label prevalence leaves the
+        20%/80% band — the region where the kappa paradox collapses κ;
+        `prevalence-skewed` cells display BOTH metrics side by side (the
+        sign form reads these cells). `meets_bar` (κ ≥ 0.70) is REPORTED
+        DATA for the operator's read — no value here auto-gates anything.
+        EVERY call lands an audit row naming the principal and the counts.
       operationId: workflowKappaReport
       parameters:
         - name: limit
@@ -7925,13 +7938,14 @@ paths:
             default: 100
       responses:
         "200":
-          description: The bounded κ cells
+          description: The bounded agreement cells
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   bar_units: { type: integer }
+                  ac1_bar_units: { type: integer }
                   rows:
                     type: array
                     items:
@@ -7945,6 +7959,10 @@ paths:
                         kappa_units: { type: integer }
                         kappa_note: { type: string, nullable: true }
                         meets_bar: { type: boolean }
+                        ac1_units: { type: integer }
+                        ac1_note: { type: string, nullable: true }
+                        raw_agreement_units: { type: integer }
+                        prevalence_flag: { type: string, nullable: true }
                   count: { type: integer }
         "400": { description: kappa_limit_out_of_bounds }
         "401": { description: Not authenticated }

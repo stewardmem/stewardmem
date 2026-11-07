@@ -15356,18 +15356,104 @@ Final paragraph after the rule.";
             let ok = brain_server::audit::verify_chain(&conn);
             assert!(ok, "report rides the chain intact");
         }
-        // The monthly human sign-off covers the measures unchanged.
+        // The monthly human sign-off covers the measures unchanged — and
+        // carries the conjunction triple (KM-4): κ, Gwet's AC1, and the raw
+        // percent agreement, typed by the human, all three together.
         let signed = brain_server::handlers::workflow::post_calibration_sign(
             axum::extract::State(state),
             brain_server::handlers::auth::OptPrincipal(None),
             axum::Json(brain_server::handlers::workflow::CalibrationSignBody {
                 reviewer_id: "dpo".to_string(),
                 human_agreement_kappa_units: 8500,
+                human_agreement_ac1_units: 8049,
+                human_agreement_raw_percent: 84,
             }),
         )
         .await
         .expect("sign");
         assert_eq!(signed.0["signed"], serde_json::json!(true));
+    }
+
+    /// KM-4: a single-metric sign refuses BY NAME. The preregistered
+    /// conjunction (KAPPA_METRIC_PREREGISTRATION_2026-11-07, committed
+    /// before any label landed) requires the sign payload to carry κ, AC1,
+    /// and the raw percent agreement together; `deny_unknown_fields` plus
+    /// the required fields make a κ-only (or κ+AC1) payload a
+    /// deserialization refusal naming the missing field — the audit can
+    /// then verify the conjunction was honored.
+    #[test]
+    fn calibration_sign_refuses_a_single_metric_payload_by_name() {
+        let kappa_only = serde_json::json!({
+            "reviewer_id": "dpo",
+            "human_agreement_kappa_units": 8500,
+        });
+        let err = serde_json::from_value::<brain_server::handlers::workflow::CalibrationSignBody>(
+            kappa_only,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("human_agreement_ac1_units"),
+            "the κ-only sign refuses naming the missing AC1 arm: {err}"
+        );
+        let kappa_and_ac1 = serde_json::json!({
+            "reviewer_id": "dpo",
+            "human_agreement_kappa_units": 8500,
+            "human_agreement_ac1_units": 8049,
+        });
+        let err = serde_json::from_value::<brain_server::handlers::workflow::CalibrationSignBody>(
+            kappa_and_ac1,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("human_agreement_raw_percent"),
+            "the κ+AC1 sign refuses naming the missing raw arm: {err}"
+        );
+        // The full triple deserializes — the shape the conjunction signs.
+        assert!(
+            serde_json::from_value::<brain_server::handlers::workflow::CalibrationSignBody>(
+                serde_json::json!({
+                    "reviewer_id": "dpo",
+                    "human_agreement_kappa_units": 8500,
+                    "human_agreement_ac1_units": 8049,
+                    "human_agreement_raw_percent": 84,
+                })
+            )
+            .is_ok()
+        );
+    }
+
+    /// The conjunction arms are range-checked by name at the handler: an
+    /// AC1 outside -1/0..=10000 refuses `ac1_invalid`, a raw percent
+    /// outside -1/0..=100 refuses `raw_percent_invalid` — the same named
+    /// vocabulary the κ arm has always had (`kappa_invalid`).
+    #[tokio::test]
+    async fn calibration_sign_refuses_out_of_range_conjunction_arms_by_name() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let state = drawbridge_state(&tmp);
+        let body = |kappa: i32, ac1: i32, raw: i32| {
+            brain_server::handlers::workflow::CalibrationSignBody {
+                reviewer_id: "dpo".to_string(),
+                human_agreement_kappa_units: kappa,
+                human_agreement_ac1_units: ac1,
+                human_agreement_raw_percent: raw,
+            }
+        };
+        let err = brain_server::handlers::workflow::post_calibration_sign(
+            axum::extract::State(state.clone()),
+            brain_server::handlers::auth::OptPrincipal(None),
+            axum::Json(body(8500, 12_345, 84)),
+        )
+        .await
+        .expect_err("ac1 out of range refuses");
+        assert_eq!(err.inner.code, "ac1_invalid");
+        let err = brain_server::handlers::workflow::post_calibration_sign(
+            axum::extract::State(state),
+            brain_server::handlers::auth::OptPrincipal(None),
+            axum::Json(body(8500, 8049, 101)),
+        )
+        .await
+        .expect_err("raw percent out of range refuses");
+        assert_eq!(err.inner.code, "raw_percent_invalid");
     }
 
     /// Herald console seam, end to end over the HMAC edge: a signed decide

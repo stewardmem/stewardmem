@@ -191,12 +191,17 @@ pub struct KappaReportQuery {
     pub limit: Option<usize>,
 }
 
-/// `GET /workflow/kappa/report` — the per-rater-pair κ cells over the
-/// labeled set, one per (domain × frozen partition × slot pair). THE
-/// exfiltration surface: the DPO dual gate plus the `calibrate`
+/// `GET /workflow/kappa/report` — the per-rater-pair agreement cells over
+/// the labeled set, one per (domain × frozen partition × slot pair). EVERY
+/// cell carries the preregistered metric SUITE together — κ, Gwet's AC1,
+/// the raw agreement, the prevalence flag (KM-2) — the side-by-side
+/// display the calibration sign form reads: when the flag says
+/// `prevalence-skewed`, both metrics are on the screen the operator signs
+/// from, with the paradox note. `meets_bar` is data for the operator's
+/// read — no value here auto-gates anything.
+/// THE exfiltration surface: the DPO dual gate plus the `calibrate`
 /// capability, and an audited global row per call naming the principal
-/// and the counts. `meets_bar` is data for the operator's read — the κ
-/// value never auto-gates anything.
+/// and the counts.
 pub async fn get_kappa_report(
     State(state): State<Arc<AppState>>,
     principal: OptPrincipal,
@@ -253,12 +258,17 @@ pub async fn get_kappa_report(
                 "kappa_units": c.kappa_units,
                 "kappa_note": c.kappa_note,
                 "meets_bar": c.meets_bar,
+                "ac1_units": c.ac1_units,
+                "ac1_note": c.ac1_note,
+                "raw_agreement_units": c.raw_agreement_units,
+                "prevalence_flag": c.prevalence_flag,
             })
         })
         .collect();
     let count = cells.len();
     Ok(Json(serde_json::json!({
         "bar_units": crate::workflow::kappa::KAPPA_BAR_UNITS,
+        "ac1_bar_units": crate::workflow::kappa::AC1_BAR_UNITS,
         "rows": cells,
         "count": count,
     })))

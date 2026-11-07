@@ -90,24 +90,46 @@ pub fn record_report(
     Ok(())
 }
 
+/// The preregistered conjunction's three recorded arms — Cohen's κ, Gwet's
+/// AC1, and the raw percent agreement — the values a human signs TOGETHER
+/// (KM-4: no single-metric signing; the sign payload refuses a single
+/// metric). One value on the record path, so the conjunction cannot
+/// decompose between the wire and the audited signature row.
+pub(crate) struct ConjunctionUnits {
+    pub kappa_units: i32,
+    pub ac1_units: i32,
+    pub raw_percent: i32,
+}
+
 /// Record a human-signed monthly calibration (the drift gate). Caller has
 /// already enforced Admin/DPO authorization; `reviewer_id` is bounded there.
-/// `complaints_summary` is the complaints register extract that
-/// rides the SAME audited signature row — joined, never parallel machinery.
+/// `conjunction` is the triple the reviewer typed — κ, AC1, raw — and it
+/// rides the SAME audited signature row as a suffix on the record detail,
+/// so the audit can verify the preregistered conjunction was honored
+/// (KM-4). `complaints_summary` is the complaints register extract that
+/// rides the same row — joined, never parallel machinery.
 pub(crate) fn record_signed(
     conn: &Connection,
-    kappa_units: i32,
+    conjunction: ConjunctionUnits,
     score_units: i32,
     reviewer_id: &str,
     now: i64,
     complaints_summary: &str,
 ) -> Result<(), rusqlite::Error> {
     let uplift = last_baseline_units(conn).map_or(0, |b| score_units - b);
-    let record = CalibrationRecord::new(kappa_units, uplift, reviewer_id);
+    let record = CalibrationRecord::new(conjunction.kappa_units, uplift, reviewer_id);
+    // The `CalibrationRecord` detail stays byte-stable (the SDK's pinned
+    // format); the conjunction's other two arms append after it.
+    let base = format!(
+        "{} ac1_units:{} raw_percent:{}",
+        record.detail(),
+        conjunction.ac1_units,
+        conjunction.raw_percent
+    );
     let detail = if complaints_summary.is_empty() {
-        record.detail()
+        base
     } else {
-        format!("{} complaints:{complaints_summary}", record.detail())
+        format!("{base} complaints:{complaints_summary}")
     };
     super::audit_write_global(
         conn,
@@ -116,7 +138,11 @@ pub(crate) fn record_signed(
         &detail,
     );
     meta_set(conn, KEY_LAST_SIGNED_MONTH, &month_index(now).to_string())?;
-    meta_set(conn, KEY_LAST_KAPPA_UNITS, &kappa_units.to_string())?;
+    meta_set(
+        conn,
+        KEY_LAST_KAPPA_UNITS,
+        &conjunction.kappa_units.to_string(),
+    )?;
     // A human signature re-anchors the baseline: deltas stay OUR-vs-US.
     meta_set(conn, KEY_BASELINE_UNITS, &score_units.to_string())?;
     Ok(())
@@ -135,6 +161,15 @@ mod tests {
         conn
     }
 
+    /// The conjunction triple as one value — the KM-4 shape at the call site.
+    fn cj(kappa: i32, ac1: i32, raw: i32) -> ConjunctionUnits {
+        ConjunctionUnits {
+            kappa_units: kappa,
+            ac1_units: ac1,
+            raw_percent: raw,
+        }
+    }
+
     #[test]
     fn report_due_then_stamped_for_a_week() {
         let conn = db();
@@ -151,7 +186,7 @@ mod tests {
         let conn = db();
         record_report(&conn, 8000, 1000, "").unwrap();
         assert!(!signature_blocked(&conn, 2000));
-        record_signed(&conn, 8500, 8200, "dpo-1", 2000, "").unwrap();
+        record_signed(&conn, cj(8500, 8000, 84), 8200, "dpo-1", 2000, "").unwrap();
         assert!(signature_blocked(&conn, 3000));
         assert_eq!(last_kappa_units(&conn), 8500);
         // Signature re-anchored the baseline to the signed score.
@@ -165,7 +200,7 @@ mod tests {
     fn records_land_on_the_audit_chain_with_their_detail() {
         let conn = db();
         record_report(&conn, 9000, 100, "").unwrap();
-        record_signed(&conn, 8000, 9100, "dpo-9", 200, "").unwrap();
+        record_signed(&conn, cj(8000, 8000, 80), 9100, "dpo-9", 200, "").unwrap();
         let n: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM audit_events WHERE kind='workflow'",
@@ -191,11 +226,11 @@ mod tests {
     #[test]
     fn signed_row_carries_the_complaints_extract() {
         let conn = db();
-        record_signed(&conn, 8000, 8100, "dpo-1", 100, "").unwrap();
+        record_signed(&conn, cj(8000, 8000, 80), 8100, "dpo-1", 100, "").unwrap();
         record_report(&conn, 8200, 100 + 40 * 86400, "").unwrap();
         crate::workflow::calibration::record_signed(
             &conn,
-            8300,
+            cj(8300, 8000, 80),
             8250,
             "dpo-2",
             200 + 40 * 86400,
@@ -213,5 +248,36 @@ mod tests {
             )
             .unwrap();
         assert_eq!(n, 2, "two signature rows on the chain");
+    }
+
+    /// KM-4's audit half: the conjunction triple rides the SAME audited
+    /// signature row. Details are hashed at rest, so the verification
+    /// recomputes the expected detail — the SDK record's own detail format
+    /// (κ arm) plus the `ac1_units`/`raw_percent` suffix — and matches the
+    /// stored hash. An auditor holding the chain can verify all three
+    /// values were signed together, which is what the preregistered
+    /// conjunction requires.
+    #[test]
+    fn signed_row_carries_the_conjunction_triple() {
+        let conn = db();
+        record_signed(&conn, cj(8500, 8049, 84), 8200, "dpo-1", 100, "").unwrap();
+        // Fresh DB: no baseline yet, so the record's uplift arm reads 0.
+        let expected_detail = format!(
+            "{} ac1_units:8049 raw_percent:84",
+            CalibrationRecord::new(8500, 0, "dpo-1").detail()
+        );
+        let detail_hash: String = conn
+            .query_row(
+                "SELECT detail_hash FROM audit_events WHERE kind='workflow' AND target_hash = ?1",
+                [crate::audit::hash("calibration/sign")],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            detail_hash,
+            crate::audit::hash(&expected_detail),
+            "the audited detail IS the conjunction triple (κ + AC1 + raw, one row)"
+        );
+        assert!(verify_chain(&conn));
     }
 }

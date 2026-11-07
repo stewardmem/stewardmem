@@ -572,12 +572,23 @@ pub async fn get_scoreboard(
 }
 
 /// The body of a monthly human-signed calibration. `human_agreement_kappa_units`
-/// is the reviewer's recorded scorer-vs-human κ (`-1` sentinel = none yet).
+/// is the reviewer's recorded scorer-vs-human κ (`-1` sentinel = none yet);
+/// `human_agreement_ac1_units` is the recorded Gwet's AC1 and
+/// `human_agreement_raw_percent` the recorded raw percent agreement — the
+/// other two arms of the preregistered conjunction (κ ≥ 0.70 ∧ AC1 ≥ 0.80
+/// ∧ raw recorded; `plans/improvements/KAPPA_METRIC_PREREGISTRATION_2026-11-07.md`,
+/// committed before any label landed). ALL THREE are required: a
+/// single-metric payload refuses at the deserializer, naming the missing
+/// field (KM-4, no single-metric signing) — so the audit chain can verify
+/// the conjunction was honored by a person. The machine still never
+/// auto-gates: every judgment is typed by the human.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CalibrationSignBody {
     pub reviewer_id: String,
     pub human_agreement_kappa_units: i32,
+    pub human_agreement_ac1_units: i32,
+    pub human_agreement_raw_percent: i32,
 }
 
 /// `POST /workflow/calibration/sign` — the monthly human-signed calibration
@@ -607,6 +618,20 @@ pub async fn post_calibration_sign(
             "human_agreement_kappa_units must be -1 or in 0..=10000",
         ));
     }
+    let ac1 = body.human_agreement_ac1_units;
+    if ac1 != -1 && !(0..=brain_engine_sdk::pure::qa_score::SCALE).contains(&ac1) {
+        return Err(HandlerError::bad_request(
+            "ac1_invalid",
+            "human_agreement_ac1_units must be -1 or in 0..=10000",
+        ));
+    }
+    let raw_percent = body.human_agreement_raw_percent;
+    if raw_percent != -1 && !(0..=100).contains(&raw_percent) {
+        return Err(HandlerError::bad_request(
+            "raw_percent_invalid",
+            "human_agreement_raw_percent must be -1 or in 0..=100",
+        ));
+    }
     tokio::task::spawn_blocking(move || -> Result<serde_json::Value, HandlerError> {
         let mut conn = pool_sign
             .get()
@@ -629,7 +654,11 @@ pub async fn post_calibration_sign(
             .unwrap_or_default();
         crate::workflow::calibration::record_signed(
             &tx,
-            kappa,
+            crate::workflow::calibration::ConjunctionUnits {
+                kappa_units: kappa,
+                ac1_units: ac1,
+                raw_percent,
+            },
             crate::workflow::scoreboard::score_units_now(&tx),
             &reviewer,
             now,

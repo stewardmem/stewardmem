@@ -1058,7 +1058,11 @@ mod tests {
         // SAME audited row (joined, not parallel machinery).
         crate::workflow::calibration::record_signed(
             &conn,
-            8_000,
+            crate::workflow::calibration::ConjunctionUnits {
+                kappa_units: 8_000,
+                ac1_units: 8_000,
+                raw_percent: 80,
+            },
             8_100,
             "dpo-1",
             300_000,

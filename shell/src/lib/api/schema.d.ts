@@ -3829,8 +3829,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The per-rater-pair κ report (DPO/admin dual gate + calibrate; audited)
-         * @description Cohen's κ over the labeled set, one cell per (domain × frozen partition × slot pair), integer ten-thousandths, latest-wins over superseded rows. A degenerate pair names itself (NO_KAPPA plus the κ function's own refusal) and never pretends to agree. `meets_bar` (κ ≥ 0.70) is REPORTED DATA for the operator's read — the κ value never auto-gates anything. EVERY call lands an audit row naming the principal and the counts.
+         * The per-rater-pair agreement report (DPO/admin dual gate + calibrate; audited)
+         * @description The preregistered metric SUITE over the labeled set, one cell per (domain × frozen partition × slot pair), integer ten-thousandths, latest-wins over superseded rows. EVERY cell carries all four together — Cohen's κ, Gwet's AC1, the raw agreement, the prevalence flag — never one number alone (KM-2; the preregistration, KAPPA_METRIC_PREREGISTRATION_2026-11-07, committed before any label landed). A degenerate pair names itself (NO_KAPPA plus the failed metric's own refusal) and never pretends to agree. The prevalence flag marks the cells whose modal pooled label prevalence leaves the 20%/80% band — the region where the kappa paradox collapses κ; `prevalence-skewed` cells display BOTH metrics side by side (the sign form reads these cells). `meets_bar` (κ ≥ 0.70) is REPORTED DATA for the operator's read — no value here auto-gates anything. EVERY call lands an audit row naming the principal and the counts.
          */
         get: operations["workflowKappaReport"];
         put?: never;
@@ -11123,6 +11123,10 @@ export interface operations {
                     reviewer_id: string;
                     /** @description -1 sentinel (no human calibration yet) or 0..=10000 */
                     human_agreement_kappa_units: number;
+                    /** @description Gwet's AC1, the conjunction's second arm (KM-4: no single-metric signing — all three required) */
+                    human_agreement_ac1_units: number;
+                    /** @description -1 sentinel (not recorded) or 0..=100; the raw percent agreement, the conjunction's third arm */
+                    human_agreement_raw_percent: number;
                 };
             };
         };
@@ -11139,7 +11143,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description reviewer_invalid or kappa_invalid */
+            /** @description reviewer_invalid, kappa_invalid, ac1_invalid, or raw_percent_invalid */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -14778,7 +14782,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The bounded κ cells */
+            /** @description The bounded agreement cells */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -14786,6 +14790,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         bar_units?: number;
+                        ac1_bar_units?: number;
                         rows?: {
                             domain?: string;
                             /** @enum {string} */
@@ -14796,6 +14801,10 @@ export interface operations {
                             kappa_units?: number;
                             kappa_note?: string | null;
                             meets_bar?: boolean;
+                            ac1_units?: number;
+                            ac1_note?: string | null;
+                            raw_agreement_units?: number;
+                            prevalence_flag?: string | null;
                         }[];
                         count?: number;
                     };
