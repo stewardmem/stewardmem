@@ -2061,6 +2061,23 @@ pub fn afm_bridge_path() -> Option<std::path::PathBuf> {
     exe.parent().map(|dir| dir.join("brain-afm"))
 }
 
+/// The Tier-2 document converter path (`BRAIN_DOCLING_PATH`, IMPROVE04 S4) —
+/// the operator-configured seam for the ocr/docling tier of
+/// `POST /ingest/document`. Strictly operator-configured (unlike
+/// `afm_bridge_path`, there is NO exe-sibling default: Docling is a Python
+/// tool that never ships beside the kernel), and `None` (unset/empty) is a
+/// POSTURE, not an error: the Tier-2 variant answers `converter_unavailable`
+/// and Tier 0 — the default — is unaffected and needs zero configuration.
+/// The conversion itself is plans 05/06; this seam only detects.
+pub fn document_converter_path() -> Option<std::path::PathBuf> {
+    let explicit = std::env::var("BRAIN_DOCLING_PATH").ok()?;
+    let trimmed = explicit.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(std::path::PathBuf::from(trimmed))
+}
+
 /// The chat tier the spine requests, verbatim, as the bridge wire's
 /// additive-optional `model` field. `BRAIN_CHAT_MODEL` names it;
 /// unset/empty is `None` — the field is OMITTED from the wire, which every
@@ -2405,6 +2422,31 @@ pub(crate) mod tests {
 
     /// Set several env vars under ONE lock acquisition (`with_env` uses the
     /// same crate-wide lock; nesting it deadlocks).
+    #[test]
+    fn document_converter_path_is_operator_configured_only() {
+        // IMPROVE04 S4: unset/empty = None (the posture, never an error);
+        // a value resolves verbatim. There is NO exe-sibling default —
+        // Docling is a Python tool that never ships beside the kernel.
+        with_envs(&[("BRAIN_DOCLING_PATH", None)], || {
+            assert!(super::document_converter_path().is_none());
+        });
+        with_envs(&[("BRAIN_DOCLING_PATH", Some(""))], || {
+            assert!(super::document_converter_path().is_none());
+        });
+        with_envs(&[("BRAIN_DOCLING_PATH", Some("  "))], || {
+            assert!(super::document_converter_path().is_none());
+        });
+        with_envs(
+            &[("BRAIN_DOCLING_PATH", Some("/opt/docling/bin/docling"))],
+            || {
+                assert_eq!(
+                    super::document_converter_path(),
+                    Some(std::path::PathBuf::from("/opt/docling/bin/docling"))
+                );
+            },
+        );
+    }
+
     fn with_envs(vars: &[(&str, Option<&str>)], f: impl FnOnce()) {
         let _guard = crate::test_support::lock_env();
         let prev: Vec<(&str, Option<String>)> = vars

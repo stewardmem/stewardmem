@@ -286,6 +286,35 @@ struct DocumentHeaderFields {
     layout: Option<String>,
 }
 
+// ── the tool-detector seam (S4, the Tier-2 plumbing and nothing else) ────────
+
+/// What the converter-path probe observed. The seam DETECTS; the conversion
+/// itself is plans 05/06 — this type exists so the route's refusal is a
+/// posture the operator can act on, never a bare error.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConverterProbe {
+    /// `BRAIN_DOCLING_PATH` unset/empty — the operator has not configured a
+    /// converter. Tier 0 needs none.
+    Unconfigured,
+    /// Configured, but the path does not exist (or is not a file).
+    PathMissing,
+    /// Configured and present. The route still refuses (named) — the
+    /// conversion is plans 05/06's work — but the posture differs: the
+    /// operator's configuration is GOOD.
+    Present(std::path::PathBuf),
+}
+
+/// Probe the configured converter path. Pure: the env read happens in
+/// `config::document_converter_path()`; this takes the resolved option so the
+/// three arms are testable without env manipulation.
+pub fn probe_document_converter(configured: Option<&std::path::Path>) -> ConverterProbe {
+    match configured {
+        None => ConverterProbe::Unconfigured,
+        Some(p) if p.is_file() => ConverterProbe::Present(p.to_path_buf()),
+        Some(_) => ConverterProbe::PathMissing,
+    }
+}
+
 // ── the isolation boundary (the child parse) ─────────────────────────────────
 
 /// How the child extraction failed, from the PARENT's seat. The child's
@@ -705,6 +734,29 @@ mod tests {
             verify_document_header(&tampered, &row)
                 .expect_err("tampered extractor")
                 .starts_with("extractor")
+        );
+    }
+
+    #[test]
+    fn converter_probe_names_all_three_postures() {
+        // the S4 seam is tested by absence (CI runs with no converter
+        // configured) — and the other two arms are pinned pure, no env.
+        assert_eq!(
+            probe_document_converter(None),
+            ConverterProbe::Unconfigured,
+            "unset = Unconfigured, the CI posture"
+        );
+        let missing = std::path::Path::new("/nonexistent/converter/path");
+        assert_eq!(
+            probe_document_converter(Some(missing)),
+            ConverterProbe::PathMissing,
+            "configured-but-absent = PathMissing"
+        );
+        let present = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+        assert_eq!(
+            probe_document_converter(Some(&present)),
+            ConverterProbe::Present(present),
+            "configured-and-present = Present (the route still refuses, named)"
         );
     }
 

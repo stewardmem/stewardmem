@@ -399,6 +399,44 @@ async fn a_pdf_that_panics_the_extractor_refuses_named_never_kills_the_server() 
 }
 
 #[tokio::test]
+async fn the_tier2_variant_refuses_named_in_every_environment() {
+    // THE S4 SEAM'S ROUTE LAW: tier=docling NEVER extracts — it refuses NAMED.
+    // Which named refusal depends on the operator's environment (the CI
+    // default — nothing configured — answers converter_unavailable; a
+    // configured path answers converter_not_implemented, the plans-05/06
+    // boundary). The exact three probe arms are pinned pure in
+    // ingest_document's tests; the config parsing is pinned in config's.
+    let s = server();
+    let (status, resp) = post_document(
+        &s.state,
+        serde_json::json!({
+            "data": b64(&fixture("table.pdf")),
+            "title": "t",
+            "tier": "docling"
+        })
+        .to_string(),
+    )
+    .await;
+    let code = code_of(&resp);
+    assert!(
+        status == StatusCode::SERVICE_UNAVAILABLE || status == StatusCode::NOT_IMPLEMENTED,
+        "the Tier-2 variant refuses, never extracts: {status} {resp}"
+    );
+    assert!(
+        code == "converter_unavailable" || code == "converter_not_implemented",
+        "the refusal names the posture: {resp}"
+    );
+    // Tier 0 is unaffected by any of it — the default still extracts.
+    let (status, resp) =
+        post_document(&s.state, document_body("table.pdf", "Tier0 Still Default")).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "Tier 0 needs no configuration: {resp}"
+    );
+}
+
+#[tokio::test]
 async fn unsupported_tier_refuses_named() {
     let s = server();
     let (status, resp) = post_document(

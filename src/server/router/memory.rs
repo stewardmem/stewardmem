@@ -2202,8 +2202,43 @@ pub async fn ingest_document(
         )
     })?;
 
-    // Tier selection. S2 lands Tier 0 only; S4 wires the `docling` variant
-    // to the converter probe.
+    // Tier selection. Tier 0 (`text-layer`) is the DEFAULT and needs zero
+    // configuration. `docling` is the Tier-2 variant: the tool-detector seam
+    // (S4) probes the operator-configured converter path — absent →
+    // `converter_unavailable` (503, a posture the operator fixes by
+    // configuring BRAIN_DOCLING_PATH); present-but-unwired →
+    // `converter_not_implemented` (501, the plans-05/06 boundary: the seam
+    // detects, the conversion is not this build's work). Tier 0 is never
+    // touched by any of this.
+    let tier = payload
+        .tier
+        .clone()
+        .unwrap_or_else(|| crate::ingest_document::TIER_TEXT_LAYER.to_string());
+    if tier == "docling" {
+        match crate::ingest_document::probe_document_converter(
+            crate::config::document_converter_path().as_deref(),
+        ) {
+            crate::ingest_document::ConverterProbe::Unconfigured
+            | crate::ingest_document::ConverterProbe::PathMissing => {
+                return Err(document_error(
+                    axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                    "converter_unavailable",
+                    "the Tier-2 converter is not available: BRAIN_DOCLING_PATH is unset or its \
+                     path does not exist; Tier 0 (text-layer) needs no configuration"
+                        .to_string(),
+                ));
+            }
+            crate::ingest_document::ConverterProbe::Present(_) => {
+                return Err(document_error(
+                    axum::http::StatusCode::NOT_IMPLEMENTED,
+                    "converter_not_implemented",
+                    "the converter seam detects the configured tool; the conversion itself is \
+                     plans 05/06 — Tier 0 (text-layer) remains the default"
+                        .to_string(),
+                ));
+            }
+        }
+    }
     let tier = payload
         .tier
         .clone()
