@@ -2239,17 +2239,39 @@ pub async fn ingest_document(
             }
         }
     }
+    // IMPROVE05: the ocr arm — the THIRD probe sibling. The probe runs
+    // BEFORE any extraction work (OV-4: absent → the named 503 posture;
+    // Tier 0 and the docling arm are unaffected — the three probes are
+    // independent). Present → the hybrid pipeline below routes per page.
+    let ocr_sidecar = if tier == crate::ingest_document::TIER_OCR {
+        match crate::ingest_document::probe_ocr_bridge(crate::config::ocr_bridge_path().as_deref())
+        {
+            crate::ingest_document::OcrProbe::Present(path) => Some(path),
+            crate::ingest_document::OcrProbe::Absent
+            | crate::ingest_document::OcrProbe::PathMissing(_) => {
+                return Err(document_error(
+                    axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                    "ocr_unavailable",
+                    "the OCR sidecar is not available: BRAIN_VISION_BRIDGE is unset or its                      path does not exist and no shell-vision was found beside the server;                      Tier 0 (text-layer) needs no configuration"
+                        .to_string(),
+                ));
+            }
+        }
+    } else {
+        None
+    };
     let tier = payload
         .tier
         .clone()
         .unwrap_or_else(|| crate::ingest_document::TIER_TEXT_LAYER.to_string());
-    if tier != crate::ingest_document::TIER_TEXT_LAYER {
+    if tier != crate::ingest_document::TIER_TEXT_LAYER && tier != crate::ingest_document::TIER_OCR {
         return Err(document_error(
             axum::http::StatusCode::BAD_REQUEST,
             "unsupported_tier",
             format!(
-                "tier {tier:?} is not available in this build; supported: {}",
-                crate::ingest_document::TIER_TEXT_LAYER
+                "tier {tier:?} is not available in this build; supported: {}, {}",
+                crate::ingest_document::TIER_TEXT_LAYER,
+                crate::ingest_document::TIER_OCR
             ),
         ));
     }
@@ -2336,13 +2358,24 @@ pub async fn ingest_document(
                 .map_err(|e| HandlerError::internal(e.to_string()))
         });
     if let Ok(Some(row)) = existing {
-        let derived = rederive_document_markdown(&pdf_bytes, &row).map_err(|e| {
-            document_error(
-                axum::http::StatusCode::CONFLICT,
-                "document_row_mismatch",
-                format!("stored document can no longer be re-derived byte-identically: {e}"),
-            )
-        })?;
+        let derived = match rederive_document_markdown(&pdf_bytes, &row) {
+            Ok(m) => m,
+            Err(RederiveFailure::OcrUnavailable) => {
+                return Err(document_error(
+                    axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                    "ocr_unavailable",
+                    "this stored document's OCR pages were derived by the shell-vision                      sidecar, and it is not available now (BRAIN_VISION_BRIDGE unset/absent)                      — a re-serve re-derives under the row's pinned engine or refuses"
+                        .to_string(),
+                ));
+            }
+            Err(RederiveFailure::Mismatch(e)) => {
+                return Err(document_error(
+                    axum::http::StatusCode::CONFLICT,
+                    "document_row_mismatch",
+                    format!("stored document can no longer be re-derived byte-identically: {e}"),
+                ));
+            }
+        };
         return Ok(Json(serde_json::json!({
             "success": true,
             "status": "duplicate",
@@ -2390,11 +2423,20 @@ pub async fn ingest_document(
     };
     let extracted = match extracted {
         Ok(doc) => doc,
+        Err(crate::ingest_document::ChildExtractError::NoTextLayer)
+            if tier == crate::ingest_document::TIER_OCR =>
+        {
+            // The deterministic all-scan verdict, routed (OV-1's vacuous
+            // form): EVERY page is image-only, so the sidecar request marks
+            // nothing (all pages) and the reply defines the page count. The
+            // per-page texts stay empty until the merge below.
+            crate::ingest_document::ExtractedDocument { pages: Vec::new() }
+        }
         Err(crate::ingest_document::ChildExtractError::NoTextLayer) => {
             return Err(document_error(
                 axum::http::StatusCode::UNPROCESSABLE_ENTITY,
                 "no_text_layer",
-                "the PDF has no text layer (image-only scan); Tier 0 extracts text layers only — scan-grade OCR is a plan-05/06 surface".to_string(),
+                "the PDF has no text layer (image-only scan); Tier 0 extracts text layers only — the ocr tier (the shell-vision sidecar) is the scan-grade surface".to_string(),
             ));
         }
         Err(crate::ingest_document::ChildExtractError::ChildFailed) => {
@@ -2413,11 +2455,140 @@ pub async fn ingest_document(
         }
     };
 
+    // ── the per-page hybrid routing (IMPROVE05, OV-1) ──
+    // A page with a text layer is NEVER sent to the sidecar: per-page
+    // emptiness of the extraction is the routing signal. The sidecar is
+    // one-shot per document (the extract-document lifecycle): the request
+    // marks exactly the empty pages, the reply's text is merged VERBATIM
+    // into the page slots (no correction path exists — OV-5), and the
+    // assembly carries the engine + confidence marks the emitter, the
+    // header, and the row all read. A page Vision refused is a named
+    // refusal for the DOCUMENT (the hole is never shipped).
+    let mut extracted = extracted;
+    let ocr_assembly: Option<crate::ingest_document::OcrAssembly> = if let Some(sidecar_exe) =
+        ocr_sidecar
+    {
+        let empty_pages: Vec<usize> = extracted
+            .pages
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.trim().is_empty())
+            .map(|(i, _)| i + 1)
+            .collect();
+        let doc_pages = extracted.pages.len();
+        if doc_pages == 0 || !empty_pages.is_empty() {
+            let request_pages: Option<Vec<usize>> = if doc_pages == 0 {
+                None
+            } else {
+                Some(empty_pages)
+            };
+            let pdf = pdf_bytes.clone();
+            let exe = sidecar_exe.clone();
+            let reply = task::spawn_blocking(move || {
+                crate::ingest_document::ocr_pages_via_sidecar(
+                    &exe,
+                    &pdf,
+                    request_pages.as_deref(),
+                    doc_pages,
+                )
+            })
+            .await
+            .map_err(|_| HandlerError::internal("the OCR task could not complete".to_string()))?;
+            let reply = match reply {
+                Ok(reply) => reply,
+                // The named fallbacks, each its own refusal: the
+                // sidecar's own raster verdict propagates BY NAME; a
+                // page Vision refused refuses the DOCUMENT naming the
+                // indices (the hole is never shipped); a dead or
+                // misframing sidecar is the 502 posture.
+                Err(crate::ingest_document::OcrSidecarError::RasterFailed) => {
+                    return Err(document_error(
+                            axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+                            "raster_failed",
+                            "the OCR sidecar could not rasterize the document (the bytes                              parsed for the text layer, but not for the renderer)"
+                                .to_string(),
+                        ));
+                }
+                Err(crate::ingest_document::OcrSidecarError::PageFailed(indices)) => {
+                    return Err(document_error(
+                        axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+                        "ocr_page_failed",
+                        format!(
+                            "the OCR sidecar refused page(s) {}: a refused page is a \
+                                 named failure, never a fabricated empty — the document is \
+                                 not ingested with a hole",
+                            indices
+                                .iter()
+                                .map(std::string::ToString::to_string)
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ),
+                    ));
+                }
+                Err(
+                    crate::ingest_document::OcrSidecarError::SidecarFailed
+                    | crate::ingest_document::OcrSidecarError::BadReply(_),
+                ) => {
+                    return Err(document_error(
+                        axum::http::StatusCode::BAD_GATEWAY,
+                        "ocr_sidecar_failed",
+                        "the OCR sidecar died, timed out, or answered nonsense; no \
+                             extraction ran in-process as a fallback"
+                            .to_string(),
+                    ));
+                }
+            };
+            // the reply defines the page count only for the all-scan case
+            if doc_pages == 0 {
+                extracted.pages = vec![String::new(); reply.pages.len()];
+            }
+            for page in &reply.pages {
+                if page.index == 0 || page.index > extracted.pages.len() {
+                    return Err(HandlerError::internal(format!(
+                        "the OCR reply named page {} of a {}-page document",
+                        page.index,
+                        extracted.pages.len()
+                    )));
+                }
+                extracted.pages[page.index - 1] = page.text.clone();
+            }
+            Some(crate::ingest_document::OcrAssembly {
+                engine: reply.engine,
+                pages: reply
+                    .pages
+                    .iter()
+                    .map(|p| crate::ingest_document::OcrPageMark {
+                        index: p.index,
+                        confidence: p.confidence,
+                    })
+                    .collect(),
+            })
+        } else {
+            // every page carries a text layer: nothing to OCR — the
+            // honest record of what ran is the Tier-0 shape.
+            None
+        }
+    } else {
+        None
+    };
+    let derived_tier = match &ocr_assembly {
+        None => crate::ingest_document::TIER_TEXT_LAYER.to_string(),
+        Some(a) => {
+            if a.pages.len() == extracted.pages.len() {
+                crate::ingest_document::TIER_OCR.to_string()
+            } else {
+                crate::ingest_document::TIER_MIXED.to_string()
+            }
+        }
+    };
+
     // ── the doors, in the door order ──
     // 1. the reasoning-trace strip, PER PAGE (the same pre-insert strip /add
     //    applies — a <think> span inside a PDF does not survive ingest; and
     //    because the strip runs before the anchors exist, a hostile page
-    //    cannot swallow its own anchor).
+    //    cannot swallow its own anchor). The OCR text crosses the SAME
+    //    strip — no bypass exists because the assembled markdown crosses
+    //    the identical path DI-5 already pins.
     let stripped_pages: Vec<String> = extracted
         .pages
         .iter()
@@ -2433,9 +2604,10 @@ pub async fn ingest_document(
         &stripped_doc,
         &sha,
         &source,
-        &tier,
+        &derived_tier,
         &extracted_utc,
         crate::ingest_document::LAYOUT_UNVERIFIED,
+        ocr_assembly.as_ref(),
     );
     // 3. fail-closed self-check: the route refuses to ship its own malformed
     //    output (DI-2's enforcement point).
@@ -2456,6 +2628,18 @@ pub async fn ingest_document(
 
     let markdown_sha = crate::ingest_document::sha256_hex(markdown.as_bytes());
     let page_count = extracted.pages.len();
+    // the row's OCR provenance (IMPROVE05): the map as a JSON array, the
+    // below-floor count, and the engine stamp — all three derived from the
+    // SAME assembly the header was emitted from (OV-2's three-way agreement
+    // starts here, not at the check).
+    let page_tiers_json = ocr_assembly.as_ref().map(|a| {
+        serde_json::to_string(&a.page_tier_map(page_count)).expect("a string array serializes")
+    });
+    let low_confidence_pages = ocr_assembly
+        .as_ref()
+        .map(crate::ingest_document::OcrAssembly::low_confidence_count)
+        .unwrap_or(0) as i64;
+    let ocr_engine = ocr_assembly.as_ref().map(|a| a.engine.clone());
     // 5. the chunker (the markdown door's chunker — "## Page N" headings are
     //    the chunk boundaries, so page provenance rides the stored text).
     let chunks = chunker::chunk_markdown(&markdown);
@@ -2532,7 +2716,10 @@ pub async fn ingest_document(
     let write_result = {
         let pool = state.pool.clone();
         let sha_for_row = sha.clone();
-        let tier_for_row = tier.clone();
+        let tier_for_row = derived_tier.clone();
+        let page_tiers_for_row = page_tiers_json.clone();
+        let low_conf_for_row = low_confidence_pages;
+        let engine_for_row = ocr_engine.clone();
         let source_for_row = source.clone();
         let domain_for_row = domain.clone();
         let owner_for_row = owner.clone();
@@ -2562,6 +2749,9 @@ pub async fn ingest_document(
                     owner: owner_for_row,
                     extracted_utc: utc_for_row,
                     markdown_sha256: markdown_sha_for_row,
+                    page_tiers: page_tiers_for_row,
+                    low_confidence_pages: low_conf_for_row,
+                    ocr_engine: engine_for_row,
                 },
                 &chunks,
                 &embeddings,
@@ -2581,9 +2771,12 @@ pub async fn ingest_document(
         "status": "created",
         "document_id": write_result.document_id,
         "sha256": sha,
-        "tier": tier,
+        "tier": derived_tier,
         "extractor": format!("{}/{}", crate::ingest_document::EXTRACTOR_NAME, crate::ingest_document::EXTRACTOR_VERSION),
+        "ocr_engine": ocr_engine,
         "pages": page_count,
+        "page_tiers": page_tiers_json.map(|j| serde_json::from_str::<serde_json::Value>(&j).expect("the row map is JSON")),
+        "low_confidence_pages": low_confidence_pages,
         "layout_unverified": true,
         "chunk_ids": write_result.chunk_ids,
         "entries_added": write_result.inserted,
@@ -2609,16 +2802,111 @@ struct DocumentIngestOutcome {
 /// pinned fields via `verify_document_header` — a re-serve that no longer
 /// matches the row (an extractor moved under a stored document) refuses
 /// named.
+/// Why a stored document could not be re-derived. `Mismatch` is the DI-3
+/// refusal (the row moved under the bytes); `OcrUnavailable` is the OCR
+/// row's posture — the pinned engine's sidecar is not here.
+enum RederiveFailure {
+    Mismatch(String),
+    OcrUnavailable,
+}
+
 fn rederive_document_markdown(
     pdf_bytes: &[u8],
     row: &crate::ingest_document::DocumentRow,
-) -> Result<String, String> {
+) -> Result<String, RederiveFailure> {
     // the same isolated boundary as the create path — the duplicate
     // re-derivation parses the same untrusted bytes.
-    let exe = crate::ingest_document::resolve_child_exe()
-        .ok_or("the extract-document isolation child is not installed")?;
+    let exe = crate::ingest_document::resolve_child_exe().ok_or(RederiveFailure::Mismatch(
+        "the extract-document isolation child is not installed".to_string(),
+    ))?;
     let extracted = crate::ingest_document::extract_pages_via_child(&exe, pdf_bytes)
-        .map_err(|e| format!("isolated extraction failed: {e:?}"))?;
+        .map_err(|e| RederiveFailure::Mismatch(format!("isolated extraction failed: {e:?}")))?;
+    // IMPROVE05: an ocr/mixed row re-derives its OCR pages through the SAME
+    // pipeline — the sidecar is probed again, the per-page emptiness routes
+    // again, and the header is verified against the ROW (including the
+    // pinned engine: an OS that moved under the stored document refuses,
+    // the same law as an extractor version bump).
+    let mut extracted = extracted;
+    let ocr_assembly = if row.ocr_engine.is_some() {
+        let sidecar_exe = match crate::ingest_document::probe_ocr_bridge(
+            crate::config::ocr_bridge_path().as_deref(),
+        ) {
+            crate::ingest_document::OcrProbe::Present(path) => path,
+            _ => return Err(RederiveFailure::OcrUnavailable),
+        };
+        let empty_pages: Vec<usize> = extracted
+            .pages
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.trim().is_empty())
+            .map(|(i, _)| i + 1)
+            .collect();
+        let doc_pages = extracted.pages.len();
+        let reply = if doc_pages == 0 || !empty_pages.is_empty() {
+            let request_pages: Option<Vec<usize>> = if doc_pages == 0 {
+                None
+            } else {
+                Some(empty_pages)
+            };
+            match crate::ingest_document::ocr_pages_via_sidecar(
+                &sidecar_exe,
+                pdf_bytes,
+                request_pages.as_deref(),
+                doc_pages,
+            ) {
+                Ok(reply) => Some(reply),
+                Err(crate::ingest_document::OcrSidecarError::RasterFailed) => {
+                    return Err(RederiveFailure::Mismatch(
+                        "the OCR sidecar could not rasterize the stored bytes".to_string(),
+                    ));
+                }
+                Err(
+                    crate::ingest_document::OcrSidecarError::SidecarFailed
+                    | crate::ingest_document::OcrSidecarError::BadReply(_),
+                ) => {
+                    return Err(RederiveFailure::OcrUnavailable);
+                }
+                Err(crate::ingest_document::OcrSidecarError::PageFailed(indices)) => {
+                    return Err(RederiveFailure::Mismatch(format!(
+                        "the OCR sidecar refused page(s) {indices:?} on re-derivation"
+                    )));
+                }
+            }
+        } else {
+            None
+        };
+        match reply {
+            Some(reply) => {
+                if doc_pages == 0 {
+                    extracted.pages = vec![String::new(); reply.pages.len()];
+                }
+                for page in &reply.pages {
+                    if page.index == 0 || page.index > extracted.pages.len() {
+                        return Err(RederiveFailure::Mismatch(format!(
+                            "the OCR reply named page {} of a {}-page document",
+                            page.index,
+                            extracted.pages.len()
+                        )));
+                    }
+                    extracted.pages[page.index - 1] = page.text.clone();
+                }
+                Some(crate::ingest_document::OcrAssembly {
+                    engine: reply.engine,
+                    pages: reply
+                        .pages
+                        .iter()
+                        .map(|p| crate::ingest_document::OcrPageMark {
+                            index: p.index,
+                            confidence: p.confidence,
+                        })
+                        .collect(),
+                })
+            }
+            None => None,
+        }
+    } else {
+        None
+    };
     let stripped_pages: Vec<String> = extracted
         .pages
         .iter()
@@ -2635,8 +2923,10 @@ fn rederive_document_markdown(
         &row.extracted_utc,
         // Tier 0 stored this row, so the layout posture is the Tier-0 one.
         crate::ingest_document::LAYOUT_UNVERIFIED,
+        ocr_assembly.as_ref(),
     );
-    crate::ingest_document::verify_document_header(&markdown, row)?;
+    crate::ingest_document::verify_document_header(&markdown, row)
+        .map_err(RederiveFailure::Mismatch)?;
     Ok(markdown)
 }
 

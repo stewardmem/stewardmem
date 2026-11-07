@@ -3261,9 +3261,36 @@ pub fn run_migration_with_store_dim(
         [],
     )?;
 
+    // ── v1.29.45 "OCR Sidecar" (IMPROVE05): the per-page provenance. ────
+    // `page_tiers` is the per-page tier map as a JSON array (present exactly
+    // when OCR ran; NULL rows are the Tier-0 shape, byte-compatible with
+    // everything stored before this round); `low_confidence_pages` counts
+    // the pages flagged below the named floor; `ocr_engine` pins the engine
+    // stamp that produced the OCR pages — a re-serve under a moved engine
+    // refuses named, the same law as an extractor version bump. All three
+    // are checked by `ingest_document::verify_document_header` (DI-3's
+    // extension). Same guarded-add pattern as every column above.
+    for (col, def) in [
+        ("page_tiers", "TEXT"),
+        ("low_confidence_pages", "INTEGER NOT NULL DEFAULT 0"),
+        ("ocr_engine", "TEXT"),
+    ] {
+        let present: bool = db
+            .query_row(
+                &format!("SELECT COUNT(*) FROM pragma_table_info('documents') WHERE name='{col}'"),
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+            .unwrap_or(0)
+            > 0;
+        if !present {
+            db.execute(&format!("ALTER TABLE documents ADD COLUMN {col} {def}"), [])?;
+        }
+    }
+
     db.execute(
-        "INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1.32.29')
-         ON CONFLICT(key) DO UPDATE SET value = '1.32.29';",
+        "INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1.32.30')
+         ON CONFLICT(key) DO UPDATE SET value = '1.32.30';",
         [],
     )?;
 

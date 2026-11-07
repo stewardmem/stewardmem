@@ -2078,6 +2078,52 @@ pub fn document_converter_path() -> Option<std::path::PathBuf> {
     Some(std::path::PathBuf::from(trimmed))
 }
 
+/// Resolve the OCR sidecar path (`shell-vision`, IMPROVE05) — the THIRD
+/// probe sibling, beside `afm_bridge_path` (above) and
+/// `document_converter_path` (above). Order: the env override
+/// `BRAIN_VISION_BRIDGE` (the operator names it explicitly), then the binary
+/// beside the RUNNING kernel (in the shipped bundle both live in
+/// `Contents/MacOS/`), then the SwiftPM build output in a dev tree (the
+/// `resolve_child_exe` precedent: `cargo test` does not build the Swift
+/// package, but a macOS tree that ran `swift build` has it, and the
+/// kernel-side presence path needs it — the Linux absence path is the
+/// tested green one). `None` is a POSTURE, not an error: the ocr tier
+/// answers `ocr_unavailable` and Tier 0 is unaffected.
+pub fn ocr_bridge_path() -> Option<std::path::PathBuf> {
+    if let Ok(explicit) = std::env::var("BRAIN_VISION_BRIDGE") {
+        let trimmed = explicit.trim();
+        if !trimmed.is_empty() {
+            return Some(std::path::PathBuf::from(trimmed));
+        }
+    }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        let sibling = dir.join("shell-vision");
+        if sibling.is_file() {
+            return Some(sibling);
+        }
+    }
+    let profile = if cfg!(debug_assertions) {
+        "debug"
+    } else {
+        "release"
+    };
+    let manifest = env!("CARGO_MANIFEST_DIR");
+    let build_dir = std::path::Path::new(manifest).join("shell-macos/.build");
+    for candidate in [
+        build_dir.join(profile).join("shell-vision"),
+        build_dir
+            .join(format!("arm64-apple-macosx/{profile}"))
+            .join("shell-vision"),
+    ] {
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
 /// The chat tier the spine requests, verbatim, as the bridge wire's
 /// additive-optional `model` field. `BRAIN_CHAT_MODEL` names it;
 /// unset/empty is `None` — the field is OMITTED from the wire, which every

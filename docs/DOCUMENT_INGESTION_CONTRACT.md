@@ -54,10 +54,12 @@ per-line split is the parse the pins test.)
 | `doc` | lowercase hex sha256 of the **source PDF bytes** (64 chars). The integrity anchor: the row and the header must agree. |
 | `source` | the trust label the request carried (≤ `MAX_SOURCE` bytes, the closed vocabulary at the write seams). |
 | `pages` | the page count the extractor observed (integer ≥ 1). |
-| `tier` | `text-layer` at Tier 0. `ocr` / `docling` are plans 05/06's vocabulary, accepted by the route's Tier-2 variant only. |
+| `tier` | What RAN, derived from the per-page routing: `text-layer` (every page from the text layer — Tier 0's shape), `ocr` (every page from the sidecar), `mixed` (at least one of each). `docling` remains the plan-06 Tier-2 request vocabulary; it never lands a row in this build. |
 | `extracted` | RFC3339 UTC of the extraction event. **The one volatile field** — see the determinism rule below. |
 | `extractor` | `<name>/<version>`, e.g. `pdf-extract/0.12.1`. The version is the resolved crate version, pinned against the lockfile by a test. |
 | `layout` | `unverified` at Tier 0 — always. A `verified` value here is a found bug (DI-2's sibling pin). |
+| `ocr-engine` | IMPROVE05, **present exactly when OCR ran**: the sidecar's engine stamp, `apple-vision/<request-type>@<os-build>` (e.g. `apple-vision/recognize-text@26B123`). Recorded per run — never promised bitwise across OS builds. |
+| `pages-tier` | IMPROVE05, **present exactly when OCR ran**: the per-page tier map, comma-joined in page order (`text-layer,ocr,text-layer,ocr`). Machine-checkable; the row carries the same map (DI-3's extension) and the sidecar request named exactly the `ocr` pages (OV-2's three-way agreement). |
 
 ### The page blocks (DI-2's anchor)
 
@@ -71,16 +73,34 @@ per-line split is the parse the pins test.)
   without one is a found bug.
 - An empty text layer on an individual page emits the heading + anchor with no
   body (honest emptiness beats invented content).
-- A PDF with **no text layer at all** (an image-only scan) is refused NAMED:
-  `no_text_layer`. Tier 0 never OCRs, never invents, never extracts garbage.
+- A PDF with **no text layer at all** (an image-only scan) is refused NAMED at
+  Tier 0: `no_text_layer`. Tier 0 never OCRs, never invents, never extracts
+  garbage. At `tier:"ocr"` the same verdict is the ROUTING SIGNAL: every page
+  goes to the sidecar (OV-1's vacuous form), and the reply defines the page
+  count.
+- **The OCR marker line (IMPROVE05).** Each page the sidecar recognized
+  carries, inside its block before the anchor, exactly one marker:
+  `<!-- ocr: engine <stamp> | confidence <c> -->`; when `c` is below the
+  named floor (`OCR_CONFIDENCE_FLOOR` = 0.5) the marker ends
+  `| low-confidence` (OV-3); a page Vision recognized NOTHING carries
+  `<!-- ocr: engine <stamp> | no-text -->` — no confidence claim exists for
+  an empty page, and a fabricated number would be the smoothing this
+  contract forbids (OV-5). The sidecar's text enters the block VERBATIM:
+  oddities and all, no spell-fix, no rewrite (arXiv:2611.05539's class,
+  refused by construction). A page the sidecar REFUSED is not shipped as a
+  hole: the whole document refuses `ocr_page_failed` (422) naming the
+  indices.
 
 ## 2 · The route: `POST /ingest/document`
 
 - **Body:** JSON, `{"data": <base64 PDF bytes>, "title": <string>, "source":
-  <label>, "domain": <name>, "tier": "text-layer"|"docling"}`. `data` is
+  <label>, "domain": <name>, "tier": "text-layer"|"docling"|"ocr"}`. `data` is
   required; `title` is required (the chunker's title law); the rest optional
   (`source` defaults to `document`, `domain` to `global`, `tier` to
-  `text-layer`).
+  `text-layer`). The response `tier` is DERIVED from what ran (`text-layer` |
+  `ocr` | `mixed`), never echoed from the request: a `tier:"ocr"` request on
+  a document whose every page has a text layer serves the Tier-0 shape — a
+  page with a text layer is never OCR'd (OV-1).
 - **Base64-bounded under the shared 1 MiB cap.** There is no multipart
   machinery in the tree; base64-in-JSON is the existing idiom. The cap is
   applied by the shared body-limit layer BEFORE the handler reads; the handler
@@ -95,16 +115,35 @@ per-line split is the parse the pins test.)
   - `converter_unavailable` (503) — the Tier-2 variant was requested and the
     operator-configured converter path is absent. **Tier 0 is never affected**;
     it is the zero-configuration default.
+  - `ocr_unavailable` (503) — IMPROVE05: `tier:"ocr"` and the shell-vision
+    sidecar is not resolvable (`BRAIN_VISION_BRIDGE` unset/absent, none beside
+    the server, none in the dev tree). The third probe sibling — Tier 0 and
+    the docling arm are unaffected (the probes are independent, OV-4). On
+    Linux CI this is the tested green path; the full path needs macOS.
+  - `ocr_page_failed` (422) — the sidecar refused named pages; the document
+    is not ingested with a hole (the refusal names the indices).
+  - `raster_failed` (422) — the sidecar could not rasterize the document
+    (the bytes parsed for the text layer, but not for the renderer).
+  - `ocr_sidecar_failed` (502) — the sidecar died, timed out (30 s, the
+    extract-document bound), or answered nonsense; no extraction ran
+    in-process as a fallback.
   - The door's own refusals pass through unchanged (the screen's 400, the
     capacity guard's 507, the AuthZ gate's 403).
 - **Response (created):** `{success, status:"created", document_id, sha256,
-  tier, extractor, pages, layout_unverified, chunk_ids, duplicates_skipped,
-  quarantined_chunk_ids, markdown}` — `markdown` is the full annotated
-  markdown above.
+  tier, extractor, ocr_engine?, pages, page_tiers?, low_confidence_pages,
+  layout_unverified, chunk_ids, duplicates_skipped, quarantined_chunk_ids,
+  markdown}` — `markdown` is the full annotated markdown above;
+  `ocr_engine`/`page_tiers` are present exactly when OCR ran;
+  `low_confidence_pages` counts the flagged pages (0 at Tier 0).
 - **Duplicate:** re-ingesting the same sha returns the SAME markdown
   byte-identically (re-derived by the same pure function) with
   `status:"duplicate"` and the original `extracted` stamp — a re-serve is not
-  a re-extraction, so the extraction event's timestamp does not move.
+  a re-extraction, so the extraction event's timestamp does not move. For an
+  ocr/mixed row the re-derivation runs the sidecar AGAIN under the row's
+  pinned engine: same OS build → byte-identical; a moved engine refuses
+  `document_row_mismatch` (409) — the same law as an extractor version bump
+  (DI-3's engine pin) — and an absent sidecar refuses `ocr_unavailable`
+  (503) rather than re-deriving a partial document.
 - **Review posture:** under `BRAIN_WRITE_POSTURE=review` the document ingest
   proposes instead of inserting — pending proposals on the existing HITL
   surface, no `knowledge` row (the no-auto-publish law, DI-4).
@@ -124,12 +163,18 @@ Table `documents` — one row per ingested PDF, keyed by content sha256:
 | `source` / `domain` / `owner` | the trust label, the pool, the principal stamp. |
 | `extracted_utc` | the header's `extracted` authority. |
 | `markdown_sha256` | sha256 of the emitted markdown WITH the `extracted` field pinned at the row's value — the row check verifies the markdown against the row, not the reverse. |
+| `page_tiers` | IMPROVE05, NULL at Tier 0. The per-page tier map as a JSON array (`["text-layer","ocr",…]`) — DI-3's row check extends to it: a tampered map fails BY NAME. |
+| `low_confidence_pages` | IMPROVE05. The count of pages below the named floor (`OCR_CONFIDENCE_FLOOR` = 0.5); 0 at Tier 0. |
+| `ocr_engine` | IMPROVE05, NULL at Tier 0. The engine stamp that produced the OCR pages — recorded per run; a re-serve under a moved engine refuses. |
 
 **The row check (DI-3).** `verify_document_header(markdown, row)` parses the
 header out of an annotated markdown and requires: `doc == row.sha256`,
 `extractor == row.extractor + "/" + row.extractor_version`, `pages ==
 row.pages`, `tier == row.tier`, `layout == "unverified" ⇔ row.layout_unverified
-== 1`, `extracted == row.extracted_utc`. A tampered header — any one field —
+== 1`, `extracted == row.extracted_utc`, and (IMPROVE05) `ocr-engine == row.ocr_engine` and
+`pages-tier == row.page_tiers` — both compared as `None == None` at Tier 0, so
+a text-layer header carrying the fields (or an ocr row's header dropping them)
+fails. A tampered header — any one field —
 fails the check. The check never "fixes" the markdown; it refuses.
 
 ## 4 · The determinism rule (DI-1, stated precisely)
@@ -140,6 +185,16 @@ differ **only** in the `extracted` header field — a test pins that the diff of
 the two outputs, with the `extracted` value normalized, is empty. The route's
 duplicate path keeps the original stamp, so a re-serve round-trip is fully
 byte-identical end to end.
+
+**The OCR bound (IMPROVE05).** The OCR pages' text is NOT a pure function of
+the PDF bytes alone: same bytes + same OS build + same engine build + same DPI
+→ same output, recorded per run (the `ocr-engine` stamp and the WER table in
+the evidence). Apple does not promise bitwise-identical OCR across OS
+versions, so nothing here promises it — the DETERMINISTIC surfaces are the
+post-processing (the emitter, the markers, the map, the counts: pure functions
+of the sidecar's reply) and the routing (per-page emptiness). The emitter's
+`ocr: None` arm is byte-identical to the pre-improve05 shape — the Tier-0
+goldens did not move.
 
 ## 5 · The doors (DI-5, the no-bypass law)
 

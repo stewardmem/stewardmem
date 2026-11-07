@@ -231,7 +231,7 @@ export interface paths {
         put?: never;
         /**
          * Ingest a PDF document (Tier 0 text-layer extraction, requires title)
-         * @description IMPROVE04. Base64-bounded JSON under the shared 1 MiB cap (no multipart). The PDF's text layer becomes page-anchored annotated markdown (docs/DOCUMENT_INGESTION_CONTRACT.md): a machine-checkable header (sha256, source, pages, tier, extracted, extractor, layout) plus one ## Page N block per page closed by an anchor comment. Deterministic zero-token extraction; no LLM; the extracted text crosses the existing doors only (screen, trace strip, dedupe, trust-label bounds, HITL posture). Tier 0 never claims layout verified. Named refusals: document_too_large (413), invalid_document (400), no_text_layer (422), document_parse_incomplete (422), unsupported_tier (400), document_extraction_unavailable (503 — the isolation child is not installed), converter_unavailable (503 — tier=docling and BRAIN_DOCLING_PATH is unset/absent), converter_not_implemented (501 — the converter is configured; the conversion is plans 05/06's work).
+         * @description IMPROVE04 + IMPROVE05. Base64-bounded JSON under the shared 1 MiB cap (no multipart). The PDF becomes page-anchored annotated markdown (docs/DOCUMENT_INGESTION_CONTRACT.md): a machine-checkable header (sha256, source, pages, tier, extracted, extractor, layout — plus ocr-engine and pages-tier exactly when OCR ran) plus one ## Page N block per page closed by an anchor comment. Deterministic zero-token extraction; no LLM anywhere (the OCR text enters VERBATIM — no post-OCR correction exists, arXiv:2611.05539's class refused by construction); the extracted text crosses the existing doors only (screen, trace strip, dedupe, trust-label bounds, HITL posture). Tier 0 never claims layout verified. tier=ocr routes PER PAGE: a page with a text layer is never sent to the sidecar; the response tier is DERIVED from what ran (text-layer | ocr | mixed), never echoed from the request. Named refusals: document_too_large (413), invalid_document (400), no_text_layer (422), document_parse_incomplete (422), unsupported_tier (400), document_extraction_unavailable (503 — the isolation child is not installed), converter_unavailable (503 — tier=docling and BRAIN_DOCLING_PATH is unset/absent), converter_not_implemented (501 — the converter is configured; the conversion is plans 05/06's work), ocr_unavailable (503 — tier=ocr and the shell-vision sidecar is absent: BRAIN_VISION_BRIDGE unset/absent and none beside the server), ocr_page_failed (422 — the sidecar refused named pages; the document is not ingested with a hole), raster_failed (422 — the sidecar could not rasterize the document), ocr_sidecar_failed (502 — the sidecar died, timed out, or answered nonsense).
          */
         post: operations["ingestDocument"];
         delete?: never;
@@ -6299,10 +6299,10 @@ export interface operations {
                     /** @description Target domain (defaults to 'global') */
                     domain?: string | null;
                     /**
-                     * @description Tier 0 'text-layer' is the default; 'docling' is the Tier-2 variant (converter probe)
+                     * @description Tier 0 'text-layer' is the default; 'docling' is the Tier-2 variant (converter probe); 'ocr' is the IMPROVE05 hybrid (the shell-vision sidecar, per-page routing)
                      * @enum {string|null}
                      */
-                    tier?: "text-layer" | "docling" | null;
+                    tier?: "text-layer" | "docling" | "ocr" | null;
                 };
             };
         };
@@ -6319,10 +6319,17 @@ export interface operations {
                         document_id?: number;
                         /** @description sha256 of the source PDF bytes */
                         sha256?: string;
+                        /** @description DERIVED from what ran: text-layer | ocr | mixed */
                         tier?: string;
                         /** @description name/version, e.g. pdf-extract/0.12.1 */
                         extractor?: string;
+                        /** @description the OCR engine stamp (apple-vision/recognize-text@<os-build>), present exactly when OCR ran */
+                        ocr_engine?: string | null;
                         pages?: number;
+                        /** @description the per-page tier map (OV-2), present exactly when OCR ran */
+                        page_tiers?: ("text-layer" | "ocr")[] | null;
+                        /** @description the count of pages flagged below the named confidence floor (OV-3) */
+                        low_confidence_pages?: number;
                         layout_unverified?: boolean;
                         chunk_ids?: number[];
                         entries_added?: number;

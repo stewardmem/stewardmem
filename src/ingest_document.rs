@@ -47,8 +47,13 @@
 
 use sha2::{Digest, Sha256};
 
-/// The Tier-0 tier label. `ocr` / `docling` are plans 05/06's vocabulary.
+/// The Tier-0 tier label. `ocr` is IMPROVE05's vocabulary; `docling` stays
+/// the plan-06 seam.
 pub const TIER_TEXT_LAYER: &str = "text-layer";
+/// The all-OCR derived tier: every page came from the sidecar.
+pub const TIER_OCR: &str = "ocr";
+/// The mixed derived tier: at least one page from each source.
+pub const TIER_MIXED: &str = "mixed";
 /// The extractor name the header and the row both carry.
 pub const EXTRACTOR_NAME: &str = "pdf-extract";
 /// The resolved pdf-extract version. Pinned against Cargo.lock by a test
@@ -56,6 +61,18 @@ pub const EXTRACTOR_NAME: &str = "pdf-extract";
 pub const EXTRACTOR_VERSION: &str = "0.12.1";
 /// Tier 0's layout posture — the ONLY value it may emit.
 pub const LAYOUT_UNVERIFIED: &str = "unverified";
+
+/// The confidence floor under which an OCR page carries the
+/// `low-confidence` marker (OV-3). Conservative honesty: page confidence is
+/// the MINIMUM top-candidate confidence, so one weak region marks the page.
+pub const OCR_CONFIDENCE_FLOOR: f64 = 0.5;
+/// The DPI the kernel asks the sidecar to rasterize at — the request's
+/// named constant (the protocol's determinism tuple: bytes + OS build +
+/// engine + DPI).
+pub const OCR_RASTER_DPI: u32 = 300;
+/// The one-shot sidecar's wall-clock bound (the extract-document bound —
+/// a hostile or hung document cannot pin a child forever).
+pub const OCR_SIDECAR_TIMEOUT_SECS: u64 = 30;
 
 // ── extraction ───────────────────────────────────────────────────────────────
 
@@ -130,10 +147,73 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
 
 // ── the annotated-markdown contract ─────────────────────────────────────────
 
+/// One page's OCR provenance: its 1-based index and the page's MINIMUM
+/// top-candidate confidence — `None` when Vision recognized nothing (an
+/// honest no-text page carries no confidence claim, never a fabricated
+/// number).
+#[derive(Debug, Clone, PartialEq)]
+pub struct OcrPageMark {
+    pub index: usize,
+    pub confidence: Option<f64>,
+}
+
+/// What the OCR sidecar produced for a document: the engine stamp that ran
+/// (recorded, never promised bitwise across OS builds) and the per-page
+/// marks. This is the assembly the emitter, the header, and the row all
+/// read — one source of truth for the tier map, the confidence markers,
+/// and the low-confidence count.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OcrAssembly {
+    pub engine: String,
+    pub pages: Vec<OcrPageMark>,
+}
+
+impl OcrAssembly {
+    /// The per-page tier map over `page_count` pages: `ocr` where this
+    /// assembly marked a page, `text-layer` everywhere else (OV-2's map —
+    /// built from what actually ran, never from the request).
+    pub fn page_tier_map(&self, page_count: usize) -> Vec<&'static str> {
+        (1..=page_count)
+            .map(|i| {
+                if self.pages.iter().any(|p| p.index == i) {
+                    "ocr"
+                } else {
+                    "text-layer"
+                }
+            })
+            .collect()
+    }
+
+    /// The pages whose confidence is below the named floor (OV-3's count).
+    pub fn low_confidence_count(&self) -> usize {
+        self.pages
+            .iter()
+            .filter(|p| matches!(p.confidence, Some(c) if c < OCR_CONFIDENCE_FLOOR))
+            .count()
+    }
+}
+
+/// The OCR marker line for one page block: the engine, the confidence (or
+/// the honest no-text absence of one), and the below-floor flag. A marker
+/// rides INSIDE the block, before the anchor — the anchor still closes the
+/// block, and the marker crosses the doors with the page's text.
+fn ocr_marker(engine: &str, confidence: Option<f64>) -> String {
+    match confidence {
+        Some(c) if c < OCR_CONFIDENCE_FLOOR => {
+            format!("<!-- ocr: engine {engine} | confidence {c} | low-confidence -->")
+        }
+        Some(c) => format!("<!-- ocr: engine {engine} | confidence {c} -->"),
+        None => format!("<!-- ocr: engine {engine} | no-text -->"),
+    }
+}
+
 /// Emit the annotated markdown for an extracted document. Pure: the same
 /// arguments always produce the same bytes. `extracted_utc` rides in (the
 /// route's clock or a test's fixed stamp) — DI-1's volatile-field rule makes
-/// it the ONLY input that may move the output.
+/// it the ONLY input that may move the output. `ocr` is the IMPROVE05
+/// assembly: `None` (Tier 0) leaves the output byte-identical to the
+/// pre-improve05 shape; `Some` adds the engine + per-page map to the header
+/// and one marker line per OCR page block.
 pub fn emit_annotated_markdown(
     extracted: &ExtractedDocument,
     sha256: &str,
@@ -141,11 +221,23 @@ pub fn emit_annotated_markdown(
     tier: &str,
     extracted_utc: &str,
     layout: &str,
+    ocr: Option<&OcrAssembly>,
 ) -> String {
     let mut out =
         String::with_capacity(128 + extracted.pages.iter().map(|p| p.len() + 40).sum::<usize>());
+    let ocr_engine_field = ocr
+        .map(|a| format!(" | ocr-engine: {}", a.engine))
+        .unwrap_or_default();
+    let pages_tier_field = ocr
+        .map(|a| {
+            format!(
+                " | pages-tier: {}",
+                a.page_tier_map(extracted.pages.len()).join(",")
+            )
+        })
+        .unwrap_or_default();
     out.push_str(&format!(
-        "<!-- doc: {sha256} | source: {source} | pages: {n} | tier: {tier}\n     extracted: {extracted_utc} | extractor: {name}/{version} | layout: {layout} -->\n",
+        "<!-- doc: {sha256} | source: {source} | pages: {n} | tier: {tier}{ocr_engine_field}\n     extracted: {extracted_utc} | extractor: {name}/{version} | layout: {layout}{pages_tier_field} -->\n",
         n = extracted.pages.len(),
         name = EXTRACTOR_NAME,
         version = EXTRACTOR_VERSION,
@@ -158,6 +250,12 @@ pub fn emit_annotated_markdown(
         // a `<think>` span that closes after it). Trim the trailing newline
         // the extractor appends so the anchor lands deterministically.
         out.push_str(page.trim_end_matches('\n'));
+        if let Some(assembly) = ocr
+            && let Some(mark) = assembly.pages.iter().find(|p| p.index == n)
+        {
+            out.push('\n');
+            out.push_str(&ocr_marker(&assembly.engine, mark.confidence));
+        }
         out.push_str(&format!("\n<!-- anchor: p{n} -->\n"));
     }
     out
@@ -219,6 +317,11 @@ pub struct DocumentHeader {
     pub extracted: String,
     pub extractor: String,
     pub layout: String,
+    /// IMPROVE05: the engine stamp, present exactly when OCR ran.
+    pub ocr_engine: Option<String>,
+    /// IMPROVE05: the per-page tier map (`text-layer`/`ocr` per page),
+    /// present exactly when OCR ran.
+    pub pages_tier: Option<Vec<String>>,
 }
 
 /// Parse the header comment out of an annotated markdown. The header is the
@@ -256,6 +359,17 @@ pub fn parse_document_header(markdown: &str) -> Result<DocumentHeader, String> {
                 "extracted" => fields.extracted = Some(v.to_string()),
                 "extractor" => fields.extractor = Some(v.to_string()),
                 "layout" => fields.layout = Some(v.to_string()),
+                // IMPROVE05: the OCR extension fields — present exactly when
+                // OCR ran; unknown fields stay ignored (the union parse).
+                "ocr-engine" => fields.ocr_engine = Some(v.to_string()),
+                "pages-tier" => {
+                    fields.pages_tier = Some(
+                        v.split(',')
+                            .map(|t| t.trim().to_string())
+                            .filter(|t| !t.is_empty())
+                            .collect(),
+                    )
+                }
                 _ => {}
             }
         }
@@ -272,6 +386,8 @@ pub fn parse_document_header(markdown: &str) -> Result<DocumentHeader, String> {
         extracted: missing(&fields.extracted, "extracted")?,
         extractor: missing(&fields.extractor, "extractor")?,
         layout: missing(&fields.layout, "layout")?,
+        ocr_engine: fields.ocr_engine,
+        pages_tier: fields.pages_tier,
     })
 }
 
@@ -284,6 +400,8 @@ struct DocumentHeaderFields {
     extracted: Option<String>,
     extractor: Option<String>,
     layout: Option<String>,
+    ocr_engine: Option<String>,
+    pages_tier: Option<Vec<String>>,
 }
 
 // ── the tool-detector seam (S4, the Tier-2 plumbing and nothing else) ────────
@@ -302,6 +420,32 @@ pub enum ConverterProbe {
     /// conversion is plans 05/06's work — but the posture differs: the
     /// operator's configuration is GOOD.
     Present(std::path::PathBuf),
+}
+
+/// What the OCR-sidecar probe observed (IMPROVE05 — the third probe
+/// sibling, beside `ConverterProbe`). `Absent`/`PathMissing` both answer
+/// the route's `ocr_unavailable` (503, OV-4's exact name — NOT the docling
+/// arm's `converter_unavailable`); `Present` runs the hybrid pipeline.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OcrProbe {
+    /// Nothing resolvable: `BRAIN_VISION_BRIDGE` unset, no shell-vision
+    /// beside the running kernel, no dev-tree build. The Linux-CI posture.
+    Absent,
+    /// The env named a path that does not exist (or is not a file).
+    PathMissing(std::path::PathBuf),
+    /// The sidecar is there. The hybrid pipeline runs against it.
+    Present(std::path::PathBuf),
+}
+
+/// Probe the resolved OCR sidecar path. Pure: the resolution happens in
+/// `config::ocr_bridge_path()`; this takes the resolved option so the three
+/// arms are testable without env manipulation (the converter probe's shape).
+pub fn probe_ocr_bridge(resolved: Option<&std::path::Path>) -> OcrProbe {
+    match resolved {
+        None => OcrProbe::Absent,
+        Some(p) if p.is_file() => OcrProbe::Present(p.to_path_buf()),
+        Some(p) => OcrProbe::PathMissing(p.to_path_buf()),
+    }
 }
 
 /// Probe the configured converter path. Pure: the env read happens in
@@ -446,6 +590,227 @@ pub fn extract_pages_via_child(
     Ok(ExtractedDocument { pages })
 }
 
+// ── the OCR sidecar client (IMPROVE05) ──────────────────────────────────────
+
+/// The sidecar lifecycle is extract-document's (docs/OCR_SIDECAR_PROTOCOL.md):
+/// one-shot per document — the request line + the PDF bytes on stdin, ONE
+/// typed reply line on stdout, exit codes as verdicts, the 30 s bound. A
+/// hung or crashed child poisons no later document.
+#[derive(Debug)]
+pub enum OcrSidecarError {
+    /// The sidecar could not be spawned, died, timed out, answered
+    /// nonsense, or broke the framing (id mismatch, unknown code). The
+    /// route answers `ocr_sidecar_failed` (502).
+    SidecarFailed,
+    /// The sidecar's own top-level `raster_failed` — the bytes it was
+    /// given do not rasterize (propagated by name, 422).
+    RasterFailed,
+    /// Per-page `ocr_page_failed` verdicts, ascending — a page Vision
+    /// refused. Never a fabricated empty; the route refuses the document
+    /// naming the indices.
+    PageFailed(Vec<usize>),
+    /// The reply carried a page index outside the document (or a malformed
+    /// page entry). A contract violation, not a document property — 502.
+    BadReply(String),
+}
+
+/// One recognized page from the sidecar's reply.
+#[derive(Debug, Clone)]
+pub struct OcrSidecarPage {
+    pub index: usize,
+    pub text: String,
+    pub confidence: Option<f64>,
+}
+
+/// A complete sidecar reply: the engine stamp (recorded per run) + the
+/// per-page verdicts for exactly the requested pages.
+#[derive(Debug, Clone)]
+pub struct OcrSidecarReply {
+    pub engine: String,
+    pub pages: Vec<OcrSidecarPage>,
+}
+
+/// Run one document through the OCR sidecar. `pages` marks the 1-based
+/// indices to recognize (OV-1: the kernel names ONLY the pages the text
+/// walk found empty; `None` = all pages, the exit-9 all-scan case).
+/// `doc_pages` is the page count the extraction observed (0 when the child
+/// answered no_text_layer and the count is unknown — the all-pages reply
+/// then defines it). Bounded like [`extract_pages_via_child`]; the reply's
+/// id must echo the request's.
+pub fn ocr_pages_via_sidecar(
+    exe: &std::path::Path,
+    pdf_bytes: &[u8],
+    pages: Option<&[usize]>,
+    doc_pages: usize,
+) -> Result<OcrSidecarReply, OcrSidecarError> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    static OCR_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let id = format!(
+        "ocr-{}",
+        OCR_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    );
+
+    // the request line: the protocol's shape, the kernel's named DPI
+    // constant, the additive-optional pages field only when the kernel is
+    // marking pages.
+    let mut request = serde_json::json!({ "id": id, "op": "ocr", "dpi": OCR_RASTER_DPI });
+    if let Some(marked) = pages {
+        request["pages"] = serde_json::to_value(marked).expect("usize array serializes");
+    }
+    let mut request_line =
+        serde_json::to_vec(&request).map_err(|_| OcrSidecarError::SidecarFailed)?;
+    request_line.push(b'\n');
+
+    let mut child = Command::new(exe)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| OcrSidecarError::SidecarFailed)?;
+    // write the request line then the raw PDF bytes; drop stdin so the
+    // child's read-to-EOF completes.
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(&request_line);
+        let _ = stdin.write_all(pdf_bytes);
+    }
+    // bounded wait: the extract-document law — a hostile or hung document
+    // cannot pin the child forever.
+    let deadline =
+        std::time::Instant::now() + std::time::Duration::from_secs(OCR_SIDECAR_TIMEOUT_SECS);
+    let output = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                break child
+                    .stdout
+                    .take()
+                    .map(|mut o| {
+                        let mut buf = Vec::new();
+                        let _ = std::io::Read::read_to_end(&mut o, &mut buf);
+                        (status, buf)
+                    })
+                    .unwrap_or((status, Vec::new()));
+            }
+            Ok(None) if std::time::Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(OcrSidecarError::SidecarFailed);
+            }
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(5)),
+            Err(_) => return Err(OcrSidecarError::SidecarFailed),
+        }
+    };
+    let (status, stdout) = output;
+    // ONE reply line (the framing); a reply-less child is a dead child.
+    let line = stdout
+        .split(|b| *b == b'\n')
+        .find(|l| !l.is_empty())
+        .ok_or(OcrSidecarError::SidecarFailed)?;
+    let parsed: serde_json::Value =
+        serde_json::from_slice(line).map_err(|_| OcrSidecarError::SidecarFailed)?;
+
+    // the id echoes verbatim (the framing contract); a mismatching reply is
+    // nonsense from the caller's seat.
+    if parsed.get("id").and_then(|v| v.as_str()) != Some(id.as_str()) {
+        return Err(OcrSidecarError::SidecarFailed);
+    }
+
+    // Top-level failures: the sidecar writes the named reply THEN exits
+    // nonzero (bad_request 2 / raster_failed 3). A nonzero exit without a
+    // parseable named reply is a dead child.
+    if parsed.get("ok") == Some(&serde_json::Value::Bool(false)) {
+        return match parsed.get("code").and_then(|v| v.as_str()) {
+            Some("raster_failed") => Err(OcrSidecarError::RasterFailed),
+            _ => Err(OcrSidecarError::SidecarFailed),
+        };
+    }
+    if !status.success() {
+        return Err(OcrSidecarError::SidecarFailed);
+    }
+
+    let engine = parsed
+        .get("engine")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| OcrSidecarError::BadReply("the reply carries no engine stamp".into()))?
+        .to_string();
+    let entries = parsed
+        .get("pages")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| OcrSidecarError::BadReply("the reply carries no pages".into()))?;
+    if entries.is_empty() {
+        return Err(OcrSidecarError::BadReply(
+            "the reply carries no pages".into(),
+        ));
+    }
+
+    let mut out: Vec<OcrSidecarPage> = Vec::with_capacity(entries.len());
+    let mut failed: Vec<usize> = Vec::new();
+    for entry in entries {
+        let index = entry
+            .get("index")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(|| OcrSidecarError::BadReply("a page entry carries no index".into()))?
+            as usize;
+        if doc_pages > 0 && (index == 0 || index > doc_pages) {
+            return Err(OcrSidecarError::BadReply(format!(
+                "page index {index} is outside the document ({doc_pages} pages)"
+            )));
+        }
+        if entry.get("ok") == Some(&serde_json::Value::Bool(false)) {
+            // the per-page named refusal (OV-5: never a fabricated empty)
+            if entry.get("code").and_then(|v| v.as_str()) != Some("ocr_page_failed") {
+                return Err(OcrSidecarError::BadReply(
+                    "a failed page carries a code the protocol does not define".into(),
+                ));
+            }
+            failed.push(index);
+            continue;
+        }
+        let text = entry
+            .get("text")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| OcrSidecarError::BadReply("a page entry carries no text".into()))?
+            .to_string();
+        let confidence = entry.get("confidence").and_then(|v| v.as_f64());
+        if text.is_empty() && confidence.is_some() {
+            return Err(OcrSidecarError::BadReply(
+                "an empty page carries a confidence claim — the smoothing the protocol forbids"
+                    .into(),
+            ));
+        }
+        if !text.is_empty()
+            && confidence
+                .map(|c| !(0.0..=1.0).contains(&c))
+                .unwrap_or(true)
+        {
+            return Err(OcrSidecarError::BadReply(
+                "a non-empty page needs a 0..1 confidence".into(),
+            ));
+        }
+        out.push(OcrSidecarPage {
+            index,
+            text,
+            confidence,
+        });
+    }
+    if !failed.is_empty() {
+        return Err(OcrSidecarError::PageFailed(failed));
+    }
+    // the reply is ascending and, for the all-pages request, complete.
+    if out.windows(2).any(|w| w[0].index >= w[1].index) {
+        return Err(OcrSidecarError::BadReply(
+            "the reply's pages are not ascending".into(),
+        ));
+    }
+    if doc_pages == 0 && out.len() != out.last().map(|p| p.index).unwrap_or(0) {
+        return Err(OcrSidecarError::BadReply(
+            "the all-pages reply is not complete from 1".into(),
+        ));
+    }
+    Ok(OcrSidecarReply { engine, pages: out })
+}
+
 // ── the document row ─────────────────────────────────────────────────────────
 
 /// One row of the `documents` table — the provenance anchor for every chunk
@@ -466,6 +831,15 @@ pub struct DocumentRow {
     pub owner: Option<String>,
     pub extracted_utc: String,
     pub markdown_sha256: String,
+    /// IMPROVE05: the per-page tier map as a JSON array (`["text-layer",
+    /// "ocr", …]`), present exactly when OCR ran. DI-3's row check extends
+    /// to it — a tampered map fails BY NAME.
+    pub page_tiers: Option<String>,
+    /// IMPROVE05: the count of pages flagged below the named floor.
+    pub low_confidence_pages: i64,
+    /// IMPROVE05: the engine stamp that produced the OCR pages (recorded
+    /// per run; a re-serve under a moved engine refuses named).
+    pub ocr_engine: Option<String>,
 }
 
 /// Verify an annotated markdown's header against the document row (DI-3).
@@ -513,6 +887,27 @@ pub fn verify_document_header(markdown: &str, row: &DocumentRow) -> Result<(), S
     expect(
         h.layout == want_layout,
         format!("layout: header {:?} != row {:?}", h.layout, want_layout),
+    )?;
+    // IMPROVE05: the OCR extension of DI-3. The engine and the map appear
+    // in the header EXACTLY when the row carries them — a text-layer row's
+    // header carries neither (the None==None arm), and a tampered map or a
+    // moved engine fails BY NAME.
+    expect(
+        h.ocr_engine == row.ocr_engine,
+        format!(
+            "ocr-engine: header {:?} != row {:?}",
+            h.ocr_engine, row.ocr_engine
+        ),
+    )?;
+    let row_map = row
+        .page_tiers
+        .as_deref()
+        .map(|raw| serde_json::from_str::<Vec<String>>(raw))
+        .transpose()
+        .map_err(|e| format!("page_tiers: the row's map is not a JSON array: {e}"))?;
+    expect(
+        h.pages_tier == row_map,
+        format!("pages-tier: header {:?} != row {:?}", h.pages_tier, row_map),
     )
 }
 
@@ -526,8 +921,9 @@ pub fn insert_document_row(
     tx.execute(
         "INSERT INTO documents
            (sha256, title, tier, extractor, extractor_version, pages,
-            layout_unverified, source, domain, owner, extracted_utc, markdown_sha256)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            layout_unverified, source, domain, owner, extracted_utc, markdown_sha256,
+            page_tiers, low_confidence_pages, ocr_engine)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
         rusqlite::params![
             row.sha256,
             row.title,
@@ -541,6 +937,9 @@ pub fn insert_document_row(
             row.owner,
             row.extracted_utc,
             row.markdown_sha256,
+            row.page_tiers,
+            row.low_confidence_pages,
+            row.ocr_engine,
         ],
     )?;
     Ok(tx.last_insert_rowid())
@@ -553,7 +952,8 @@ pub fn find_document_by_sha(
 ) -> rusqlite::Result<Option<DocumentRow>> {
     let mut stmt = conn.prepare(
         "SELECT id, sha256, title, tier, extractor, extractor_version, pages,
-                layout_unverified, source, domain, owner, extracted_utc, markdown_sha256
+                layout_unverified, source, domain, owner, extracted_utc, markdown_sha256,
+                page_tiers, low_confidence_pages, ocr_engine
          FROM documents WHERE sha256 = ?1",
     )?;
     let mut rows = stmt.query_map([sha256], |r| {
@@ -571,6 +971,9 @@ pub fn find_document_by_sha(
             owner: r.get(10)?,
             extracted_utc: r.get(11)?,
             markdown_sha256: r.get(12)?,
+            page_tiers: r.get(13)?,
+            low_confidence_pages: r.get(14)?,
+            ocr_engine: r.get(15)?,
         })
     })?;
     rows.next().transpose()
@@ -626,6 +1029,7 @@ mod tests {
             TIER_TEXT_LAYER,
             "2026-11-07T00:00:00+00:00",
             LAYOUT_UNVERIFIED,
+            None,
         );
         let b = emit_annotated_markdown(
             &doc,
@@ -634,6 +1038,7 @@ mod tests {
             TIER_TEXT_LAYER,
             "2026-11-07T00:00:00+00:00",
             LAYOUT_UNVERIFIED,
+            None,
         );
         assert_eq!(a, b, "same arguments → byte-identical markdown");
         verify_anchor_contract(&a, 3).expect("the emitted markdown carries its own contract");
@@ -680,6 +1085,7 @@ mod tests {
             TIER_TEXT_LAYER,
             utc,
             LAYOUT_UNVERIFIED,
+            None,
         );
         let h = parse_document_header(&md).expect("the emitted header parses");
         assert_eq!(h.doc, "cafe123");
@@ -702,6 +1108,9 @@ mod tests {
             owner: None,
             extracted_utc: utc.into(),
             markdown_sha256: String::new(),
+            page_tiers: None,
+            low_confidence_pages: 0,
+            ocr_engine: None,
         };
         verify_document_header(&md, &row).expect("an honest header verifies");
 
