@@ -90,6 +90,56 @@ pub(crate) fn cohen_kappa_units(rater_a: &[String], rater_b: &[String]) -> Resul
     Ok((kappa * 10_000.0).round() as i32)
 }
 
+/// Gwet's AC1 over label vectors, integer ten-thousandths — the second
+/// metric of the preregistered conjunction (κ ≥ 0.70 ∧ AC1 ≥ 0.80 ∧ raw
+/// agreement recorded; `plans/improvements/KAPPA_METRIC_PREREGISTRATION_2026-11-07.md`,
+/// committed before any label landed). Shape-identical to
+/// [`cohen_kappa_units`] — `pub(crate)`, `&[String] × &[String] →
+/// Result<i32, String>`, ten-thousandths — so the report's two metrics are
+/// comparable unit-for-unit (KM-5, pinned structurally in this file).
+/// `AC1 = (Pa − Pe(γ)) / (1 − Pe(γ))` with `Pe(γ) = (1/(q−1)) · Σₖ πₖ(1−πₖ)`,
+/// q = the distinct pooled labels, πₖ = the average marginal proportion —
+/// the q-category form that reproduces the PUBLISHED prevalence-paradox
+/// fixture (82/8/8/2: 84% raw agreement → κ 0.11 / AC1 0.80; the binary
+/// specialization is Pe = 2π(1−π); the fixture pins both numbers exactly,
+/// 1111 / 8049). AC1 stays stable where κ collapses under skewed
+/// prevalence — the conjunction's second arm, never a replacement (Vach
+/// 2023: the two answer different questions). Degenerate inputs are named
+/// errors, never NaN: empty, length-mismatched, or a single category (the
+/// q−1 denominator) refuse under the fn's own `ac1:` prefix. Pe(γ) ≤ 0.5
+/// for every q, so the denominator cannot vanish — no further degenerate
+/// case exists.
+pub(crate) fn gwet_ac1_units(rater_a: &[String], rater_b: &[String]) -> Result<i32, String> {
+    if rater_a.is_empty() || rater_b.is_empty() {
+        return Err("ac1: no ratings supplied".into());
+    }
+    if rater_a.len() != rater_b.len() {
+        return Err(format!(
+            "ac1: rating length mismatch ({} vs {})",
+            rater_a.len(),
+            rater_b.len()
+        ));
+    }
+    let n = rater_a.len() as f64;
+    let observed = rater_a.iter().zip(rater_b).filter(|(a, b)| a == b).count() as f64 / n;
+    let mut labels: Vec<&String> = rater_a.iter().chain(rater_b.iter()).collect();
+    labels.sort();
+    labels.dedup();
+    if labels.len() < 2 {
+        return Err("ac1: degenerate — a single category; AC1 is undefined".into());
+    }
+    let mut expected = 0.0;
+    for label in &labels {
+        let pa = rater_a.iter().filter(|a| *a == *label).count() as f64 / n;
+        let pb = rater_b.iter().filter(|b| *b == *label).count() as f64 / n;
+        let pi = (pa + pb) / 2.0;
+        expected += pi * (1.0 - pi);
+    }
+    let expected = expected / (labels.len() as f64 - 1.0);
+    let ac1 = (observed - expected) / (1.0 - expected);
+    Ok((ac1 * 10_000.0).round() as i32)
+}
+
 /// Char-bound cap, the reflection core's exact shape. `pub(super)`: the
 /// agreement module shares THIS copy — the dup_guard pin forbids a second.
 pub(super) fn cap_chars(s: &str, cap: usize) -> String {
@@ -737,6 +787,151 @@ mod tests {
         // Named refusals.
         assert!(cohen_kappa_units(&[], &[]).is_err());
         assert!(cohen_kappa_units(&["x".into()], &["x".into(), "y".into()]).is_err());
+    }
+
+    /// The published prevalence-paradox fixture (KM-1): the classic Gwet-
+    /// literature illustration — n=100, both raters 90% "yes" marginals,
+    /// table 82 both-yes / 8 A-yes-B-no / 8 A-no-B-yes / 2 both-no → raw
+    /// agreement 84%, published κ = 0.11, AC1 = 0.80. The implementation is
+    /// pinned to THESE numbers, not invented ones. Exact ten-thousandths
+    /// (the preregistration doc's §3 arithmetic): Pe(κ) = 0.9·0.9 + 0.1·0.1
+    /// = 0.82, κ = 0.02/0.18 = 1/9 → 1111; π_yes = 0.9, π_no = 0.1, Pe(γ) =
+    /// (0.09 + 0.09)/(2−1) = 0.18, AC1 = 0.66/0.82 = 33/41 → 8049. A
+    /// formula that misses either number on this table is wrong, whatever
+    /// it claims (the transcribed Pe = 2γ(1−γ) reading yields 7730 — the
+    /// fixture is the arbiter).
+    #[test]
+    fn gwet_ac1_matches_the_published_paradox_example() {
+        let mut a: Vec<String> = Vec::with_capacity(100);
+        let mut b: Vec<String> = Vec::with_capacity(100);
+        for i in 0..100 {
+            let (la, lb) = match i {
+                0..=81 => ("yes", "yes"), // 82 both yes
+                82..=89 => ("yes", "no"), // 8 A yes / B no
+                90..=97 => ("no", "yes"), // 8 A no / B yes
+                _ => ("no", "no"),        // 2 both no — raw agreement 84%
+            };
+            a.push(la.into());
+            b.push(lb.into());
+        }
+        // The κ arm of the same fixture (the published 0.11): the EXISTING
+        // implementation already carries it — the pin binds both metrics to
+        // one published table.
+        assert_eq!(
+            cohen_kappa_units(&a, &b).unwrap(),
+            1_111,
+            "the published κ 0.11 (1/9) on the paradox table"
+        );
+        // The AC1 arm (the published 0.80): 33/41 → 8049.
+        assert_eq!(
+            gwet_ac1_units(&a, &b).unwrap(),
+            8_049,
+            "the published AC1 0.80 (33/41) on the same table"
+        );
+    }
+
+    /// Parallel goldens over the κ fn's own cases — same vectors, both
+    /// metrics, so the shapes stay comparable (KM-5's behavioral arm) and
+    /// the "different questions" claim is concrete. Hand arithmetic, all
+    /// verified: a=[p,p,q] vs b=[p,q,q] (TWO distinct labels): observed
+    /// 2/3, Pe(κ) = 4/9 → κ 4000; π_p = π_q = 0.5, Pe(γ) = 0.5/(2−1) →
+    /// AC1 = 1/3 → 3333. The TRUE three-class case a=[p,p,r] vs b=[p,r,s]:
+    /// observed 1/3, Pe(κ) = 1/3 → κ 0; π = (1/2, 1/3, 1/6), Σπ(1−π) =
+    /// 11/18, Pe(γ) = (11/18)/(3−1) = 11/36 → AC1 = (1/36)/(25/36) = 1/25
+    /// → 400 — the only case that
+    /// exercises the q−1 divisor (at q = 2 it is 1, invisible to a mutant).
+    /// Opposite constants: κ 0 (observed and expected both 0) but AC1 −1
+    /// (Gwet's Pe(γ) = 0.5 is NOT 0) — the divergence is the point, both
+    /// are recorded as data.
+    #[test]
+    fn gwet_ac1_goldens_track_the_kappa_goldens() {
+        let v: fn(&[&str]) -> Vec<String> = |xs| xs.iter().map(|s| s.to_string()).collect();
+        // Perfect agreement → 10000 for both.
+        let a = v(&["x", "y", "x"]);
+        assert_eq!(gwet_ac1_units(&a, &a).unwrap(), 10_000);
+        // Chance agreement → 0 for both (observed 0.5 = Pe(γ) 0.5).
+        let a = v(&["x", "y", "x", "y"]);
+        let b = v(&["x", "y", "y", "x"]);
+        assert_eq!(cohen_kappa_units(&a, &b).unwrap(), 0);
+        assert_eq!(gwet_ac1_units(&a, &b).unwrap(), 0);
+        // Perfect disagreement, balanced marginals → −10000 for both.
+        let a = v(&["x", "x", "y", "y"]);
+        let b = v(&["y", "y", "x", "x"]);
+        assert_eq!(cohen_kappa_units(&a, &b).unwrap(), -10_000);
+        assert_eq!(gwet_ac1_units(&a, &b).unwrap(), -10_000);
+        // The two-class divergence: same vectors, different questions.
+        let a = v(&["p", "p", "q"]);
+        let b = v(&["p", "q", "q"]);
+        assert_eq!(cohen_kappa_units(&a, &b).unwrap(), 4_000);
+        assert_eq!(gwet_ac1_units(&a, &b).unwrap(), 3_333);
+        // The TRUE three-class case: the q−1 divisor is load-bearing here
+        // (a mutant dropping it reds THIS arm and no other). Hand
+        // arithmetic: observed 1/3, Pe(κ) = 1/3 → κ 0; π = (1/2, 1/3, 1/6),
+        // Σπ(1−π) = 11/18, Pe(γ) = (11/18)/(3−1) = 11/36,
+        // AC1 = (1/36)/(25/36) = 1/25 → 400.
+        let a = v(&["p", "p", "r"]);
+        let b = v(&["p", "r", "s"]);
+        assert_eq!(cohen_kappa_units(&a, &b).unwrap(), 0);
+        assert_eq!(gwet_ac1_units(&a, &b).unwrap(), 400);
+        // Opposite constants: κ 0, AC1 −1 — AC1 names the total disagreement
+        // κ's chance-model absorbs; the report shows both, never one.
+        let a = v(&["x", "x"]);
+        let b = v(&["y", "y"]);
+        assert_eq!(cohen_kappa_units(&a, &b).unwrap(), 0);
+        assert_eq!(gwet_ac1_units(&a, &b).unwrap(), -10_000);
+    }
+
+    /// The refusals match `cohen_kappa_units`' named-error shape — the
+    /// degenerate pair names itself, never NaN (the degenerate-pair
+    /// pattern's fn-level arm; the report cell carries the same strings in
+    /// its notes). Every input κ refuses, AC1 refuses too, under its own
+    /// `ac1:` prefix; the single-category case is AC1's own degenerate
+    /// (the q−1 denominator), refused even where κ computes.
+    #[test]
+    fn gwet_ac1_refusals_match_cohen_kappa_named() {
+        let v: fn(&[&str]) -> Vec<String> = |xs| xs.iter().map(|s| s.to_string()).collect();
+        // Empty: the same refusal shape, AC1's own prefix.
+        let err = gwet_ac1_units(&[], &[]).unwrap_err();
+        assert_eq!(err, "ac1: no ratings supplied");
+        // Length mismatch: the same refusal shape, AC1's own prefix.
+        let err = gwet_ac1_units(&["x".into()], &["x".into(), "y".into()]).unwrap_err();
+        assert_eq!(err, "ac1: rating length mismatch (1 vs 2)");
+        // Single category (both raters constant, same label): κ refuses as
+        // "expected agreement 1"; AC1 refuses as its own degenerate — the
+        // q−1 denominator.
+        let a = v(&["x", "x", "x"]);
+        assert!(cohen_kappa_units(&a, &a).is_err());
+        let err = gwet_ac1_units(&a, &a).unwrap_err();
+        assert_eq!(err, "ac1: degenerate — a single category; AC1 is undefined");
+        // The name carries the metric: no AC1 refusal answers as "kappa:".
+        assert!(err.starts_with("ac1: "));
+    }
+
+    /// KM-5 (structural): `gwet_ac1_units`' signature is shape-identical to
+    /// `cohen_kappa_units`' — same parameter list, same `Result<i32, String>`
+    /// return — the comparability law read off the source itself, so a unit
+    /// drift (f64 return, swapped params, a differing shape) reds here
+    /// before it can make the report's two metrics incomparable.
+    #[test]
+    fn gwet_ac1_signature_matches_cohen_kappa_units_shape() {
+        const SOURCE: &str = include_str!("kappa.rs");
+        let sig = |name: &str| {
+            let line = SOURCE
+                .lines()
+                .find(|l| l.contains(&format!("pub(crate) fn {name}(")))
+                .unwrap_or_else(|| panic!("the source must declare pub(crate) fn {name}"));
+            line.trim()
+                .split_once(&format!("fn {name}"))
+                .map(|(_, rest)| rest)
+                .unwrap()
+                .to_string()
+        };
+        assert_eq!(
+            sig("cohen_kappa_units"),
+            sig("gwet_ac1_units"),
+            "the two metrics' signatures must be identical modulo the name \
+             (the comparability law): (rater_a: &[String], rater_b: &[String]) -> Result<i32, String>"
+        );
     }
 
     #[test]
