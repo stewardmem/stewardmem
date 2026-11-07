@@ -313,3 +313,54 @@ its 2026-11-07 addendum section` (red);
 run 2 (addendum landed, stamp unmoved): red at the stamp assert;
 run 3 (both docs refreshed): **green**. The pin cannot be satisfied by
 sentiment — it re-derives from the two files on every kernel test run.
+
+---
+
+## 4 · Verify-after (the final tree, 2026-11-07)
+
+| Lane | Result |
+|---|---|
+| `cargo fmt --check` | clean ✓ |
+| `cargo clippy --all-targets -- -D warnings` | clean ✓ |
+| kernel `cargo test --features bench` | **3,817 passed / 0 failed** ✓ (the raw count; the badge's platform-normalized derivation: 3,835) |
+| shell/src-tauri `cargo test` | **129 passed / 0 failed** ✓ (the baseline held: 129/2-ignored pre-round) |
+| shell `pnpm check / lint / test` | 0 errors / clean / pass ✓ |
+| `cargo deny check` — all 8 workspaces | green ✓ (re-run on the FINAL tree) |
+| CI | the `deny` job mirrors the `audit` job's shape (binary pinned 0.20.2, binary-cache, the find-loop, found=1 aggregation); full check at root + policy checks ×8 — local equivalents green end-to-end |
+| the census | re-derived: **3,893 → 3,894** (+1, the AD-3 pin, structural); the drift pin green against the committed table |
+| the badge | re-derived (badges.sh, the platform-normalized skip set): **3,834 → 3,835** |
+| the lock delta | **ZERO Cargo.lock changes across the entire round** (`git diff 5c4b1109..HEAD`) — no product dependency changed; the only manifest delta is the license metadata on brain-client + brain-server-fuzz |
+| capability change | NONE — `capabilities/main.json` byte-identical to baseline (both drill plants reverted) |
+| gate behavior | unchanged — the audit job untouched; the deny job ADDS a lane; the machine never auto-gates (the AD-3 pin reads docs; the deny gate reds to a human) |
+
+**Commits (in order):** `b5d7938d` (S1 the deny gate) → `96c1e7b4` (S2 the
+red-proof + the residual) → `68eff54c` (S3 the two-file refresh + the AD-3
+pin) → `ea65de79` (the census/badge re-derivation) → this evidence close-out.
+
+## 5 · Exit criteria (the execution prompt's §4)
+
+- [x] `deny.toml` landed with dated waivers only (2, both root/fuzz-graph,
+      review by 2027-02-07); the unused-waiver detector ON
+      (`unused-ignored-advisory = "deny"`, drill-proven); the deny CI job
+      mirroring the audit loop (the measured per-run union constraint
+      shaped it: full@root + policy×8, documented in the job + deny.toml);
+      all 8 workspaces green
+- [x] The capability pin red-proven at BOTH layers (the tauri build script
+      refuses a shell-plugin permission by name; the exact-set pin reds any
+      drift by name); the dev-audit residual decided and dated (1 LOW,
+      dev-only, gate stays --prod, re-verify 2027-02-07)
+- [x] The two-file refresh: ATLAS commit + counts cited; every new row
+      sourced + mitigated; both stamps moved (R152 / Last-reviewed
+      2026-11-07)
+- [x] The OpenClaw answered-vs-open enumeration recorded (O1–O8, the six
+      mechanisms, M1–M7 — each answered or owner-named); the PQC tracked
+      row landed
+- [x] Zero product-dependency changes; all lanes green; the plan's §0.1
+      stands as the ground record; this file complete
+
+**Deviations from the plan text, each measured and recorded:** the deny job
+runs the advisories check at the ROOT only (the per-run unused-waiver
+detector reds satellite workspaces — measured, §1.4); the sidecar pin
+family is 46 tests, not the plan's 21 (measured); tauri is 2.12.5, not
+2.12.4 (measured); the capability drill red-proofs TWO layers (the plan's
+single drill hit the earlier fence — recorded, §2.1).
