@@ -374,7 +374,13 @@ fn rows() -> Vec<(&'static str, String, &'static str, &'static str)> {
             "/workflow/runs/{id}" => ("GET", ""),
             "/workflow/calibration/sign" => (
                 "POST",
-                r#"{"reviewer_id":"m","human_agreement_kappa_units":100}"#,
+                // The preregistered conjunction's triple (KM-4): the body
+                // must parse so the AUTH layer is what answers — a valid
+                // cross-tenant sign must 403. (The pre-round single-metric
+                // body now refuses 422 at the typed extractor, before the
+                // handler's gate — the schema evolution's honest, still-
+                // refusing consequence, recorded in the round evidence.)
+                r#"{"reviewer_id":"m","human_agreement_kappa_units":100,"human_agreement_ac1_units":100,"human_agreement_raw_percent":80}"#,
             ),
             "/workflow/runs/{id}/steering" => ("POST", r#"{"message":"m"}"#),
             "/ops/crew/config" => ("POST", r#"{"presence_enabled":true}"#),
