@@ -148,6 +148,14 @@ const KNOWN_ERRORS: &[(&str, &str, &str, &str)] = &[
     // whitespace-collapsed in the constructor's helper — never raw tool
     // internals), and the other three variants are fixed classifications.
     ("ConverterError", "ingest_document.rs", "service", "display"),
+    // IMPROVE07's scholarly adapters. `service` category: the publisher-API
+    // fetch lane's failure contract as the parent sees it (the
+    // OcrSidecarError shape — the API's internals are unknowable from the
+    // parent's seat). Every variant is a fixed classification with a
+    // fixed-prefix Display; no API bytes flow into any error string (the
+    // GDL config error law — a refusal names the failure, never the
+    // response that caused it).
+    ("ScholarError", "scholar.rs", "service", "display"),
     // The drift census's operator-facing error. `service` category: it is a
     // cadence job's failure contract, and every variant is a fixed-prefix
     // string with the offending value interpolated by the CONSTRUCTOR, never by

@@ -1,0 +1,12 @@
+{
+  "fixture": "epmc-clean-noa.json",
+  "api": "europepmc",
+  "expect": {
+    "doi": "10.1016/s0140-6736(12)61729-2",
+    "pmid": "23245607",
+    "license": null,
+    "open_access": false,
+    "retracted": false,
+    "updates_recorded": 0
+  }
+}

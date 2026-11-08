@@ -1,0 +1,12 @@
+{
+  "fixture": "epmc-clean-oa.json",
+  "api": "europepmc",
+  "expect": {
+    "doi": "10.1371/journal.pone.0266789",
+    "pmid": "35476794",
+    "license": "cc by",
+    "open_access": true,
+    "retracted": false,
+    "updates_recorded": 0
+  }
+}

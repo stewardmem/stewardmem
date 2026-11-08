@@ -327,6 +327,11 @@ pub const SCHEMA_VERSION_V1_32_29: &str = "1.32.29";
 /// v1.32.30 (IMPROVE05): the documents row's per-page OCR provenance
 /// (`page_tiers`, `low_confidence_pages`, `ocr_engine`).
 pub const SCHEMA_VERSION_V1_32_30: &str = "1.32.30";
+/// v1.32.31 (IMPROVE07): the knowledge row's scholarly provenance — ONE
+/// guarded ALTER adding `scholar_meta` (JSON-as-TEXT: the markdown door's
+/// extended frontmatter vocabulary doi | pmid | source_api | fetched_at |
+/// license | retracted). NULL rows are the pre-scholar shape.
+pub const SCHEMA_VERSION_V1_32_31: &str = "1.32.31";
 
 pub const SCHEMA_VERSION_V1_17_3: &str = "1.17.3";
 pub const SCHEMA_VERSION_V1_9_0: &str = "1.9.0";
@@ -348,7 +353,7 @@ pub const SCHEMA_VERSION_V0_9_9: &str = "0.9.9";
 /// Security posture: a source DB stamped NEWER than this is refused loudly
 /// ([`refuse_newer_schema`]) — migrating *down* would silently drop columns
 /// the newer release added, i.e. data loss dressed as a migration.
-pub const LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_30;
+pub const LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_31;
 
 /// Numeric dotted-version compare (std-only, no semver dependency).
 /// Non-numeric components are skipped (the `schema_ge` precedent in the
@@ -814,13 +819,15 @@ mod tests {
         // LL-04 round (the chat `support_decision` verdict column) moved the ceiling to
         // 1.32.29, so the probe moved to 1.32.30, and the
         // IMPROVE05 round (the documents row's per-page OCR provenance) moved
-        // the ceiling to 1.32.30, so the probe moved to 1.32.31.
+        // the ceiling to 1.32.30, so the probe moved to 1.32.31, and the
+        // IMPROVE07 round (the knowledge row's `scholar_meta` column) moved
+        // the ceiling to 1.32.31, so the probe moved to 1.32.32.
         // A probe
         // pinned AT the ceiling silently tests `Equal`, not `Greater` — the assertion
         // would keep passing while a NEWER-schema database was blessed instead of
         // refused, which is the one failure this function exists to prevent.
-        assert!(is_newer_than_known(Some("1.32.31")));
-        assert!(!is_newer_than_known(Some("1.32.30")));
+        assert!(is_newer_than_known(Some("1.32.32")));
+        assert!(!is_newer_than_known(Some("1.32.31")));
         assert!(!is_newer_than_known(Some("1.32.9")));
         assert!(!is_newer_than_known(Some("1.28.9")));
     }

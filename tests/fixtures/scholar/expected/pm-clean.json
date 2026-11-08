@@ -1,0 +1,10 @@
+{
+  "fixture": "pm-clean.json",
+  "api": "pubmed",
+  "expect": {
+    "records": 2,
+    "uids": ["35476794", "23245607"],
+    "retracted": false,
+    "updates_recorded": 0
+  }
+}

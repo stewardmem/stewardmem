@@ -1,0 +1,13 @@
+{
+  "fixture": "cr-correction-control.json",
+  "api": "crossref",
+  "expect": {
+    "doi": "10.1088/1361-6595/aaebdb",
+    "title_prefix": "Mechanisms responsible for the initiation",
+    "retracted": false,
+    "retraction": null,
+    "updates_recorded": 1,
+    "update_kinds_present": ["correction"],
+    "never_floors": true
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "fixture": "cr-clean-oa.json",
+  "api": "crossref",
+  "expect": { "doi": "10.1371/journal.pone.0266789", "retracted": false, "updates_recorded": 0 }
+}

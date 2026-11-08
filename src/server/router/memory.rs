@@ -1886,6 +1886,15 @@ pub(crate) async fn ingest_markdown(
         .or_else(|| fm.domain.clone().filter(|d| !d.trim().is_empty()))
         .unwrap_or_else(|| "global".to_string());
 
+    // The scholarly vocabulary (IMPROVE07, SA-8): the extended frontmatter
+    // keys persist into the row's `scholar_meta` JSON column — the machine
+    // retraction flag the trust floor reads. The DOI normalizes through the
+    // ONE named normalizer (SA-6); unknown frontmatter keys STILL drop (the
+    // vault sink arm is untouched — the extension is the named act). Absent
+    // keys write nothing: a document without scholarly frontmatter is
+    // byte-compatible with every row stored before the extension.
+    let scholar_meta = scholar_meta_from_frontmatter(&fm);
+
     // Seatbelt (Seatbelt): under BRAIN_WRITE_POSTURE=review the vault ingest
     // proposes instead of inserting — one proposal per chunk (capped), the
     // connector fetch loop inherits this automatically. No `knowledge` row
@@ -2006,6 +2015,12 @@ pub(crate) async fn ingest_markdown(
             quarantine_flagged,
             &owner,
         )?;
+        // The scholarly provenance persist (IMPROVE07): in-tx, AFTER the
+        // rows exist (the UPDATE needs them), BEFORE the audit row — the
+        // whole ingest commits or rolls back as one unit.
+        if let Some(meta) = scholar_meta.as_deref() {
+            persist_scholar_meta(&tx, &doc_id, meta)?;
+        }
         // audit successful markdown ingest (identifier only) — INSIDE the
         // tx: the evidence row commits or rolls back WITH the write (the
         // post-commit form was the crash window).
@@ -3281,6 +3296,66 @@ fn write_document_ingest(
         duplicates,
         quarantined_chunk_ids: quarantined_ids,
     })
+}
+
+/// The scholarly provenance JSON (IMPROVE07, SA-8): build the `scholar_meta`
+/// value from the extended frontmatter vocabulary — `None` when NO scholarly
+/// key is present (a document without scholarly frontmatter persists NULL,
+/// byte-compatible with every pre-extension row). The DOI normalizes through
+/// the ONE named normalizer (SA-6 — a second normalizer is a found bug);
+/// every other key is stored verbatim. Unknown frontmatter keys never reach
+/// this function: they dropped in the vault sink arm.
+pub(crate) fn scholar_meta_from_frontmatter(fm: &vault::Frontmatter) -> Option<String> {
+    use serde_json::{Map, Value};
+    let mut m = Map::new();
+    if let Some(doi) = fm
+        .doi
+        .as_deref()
+        .map(crate::scholar::normalize_doi)
+        .filter(|s| !s.is_empty())
+    {
+        m.insert("doi".to_string(), Value::String(doi));
+    }
+    if let Some(v) = fm.pmid.as_deref().filter(|s| !s.trim().is_empty()) {
+        m.insert("pmid".to_string(), Value::String(v.to_string()));
+    }
+    if let Some(v) = fm.source_api.as_deref().filter(|s| !s.trim().is_empty()) {
+        m.insert("source_api".to_string(), Value::String(v.to_string()));
+    }
+    if let Some(v) = fm.fetched_at.as_deref().filter(|s| !s.trim().is_empty()) {
+        m.insert("fetched_at".to_string(), Value::String(v.to_string()));
+    }
+    if let Some(v) = fm.license.as_deref().filter(|s| !s.trim().is_empty()) {
+        m.insert("license".to_string(), Value::String(v.to_string()));
+    }
+    if let Some(v) = fm.retracted.as_deref().filter(|s| !s.trim().is_empty()) {
+        m.insert("retracted".to_string(), Value::String(v.to_string()));
+    }
+    if m.is_empty() {
+        None
+    } else {
+        Some(Value::Object(m).to_string())
+    }
+}
+
+/// The scholarly provenance persist (IMPROVE07): ONE UPDATE over the
+/// document's rows, in the ingest tx (commits or rolls back WITH the write,
+/// the audit-row discipline). The domain-move precedent keeps
+/// `write_markdown_ingest`'s signature stable; running by `document_id`
+/// (not the insert path) means a re-fetch of the same record updates the
+/// machine flag even when every chunk dedupes — the retraction signal must
+/// survive its own no-op re-serve.
+pub(crate) fn persist_scholar_meta(
+    tx: &rusqlite::Transaction<'_>,
+    doc_id: &str,
+    meta_json: &str,
+) -> Result<(), AppError> {
+    tx.execute(
+        "UPDATE knowledge SET scholar_meta = ?1 WHERE document_id = ?2",
+        params![meta_json, doc_id],
+    )
+    .map(|_| ())
+    .map_err(|e| AppError::Internal(e.to_string()))
 }
 
 /// pure DB-write for a markdown ingest. Extracted from `ingest_markdown`

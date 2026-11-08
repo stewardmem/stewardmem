@@ -2328,6 +2328,8 @@ pub fn run_migration_with_store_dim(
     )?;
 
     // Bumped once per release that changes this function.
+    // v1.32.31 "ScholarMeta" (IMPROVE07): knowledge.scholar_meta — the
+    // scholarly provenance JSON column (one guarded ALTER) → 1.32.31.
     // v1.32.16 "Attestations": delivery_attestations table + delivery_traces.seq
     // (additive, guarded) → 1.32.16.
     // v1.32.15 "Delivery": delivery_traces + delivery_budgets tables → 1.32.15.
@@ -3288,9 +3290,33 @@ pub fn run_migration_with_store_dim(
         }
     }
 
+    // ── v1.32.31 "ScholarMeta" (IMPROVE07): the scholarly provenance. ───
+    // ONE guarded ALTER: `knowledge.scholar_meta` is a JSON-as-TEXT column
+    // carrying the markdown door's extended frontmatter vocabulary (doi |
+    // pmid | source_api | fetched_at | license | retracted — the scholarly
+    // source adapters' record identity and the machine retraction flag the
+    // trust floor reads). NULL rows are the pre-scholar shape,
+    // byte-compatible with everything stored before this round; unknown
+    // frontmatter keys STILL drop (the extension is the named act). The
+    // column never rewrites kcs_state — the retraction floor is the
+    // tiebreak's input, never a stored tier (plan 07 §0.3.6).
+    {
+        let present: bool = db
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('knowledge') WHERE name='scholar_meta'",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+            .unwrap_or(0)
+            > 0;
+        if !present {
+            db.execute("ALTER TABLE knowledge ADD COLUMN scholar_meta TEXT", [])?;
+        }
+    }
+
     db.execute(
-        "INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1.32.30')
-         ON CONFLICT(key) DO UPDATE SET value = '1.32.30';",
+        "INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1.32.31')
+         ON CONFLICT(key) DO UPDATE SET value = '1.32.31';",
         [],
     )?;
 

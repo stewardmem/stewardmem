@@ -197,6 +197,15 @@ pub mod packs;
 pub mod ph;
 pub mod procedural;
 pub mod qa;
+/// Scholarly source adapters (IMPROVE07): the deterministic zero-token parse
+/// layer over Europe PMC / Crossref / PubMed — the published retraction
+/// signal read at zero tokens (no ML detection; arXiv:2502.15429 is the
+/// foil), the correction trap floored on the EXACT retraction vocabulary
+/// only, the named DOI normalizer, and the `SourceAdapter` fetcher trait.
+/// An adapter is a FETCHER, never a promoter: ingest rides the EXISTING
+/// markdown door; the network lane (plan S2) is operator-configured,
+/// allowlist-pinned, and replay-tested (CI never performs a live call).
+pub mod scholar;
 pub mod screen;
 pub mod search;
 pub mod secrets;

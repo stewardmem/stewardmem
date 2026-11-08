@@ -1,9 +1,14 @@
 //! Obsidian vault semantics: YAML frontmatter + `[[wikilink]]` extraction.
 //!
 //! Pure, allocation-only, no I/O, no `unsafe`, no YAML dependency. Only the
-//! four keys brain-server cares about are parsed: `title`, `tags`, `aliases`,
-//! `domain`. Anything more complex is out of scope (upgrade path: a real YAML
-//! parser if a corpus needs nested frontmatter).
+//! ten keys brain-server cares about are parsed: `title`, `tags`, `aliases`,
+//! `domain` (the original four) and — the IMPROVE07 extension — the scholarly
+//! vocabulary `doi`, `pmid`, `source_api`, `fetched_at`, `license`,
+//! `retracted`, which the markdown door persists into the knowledge row's
+//! `scholar_meta` column (unknown keys STILL drop — the extension is the
+//! named act, not a vocabulary opening). Anything more complex is out of
+//! scope (upgrade path: a real YAML parser if a corpus needs nested
+//! frontmatter).
 //!
 //! ponytail ceiling: hand-rolled line-oriented YAML. Handles the inline and
 //! block list forms Obsidian emits (`tags: [a, b]` and `tags:\n  - a`). Does
@@ -14,12 +19,32 @@
 #![deny(unsafe_code)]
 
 /// Parsed frontmatter for the keys brain-server cares about.
+///
+/// The scholarly keys (IMPROVE07) ride the markdown door into the row's
+/// `scholar_meta` JSON column; an absent key stays `None` and writes nothing
+/// — a document without scholarly frontmatter is byte-compatible with every
+/// row stored before the extension.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Frontmatter {
     pub title: Option<String>,
     pub tags: Vec<String>,
     pub aliases: Vec<String>,
     pub domain: Option<String>,
+    // ── the scholarly vocabulary (IMPROVE07) ────────────────────────────
+    /// The NORMALIZED DOI identity (lowercased, resolver prefixes stripped)
+    /// — the door normalizes through `scholar::normalize_doi` (SA-6: one
+    /// normalizer, the dedupe key).
+    pub doi: Option<String>,
+    pub pmid: Option<String>,
+    /// Which adapter produced the record (`europepmc | crossref | pubmed`).
+    pub source_api: Option<String>,
+    /// RFC3339 fetch stamp (verbatim from frontmatter).
+    pub fetched_at: Option<String>,
+    pub license: Option<String>,
+    /// The retraction DATE as published by the API, or `true` when a date
+    /// is not carried. The machine flag on the row is the source of truth
+    /// for the tier floor; this frontmatter key is the human-written form.
+    pub retracted: Option<String>,
 }
 
 /// Split a document into `(frontmatter_yaml, body)`.
@@ -56,7 +81,9 @@ pub fn split_frontmatter(content: &str) -> (String, String) {
     (String::new(), content.to_string())
 }
 
-/// Parse the three supported keys from a frontmatter YAML string.
+/// Parse the supported keys from a frontmatter YAML string. Unknown keys
+/// still drop (SA-8: the scholarly extension is additive; the sink arm is
+/// untouched).
 pub fn parse_frontmatter(yaml: &str) -> Frontmatter {
     let mut fm = Frontmatter::default();
     let mut lines = yaml.lines().peekable();
@@ -93,6 +120,22 @@ pub fn parse_frontmatter(yaml: &str) -> Frontmatter {
                     fm.tags.extend(list);
                 } else {
                     fm.aliases.extend(list);
+                }
+            }
+            // The scholarly vocabulary (IMPROVE07): scalar string keys,
+            // quoted or bare, parsed exactly like `domain`. Empty values
+            // leave the field `None` (same law as title/domain).
+            "doi" | "pmid" | "source_api" | "fetched_at" | "license" | "retracted"
+                if !val.is_empty() =>
+            {
+                let v = strip_quotes(val).to_string();
+                match key {
+                    "doi" => fm.doi = Some(v),
+                    "pmid" => fm.pmid = Some(v),
+                    "source_api" => fm.source_api = Some(v),
+                    "fetched_at" => fm.fetched_at = Some(v),
+                    "license" => fm.license = Some(v),
+                    _ => fm.retracted = Some(v),
                 }
             }
             _ => {}
@@ -324,5 +367,62 @@ mod tests {
     fn frontmatter_domain_defaults_when_absent() {
         let fm = parse_frontmatter("title: Test\ntags: [a]\n");
         assert!(fm.domain.is_none());
+    }
+
+    // ── the scholarly vocabulary (IMPROVE07, SA-8) ───────────────────────
+
+    #[test]
+    fn frontmatter_parses_the_scholarly_keys() {
+        let yaml = "title: Retracted paper\ndoi: HTTPS://DOI.ORG/10.1016/S0140-6736(97)11096-0\n\
+                    pmid: 9500320\nsource_api: crossref\nfetched_at: 2026-11-08T00:00:00Z\n\
+                    license: cc by\nretracted: 2010-02-06\n";
+        let fm = parse_frontmatter(yaml);
+        assert_eq!(
+            fm.doi.as_deref(),
+            Some("HTTPS://DOI.ORG/10.1016/S0140-6736(97)11096-0"),
+            "the parser stores verbatim; NORMALIZATION is scholar::normalize_doi's job \
+             (SA-6: one normalizer, not two)"
+        );
+        assert_eq!(fm.pmid.as_deref(), Some("9500320"));
+        assert_eq!(fm.source_api.as_deref(), Some("crossref"));
+        assert_eq!(fm.fetched_at.as_deref(), Some("2026-11-08T00:00:00Z"));
+        assert_eq!(fm.license.as_deref(), Some("cc by"));
+        assert_eq!(fm.retracted.as_deref(), Some("2010-02-06"));
+    }
+
+    #[test]
+    fn frontmatter_scholarly_keys_default_when_absent() {
+        let fm = parse_frontmatter("title: Plain note\ntags: [a]\n");
+        assert!(fm.doi.is_none());
+        assert!(fm.pmid.is_none());
+        assert!(fm.source_api.is_none());
+        assert!(fm.fetched_at.is_none());
+        assert!(fm.license.is_none());
+        assert!(fm.retracted.is_none());
+    }
+
+    #[test]
+    fn frontmatter_unknown_keys_still_drop() {
+        // SA-8's backward-compatibility half: the extension must not open
+        // the vocabulary — anything outside the named keys sinks.
+        let fm = parse_frontmatter("title: X\ncustom_key: keep me?\nscholar_extra: nope\n");
+        assert_eq!(fm.title.as_deref(), Some("X"));
+        assert!(fm.doi.is_none());
+        // The struct's PartialEq has no field for the unknown keys; the
+        // sink arm is the proof — nothing else could have stored them.
+    }
+
+    #[test]
+    fn frontmatter_quoted_scholarly_values_unquote() {
+        let fm = parse_frontmatter("doi: \"10.1016/S0140-6736(97)11096-0\"\nlicense: 'cc by'\n");
+        assert_eq!(fm.doi.as_deref(), Some("10.1016/S0140-6736(97)11096-0"));
+        assert_eq!(fm.license.as_deref(), Some("cc by"));
+    }
+
+    #[test]
+    fn frontmatter_empty_scholarly_values_leave_none() {
+        let fm = parse_frontmatter("doi:\npmid:\n");
+        assert!(fm.doi.is_none());
+        assert!(fm.pmid.is_none());
     }
 }

@@ -1,0 +1,17 @@
+{
+  "fixture": "epmc-wakefield-core.json",
+  "api": "europepmc",
+  "expect": {
+    "doi": "10.1016/s0140-6736(97)11096-0",
+    "pmid": "9500320",
+    "title_prefix": "Ileal-lymphoid-nodular hyperplasia",
+    "pub_year": "1998",
+    "license": null,
+    "open_access": false,
+    "retracted": true,
+    "retraction_kind": "retraction",
+    "updates_recorded": 29,
+    "update_kinds_present": ["Comment in", "Retraction in", "Expression of concern in"],
+    "retraction_in_dois": ["10.1016/s0140-6736(04)15715-2", "10.1016/s0140-6736(10)60175-4"]
+  }
+}

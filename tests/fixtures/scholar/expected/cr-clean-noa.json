@@ -1,0 +1,5 @@
+{
+  "fixture": "cr-clean-noa.json",
+  "api": "crossref",
+  "expect": { "doi": "10.1016/s0140-6736(12)61729-2", "retracted": false, "updates_recorded": 0 }
+}

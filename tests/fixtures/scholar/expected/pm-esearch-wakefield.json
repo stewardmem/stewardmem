@@ -1,0 +1,5 @@
+{
+  "fixture": "pm-esearch-wakefield.json",
+  "api": "pubmed",
+  "expect": { "count": 1, "uids": ["9500320"] }
+}

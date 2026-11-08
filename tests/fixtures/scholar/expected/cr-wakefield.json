@@ -1,0 +1,16 @@
+{
+  "fixture": "cr-wakefield.json",
+  "api": "crossref",
+  "expect": {
+    "doi": "10.1016/s0140-6736(97)11096-0",
+    "title_prefix": "RETRACTED: Ileal-lymphoid-nodular hyperplasia",
+    "license": null,
+    "retracted": true,
+    "retraction_kind": "retraction",
+    "retraction_notice_doi": "10.1016/s0140-6736(10)60175-4",
+    "retraction_date": "2010-02-06",
+    "updates_recorded": 2,
+    "update_kinds_present": ["correction", "retraction"],
+    "correction_entry_is_non_flooring": true
+  }
+}
