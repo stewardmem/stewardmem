@@ -194,9 +194,31 @@ Honest notes the table needs:
 - The dual is deliberate and pinned, not a skip: the same test asserts
   whichever half its tree can prove.
 
-## The seal (stage + verify) — recorded after the evidence commit
+## The seal (stage, on the clean tree)
 
-Filled below after `sidecar.mjs stage` + `verify` on the clean tree.
+`node shell/scripts/sidecar.mjs stage` — **exit 0** on the clean tree at the
+round's close: both Rust release targets compiled, the stale-copy guard ran
+(`brain-server <version>` round-trip), the Swift universal build produced BOTH
+sidecars, and the provenance record carries **nine artifacts** — the kernel's
+three files (two thin slices + the universal), and the SAME three-file law for
+`brain-afm` AND `shell-vision` (universal + `lipo -thin` per target, each
+arch-checked before it earned a record entry):
+
+```
+brain-server-{aarch64,x86_64,universal}-apple-darwin
+brain-afm-{universal,aarch64,x86_64}-apple-darwin
+shell-vision-{universal,aarch64,x86_64}-apple-darwin   <- the IMPROVE05 addition
+```
+
+Every entry carries its sha256 + size + arch set (`SIDECAR_PROVENANCE.json`,
+written LAST so a found record trusts every entry it names). The bundle-half
+of verify (the codesign walk, hardened runtime, `--expect-identity`) runs at
+the release cut over the real signed `.app` — and `release-app-store.sh`'s
+bundle law now refuses a MAS submission whose `Contents/MacOS/` lacks
+`shell-vision`, so a kernel-less or vision-less bundle cannot be submitted.
+The verify LOGIC itself (including `stagedFailures` — every record artifact
+checked against the staged dir by sha256 + size) is pinned by the shell
+suite's `sidecar-bundle.test.ts` (8 tests, green).
 
 ## Lanes
 
