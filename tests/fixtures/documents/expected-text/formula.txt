@@ -1,0 +1,10 @@
+Formula Class: Notation Integrity
+E = mc2
+f(x) = a x2 + b x + c
+x1 + x2 = 7
+The exponent two above is a separate run at a raised baseline and a
+smaller size; the subscripts one and two sit below theirs. A text-layer
+extractor reads content order and glues every run inline (E = mc2 - the
+cue loss this corpus measures). A layout-aware converter may keep the
+visual cue, flatten it, or displace it: the fidelity table records which,
+per tier, from the same bytes.

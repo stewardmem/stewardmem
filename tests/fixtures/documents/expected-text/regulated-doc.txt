@@ -1,0 +1,29 @@
+SYNTHETIC - educational fixture - not medical advice - page 1 of 2
+SYNTHETIC CLINICAL GUIDELINE SG-CG-042 (educational fixture, rev 3)
+
+Guideline for the Care of a Synthetic Condition
+
+1. Scope
+This guideline applies to synthetic patients only. It exists to give the
+converter fidelity table a regulated-document shape: numbered sections,
+a boxed warning, a dosing table, and a footer stamp on every page.
+
+2. Contraindications
+Do not apply this guideline to real clinical decisions. The document is
+a test artifact; every value in it is invented and every section number
+exists so a converter can lose or keep it measurably.
+
+BOXED WARNING: SYNTHETIC CONTENT. The knowledge extracted from this
+document must never leave the test domain. A converter that reorders or
+merges this warning with adjacent sections is recorded, not corrected.
+SYNTHETIC - educational fixture - not medical advice - page 2 of 2
+3. Dosing (synthetic values)
+stage        dose            route      interval
+initial      10 mg           oral       once daily
+titration    +5 mg weekly    oral       weekly review
+maximum      40 mg           oral       once daily
+
+4. Monitoring
+Check the synthetic marker before each titration step. Record every
+measurement with its page anchor, so a citation can be traced to the
+section that stated it.

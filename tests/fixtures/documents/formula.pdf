@@ -1,0 +1,79 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 1090 >>
+stream
+BT
+/F1 14 Tf
+1 0 0 1 54.00 720.00 Tm
+(Formula Class: Notation Integrity) Tj
+/F1 12 Tf
+1 0 0 1 54.00 678.00 Tm
+(E = mc) Tj
+/F1 8 Tf
+1 0 0 1 97.20 682.50 Tm
+(2) Tj
+/F1 12 Tf
+1 0 0 1 54.00 650.00 Tm
+(f\(x\) = a x) Tj
+/F1 8 Tf
+1 0 0 1 126.00 654.50 Tm
+(2) Tj
+/F1 12 Tf
+1 0 0 1 130.80 650.00 Tm
+( + b x + c) Tj
+/F1 12 Tf
+1 0 0 1 54.00 622.00 Tm
+(x) Tj
+/F1 8 Tf
+1 0 0 1 61.20 619.50 Tm
+(1) Tj
+/F1 12 Tf
+1 0 0 1 66.00 622.00 Tm
+( + x) Tj
+/F1 8 Tf
+1 0 0 1 94.80 619.50 Tm
+(2) Tj
+/F1 12 Tf
+1 0 0 1 99.60 622.00 Tm
+( = 7) Tj
+/F1 10 Tf
+1 0 0 1 54.00 580.00 Tm
+(The exponent two above is a separate run at a raised baseline and a) Tj
+1 0 0 1 54.00 566.00 Tm
+(smaller size; the subscripts one and two sit below theirs. A text-layer) Tj
+1 0 0 1 54.00 552.00 Tm
+(extractor reads content order and glues every run inline \(E = mc2 - the) Tj
+1 0 0 1 54.00 538.00 Tm
+(cue loss this corpus measures\). A layout-aware converter may keep the) Tj
+1 0 0 1 54.00 524.00 Tm
+(visual cue, flatten it, or displace it: the fidelity table records which,) Tj
+1 0 0 1 54.00 510.00 Tm
+(per tier, from the same bytes.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000001383 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1453
+%%EOF

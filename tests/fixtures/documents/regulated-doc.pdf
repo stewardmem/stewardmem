@@ -1,0 +1,108 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 7 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 1467 >>
+stream
+BT
+/F1 8 Tf
+1 0 0 1 54.00 742.00 Tm
+(SYNTHETIC - educational fixture - not medical advice - page 1 of 2) Tj
+/F1 10 Tf
+1 0 0 1 54.00 720.00 Tm
+(SYNTHETIC CLINICAL GUIDELINE SG-CG-042 \(educational fixture, rev 3\)) Tj
+1 0 0 1 54.00 706.00 Tm
+1 0 0 1 54.00 692.00 Tm
+(Guideline for the Care of a Synthetic Condition) Tj
+1 0 0 1 54.00 678.00 Tm
+1 0 0 1 54.00 664.00 Tm
+(1. Scope) Tj
+1 0 0 1 54.00 650.00 Tm
+(This guideline applies to synthetic patients only. It exists to give the) Tj
+1 0 0 1 54.00 636.00 Tm
+(converter fidelity table a regulated-document shape: numbered sections,) Tj
+1 0 0 1 54.00 622.00 Tm
+(a boxed warning, a dosing table, and a footer stamp on every page.) Tj
+1 0 0 1 54.00 608.00 Tm
+1 0 0 1 54.00 594.00 Tm
+(2. Contraindications) Tj
+1 0 0 1 54.00 580.00 Tm
+(Do not apply this guideline to real clinical decisions. The document is) Tj
+1 0 0 1 54.00 566.00 Tm
+(a test artifact; every value in it is invented and every section number) Tj
+1 0 0 1 54.00 552.00 Tm
+(exists so a converter can lose or keep it measurably.) Tj
+1 0 0 1 54.00 538.00 Tm
+1 0 0 1 54.00 524.00 Tm
+(BOXED WARNING: SYNTHETIC CONTENT. The knowledge extracted from this) Tj
+1 0 0 1 54.00 510.00 Tm
+(document must never leave the test domain. A converter that reorders or) Tj
+1 0 0 1 54.00 496.00 Tm
+(merges this warning with adjacent sections is recorded, not corrected.) Tj
+/F1 8 Tf
+1 0 0 1 54.00 120.00 Tm
+(SYNTHETIC - educational fixture - not medical advice - page 1 of 2) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 7 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 921 >>
+stream
+BT
+/F1 8 Tf
+1 0 0 1 54.00 742.00 Tm
+(SYNTHETIC - educational fixture - not medical advice - page 2 of 2) Tj
+/F1 10 Tf
+1 0 0 1 54.00 720.00 Tm
+(3. Dosing \(synthetic values\)) Tj
+1 0 0 1 54.00 706.00 Tm
+(stage        dose            route      interval) Tj
+1 0 0 1 54.00 692.00 Tm
+(initial      10 mg           oral       once daily) Tj
+1 0 0 1 54.00 678.00 Tm
+(titration    +5 mg weekly    oral       weekly review) Tj
+1 0 0 1 54.00 664.00 Tm
+(maximum      40 mg           oral       once daily) Tj
+1 0 0 1 54.00 650.00 Tm
+1 0 0 1 54.00 636.00 Tm
+(4. Monitoring) Tj
+1 0 0 1 54.00 622.00 Tm
+(Check the synthetic marker before each titration step. Record every) Tj
+1 0 0 1 54.00 608.00 Tm
+(measurement with its page anchor, so a citation can be traced to the) Tj
+1 0 0 1 54.00 594.00 Tm
+(section that stated it.) Tj
+/F1 8 Tf
+1 0 0 1 54.00 120.00 Tm
+(SYNTHETIC - educational fixture - not medical advice - page 2 of 2) Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000001766 00000 n 
+0000001892 00000 n 
+0000002864 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+2934
+%%EOF

@@ -28,6 +28,15 @@ Fixtures (the plan's S1 set):
                       signal, so pages 2 and 4 go to the sidecar and pages 1
                       and 3 keep Tier-0 verbatim; the per-page tier map
                       records the split in the header and the row.
+  formula.pdf         1 page, notation-cue class (IMPROVE06): superscripts/
+                      subscripts as separate positioned runs (raised/lowered
+                      baseline, smaller size) — Tier 0 glues them inline (the
+                      measured cue loss); the docling tier's cue handling is
+                      what the S3 table records.
+  regulated-doc.pdf   2 pages, regulated-document class (IMPROVE06): numbered
+                      sections, a boxed warning, a column-aligned dosing
+                      table, a footer stamp per page — the structure-survival
+                      class the Tier-2 fidelity table measures.
 """
 
 import hashlib
@@ -308,6 +317,122 @@ FOOTNOTE_PAGES = [
     ],
 ]
 
+# ── formula.pdf + regulated-doc.pdf (IMPROVE06, the Tier-2 fidelity classes) ──
+# Two born-digital classes the docling tier exists for, in the corpus's own
+# discipline (stdlib-only, ASCII, byte-deterministic):
+#
+# formula.pdf — the NOTATION-CUE class (arXiv:2610.30026's visual-encoding
+# layer): superscripts/subscripts drawn as SEPARATE positioned runs at a
+# raised/lowered baseline and smaller size. The PDF's content order places
+# them adjacent (a text-layer extractor reads "E = mc2" — the Tier-0 cue
+# loss, honest to measure); a layout-aware converter may read the visual
+# cue, may flatten it, or may displace it — the S3 table records what each
+# tier actually did, never smoothed. The notation is ASCII pseudo-math by
+# the corpus law (Helvetica base-14 has no math glyphs); the class tested is
+# CUE INTEGRITY, not math typesetting.
+#
+# regulated-doc.pdf — the regulated-document shape (S4's dress rehearsal):
+# title, numbered sections, a boxed warning, a column-aligned dosing table,
+# and a per-page footer stamp. Single-column (the two-column class lives in
+# two-column.pdf); the class tested is STRUCTURE survival — sections, table
+# rows, the warning block, and the footer must remain attributable to their
+# pages after conversion.
+
+def formula_runs(x: float, y: float, runs: list[tuple[str, float, float]]) -> list[str]:
+    """One visual line as positioned runs: (text, size, dy) — dy raises the
+    baseline (positive = superscript posture). x advances by an estimated
+    Helvetica advance (0.6 * size per glyph — fixture-grade, deterministic)."""
+    ops: list[str] = []
+    cx = x
+    for text, size, dy in runs:
+        if text:
+            ops.append(f"/F1 {size} Tf")
+            ops.append(f"1 0 0 1 {cx:.2f} {y + dy:.2f} Tm")
+            ops.append(f"({esc(text)}) Tj")
+        cx += 0.6 * size * len(text)
+    return ops
+
+
+FORMULA_BODY: list[list[tuple[str, float, float]]] = [
+    [("E = mc", 12, 0), ("2", 8, 4.5)],
+    [("f(x) = a x", 12, 0), ("2", 8, 4.5), (" + b x + c", 12, 0)],
+    [("x", 12, 0), ("1", 8, -2.5), (" + x", 12, 0), ("2", 8, -2.5), (" = 7", 12, 0)],
+]
+
+FORMULA_PROSE = [
+    "The exponent two above is a separate run at a raised baseline and a",
+    "smaller size; the subscripts one and two sit below theirs. A text-layer",
+    "extractor reads content order and glues every run inline (E = mc2 - the",
+    "cue loss this corpus measures). A layout-aware converter may keep the",
+    "visual cue, flatten it, or displace it: the fidelity table records which,",
+    "per tier, from the same bytes.",
+]
+
+
+def formula_page() -> tuple[str, dict]:
+    ops: list[str] = []
+    ops += draw_lines(LEFT, TOP, "F1", 14, ["Formula Class: Notation Integrity"])
+    yy = TOP - 3 * LINE
+    for runs in FORMULA_BODY:
+        ops += formula_runs(LEFT, yy, runs)
+        yy -= 2 * LINE
+    yy -= LINE
+    ops += draw_lines(LEFT, yy, "F1", 10, FORMULA_PROSE)
+    return page_stream(ops), {}
+
+
+def _regulated_footer(page_no: int, total: int) -> list[str]:
+    return [
+        f"SYNTHETIC - educational fixture - not medical advice - page {page_no} of {total}",
+    ]
+
+
+REGULATED_PAGE1 = [
+    "SYNTHETIC CLINICAL GUIDELINE SG-CG-042 (educational fixture, rev 3)",
+    "",
+    "Guideline for the Care of a Synthetic Condition",
+    "",
+    "1. Scope",
+    "This guideline applies to synthetic patients only. It exists to give the",
+    "converter fidelity table a regulated-document shape: numbered sections,",
+    "a boxed warning, a dosing table, and a footer stamp on every page.",
+    "",
+    "2. Contraindications",
+    "Do not apply this guideline to real clinical decisions. The document is",
+    "a test artifact; every value in it is invented and every section number",
+    "exists so a converter can lose or keep it measurably.",
+    "",
+    "BOXED WARNING: SYNTHETIC CONTENT. The knowledge extracted from this",
+    "document must never leave the test domain. A converter that reorders or",
+    "merges this warning with adjacent sections is recorded, not corrected.",
+]
+
+REGULATED_PAGE2_TABLE = [
+    "3. Dosing (synthetic values)",
+    "stage        dose            route      interval",
+    "initial      10 mg           oral       once daily",
+    "titration    +5 mg weekly    oral       weekly review",
+    "maximum      40 mg           oral       once daily",
+    "",
+    "4. Monitoring",
+    "Check the synthetic marker before each titration step. Record every",
+    "measurement with its page anchor, so a citation can be traced to the",
+    "section that stated it.",
+]
+
+REGULATED_PAGES = [
+    [
+        *draw_lines(LEFT, PAGE_H - 50, "F1", 8, _regulated_footer(1, 2)),
+        *draw_lines(LEFT, TOP, "F1", 10, REGULATED_PAGE1),
+        *draw_lines(LEFT, 120, "F1", 8, _regulated_footer(1, 2)),
+    ],
+    [
+        *draw_lines(LEFT, PAGE_H - 50, "F1", 8, _regulated_footer(2, 2)),
+        *draw_lines(LEFT, TOP, "F1", 10, REGULATED_PAGE2_TABLE),
+        *draw_lines(LEFT, 120, "F1", 8, _regulated_footer(2, 2)),
+    ],
+]
+
 SCAN_PAGES = [
     (image_page_stream(54, 200, 504, 500), {"image": True}),
     (image_page_stream(54, 200, 504, 500), {"image": True}),
@@ -407,7 +532,34 @@ def build_hostile_pdf() -> bytes:
     return bytes(out)
 
 
+def formula_expected_text() -> str:
+    """The exact source text in content order: headings, formulas with every
+    run glued inline (what the bytes say, not what typography implies), then
+    the prose. The WER reference for the notation-cue class."""
+    lines = ["Formula Class: Notation Integrity"]
+    for runs in FORMULA_BODY:
+        lines.append("".join(text for text, _, _ in runs))
+    lines.extend(FORMULA_PROSE)
+    return "\n".join(lines) + "\n"
+
+
+def regulated_expected_text() -> str:
+    """Both pages' exact text in content order, page footers included."""
+    blocks = []
+    for page_no, page in enumerate((REGULATED_PAGE1, REGULATED_PAGE2_TABLE), start=1):
+        lines = list(_regulated_footer(page_no, 2))
+        lines.extend(page)
+        blocks.append("\n".join(lines))
+    return "\n".join(blocks) + "\n"
+
+
 def main() -> None:
+    expected_dir = HERE / "expected-text"
+    expected_dir.mkdir(exist_ok=True)
+    (expected_dir / "formula.txt").write_text(formula_expected_text(), encoding="ascii")
+    (expected_dir / "regulated-doc.txt").write_text(
+        regulated_expected_text(), encoding="ascii"
+    )
     fixtures = {
         "single-column.pdf": build_pdf([prose_page(p) for p in SINGLE_COL_PAGES]),
         "two-column.pdf": build_pdf([(page_stream(p), {}) for p in TWO_COL_PAGES]),
@@ -421,6 +573,8 @@ def main() -> None:
             ]
         ),
         "hostile-font-panic.pdf": build_hostile_pdf(),
+        "formula.pdf": build_pdf([formula_page()]),
+        "regulated-doc.pdf": build_pdf([(page_stream(p), {}) for p in REGULATED_PAGES]),
     }
     manifest = []
     for name in sorted(fixtures):

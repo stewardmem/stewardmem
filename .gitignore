@@ -168,3 +168,10 @@ docs/SECURITY_AUDIT_20261006_TENTH_PASS_REGULATORY.md
 # this repository is mirrored to a PUBLIC repo, so committing it would publish
 # the name. Nothing in the tree references it and nothing needs it to.
 .exec-in-tmux.sh
+
+# The docling operator venv (IMPROVE06 S1) — the candidate-A toolchain the
+# wrapper runs inside (pip install docling, ~2 GB with torch). A LOCAL
+# operator artifact, never a tree dependency: the committed implementation is
+# scripts/docling-kernel.py, the posture is documented in
+# docs/DOCLING_TOOL_PROTOCOL.md, and the kernel has zero Python dependencies.
+.venv-docling/
