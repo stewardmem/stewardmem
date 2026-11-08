@@ -529,10 +529,12 @@ impl ScholarProfile {
 
         let rate_per_sec = match rate_raw.as_deref().map(str::trim) {
             None => 1,
-            Some(v) => match v.parse::<u32>() {
-                Ok(n) if (1..=10).contains(&n) => n,
-                _ => return Err("scholar profile is invalid".to_string()),
-            },
+            Some(v) => {
+                let Some(n) = v.parse::<u32>().ok().filter(|n| (1..=10).contains(n)) else {
+                    return Err("scholar profile is invalid".to_string());
+                };
+                n
+            }
         };
 
         Ok(Some(Self {

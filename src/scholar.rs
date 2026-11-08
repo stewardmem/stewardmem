@@ -1669,7 +1669,7 @@ async fn attempt_with_backoff(
     transport: &ScholarTransport,
     url: &str,
 ) -> Result<ScholarResponse, ScholarError> {
-    let mut attempt: u8 = 1;
+    let mut attempt = 1u8;
     loop {
         let resp = transport.get(url).await?;
         match backoff_decision(resp.status, resp.retry_after_secs, attempt) {
@@ -1723,10 +1723,12 @@ pub fn render_record_markdown(rec: &SourceRecord) -> String {
         out.push_str(&format!("license: {license}\n"));
     }
     if let Some(r) = &rec.retraction {
-        match &r.date {
-            Some(date) => out.push_str(&format!("retracted: {date}\n")),
-            None => out.push_str("retracted: true\n"),
-        }
+        let line = r
+            .date
+            .as_ref()
+            .map(|date| format!("retracted: {date}\n"))
+            .unwrap_or_else(|| "retracted: true\n".to_string());
+        out.push_str(&line);
     }
     out.push_str("---\n\n");
 
