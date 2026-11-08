@@ -489,3 +489,352 @@ fn rw_s1_schema_three_tables_and_the_stamp() {
         );
     }
 }
+
+// ── S2: the parsers, the corpus, the transport (RW-5/6/7 pins) ──────────
+//
+// RED LEDGER (2026-11-09, after S1 landed): compile-presence —
+// `parse_feed` / `ParsedFeed` / `WatchTransport` / `build_arxiv_query_url`
+// did not exist; this file did not compile until the parser + the
+// transport landed in the same commit.
+
+const FIXTURES: &str = "tests/fixtures/watch";
+
+fn fixture(name: &str) -> Vec<u8> {
+    std::fs::read(format!("{FIXTURES}/{name}")).expect("fixture present")
+}
+
+/// RW-6: the corpus byte-integrity pin — every file in `SHA256SUMS` matches
+/// its committed hash (the 07 corpus law: drift re-records under a new
+/// name, never overwrites).
+#[test]
+fn rw6_the_fixture_corpus_round_trips_byte_identically() {
+    use sha2::{Digest, Sha256};
+    let sums = std::fs::read_to_string(format!("{FIXTURES}/SHA256SUMS")).expect("sums");
+    let mut checked = 0;
+    for line in sums.lines().filter(|l| !l.trim().is_empty()) {
+        let (hash, path) = line.split_once("  ").expect("two-space sha256sums format");
+        let bytes = std::fs::read(format!("{FIXTURES}/{}", path.trim())).expect("fixture");
+        let got = hex::encode(Sha256::digest(&bytes));
+        assert_eq!(
+            got,
+            hash.trim(),
+            "{} drifted from the committed hash",
+            path.trim()
+        );
+        checked += 1;
+    }
+    assert!(
+        checked >= 6,
+        "the corpus carries at least the six recorded files, got {checked}"
+    );
+}
+
+/// RW-7: the five recorded live shapes parse through ONE parser.
+/// - the arXiv Atom lane: 3 entries, identities the BARE arXiv ids WITH
+///   version, RFC-3339 dates, authors, categories;
+/// - lobsters: guid identities, the `<ttl>120` honored as 7200 s, RFC-822
+///   normalized to RFC-3339;
+/// - NIST: a dozen declared namespaces — the parser is prefix-tolerant;
+/// - CISA's trimmed prefix: exactly its three items, entity-decoded;
+/// - the Sunday arXiv RSS: ZERO items, no error (the empty-state honesty).
+#[test]
+fn rw7_the_five_live_shapes_parse() {
+    // 1. the arXiv Atom lane (LIVE).
+    let feed = brain_server::watch::parse_feed(
+        brain_server::watch::SourceKind::ArxivApi,
+        &fixture("arxiv-atom.xml"),
+    )
+    .expect("the arXiv Atom fixture parses");
+    assert_eq!(feed.items.len(), 3);
+    assert_eq!(feed.items[0].identity, "2410.05451v3", "id WITH version");
+    assert!(feed.items[0].published.is_some());
+    assert!(!feed.items[0].authors.is_empty());
+    assert!(
+        feed.items
+            .iter()
+            .any(|i| i.categories.iter().any(|c| c == "cs.CR"))
+    );
+    let secalign = feed
+        .items
+        .iter()
+        .find(|i| i.identity == "2410.05451v3")
+        .unwrap();
+    assert!(
+        secalign
+            .summary
+            .as_deref()
+            .unwrap_or("")
+            .contains("SecAlign"),
+        "the summary is the item's DATA"
+    );
+
+    // 2. lobsters (LIVE): guid identity + the ttl honored + RFC-822 dates.
+    let feed = brain_server::watch::parse_feed(
+        brain_server::watch::SourceKind::Rss,
+        &fixture("lobsters.rss"),
+    )
+    .expect("the lobsters fixture parses");
+    assert!(
+        feed.items.len() >= 10,
+        "lobsters carries its items, got {}",
+        feed.items.len()
+    );
+    assert_eq!(
+        feed.ttl_secs,
+        Some(7_200),
+        "the <ttl>120 cache hint, in seconds"
+    );
+    assert!(
+        feed.items
+            .iter()
+            .any(|i| i.identity == "https://lobste.rs/s/62loik")
+    );
+    let first = feed
+        .items
+        .iter()
+        .find(|i| i.identity == "https://lobste.rs/s/62loik")
+        .unwrap();
+    assert_eq!(
+        first.published.as_deref(),
+        Some("2026-11-08T06:55:05-06:00"),
+        "RFC-822 -0600 re-rendered in the uniform RFC-3339 form (the \
+         publisher's offset preserved, not silently converted)"
+    );
+
+    // 3. NIST (LIVE): namespace-prefix-tolerant local-name parsing.
+    let feed =
+        brain_server::watch::parse_feed(brain_server::watch::SourceKind::Rss, &fixture("nist.rss"))
+            .expect("the NIST fixture parses");
+    assert!(feed.items.len() >= 5, "NIST carries its items");
+    assert!(
+        feed.items.iter().all(|i| !i.title.is_empty()),
+        "every NIST item carries a title through the declared namespaces"
+    );
+
+    // 4. CISA (LIVE, byte-prefix trimmed through item 3): exactly its three
+    // items; the entity-encoded descriptions decode ONE level and stay DATA.
+    let feed = brain_server::watch::parse_feed(
+        brain_server::watch::SourceKind::Rss,
+        &fixture("cisa-trim-prefix3.xml"),
+    )
+    .expect("the CISA trimmed prefix parses");
+    assert_eq!(
+        feed.items.len(),
+        3,
+        "the trim carries exactly its three items"
+    );
+    assert!(
+        feed.items
+            .iter()
+            .all(|i| !i.summary.as_deref().unwrap_or("").contains("&lt;")),
+        "descriptions are decoded (no raw entity escapes ride the text)"
+    );
+
+    // 5. the Sunday arXiv RSS (LIVE): zero items, NO error.
+    let feed = brain_server::watch::parse_feed(
+        brain_server::watch::SourceKind::Rss,
+        &fixture("arxiv-rss-sunday-empty.xml"),
+    )
+    .expect("the empty state is HONEST, never an error");
+    assert_eq!(feed.items.len(), 0, "the Sunday feed saw zero items");
+
+    // The marked-synthetic weekday shape parses to its two items (the
+    // fixture the Sunday probe could not record — the evidence says so).
+    let feed = brain_server::watch::parse_feed(
+        brain_server::watch::SourceKind::Rss,
+        &fixture("arxiv-rss-weekday-items.SYNTHETIC.xml"),
+    )
+    .expect("the marked-synthetic weekday shape parses");
+    assert_eq!(feed.items.len(), 2);
+    assert!(
+        feed.items
+            .iter()
+            .any(|i| i.identity == "http://arxiv.org/abs/2601.00001v1")
+    );
+}
+
+/// RW-7: the security refusals. A feed carrying `<!DOCTYPE` or `<!ENTITY`
+/// is refused BY NAME — entities are never expanded, the XXE posture
+/// (inline synthetic bodies; no probe carried a DTD, and the refusal must
+/// hold regardless).
+#[test]
+fn rw7_dtd_and_entity_are_refused_by_name_never_expanded() {
+    let doctype = br#"<?xml version="1.0"?>
+<rss version="2.0"><!DOCTYPE rss [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+<channel><title>t</title><item><title>&xxe;</title></item></channel></rss>"#;
+    let entity_only = br#"<rss version="2.0"><!ENTITY trick "expanded"><channel><item><title>&trick;</title></item></channel></rss>"#;
+    for body in [&doctype[..], &entity_only[..]] {
+        match brain_server::watch::parse_feed(brain_server::watch::SourceKind::Rss, body) {
+            Err(brain_server::watch::WatchError::FeedDtdRefused) => {}
+            other => panic!("a DTD/entity feed must refuse watch_feed_dtd_refused, got {other:?}"),
+        }
+    }
+}
+
+/// RW-7: malformed bytes (a truncated document — an item opened and never
+/// closed) refuse `watch_feed_malformed`; a non-feed document (an HTML
+/// page, a JSON body) refuses `watch_feed_wrong_schema`.
+#[test]
+fn rw7_malformed_and_wrong_schema_are_named() {
+    // Truncation: the lobsters bytes cut mid-tag (derived from the corpus,
+    // honestly-synthetic).
+    let full = fixture("lobsters.rss");
+    let cut = &full[..full.len() - 200];
+    match brain_server::watch::parse_feed(brain_server::watch::SourceKind::Rss, cut) {
+        Err(brain_server::watch::WatchError::FeedMalformed) => {}
+        other => panic!("a truncated feed must refuse watch_feed_malformed, got {other:?}"),
+    }
+    for body in [
+        &b"<html><body><h1>503 Service Unavailable</h1></body></html>"[..],
+        &br#"{"error":"not a feed"}"#[..],
+    ] {
+        match brain_server::watch::parse_feed(brain_server::watch::SourceKind::Rss, body) {
+            Err(brain_server::watch::WatchError::FeedWrongSchema) => {}
+            other => panic!("a non-feed body must refuse watch_feed_wrong_schema, got {other:?}"),
+        }
+    }
+}
+
+/// RW-7: the arXiv API's documented error shape — a single Atom entry whose
+/// `<id>` starts `http://arxiv.org/api/errors#` — is the NAMED refusal,
+/// NEVER parsed as zero items (inline synthetic body; the shape is the
+/// manual's, the bytes are not a transcript).
+#[test]
+fn rw7_arxiv_error_entry_is_a_named_refusal() {
+    let body = br#"<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Error</title>
+  <entry>
+    <id>http://arxiv.org/api/errors#error_403</id>
+    <title>Error</title>
+    <summary>your request looks automated</summary>
+  </entry>
+</feed>"#;
+    match brain_server::watch::parse_feed(brain_server::watch::SourceKind::ArxivApi, body) {
+        Err(brain_server::watch::WatchError::ArxivErrorEntry(_)) => {}
+        other => panic!("the arXiv error-as-Atom shape must refuse by name, got {other:?}"),
+    }
+}
+
+/// RW-5: the byte cap is the chunked read's law — accumulation past
+/// `WATCH_MAX_FEED_BYTES` refuses `watch_feed_too_large` (the accumulator
+/// is the named pure function the transport loop calls; this pin drives it
+/// over an honestly-synthetic oversized body, no server).
+#[test]
+fn rw5_the_byte_cap_refuses_named() {
+    let chunk = vec![b'x'; 1024 * 1024];
+    let mut buf = Vec::new();
+    for _ in 0..16 {
+        // 16 MiB in 1 MiB chunks — exactly AT the cap is allowed.
+        brain_server::watch::push_bounded(&mut buf, &chunk).expect("at the cap is allowed");
+    }
+    assert_eq!(buf.len(), brain_server::watch::WATCH_MAX_FEED_BYTES);
+    match brain_server::watch::push_bounded(&mut buf, &chunk) {
+        Err(brain_server::watch::WatchError::FeedTooLarge) => {}
+        other => panic!("over the cap must refuse watch_feed_too_large, got {other:?}"),
+    }
+    assert_eq!(
+        buf.len(),
+        brain_server::watch::WATCH_MAX_FEED_BYTES,
+        "the refusing chunk is never appended"
+    );
+}
+
+/// RW-6: the replay transport serves the frozen corpus and refuses the
+/// gap — every mapped URL returns bytes IDENTICAL to the fixture file (the
+/// replay IS the corpus), and an unmapped URL is the named
+/// `watch_replay_gap`, never a silent live fallback.
+#[tokio::test]
+async fn rw6_the_replay_transport_serves_the_corpus_and_refuses_the_gap() {
+    let t = brain_server::watch::WatchTransport::replay();
+    for (url, fixture_name) in [
+        (
+            "https://export.arxiv.org/api/query?search_query=cat:cs.CR&start=0&max_results=100",
+            "arxiv-atom.xml",
+        ),
+        (
+            "https://export.arxiv.org/rss/cs.CL",
+            "arxiv-rss-sunday-empty.xml",
+        ),
+        ("https://lobste.rs/rss.rss", "lobsters.rss"),
+        (
+            "https://www.cisa.gov/cybersecurity-advisories/all.xml",
+            "cisa-trim-prefix3.xml",
+        ),
+        ("https://www.nist.gov/news-events/news/rss.xml", "nist.rss"),
+    ] {
+        let bytes = t.get(url).await.expect("mapped URL replays");
+        assert_eq!(
+            bytes,
+            fixture(fixture_name),
+            "the replay IS the corpus: {url}"
+        );
+    }
+    match t.get("https://example.com/feed.xml").await {
+        Err(brain_server::watch::WatchError::ReplayGap) => {}
+        other => panic!("an unmapped URL must refuse watch_replay_gap, got {other:?}"),
+    }
+}
+
+/// RW-5: the live transport is host-pinned BEFORE any I/O — a URL whose
+/// host is not the pinned lane host refuses `watch_fetch_host_mismatch`,
+/// and a non-https URL refuses outright (both checks fire before the
+/// client is ever consulted, so this pin runs offline).
+#[tokio::test]
+async fn rw5_the_live_transport_is_host_pinned_pre_io() {
+    let t = brain_server::watch::WatchTransport::live("lobste.rs").expect("client builds");
+    match t
+        .get("https://www.cisa.gov/cybersecurity-advisories/all.xml")
+        .await
+    {
+        Err(brain_server::watch::WatchError::FetchHostMismatch) => {}
+        other => panic!("a foreign host must refuse watch_fetch_host_mismatch, got {other:?}"),
+    }
+    match t.get("http://lobste.rs/rss.rss").await {
+        Err(brain_server::watch::WatchError::LaneHostRequired) => {}
+        other => panic!("a non-https URL must refuse, got {other:?}"),
+    }
+}
+
+/// RW-5 (structural): the client construction law reads from the source —
+/// `redirect::Policy::none()` (a redirect is a pin bypass), `https_only`,
+/// `no_proxy`, and the named timeouts, all in the ONE builder.
+#[test]
+fn rw5_the_client_builder_is_pinned_structurally() {
+    let src = std::fs::read_to_string("src/watch.rs").expect("src");
+    for needle in [
+        "redirect(reqwest::redirect::Policy::none())",
+        "https_only(true)",
+        "no_proxy()",
+        "WATCH_HTTP_CONNECT_TIMEOUT_SECS",
+        "WATCH_HTTP_TOTAL_TIMEOUT_SECS",
+    ] {
+        assert!(src.contains(needle), "the builder must carry {needle}");
+    }
+}
+
+/// RW-8: the arXiv param builder encodes per the manual — spaces as `+`,
+/// the submittedDate window with encoded brackets, `sortBy=lastUpdatedDate`,
+/// and the slice cap at 2000.
+#[test]
+fn rw8_the_arxiv_param_builder_encodes_per_the_manual() {
+    let url = brain_server::watch::build_arxiv_query_url(
+        "cat:cs.CR AND all:prompt injection",
+        Some(("202611010000", "202611092359")),
+        100,
+    );
+    assert!(url.starts_with("https://export.arxiv.org/api/query?"));
+    assert!(url.contains("search_query=cat:cs.CR+AND+all:prompt+injection"));
+    assert!(
+        url.contains("submittedDate:%5B202611010000+TO+202611092359%5D"),
+        "the incremental window, brackets encoded: {url}"
+    );
+    assert!(url.contains("sortBy=lastUpdatedDate"));
+    assert!(url.contains("max_results=100"));
+
+    let url = brain_server::watch::build_arxiv_query_url("cat:cs.CR", None, 5000);
+    assert!(
+        url.contains("max_results=2000"),
+        "the slice cap is the manual's 2000, clamped: {url}"
+    );
+}

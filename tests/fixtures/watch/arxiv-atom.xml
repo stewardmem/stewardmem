@@ -1,0 +1,98 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/GtCuwldBCPk007jmsEDSKNhD62I</id>
+  <title>arXiv Query: search_query=cat:cs.CR AND all:prompt OR all:injection&amp;id_list=&amp;start=0&amp;max_results=3</title>
+  <updated>2026-11-08T20:16:33Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=cat:cs.CR+AND+(all:prompt+OR+all:injection)&amp;start=0&amp;max_results=3&amp;id_list=" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>3</opensearch:itemsPerPage>
+  <opensearch:totalResults>5531</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2410.05451v3</id>
+    <title>SecAlign: Defending Against Prompt Injection with Preference Optimization</title>
+    <updated>2025-07-03T05:45:41Z</updated>
+    <link href="https://arxiv.org/abs/2410.05451v3" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2410.05451v3" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Large language models (LLMs) are becoming increasingly prevalent in modern software systems, interfacing between the user and the Internet to assist with tasks that require advanced language understanding. To accomplish these tasks, the LLM often uses external data sources such as user documents, web retrieval, results from API calls, etc. This opens up new avenues for attackers to manipulate the LLM via prompt injection. Adversarial prompts can be injected into external data sources to override the system's intended instruction and instead execute a malicious instruction. To mitigate this vulnerability, we propose a new defense called SecAlign based on the technique of preference optimization. Our defense first constructs a preference dataset with prompt-injected inputs, secure outputs (ones that respond to the legitimate instruction), and insecure outputs (ones that respond to the injection). We then perform preference optimization on this dataset to teach the LLM to prefer the secure output over the insecure one. This provides the first known method that reduces the success rates of various prompt injections to &lt;10%, even against attacks much more sophisticated than ones seen during training. This indicates our defense generalizes well against unknown and yet-to-come attacks. Also, SecAlign models are still practical with similar utility to the one before defensive training in our evaluations. Our code is at https://github.com/facebookresearch/SecAlign</summary>
+    <category term="cs.CR" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2024-10-07T19:34:35Z</published>
+    <arxiv:comment>ACM CCS 2025. Key words: prompt injection defense, LLM security, LLM-integrated applications</arxiv:comment>
+    <arxiv:primary_category term="cs.CR"/>
+    <author>
+      <name>Sizhe Chen</name>
+    </author>
+    <author>
+      <name>Arman Zharmagambetov</name>
+    </author>
+    <author>
+      <name>Saeed Mahloujifar</name>
+    </author>
+    <author>
+      <name>Kamalika Chaudhuri</name>
+    </author>
+    <author>
+      <name>David Wagner</name>
+    </author>
+    <author>
+      <name>Chuan Guo</name>
+    </author>
+    <arxiv:doi>10.1145/3719027.3744836</arxiv:doi>
+    <link rel="related" href="https://doi.org/10.1145/3719027.3744836" title="doi"/>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2402.06363v2</id>
+    <title>StruQ: Defending Against Prompt Injection with Structured Queries</title>
+    <updated>2024-09-25T19:48:39Z</updated>
+    <link href="https://arxiv.org/abs/2402.06363v2" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2402.06363v2" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Recent advances in Large Language Models (LLMs) enable exciting LLM-integrated applications, which perform text-based tasks by utilizing their advanced language understanding capabilities. However, as LLMs have improved, so have the attacks against them. Prompt injection attacks are an important threat: they trick the model into deviating from the original application's instructions and instead follow user directives. These attacks rely on the LLM's ability to follow instructions and inability to separate prompts and user data. We introduce structured queries, a general approach to tackle this problem. Structured queries separate prompts and data into two channels. We implement a system that supports structured queries. This system is made of (1) a secure front-end that formats a prompt and user data into a special format, and (2) a specially trained LLM that can produce high-quality outputs from these inputs. The LLM is trained using a novel fine-tuning strategy: we convert a base (non-instruction-tuned) LLM to a structured instruction-tuned model that will only follow instructions in the prompt portion of a query. To do so, we augment standard instruction tuning datasets with examples that also include instructions in the data portion of the query, and fine-tune the model to ignore these. Our system significantly improves resistance to prompt injection attacks, with little or no impact on utility. Our code is released at https://github.com/Sizhe-Chen/StruQ.</summary>
+    <category term="cs.CR" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2024-02-09T12:15:51Z</published>
+    <arxiv:comment>To appear at USENIX Security Symposium 2025. Key words: prompt injection defense, LLM security, LLM-integrated applications</arxiv:comment>
+    <arxiv:primary_category term="cs.CR"/>
+    <author>
+      <name>Sizhe Chen</name>
+    </author>
+    <author>
+      <name>Julien Piet</name>
+    </author>
+    <author>
+      <name>Chawin Sitawarin</name>
+    </author>
+    <author>
+      <name>David Wagner</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2512.12583v1</id>
+    <title>Detecting Prompt Injection Attacks Against Application Using Classifiers</title>
+    <updated>2025-12-14T07:35:32Z</updated>
+    <link href="https://arxiv.org/abs/2512.12583v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2512.12583v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Prompt injection attacks can compromise the security and stability of critical systems, from infrastructure to large web applications. This work curates and augments a prompt injection dataset based on the HackAPrompt Playground Submissions corpus and trains several classifiers, including LSTM, feed forward neural networks, Random Forest, and Naive Bayes, to detect malicious prompts in LLM integrated web applications. The proposed approach improves prompt injection detection and mitigation, helping protect targeted applications and systems.</summary>
+    <category term="cs.CR" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2025-12-14T07:35:32Z</published>
+    <arxiv:comment>9 pages, X figures; undergraduate research project on detecting prompt injection attacks against LLM integrated web applications using classical machine learning and neural classifiers</arxiv:comment>
+    <arxiv:primary_category term="cs.CR"/>
+    <author>
+      <name>Safwan Shaheer</name>
+    </author>
+    <author>
+      <name>G. M. Refatul Islam</name>
+    </author>
+    <author>
+      <name>Mohammad Rafid Hamid</name>
+    </author>
+    <author>
+      <name>Md. Abrar Faiaz Khan</name>
+    </author>
+    <author>
+      <name>Md. Omar Faruk</name>
+    </author>
+    <author>
+      <name>Yaseen Nur</name>
+    </author>
+  </entry>
+</feed>

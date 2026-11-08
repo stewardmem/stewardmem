@@ -1,0 +1,301 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Lobsters</title>
+    <link>https://lobste.rs/</link>
+    <atom:link href="https://lobste.rs/rss?token=u6gmkigibafhnqrs45pvl8v8edq0ekhzyvgwtyjs5n0dccwyfiqxutfwh76v" rel="self"/>
+    <description></description>
+    <pubDate>Sun, 08 Nov 2026 06:55:05 -0600</pubDate>
+    <ttl>120</ttl>
+    <item>
+      <title>systemd loves Rust</title>
+      <link>https://amutable.com/blog/systemd-loves-rust</link>
+      <guid>https://lobste.rs/s/62loik</guid>
+      <author>amutable.com via lorenzleutgeb</author>
+      <pubDate>Sun, 08 Nov 2026 06:55:05 -0600</pubDate>
+      <comments>https://lobste.rs/s/62loik/systemd_loves_rust</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/62loik/systemd_loves_rust"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>rust</category>
+      <category>systemd</category>
+    </item>
+    <item>
+      <title>Who wants to crowdsource LLM scans of articles submitted to Lobste.rs?</title>
+      <link>https://lobste.rs/s/jbdtim/who_wants_crowdsource_llm_scans_articles</link>
+      <guid>https://lobste.rs/s/jbdtim</guid>
+      <author> by wofo</author>
+      <pubDate>Sun, 08 Nov 2026 10:36:17 -0600</pubDate>
+      <comments>https://lobste.rs/s/jbdtim/who_wants_crowdsource_llm_scans_articles</comments>
+      <description>&lt;p&gt;Like many of us who value the human side of the web, I am looking for ways to keep slop at bay. It seems like LLM detection technology works reasonably well nowadays, with Pangram as the main provider. It is expensive, though!&lt;/p&gt;
+&lt;p&gt;Assuming pangram scans are trustworthy, and it seems they are, we could create a centralized index of pangram scans of articles. I have already set up a &lt;a href="https://llm-scanner.ochagavia.nl/dashboard" rel="ugc"&gt;prototype&lt;/a&gt; where I publish results of my own pangram scans. I could create more users, each tied to its own API key, so others can contribute with scans as well. This is way more resource efficient than everyone running their own scans.&lt;/p&gt;
+&lt;p&gt;What do you think?&lt;/p&gt;
+</description>
+      <category>web</category>
+      <category>ask</category>
+    </item>
+    <item>
+      <title>A bit about email</title>
+      <link>https://maurycyz.com/misc/email/</link>
+      <guid>https://lobste.rs/s/jnz4v5</guid>
+      <author>maurycyz.com via robalex</author>
+      <pubDate>Sun, 08 Nov 2026 06:53:34 -0600</pubDate>
+      <comments>https://lobste.rs/s/jnz4v5/bit_about_email</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/jnz4v5/bit_about_email"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>email</category>
+    </item>
+    <item>
+      <title>I’m not a fan of Deno’s security model (2024)</title>
+      <link>https://goldstein.lol/posts/deno-security/</link>
+      <guid>https://lobste.rs/s/sh62d1</guid>
+      <author>goldstein.lol via ThinkChaos</author>
+      <pubDate>Sat, 07 Nov 2026 17:19:53 -0600</pubDate>
+      <comments>https://lobste.rs/s/sh62d1/i_m_not_fan_deno_s_security_model_2024</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/sh62d1/i_m_not_fan_deno_s_security_model_2024"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>security</category>
+    </item>
+    <item>
+      <title>NetBSD 11 desktop on a Raspberry Pi 4</title>
+      <link>https://neongd.com/articles/netbsd11-rpi4.gmi</link>
+      <guid>https://lobste.rs/s/rv1icj</guid>
+      <author>neongd.com via jaypatelani</author>
+      <pubDate>Sun, 08 Nov 2026 06:07:39 -0600</pubDate>
+      <comments>https://lobste.rs/s/rv1icj/netbsd_11_desktop_on_raspberry_pi_4</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/rv1icj/netbsd_11_desktop_on_raspberry_pi_4"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>netbsd</category>
+    </item>
+    <item>
+      <title>Unattended reboots with encrypted disks</title>
+      <link>https://jmmv.dev/2026/11/zkeys-intro.html</link>
+      <guid>https://lobste.rs/s/urg4yu</guid>
+      <author>jmmv.dev by jmmv</author>
+      <pubDate>Sun, 08 Nov 2026 10:58:03 -0600</pubDate>
+      <comments>https://lobste.rs/s/urg4yu/unattended_reboots_with_encrypted_disks</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/urg4yu/unattended_reboots_with_encrypted_disks"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>security</category>
+      <category>freebsd</category>
+    </item>
+    <item>
+      <title>What can I realistically do with local AI on a Mac mini M5 Pro (48GB)?</title>
+      <link>https://lobste.rs/s/umsitb/what_can_i_realistically_do_with_local_ai</link>
+      <guid>https://lobste.rs/s/umsitb</guid>
+      <author> by napolux</author>
+      <pubDate>Sun, 08 Nov 2026 11:07:51 -0600</pubDate>
+      <comments>https://lobste.rs/s/umsitb/what_can_i_realistically_do_with_local_ai</comments>
+      <description>&lt;p&gt;I just got a Mac mini with an M5 Pro (base CPU config) and 48GB of unified memory. I want to run as much AI locally as makes sense, but it's hard to separate what actually works day to day from benchmark hype.&lt;/p&gt;
+&lt;p&gt;What I'd like to do:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Coding: autocomplete and agentic workflows with local models&lt;/li&gt;
+&lt;li&gt;Image generation&lt;/li&gt;
+&lt;li&gt;Anything else genuinely useful: transcription, RAG over my notes, etc.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Questions:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;Which models and quantizations fit comfortably in 48GB and are actually usable, not just "it runs"?&lt;/li&gt;
+&lt;li&gt;Which runtime and tools: MLX, llama.cpp, Ollama, LM Studio, ComfyUI, something else?&lt;/li&gt;
+&lt;li&gt;What's your setup, and what did you give up on and go back to cloud APIs for?&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;Real tokens/sec numbers and "this was a waste of time" stories are especially welcome.&lt;/p&gt;
+</description>
+      <category>mac</category>
+      <category>ask</category>
+      <category>ai</category>
+    </item>
+    <item>
+      <title>Introducing Project Steadfast</title>
+      <link>https://noteflakes.com/articles/2026-11-07-introducing-project-steadfast</link>
+      <guid>https://lobste.rs/s/5cavvx</guid>
+      <author>noteflakes.com by noteflakes</author>
+      <pubDate>Sun, 08 Nov 2026 03:09:24 -0600</pubDate>
+      <comments>https://lobste.rs/s/5cavvx/introducing_project_steadfast</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/5cavvx/introducing_project_steadfast"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>ruby</category>
+    </item>
+    <item>
+      <title>Nspawn 3.0: A Docker-compatible Engine API for systemd-nspawn containers</title>
+      <link>https://blog.nspawn.org/posts/nspawn-3-0-a-docker-compatible-engine-api-for-systemd-nspawn-containers/</link>
+      <guid>https://lobste.rs/s/lh0qbr</guid>
+      <author>blog.nspawn.org via diktomat</author>
+      <pubDate>Sun, 08 Nov 2026 02:41:38 -0600</pubDate>
+      <comments>https://lobste.rs/s/lh0qbr/nspawn_3_0_docker_compatible_engine_api</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/lh0qbr/nspawn_3_0_docker_compatible_engine_api"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>release</category>
+    </item>
+    <item>
+      <title>How are you dealing with all the negative side effects of AI on the web?</title>
+      <link>https://lobste.rs/s/ipplhe/how_are_you_dealing_with_all_negative_side</link>
+      <guid>https://lobste.rs/s/ipplhe</guid>
+      <author> by tmcb</author>
+      <pubDate>Sat, 07 Nov 2026 03:47:24 -0600</pubDate>
+      <comments>https://lobste.rs/s/ipplhe/how_are_you_dealing_with_all_negative_side</comments>
+      <description>&lt;p&gt;It seems to me that the AI hype killed the web for good, but not for the reasons we immediately associate with it.&lt;/p&gt;
+&lt;p&gt;Search engines now rank links full of slop at the top, which ironically make LLM summaries acceptable, not because they are better than what we had before (they are not), but because they at least mention the good links which are now buried at the bottom of the page. Also, they've been rate limiting ordinary users like crazy: more often than I'd like to, Google and DuckDuckGo now either show me either an error message or tell me to wait a bit. Sometimes I waste at least a minute refreshing the page and waiting for a result.&lt;/p&gt;
+&lt;p&gt;I also can't browse GitHub freely without being logged in. Anubis is now everywhere, occasionally blocking me. I feel like my productivity has actually gone down thanks to all of that.&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;Edit: I see that most of the replies here are suggesting relying less on the web and going after more fundamental resources, which are great suggestions, don’t get me wrong! But a book from 5 years ago will not help you understand why your custom firmware doesn’t boot in your 1-year old mobile chipset. A existing bug report on the web probably will. Not quite my predicament at the moment, but something very similar for which the web seemed to work just fine before the AI craze.&lt;/em&gt;&lt;/p&gt;
+</description>
+      <category>web</category>
+      <category>ask</category>
+    </item>
+    <item>
+      <title>Dear Open Source Developers: It's OK not to embargo</title>
+      <link>https://opensourcesecurity.io/2026/10-embargo/</link>
+      <guid>https://lobste.rs/s/lhovnm</guid>
+      <author>opensourcesecurity.io via liberty</author>
+      <pubDate>Sat, 07 Nov 2026 17:31:05 -0600</pubDate>
+      <comments>https://lobste.rs/s/lhovnm/dear_open_source_developers_it_s_ok_not</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/lhovnm/dear_open_source_developers_it_s_ok_not"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>security</category>
+    </item>
+    <item>
+      <title>Playing with the STM32MP2</title>
+      <link>https://serd.es///2026/11/08/playing-with-stm32mp2.html</link>
+      <guid>https://lobste.rs/s/cwmxea</guid>
+      <author>serd.es via fanf</author>
+      <pubDate>Sun, 08 Nov 2026 11:12:00 -0600</pubDate>
+      <comments>https://lobste.rs/s/cwmxea/playing_with_stm32mp2</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/cwmxea/playing_with_stm32mp2"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>hardware</category>
+    </item>
+    <item>
+      <title>Meridian — an experimental web browser built on Servo and GPUI</title>
+      <link>https://op.tngl.io/meridian/</link>
+      <guid>https://lobste.rs/s/j63dme</guid>
+      <author>op.tngl.io via icy</author>
+      <pubDate>Sat, 07 Nov 2026 03:21:55 -0600</pubDate>
+      <comments>https://lobste.rs/s/j63dme/meridian_experimental_web_browser_built</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/j63dme/meridian_experimental_web_browser_built"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>browsers</category>
+      <category>rust</category>
+    </item>
+    <item>
+      <title>*sshole, or when are we finally going to get rid of C?</title>
+      <link>https://sunshowers.io/posts/sshole/</link>
+      <guid>https://lobste.rs/s/owsnms</guid>
+      <author>sunshowers.io via novedevo</author>
+      <pubDate>Sat, 07 Nov 2026 15:05:35 -0600</pubDate>
+      <comments>https://lobste.rs/s/owsnms/sshole_when_are_we_finally_going_get_rid_c</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/owsnms/sshole_when_are_we_finally_going_get_rid_c"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>rant</category>
+    </item>
+    <item>
+      <title>How to prove equations using diagrams, part 3</title>
+      <link>https://www.epatters.org/post/e-graphs-3/</link>
+      <guid>https://lobste.rs/s/dr5zrz</guid>
+      <author>epatters.org via saulshanabrook</author>
+      <pubDate>Sun, 08 Nov 2026 12:23:35 -0600</pubDate>
+      <comments>https://lobste.rs/s/dr5zrz/how_prove_equations_using_diagrams_part_3</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/dr5zrz/how_prove_equations_using_diagrams_part_3"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>math</category>
+      <category>compilers</category>
+      <category>plt</category>
+    </item>
+    <item>
+      <title>Following breadcrumbs in code - What accidentally committed Ad-Hoc logs reveal about developer comprehension</title>
+      <link>https://link.springer.com/article/10.1007/s10664-026-10988-z</link>
+      <guid>https://lobste.rs/s/b6ebju</guid>
+      <author>link.springer.com via kngl</author>
+      <pubDate>Sun, 08 Nov 2026 07:21:22 -0600</pubDate>
+      <comments>https://lobste.rs/s/b6ebju/following_breadcrumbs_code_what</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/b6ebju/following_breadcrumbs_code_what"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>pdf</category>
+      <category>practices</category>
+    </item>
+    <item>
+      <title>Hacking the T-Mobile Sidekick, 20 Years Too Late</title>
+      <link>https://x86.cx/blog/redanger</link>
+      <guid>https://lobste.rs/s/f1nsnm</guid>
+      <author>x86.cx via robey</author>
+      <pubDate>Sun, 08 Nov 2026 02:10:08 -0600</pubDate>
+      <comments>https://lobste.rs/s/f1nsnm/hacking_t_mobile_sidekick_20_years_too</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/f1nsnm/hacking_t_mobile_sidekick_20_years_too"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>reversing</category>
+      <category>retrocomputing</category>
+    </item>
+    <item>
+      <title>Libghostty 1.0</title>
+      <link>https://mitchellh.com/writing/libghostty-1-0</link>
+      <guid>https://lobste.rs/s/0ouxwf</guid>
+      <author>mitchellh.com via dgv</author>
+      <pubDate>Fri, 06 Nov 2026 17:48:03 -0600</pubDate>
+      <comments>https://lobste.rs/s/0ouxwf/libghostty_1_0</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/0ouxwf/libghostty_1_0"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>c</category>
+      <category>release</category>
+      <category>zig</category>
+    </item>
+    <item>
+      <title>OpenBSD top(1) adds flag to show chroot, pledge and unveil status</title>
+      <link>https://undeadly.org/cgi?action=article;sid=20261106104957</link>
+      <guid>https://lobste.rs/s/tfywf1</guid>
+      <author>undeadly.org via mairo</author>
+      <pubDate>Sat, 07 Nov 2026 12:41:33 -0600</pubDate>
+      <comments>https://lobste.rs/s/tfywf1/openbsd_top_1_adds_flag_show_chroot_pledge</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/tfywf1/openbsd_top_1_adds_flag_show_chroot_pledge"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>security</category>
+      <category>openbsd</category>
+    </item>
+    <item>
+      <title>Scriptable GeoDNS: leaving AWS for Bunny</title>
+      <link>https://vincent.bernat.ch/en/blog/2026-bunny-geodns</link>
+      <guid>https://lobste.rs/s/jsvlfm</guid>
+      <author>vincent.bernat.ch by vbernat</author>
+      <pubDate>Sat, 07 Nov 2026 01:46:35 -0600</pubDate>
+      <comments>https://lobste.rs/s/jsvlfm/scriptable_geodns_leaving_aws_for_bunny</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/jsvlfm/scriptable_geodns_leaving_aws_for_bunny"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>web</category>
+      <category>performance</category>
+    </item>
+    <item>
+      <title>Progress Report: Linux 7.3 - Asahi Linux</title>
+      <link>https://asahilinux.org/2026/11/progress-report-7-3/</link>
+      <guid>https://lobste.rs/s/4qiair</guid>
+      <author>asahilinux.org via signal-11</author>
+      <pubDate>Sat, 07 Nov 2026 00:02:38 -0600</pubDate>
+      <comments>https://lobste.rs/s/4qiair/progress_report_linux_7_3_asahi_linux</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/4qiair/progress_report_linux_7_3_asahi_linux"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>linux</category>
+      <category>mac</category>
+    </item>
+    <item>
+      <title>SFLC.in Statement Regarding the Takedown Requests Against Its X Account and Posts</title>
+      <link>https://sflc.in/sflc-in-statement-regarding-the-takedown-requests-against-its-x-account-and-posts/</link>
+      <guid>https://lobste.rs/s/smx0fn</guid>
+      <author>sflc.in via robalex</author>
+      <pubDate>Sun, 08 Nov 2026 10:30:47 -0600</pubDate>
+      <comments>https://lobste.rs/s/smx0fn/sflc_statement_regarding_takedown</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/smx0fn/sflc_statement_regarding_takedown"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>law</category>
+    </item>
+    <item>
+      <title>PHP2Shell — Deep Dive</title>
+      <link>https://djad04.github.io/php2shell-deep-dive/</link>
+      <guid>https://lobste.rs/s/d8dgav</guid>
+      <author>djad04.github.io via hoistbypetard</author>
+      <pubDate>Sat, 07 Nov 2026 23:51:54 -0600</pubDate>
+      <comments>https://lobste.rs/s/d8dgav/php2shell_deep_dive</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/d8dgav/php2shell_deep_dive"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>security</category>
+      <category>programming</category>
+    </item>
+    <item>
+      <title>How to prove equations using diagrams, part 1</title>
+      <link>https://www.epatters.org/post/e-graphs-1/</link>
+      <guid>https://lobste.rs/s/jvicvb</guid>
+      <author>epatters.org via saulshanabrook</author>
+      <pubDate>Sat, 07 Nov 2026 19:48:58 -0600</pubDate>
+      <comments>https://lobste.rs/s/jvicvb/how_prove_equations_using_diagrams_part_1</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/jvicvb/how_prove_equations_using_diagrams_part_1"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>math</category>
+      <category>compilers</category>
+      <category>plt</category>
+    </item>
+    <item>
+      <title>The Port That Does Not Exist</title>
+      <link>https://acid.vegas/blog/the-port-that-does-not-exist/</link>
+      <guid>https://lobste.rs/s/osqswf</guid>
+      <author>acid.vegas via drmorr</author>
+      <pubDate>Fri, 06 Nov 2026 17:03:12 -0600</pubDate>
+      <comments>https://lobste.rs/s/osqswf/port_does_not_exist</comments>
+      <description>&lt;p&gt;&lt;a href="https://lobste.rs/s/osqswf/port_does_not_exist"&gt;Comments&lt;/a&gt;&lt;/p&gt;</description>
+      <category>networking</category>
+    </item>
+  </channel>
+</rss>

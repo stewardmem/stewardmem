@@ -1,0 +1,38 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<rss xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/" version="2.0">
+  <channel>
+    <title>cs.CL updates on arXiv.org</title>
+    <link>http://rss.arxiv.org/rss/cs.CL</link>
+    <description>cs.CL updates on the arXiv.org e-print archive.</description>
+    <atom:link href="http://rss.arxiv.org/rss/cs.CL" rel="self" type="application/rss+xml"/>
+    <docs>http://www.rssboard.org/rss-specification</docs>
+    <language>en-us</language>
+    <lastBuildDate>Mon, 09 Nov 2026 05:00:00 +0000</lastBuildDate>
+    <managingEditor>rss-help@arxiv.org</managingEditor>
+    <pubDate>Mon, 09 Nov 2026 00:00:00 -0500</pubDate>
+    <item>
+      <title>Synthetic Placeholder: a Study of Feed Shapes [SYNTHETIC]</title>
+      <link>http://arxiv.org/abs/2601.00001v1</link>
+      <guid isPermaLink="false">http://arxiv.org/abs/2601.00001v1</guid>
+      <dc:creator>Example Author</dc:creator>
+      <pubDate>Sun, 08 Nov 2026 18:00:00 -0500</pubDate>
+      <description>&lt;a href="http://arxiv.org/abs/2601.00001v1"&gt;arXiv:2601.00001v1&lt;/a&gt; [&lt;a href="http://arxiv.org/pdf/2601.00001v1" title="Download PDF"&gt;pdf&lt;/a&gt;] &lt;small&gt;comments:&lt;/small&gt; SYNTHETIC ITEM&lt;br/&gt;
+&lt;b&gt;Authors:&lt;/b&gt;&lt;br/&gt;Example Author&lt;br/&gt;&lt;br/&gt;
+&lt;b&gt;Abstract:&lt;/b&gt; This synthetic item marks the weekday RSS shape that could not be recorded live on a Sunday.</description>
+      <arxiv:comment>SYNTHETIC — not a recorded transcript</arxiv:comment>
+      <arxiv:primary_category term="cs.CL"/>
+      <category>cs.CL</category>
+    </item>
+    <item>
+      <title>Second Synthetic Placeholder for Corpus Shape [SYNTHETIC]</title>
+      <link>http://arxiv.org/abs/2601.00002v1</link>
+      <guid isPermaLink="false">http://arxiv.org/abs/2601.00002v1</guid>
+      <dc:creator>Another Author</dc:creator>
+      <pubDate>Sun, 08 Nov 2026 17:30:00 -0500</pubDate>
+      <description>&lt;a href="http://arxiv.org/abs/2601.00002v1"&gt;arXiv:2601.00002v1&lt;/a&gt; [&lt;a href="http://arxiv.org/pdf/2601.00002v1" title="Download PDF"&gt;pdf&lt;/a&gt;]&lt;br/&gt;
+&lt;b&gt;Abstract:&lt;/b&gt; Second synthetic item exercising the guid/link identity extraction.</description>
+      <arxiv:primary_category term="cs.CL"/>
+      <category>cs.CL</category>
+    </item>
+  </channel>
+</rss>

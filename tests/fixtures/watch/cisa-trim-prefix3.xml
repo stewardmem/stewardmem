@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xml:base="https://www.cisa.gov/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>All CISA Advisories</title>
+    <link>https://www.cisa.gov/</link>
+    <description></description>
+    <language>en</language>
+    
+    <item>
+  <title>CISA Adds One Known Exploited Vulnerability to Catalog</title>
+  <link>https://www.cisa.gov/news-events/alerts/2026/11/06/cisa-adds-one-known-exploited-vulnerability-catalog</link>
+  <description>&lt;p&gt;CISA has added one new vulnerability to its&amp;nbsp;&lt;a href=&quot;https://www.cisa.gov/known-exploited-vulnerabilities-catalog&quot;&gt;Known Exploited Vulnerabilities (KEV) Catalog&lt;/a&gt;, based on evidence of active exploitation.&lt;/p&gt;
+&lt;ul type=&quot;disc&quot;&gt;
+&lt;li&gt;&lt;a href=&quot;https://www.cve.org/CVERecord?id=CVE-2026-19868&quot; target=&quot;_blank&quot;&gt;CVE-2026-19868&lt;/a&gt; SonicWall SonicOS SSLVPN Use of Single-factor Authentication Vulnerability&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;This type of vulnerability is a frequent attack vector for malicious cyber actors and poses significant risks to the federal enterprise.&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://www.cisa.gov/news-events/directives/bod-26-04-implementation-guidance-prioritizing-security-updates-based-risk&quot;&gt;Binding Operational Directive (BOD) 26-04: Prioritizing Security Updates Based on Risk&lt;/a&gt; establishes vulnerability management requirements for Federal Civilian Executive Branch (FCEB) agencies. BOD 26-04 reinforces the importance of the KEV Catalog and requires federal agencies to prioritize rapid remediation of high-risk vulnerabilities, specifically those identified by Common Vulnerabilities and Exposures (CVEs) listed in CISA’s KEV Catalog on publicly exposed assets that grant total control of the asset post-exploitation, while deferring action for lower-risk vulnerabilities. BOD 26-04 further establishes basic expectations for when agencies must check whether threat actors compromised the system before the patch was applied.&lt;/p&gt;
+&lt;p&gt;While BOD 26-04 applies only to FCEB agencies, CISA encourages all organizations to adopt risk-based vulnerability management and prioritize remediation of&amp;nbsp;&lt;a href=&quot;https://www.cisa.gov/known-exploited-vulnerabilities-catalog&quot;&gt;KEV Catalog vulnerabilities&lt;/a&gt;. CISA will continue to add vulnerabilities to the catalog that meet the&amp;nbsp;&lt;a href=&quot;https://www.cisa.gov/known-exploited-vulnerabilities&quot;&gt;specified criteria&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Aware of an exploited vulnerability not currently listed in the KEV Catalog? Submit it for potential addition through CISA’s&amp;nbsp;&lt;a href=&quot;https://cisasurvey.gov1.qualtrics.com/jfe/form/SV_1Zwu52kgK2OYf3w&quot; target=&quot;_blank&quot;&gt;KEV Nomination Form&lt;/a&gt;. Potential KEV additions must have a CVE ID, evidence of exploitation, and clear mitigation guidance.&lt;/p&gt;
+</description>
+  <pubDate>Fri, 06 Nov 26 12:00:00 +0000</pubDate>
+    <dc:creator>CISA</dc:creator>
+    <guid isPermaLink="false">/node/25756</guid>
+    </item>
+<item>
+  <title>US Government Partners Urge Hardening Industrial Refrigeration and Cold Chain Monitoring Systems</title>
+  <link>https://www.cisa.gov/resources-tools/resources/us-government-partners-urge-hardening-industrial-refrigeration-and-cold-chain-monitoring-systems</link>
+  <description>&lt;h2&gt;&lt;strong&gt;Overview&lt;/strong&gt;&lt;/h2&gt;
+&lt;p&gt;The Cybersecurity and Infrastructure Security Agency (CISA), Federal Bureau of Investigation (FBI), Health and Human Services (HHS), U.S. Department of Agriculture (USDA), and the Department of Transportation (DoT)—hereafter referred to as “the authoring organizations”—are aware of malicious cyber activity targeting industrial refrigeration and cold chain monitoring systems globally. Organizations in the &lt;a href=&quot;https://www.cisa.gov/topics/critical-infrastructure-security-and-resilience/critical-infrastructure-sectors/healthcare-and-public-health-sector&quot; title=&quot;Healthcare and Public Health&quot;&gt;Healthcare and Public Health&lt;/a&gt;, &lt;a href=&quot;https://www.cisa.gov/topics/critical-infrastructure-security-and-resilience/critical-infrastructure-sectors/chemical-sector&quot; title=&quot;Chemical&quot;&gt;Chemical&lt;/a&gt;, &lt;a href=&quot;https://www.cisa.gov/topics/critical-infrastructure-security-and-resilience/critical-infrastructure-sectors/food-and-agriculture-sector&quot; title=&quot;Food and Agriculture&quot;&gt;Food and Agriculture&lt;/a&gt;, and &lt;a href=&quot;https://www.cisa.gov/topics/critical-infrastructure-security-and-resilience/critical-infrastructure-sectors/transportation-systems-sector&quot; title=&quot;Transportation Systems&quot;&gt;Transportation Systems&lt;/a&gt; Sectors widely use these systems, including in refrigerated transport services, for automated and remote monitoring of temperatures, continuous temperature logging, defrost cycle management, and energy optimization.&lt;/p&gt;
+&lt;p&gt;The authoring organizations urge owners and operators to defend against this activity by using strong authentication, keeping systems updated, identifying any systems that are accessible from the internet, removing unnecessary remote access, and securing any necessary remote access.&lt;/p&gt;
+&lt;h2&gt;&lt;strong&gt;Threat&lt;/strong&gt;&lt;/h2&gt;
+&lt;p&gt;The authoring organizations are aware of malicious cyber actors targeting electronic temperature controllers and commercial refrigeration controllers in retail grocery and cold storage facilities. The actors may exploit vulnerabilities or weaknesses in unpatched or internet-accessible controllers to remotely alter settings and force units into continuous heating and defrost cycles, which can cause widespread inventory loss and equipment hazards.&lt;/p&gt;
+&lt;p&gt;Specifically, the actors may exploit these flaws through multiple vectors:&lt;/p&gt;
+&lt;ul type=&quot;square&quot;&gt;
+&lt;li&gt;Authentication bypass;&lt;/li&gt;
+&lt;li&gt;Arbitrary code injection; and&lt;/li&gt;
+&lt;li&gt;Weak configurations.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Upon successful exploitation of the flaws, the actors could achieve the following effects:&lt;/p&gt;
+&lt;ul type=&quot;square&quot;&gt;
+&lt;li&gt;Change of temperature, which could:&lt;br&gt;
+&lt;ul type=&quot;circle&quot;&gt;
+&lt;li&gt;Affect the service life of the system;&lt;/li&gt;
+&lt;li&gt;Create a fire hazard;&lt;/li&gt;
+&lt;li&gt;Cause loss of inventory; or&lt;/li&gt;
+&lt;li&gt;Indirectly harm consumers if products are consumed after unsafe storage.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;Loss of visibility into current temperatures (a denial-of-view condition).&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;&lt;strong&gt;Mitigations&lt;/strong&gt;&lt;/h2&gt;
+&lt;p&gt;The authoring organizations urge owners and operators to immediately take the following actions. These mitigations align with the &lt;a href=&quot;https://www.cisa.gov/cross-sector-cybersecurity-performance-goals&quot; title=&quot;Cross-Sector Cybersecurity Performance Goals (CPGs)&quot;&gt;Cross-Sector Cybersecurity Performance Goals (CPGs)&lt;/a&gt;, developed by CISA and the National Institute of Standards and Technology (NIST). The CPGs provide a minimum set of practices and protections that CISA and NIST recommend all organizations implement:&lt;/p&gt;
+&lt;ul type=&quot;square&quot;&gt;
+&lt;li&gt;&lt;strong&gt;Eliminate public internet exposure&lt;/strong&gt;: Do not expose control system devices and/or systems, particularly controller panels, to the internet [&lt;a href=&quot;https://www.cisa.gov/cybersecurity-performance-goals-2-0-cpg-2-0#SecureInternetFacingDevices3S&quot; title=&quot;CPG 3.S&quot;&gt;CPG 3.S&lt;/a&gt;]. Should remote access be necessary, protect it by using a firewall or edge device and updating it to the latest version to reduce security vulnerabilities. See CISA’s &lt;a href=&quot;https://www.cisa.gov/resources-tools/resources/exposure-reduction&quot; title=&quot;Internet Exposure Reduction Guidance&quot;&gt;Internet Exposure Reduction Guidance&lt;/a&gt; and &lt;a href=&quot;https://www.cisa.gov/topics/cybersecurity-best-practices/edge-device-security&quot; title=&quot;Defend the Edge: The Critical Importance of Edge Device Security&quot;&gt;Defend the Edge: The Critical Importance of Edge Device Security&lt;/a&gt; for additional guidance on securing edge devices.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Isolate operational technology (OT) devices&lt;/strong&gt;: Create a dedicated OT virtual local area network (VLAN) to separate OT devices from business networks [&lt;a href=&quot;https://www.cisa.gov/cybersecurity-performance-goals-2-0-cpg-2-0#ImplementLogicalPhysicalNetworkSegmentation3I&quot; title=&quot;CPG 3.I&quot;&gt;CPG 3.I&lt;/a&gt;].&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Enforce credential security&lt;/strong&gt;: Change default passwords [&lt;a href=&quot;https://www.cisa.gov/cybersecurity-performance-goals-2-0-cpg-2-0#ChangingDefaultPasswords3A&quot; title=&quot;CPG 3.A&quot;&gt;CPG 3.A&lt;/a&gt;], strengthen passwords, and implement strong password policies [&lt;a href=&quot;https://www.cisa.gov/cybersecurity-performance-goals-2-0-cpg-2-0#EstablishMinimumPasswordStrength3B&quot; title=&quot;CPG 3.B&quot;&gt;CPG 3.B&lt;/a&gt;]. Further, implement phishing-resistant multifactor authentication wherever feasible [&lt;a href=&quot;https://www.cisa.gov/cybersecurity-performance-goals-2-0-cpg-2-0#ImplementMultifactorAuthentication3F&quot; title=&quot;CPG 3.F&quot;&gt;CPG 3.F&lt;/a&gt;].&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Apply patches&lt;/strong&gt;: Keep device firmware up to date and establish a structured lifecycle management process to identify, retire, and replace legacy devices that are at end of life (EOL) and no longer supported by the manufacturer [&lt;a href=&quot;https://www.cisa.gov/cybersecurity-performance-goals-2-0-cpg-2-0#ManageOrganizationalAssets2A&quot; title=&quot;CPG 2.A&quot;&gt;CPG 2.A&lt;/a&gt;, &lt;a href=&quot;https://www.cisa.gov/cybersecurity-performance-goals-2-0-cpg-2-0#MitigateKnownVulnerabilities2B&quot; title=&quot;2.B&quot;&gt;2.B&lt;/a&gt;]. See CISA’s &lt;a href=&quot;https://www.cisa.gov/news-events/directives/bod-26-04-implementation-guidance-prioritizing-security-updates-based-risk&quot; title=&quot;BOD 26-04: Prioritizing Security Updates Based on Risk&quot;&gt;BOD 26-04: Implementation Guidance for Prioritizing Security Updates Based on Risk&lt;/a&gt; and &lt;a href=&quot;https://www.cisa.gov/news-events/directives/bod-26-02-mitigating-risk-end-support-edge-devices&quot;&gt;BOD 26-02: Mitigating Risk From End-of-Support Edge Devices&lt;/a&gt; for additional guidance.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Restrict access&lt;/strong&gt;: Define and maintain device and IP address allowlisting, limiting access to only those devices and IP addresses authorized to make changes [&lt;a href=&quot;https://www.cisa.gov/cybersecurity-performance-goals-2-0-cpg-2-0#ImplementthePrinciplesofLeastPrivilege3H&quot; title=&quot;CPG 3.H&quot;&gt;CPG 3.H&lt;/a&gt;].&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Have reliable backups&lt;/strong&gt;: Maintain current backups offsite and offline and test them [&lt;a href=&quot;https://www.cisa.gov/cybersecurity-performance-goals-2-0-cpg-2-0#MaintainSystemBackupsRestorationAbility3O&quot; title=&quot;CPG 3.O&quot;&gt;CPG 3.O&lt;/a&gt;].&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Monitor and report&lt;/strong&gt;: Enable logging [&lt;a href=&quot;https://www.cisa.gov/cybersecurity-performance-goals-2-0-cpg-2-0#MaintainLogCollectionStorage3Q&quot; title=&quot;CPG 3.Q&quot;&gt;CPG 3.Q&lt;/a&gt;] and regularly review logs for unexpected activity.&lt;br&gt;
+&lt;ul type=&quot;circle&quot;&gt;
+&lt;li&gt;For OT assets where logs are non-standard or not available, collect network traffic and communications between the assets.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Review setpoint ranges&lt;/strong&gt;: Define and maintain reasonable setpoint limits for devices operating downstream of controllers to stay within safe ranges and establish alerting for deviations.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;&lt;strong&gt;Resources&lt;/strong&gt;&lt;/h2&gt;
+&lt;p&gt;The authoring organizations strongly urge industrial refrigeration and cold chain monitoring system owners and operators to secure remote access to their OT systems. To strengthen system security, owners and operators should review the following resources and implement recommended mitigations:&lt;/p&gt;
+&lt;ul type=&quot;square&quot;&gt;
+&lt;li&gt;CISA: &lt;a href=&quot;https://www.cisa.gov/resources-tools/resources/primary-mitigations-reduce-cyber-threats-operational-technology&quot; title=&quot;Primary Mitigations to Reduce Cyber Threats to Operational Technology&quot;&gt;Primary Mitigations to Reduce Cyber Threats to Operational Technology&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;CISA: &lt;a href=&quot;https://www.cisa.gov/topics/cybersecurity-best-practices/edge-device-security&quot; title=&quot;Defend the Edge: The Critical Importance of Edge Device Security&quot;&gt;Defend the Edge: The Critical Importance of Edge Device Security&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;CISA: &lt;a href=&quot;https://www.cisa.gov/resources-tools/resources/exposure-reduction&quot; title=&quot;Internet Exposure Reduction Guidance&quot;&gt;Internet Exposure Reduction Guidance&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;United Kingdom’s National Cyber Security Centre and Partners:&amp;nbsp;&lt;a href=&quot;https://www.cisa.gov/resources-tools/resources/secure-connectivity-principles-operational-technology-ot&quot; title=&quot;Secure Connectivity Principles for Operational Technology&quot;&gt;Secure Connectivity Principles for OT&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;&lt;strong&gt;Contact Information&lt;/strong&gt;&lt;/h2&gt;
+&lt;p&gt;The authoring organizations recommend U.S. organizations report suspicious or criminal activity related to information provided in this fact sheet:&lt;/p&gt;
+&lt;ul type=&quot;square&quot;&gt;
+&lt;li&gt;Contact &lt;strong&gt;CISA &lt;/strong&gt;via CISA’s 24/7 Operations Center at &lt;a href=&quot;mailto:contact@cisa.dhs.gov&quot;&gt;contact@cisa.dhs.gov&lt;/a&gt; or 1-844-Say-CISA (1-844-729-2472). For more information on reporting a cyber incident, refer to CISA’s &lt;a href=&quot;https://www.cisa.gov/topics/cyber-threats-and-advisories/information-sharing/cyber-incident-reporting-critical-infrastructure-act-2022-circia/voluntary-cyber-incident-reporting&quot; title=&quot;Voluntary Cyber Incident Reporting&quot;&gt;Voluntary Cyber Incident Reporting&lt;/a&gt; web page. File a claim with &lt;strong&gt;FBI’s &lt;/strong&gt;&lt;a href=&quot;https://ic3.gov/&quot; title=&quot;Internet Crime Complaint Center (IC3)&quot; target=&quot;_blank&quot;&gt;Internet Crime Complaint Center (IC3)&lt;/a&gt; or contact your local &lt;a href=&quot;https://www.fbi.gov/contact-us/field-offices&quot; title=&quot;FBI field office&quot; target=&quot;_blank&quot;&gt;FBI field office&lt;/a&gt;. When available, please include the following information regarding the incident:&lt;br&gt;
+&lt;ul type=&quot;circle&quot;&gt;
+&lt;li&gt;Date, time, and location of the incident;&lt;/li&gt;
+&lt;li&gt;Type of activity;&lt;/li&gt;
+&lt;li&gt;Number of people affected;&lt;/li&gt;
+&lt;li&gt;Type of equipment used for the activity; and&lt;/li&gt;
+&lt;li&gt;Name of the submitting company or organization, and a designated point of contact.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;Contact &lt;strong&gt;HHS&lt;/strong&gt; via&amp;nbsp;&lt;a href=&quot;mailto:HHSCyber@hhs.gov&quot;&gt;HHSCyber@hhs.gov&lt;/a&gt; or the HHS 24/7 Operations Center at 202-619-7800 for assistance mitigating potential disruptions to the delivery of healthcare resulting from health and medical supply chain impacts.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;&lt;strong&gt;Disclaimer&lt;/strong&gt;&lt;/h2&gt;
+&lt;p&gt;The information in this report is being provided “as is” for informational purposes only. The authoring organizations do not endorse any commercial entity, product, company, or service, including any entities, products, or services linked within this document. Any reference to specific commercial entities, products, processes, or services by service mark, trademark, manufacturer, or otherwise, does not constitute or imply endorsement, recommendation, or favor by the authoring organizations.&lt;/p&gt;
+&lt;p&gt;&amp;nbsp;&lt;/p&gt;
+</description>
+  <pubDate>Thu, 05 Nov 26 12:00:00 +0000</pubDate>
+    <dc:creator>CISA</dc:creator>
+    <guid isPermaLink="false">/node/25744</guid>
+    </item>
+<item>
+  <title>Post-Quantum Questions to Ask Your Vendors</title>
+  <link>https://www.cisa.gov/resources-tools/resources/post-quantum-questions-ask-your-vendors</link>
+  <description>&lt;p&gt;CISA, the Australian Signals Directorate’s Australian Cyber Security Centre (ASD’s ACSC) and the National Security Agency (NSA) released joint guidance and an accompanying quick-reference list to help organizations assess vendor readiness for transitioning to post-quantum cryptography (PQC). As quantum computing advances, widely used public-key cryptography will become vulnerable to compromise from cryptographically relevant quantum computers (CRQCs). To protect their systems and data, organizations must plan for and transition to PQC—which includes algorithms capable of withstanding both classical computing and quantum-enabled threats—before CRQCs become available.&amp;nbsp;&lt;/p&gt;
+&lt;p&gt;Many organizations rely on third-party vendors for managed services, cloud capabilities, and other cryptography-dependent products and services. Cryptography is also embedded in systems and devices that are difficult to update, tied to long asset lifecycles, and require vendor support or replacement—such as industrial control systems and Internet of Things (IoT) devices. Reliance on vendors means that effective PQC transition depends on vendor readiness, and early, structured engagement with these vendors is critical to planning efforts.&amp;nbsp;&lt;/p&gt;
+&lt;p&gt;Organizations can use the vendor-neutral questions outlined in this guidance to determine whether a vendor understands quantum-related risks, maintains transparency over its cryptographic implementations, and supports a secure, cost-effective and timely transition to PQC.&amp;nbsp;&lt;/p&gt;
+&lt;p&gt;Visit CISA’s &lt;a href=&quot;https://www.cisa.gov/topics/risk-management/quantum&quot;&gt;PQC Initiative page&lt;/a&gt; for additional resources.&lt;/p&gt;
+</description>
+  <pubDate>Thu, 05 Nov 26 12:00:00 +0000</pubDate>
+    <dc:creator>CISA</dc:creator>
+    <guid isPermaLink="false">/node/25746</guid>
+    </item>

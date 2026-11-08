@@ -231,6 +231,13 @@ pub enum WatchError {
     /// The replay transport had no fixture for this URL (SA-4 — CI
     /// replays the frozen corpus only).
     ReplayGap,
+    /// The live transport's pre-I/O pin refusal: the URL's host is not the
+    /// lane's pinned host — a foreign fetch never reaches the client (RW-5).
+    FetchHostMismatch,
+    /// The live fetch failed (transport error, non-success status, or a
+    /// read error inside the chunked loop). Fixed string — the wire's
+    /// bytes never ride the error.
+    TransportFailed,
     /// A storage error inside the tick's transaction.
     Db(String),
 }
@@ -253,6 +260,8 @@ impl WatchError {
             WatchError::FeedWrongSchema => "watch_feed_wrong_schema",
             WatchError::ArxivErrorEntry(_) => "watch_arxiv_error_entry",
             WatchError::ReplayGap => "watch_replay_gap",
+            WatchError::FetchHostMismatch => "watch_fetch_host_mismatch",
+            WatchError::TransportFailed => "watch_transport_failed",
             WatchError::Db(_) => "watch_db_error",
         }
     }
@@ -322,6 +331,13 @@ impl fmt::Display for WatchError {
                 "watch_replay_gap: no recorded fixture for this URL — CI replays the frozen \
                  corpus only"
             ),
+            WatchError::FetchHostMismatch => write!(
+                f,
+                "watch_fetch_host_mismatch: the feed URL's host is not the lane's pinned host"
+            ),
+            WatchError::TransportFailed => {
+                write!(f, "watch_transport_failed: the fetch failed")
+            }
             WatchError::Db(e) => write!(f, "watch_db_error: {e}"),
         }
     }
@@ -745,4 +761,672 @@ pub fn is_stale(floor_secs: u64, last_fetch_epoch: Option<i64>, now_epoch: i64) 
         None => true,
         Some(last) => now_epoch.saturating_sub(last) >= floor_secs as i64,
     }
+}
+
+// ── S2: the feed parsers (the hand-rolled std-side scanner) ─────────────
+//
+// NO XML CRATE IS LOCKED (the deny law — zero new dependencies), so the
+// parser is a minimal tag-scanner over the TWO RECORDED GRAMMARS (Atom 1.0
+// entries + RSS 2.0 items), exactly as the ground correction scopes it:
+// local-name matching (namespace-PREFIX-tolerant — the NIST shape declares
+// a dozen), one-level entity decode (the five XML built-ins — decoded HTML
+// stays DATA, never instructions), CDATA passthrough, and the SECURITY
+// REFUSALS: `<!DOCTYPE` / `<!ENTITY` refused BY NAME before any parsing
+// (entities are never expanded — the XXE posture). Dates parse through the
+// ALREADY-LOCKED chrono (`parse_from_rfc2822` for RSS, `parse_from_rfc3339`
+// for Atom) — no new date code.
+//
+// Honest scope: the scanner reads the recorded grammars, not arbitrary XML.
+// It does not resolve namespaces, does not handle the extreme XML corners
+// (literal `>` inside attribute values, CDATA carrying raw same-name tags)
+// — a document playing those games is outside the recorded shapes and
+// fails one of the named refusals.
+
+/// One parsed feed: the items (in feed order) + the channel's `<ttl>` cache
+/// hint in SECONDS when the publisher declared one (RSS `<ttl>` is minutes).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedFeed {
+    pub items: Vec<FeedItem>,
+    pub ttl_secs: Option<u64>,
+}
+
+/// Parse a feed's bytes into [`ParsedFeed`]. The kind shapes the identity
+/// rule: an [`SourceKind::ArxivApi`] lane strips the arXiv abs prefix from
+/// the Atom `<id>`, KEEPING the version suffix (`2410.05451v3`); a generic
+/// Atom lane takes `<id>` verbatim; an RSS lane takes `<guid>` else the
+/// trimmed `<link>`; an adapter lane does not ride this parser (its records
+/// come from the scholar transport, already shaped).
+pub fn parse_feed(kind: SourceKind, bytes: &[u8]) -> Result<ParsedFeed, WatchError> {
+    let text = std::str::from_utf8(bytes).map_err(|_| WatchError::FeedMalformed)?;
+    // The security refusal BEFORE any parsing: a DTD or entity declaration
+    // is refused by name and never expanded.
+    if text.contains("<!DOCTYPE") || text.contains("<!ENTITY") {
+        return Err(WatchError::FeedDtdRefused);
+    }
+    // Schema dispatch: the Atom container else the RSS container; neither
+    // is `watch_feed_wrong_schema` (an HTML error page, a JSON body).
+    if text.contains("<feed") {
+        let mut feed = ParsedFeed {
+            items: parse_atom_entries(text)?,
+            ttl_secs: None,
+        };
+        // The arXiv API's documented error shape: an entry whose id starts
+        // the errors# prefix is the NAMED refusal — never parsed as zero
+        // items, never silently dropped.
+        for item in &feed.items {
+            if item.identity.starts_with("http://arxiv.org/api/errors#") {
+                return Err(WatchError::ArxivErrorEntry(item.identity.clone()));
+            }
+        }
+        // The identity rule for the arXiv API lane: strip the abs prefix,
+        // keep the version.
+        if kind == SourceKind::ArxivApi {
+            for item in &mut feed.items {
+                for prefix in ["http://arxiv.org/abs/", "https://arxiv.org/abs/"] {
+                    if let Some(stripped) = item.identity.strip_prefix(prefix) {
+                        item.identity = stripped.to_string();
+                        break;
+                    }
+                }
+            }
+        }
+        Ok(feed)
+    } else if text.contains("<rss") || text.contains("<channel") {
+        parse_rss_channel(text)
+    } else {
+        Err(WatchError::FeedWrongSchema)
+    }
+}
+
+/// Parse an Atom document's `<entry>` elements.
+fn parse_atom_entries(text: &str) -> Result<Vec<FeedItem>, WatchError> {
+    let mut items = Vec::new();
+    for entry in extract_elements(text, "entry") {
+        let id = element_text(entry, "id").unwrap_or_default();
+        let title = element_text(entry, "title").unwrap_or_default();
+        let published = date_rfc3339(element_text(entry, "published"));
+        let updated = date_rfc3339(element_text(entry, "updated"));
+        let summary = element_text(entry, "summary");
+        let authors: Vec<String> = extract_elements(entry, "author")
+            .iter()
+            .filter_map(|a| element_text(a, "name"))
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let categories: Vec<String> = extract_element_attrs(entry, "category")
+            .iter()
+            .filter_map(|(attrs, _)| attrs.get("term").cloned())
+            .collect();
+        // The links: rel="alternate" href is the item link.
+        let link = extract_element_attrs(entry, "link")
+            .into_iter()
+            .find_map(|(attrs, _)| {
+                let rel = attrs.get("rel").map(String::as_str);
+                if rel.is_none() || rel == Some("alternate") {
+                    attrs.get("href").cloned()
+                } else {
+                    None
+                }
+            });
+        items.push(FeedItem {
+            identity: id.trim().to_string(),
+            title: title.trim().to_string(),
+            link,
+            published,
+            updated,
+            summary,
+            authors,
+            categories,
+            adapter: None,
+        });
+    }
+    Ok(items)
+}
+
+/// Parse an RSS document's `<item>` elements + the channel's `<ttl>`.
+fn parse_rss_channel(text: &str) -> Result<ParsedFeed, WatchError> {
+    // The balance law: an OPENED item never closed is a truncated document
+    // — the named malformed refusal, not an honest empty state. (Entity-
+    // encoded text never contains raw tags, so the count reads structure.)
+    let opens = count_tag_opens(text, "item");
+    let closes = count_tag_closes(text, "item");
+    if opens != closes {
+        return Err(WatchError::FeedMalformed);
+    }
+    let ttl_secs = extract_elements(text, "ttl")
+        .first()
+        .and_then(|t| t.trim().parse::<u64>().ok())
+        .map(|m| m.saturating_mul(60));
+    let mut items = Vec::new();
+    for item in extract_elements(text, "item") {
+        let guid = element_text(item, "guid");
+        let link_text = element_text(item, "link");
+        let identity = guid
+            .or_else(|| link_text.clone())
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let title = element_text(item, "title").unwrap_or_default();
+        let published = date_rfc2822(element_text(item, "pubDate"));
+        let summary = element_text(item, "description");
+        let mut authors: Vec<String> = extract_elements(item, "author")
+            .iter()
+            .map(|a| element_text(a, "name").unwrap_or_else(|| a.to_string()))
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        // dc:creator — local-name matching covers the prefixed form.
+        for c in extract_elements(item, "creator") {
+            let c = c.trim().to_string();
+            if !c.is_empty() {
+                authors.push(c);
+            }
+        }
+        let categories: Vec<String> = extract_elements(item, "category")
+            .iter()
+            .map(|c| c.trim().to_string())
+            .filter(|c| !c.is_empty())
+            .collect();
+        items.push(FeedItem {
+            identity,
+            title: title.trim().to_string(),
+            link: link_text.map(|s| s.trim().to_string()),
+            published,
+            updated: None,
+            summary,
+            authors,
+            categories,
+            adapter: None,
+        });
+    }
+    Ok(ParsedFeed { items, ttl_secs })
+}
+
+fn count_tag_opens(text: &str, local: &str) -> usize {
+    count_tag_name(text, local, false)
+}
+
+fn count_tag_closes(text: &str, local: &str) -> usize {
+    count_tag_name(text, local, true)
+}
+
+/// Count tags whose LOCAL name matches (prefix-tolerant): `<item …>`,
+/// `<rss:item …>` (open) or `</item>`, `</rss:item>` (close).
+fn count_tag_name(text: &str, local: &str, close: bool) -> usize {
+    let mut n = 0;
+    let mut rest = text;
+    while let Some(pos) = rest.find('<') {
+        let after = &rest[pos + 1..];
+        let matches = if close {
+            after.starts_with('/')
+                && after[1..]
+                    .trim_start()
+                    .strip_prefix(local)
+                    .is_some_and(|tail| {
+                        tail.starts_with('>')
+                            || tail.starts_with(':')
+                            || tail.starts_with([' ', '\t', '\r', '\n'])
+                    })
+        } else {
+            !after.starts_with('/')
+                && after.strip_prefix(local).is_some_and(|tail| {
+                    tail.starts_with('>')
+                        || tail.starts_with([' ', '\t', '\r', '\n', '/'])
+                        || tail.starts_with(':')
+                })
+        };
+        if matches {
+            n += 1;
+        }
+        rest = &rest[pos + 1..];
+    }
+    n
+}
+
+/// Every element whose LOCAL name matches, as its full `<tag …>body</tag>`
+/// span body. Self-closing elements yield "" (the attrs are reachable via
+/// [`extract_element_attrs`]). Sibling order preserved.
+fn extract_elements<'a>(text: &'a str, local: &str) -> Vec<&'a str> {
+    let mut bodies = Vec::new();
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'<' {
+            i += 1;
+            continue;
+        }
+        let Some((name_token, tag_end, self_closing, is_close)) = read_tag_name(text, i) else {
+            i += 1;
+            continue;
+        };
+        if is_close {
+            // A stray close tag (or the outer close of a parent element the
+            // caller handed us) — never an open; move past it.
+            i = tag_end;
+            continue;
+        }
+        if local_name_of(name_token) == local {
+            if self_closing {
+                bodies.push("");
+                i = tag_end;
+                continue;
+            }
+            // Find the matching close tag by local name.
+            let mut j = tag_end;
+            let mut found = None;
+            while j < bytes.len() {
+                if bytes[j] == b'<'
+                    && let Some((cname, cend, _, is_close)) = read_tag_name(text, j)
+                    && is_close
+                    && local_name_of(cname) == local
+                {
+                    // The body ends at the close tag's '<'.
+                    found = Some(j);
+                    j = cend;
+                    break;
+                }
+                j += 1;
+            }
+            if let Some(end) = found {
+                bodies.push(&text[tag_end..end]);
+                i = j;
+                continue;
+            }
+        }
+        i = tag_end.max(i + 1);
+    }
+    bodies
+}
+
+/// (attrs, body) for every element whose local name matches — used for
+/// attribute-bearing elements (`<link href rel>`, `<category term>`).
+fn extract_element_attrs<'a>(
+    text: &'a str,
+    local: &str,
+) -> Vec<(std::collections::HashMap<String, String>, &'a str)> {
+    let mut out = Vec::new();
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'<' {
+            i += 1;
+            continue;
+        }
+        let Some((name_token, tag_end, self_closing, is_close)) = read_tag_name(text, i) else {
+            i += 1;
+            continue;
+        };
+        if is_close {
+            i = tag_end;
+            continue;
+        }
+        if local_name_of(name_token) == local {
+            let open_tag = &text[i + 1..tag_end.saturating_sub(1)];
+            let attrs = parse_attrs(open_tag);
+            if self_closing {
+                out.push((attrs, ""));
+                i = tag_end;
+                continue;
+            }
+            // Same close-scan as extract_elements.
+            let mut j = tag_end;
+            let mut found = None;
+            while j < bytes.len() {
+                if bytes[j] == b'<'
+                    && let Some((cname, cend, _, close)) = read_tag_name(text, j)
+                    && close
+                    && local_name_of(cname) == local
+                {
+                    found = Some(j);
+                    j = cend;
+                    break;
+                }
+                j += 1;
+            }
+            if let Some(end) = found {
+                out.push((attrs, &text[tag_end..end]));
+                i = j;
+                continue;
+            }
+        }
+        i = tag_end.max(i + 1);
+    }
+    out
+}
+
+/// Read the tag starting at `text[pos] == '<'`: its name token (up to the
+/// first whitespace / `>` / `/`), the index ONE PAST the tag's `>`, whether
+/// it self-closes, and whether it is a CLOSE tag. A bare `<` in text (not a
+/// tag) yields None.
+fn read_tag_name(text: &str, pos: usize) -> Option<(&str, usize, bool, bool)> {
+    let after = &text[pos + 1..];
+    let (is_close, after) = match after.strip_prefix('/') {
+        Some(rest) => (true, rest),
+        None => (false, after),
+    };
+    let name_end = after
+        .find(|c: char| c.is_whitespace() || c == '>' || c == '/')
+        .unwrap_or(after.len());
+    if name_end == 0 {
+        return None; // "< " or "<>" — not a tag name
+    }
+    let name = &after[..name_end];
+    // The tag's own '>' — attribute values with a raw '>' are outside the
+    // recorded grammars (the scanner's honest scope).
+    let gt_rel = name_end + after[name_end..].find('>')? + 1;
+    let gt = pos + 1 + gt_rel;
+    let self_closing = text[..gt].ends_with("/>");
+    Some((name, gt, self_closing, is_close))
+}
+
+/// The local name of a tag token: everything after the LAST ':' (the
+/// prefix-tolerant match the NIST shape needs).
+fn local_name_of(name: &str) -> &str {
+    name.rsplit(':').next().unwrap_or(name)
+}
+
+/// The open tag's attribute map (name="value" | name='value'), decoded.
+fn parse_attrs(open_tag: &str) -> std::collections::HashMap<String, String> {
+    let mut attrs = std::collections::HashMap::new();
+    let bytes = open_tag.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        // Skip to an attribute-name start.
+        if !(bytes[i].is_ascii_alphabetic() || bytes[i] == b'_') {
+            i += 1;
+            continue;
+        }
+        let name_start = i;
+        while i < bytes.len()
+            && (bytes[i].is_ascii_alphanumeric() || matches!(bytes[i], b'-' | b':' | b'_' | b'.'))
+        {
+            i += 1;
+        }
+        let name = &open_tag[name_start..i];
+        // Whitespace, '=', whitespace, quote.
+        let mut j = i;
+        while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+            j += 1;
+        }
+        if j >= bytes.len() || bytes[j] != b'=' {
+            continue; // not a key=value attr; resume scanning after the name
+        }
+        j += 1;
+        while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+            j += 1;
+        }
+        if j >= bytes.len() || (bytes[j] != b'"' && bytes[j] != b'\'') {
+            i = j;
+            continue;
+        }
+        let q = bytes[j] as char;
+        let value_start = j + 1;
+        let Some(close_rel) = open_tag[value_start..].find(q) else {
+            break;
+        };
+        let value_end = value_start + close_rel;
+        attrs.insert(
+            name.to_string(),
+            decode_entities(open_tag[value_start..value_end].trim()),
+        );
+        i = value_end + 1;
+    }
+    attrs
+}
+
+/// An element's decoded TEXT: CDATA passes through raw (the wrapper
+/// stripped, no entity decode inside), otherwise ONE level of the five
+/// XML built-ins (decoded HTML stays DATA). Element-bounded.
+fn element_text(scope: &str, local: &str) -> Option<String> {
+    let raw = extract_elements(scope, local).into_iter().next()?;
+    Some(decode_element_text(raw))
+}
+
+/// CDATA passthrough or one-level entity decode.
+fn decode_element_text(raw: &str) -> String {
+    let raw = raw.trim();
+    if let Some(inner) = raw
+        .strip_prefix("<![CDATA[")
+        .and_then(|r| r.strip_suffix("]]>"))
+    {
+        return inner.to_string();
+    }
+    decode_entities(raw)
+}
+
+/// ONE level of the five XML built-ins. `&amp;` decodes LAST so a
+/// doubly-escaped `&amp;lt;` stays the honest single-level `&lt;` (the
+/// decoded HTML is DATA, evidence bytes — never re-scanned, never run).
+fn decode_entities(s: &str) -> String {
+    if !s.contains('&') {
+        return s.to_string();
+    }
+    s.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&amp;", "&")
+}
+
+/// RFC-3339 normalization for Atom dates (already RFC-3339; parsed and
+/// re-rendered so the stored form is uniform). Unparseable = None — a
+/// missing date is honest absent data, not a refusal.
+fn date_rfc3339(raw: Option<String>) -> Option<String> {
+    let s = raw?;
+    chrono::DateTime::parse_from_rfc3339(s.trim())
+        .ok()
+        .map(|d| d.to_rfc3339())
+}
+
+/// RFC-822 → RFC-3339 for RSS pubDates (lobsters: `-0600` offsets).
+fn date_rfc2822(raw: Option<String>) -> Option<String> {
+    let s = raw?;
+    chrono::DateTime::parse_from_rfc2822(s.trim())
+        .ok()
+        .map(|d| d.to_rfc3339())
+}
+
+// ── S2: the transport (replay/live, the SA-4 discipline inherited) ──────
+
+/// The named HTTP budgets (inside the shared 30 s wall — a per-lane tick is
+/// one fetch, and the ground's merge-order fallback stays unnecessary).
+pub const WATCH_HTTP_CONNECT_TIMEOUT_SECS: u64 = 10;
+pub const WATCH_HTTP_TOTAL_TIMEOUT_SECS: u64 = 25;
+
+/// The tick's fetch transport: LIVE (a client pinned to the LANE's host by
+/// construction — `redirect::Policy::none()` because a redirect is a pin
+/// bypass, `https_only`, `no_proxy`, the named budgets) or REPLAY (the
+/// frozen corpus — the SA-4 discipline: CI never performs a live fetch).
+/// There is no process global: the transport is a per-tick VALUE, so a
+/// test cannot accidentally bless the live arm and the live arm cannot
+/// leak into CI.
+#[derive(Debug, Clone)]
+pub enum WatchTransport {
+    Live {
+        client: reqwest::Client,
+        host: String,
+    },
+    Replay,
+}
+
+impl WatchTransport {
+    /// The live client for ONE lane's host. The host was SSRF-screened at
+    /// lane create; the client pins every subsequent fetch to it.
+    pub fn live(lane_host: &str) -> Result<Self, WatchError> {
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .https_only(true)
+            .no_proxy()
+            .connect_timeout(std::time::Duration::from_secs(
+                WATCH_HTTP_CONNECT_TIMEOUT_SECS,
+            ))
+            .timeout(std::time::Duration::from_secs(
+                WATCH_HTTP_TOTAL_TIMEOUT_SECS,
+            ))
+            .user_agent(concat!(
+                "brain-server/",
+                env!("CARGO_PKG_VERSION"),
+                " (research-watch; publishers-etiquette-honoring)"
+            ))
+            .build()
+            .map_err(|_| WatchError::TransportFailed)?;
+        Ok(WatchTransport::Live {
+            client,
+            host: lane_host.to_ascii_lowercase(),
+        })
+    }
+
+    /// The replay arm: URL → frozen fixture bytes. A URL the corpus does
+    /// not know is the named `watch_replay_gap`, never a silent live
+    /// fallback (RW-6).
+    pub fn replay() -> Self {
+        WatchTransport::Replay
+    }
+
+    /// ONE GET, host-checked BEFORE any I/O (the pin bypass refusals — a
+    /// foreign host or a non-https scheme never reach the client), then
+    /// the CHUNKED bounded read: `Response::chunk()` accumulates under
+    /// [`WATCH_MAX_FEED_BYTES`], the refusing chunk is never appended, and
+    /// the client's own connect/total timeouts bound the stream (the
+    /// Context7-verified shape on the locked reqwest).
+    pub async fn get(&self, url: &str) -> Result<Vec<u8>, WatchError> {
+        match self {
+            WatchTransport::Replay => {
+                let fixture = watch_replay_fixture_file(url).ok_or(WatchError::ReplayGap)?;
+                std::fs::read(format!(
+                    "{}/tests/fixtures/watch/{fixture}",
+                    env!("CARGO_MANIFEST_DIR")
+                ))
+                .map_err(|_| WatchError::ReplayGap)
+            }
+            WatchTransport::Live { client, host } => {
+                // The pre-I/O pin checks: the URL is https on THE lane's
+                // host, or the fetch refuses by name.
+                let parsed = reqwest::Url::parse(url).map_err(|_| WatchError::LaneHostRequired)?;
+                if parsed.scheme() != "https" {
+                    return Err(WatchError::LaneHostRequired);
+                }
+                let url_host = parsed
+                    .host_str()
+                    .map(|h| h.to_ascii_lowercase())
+                    .ok_or(WatchError::LaneHostRequired)?;
+                if url_host != *host {
+                    return Err(WatchError::FetchHostMismatch);
+                }
+                let mut resp = client
+                    .get(url)
+                    .send()
+                    .await
+                    .map_err(|_| WatchError::TransportFailed)?;
+                if !resp.status().is_success() {
+                    return Err(WatchError::TransportFailed);
+                }
+                let mut buf: Vec<u8> = Vec::new();
+                while let Some(chunk) = resp
+                    .chunk()
+                    .await
+                    .map_err(|_| WatchError::TransportFailed)?
+                {
+                    push_bounded(&mut buf, &chunk)?;
+                }
+                Ok(buf)
+            }
+        }
+    }
+}
+
+/// The bounded accumulator: append `chunk` unless the running total would
+/// cross [`WATCH_MAX_FEED_BYTES`] — then the named `watch_feed_too_large`
+/// refusal, the offending chunk never appended (the pin drives THIS over a
+/// synthetic oversized body; the transport loop is the thin caller).
+pub fn push_bounded(buf: &mut Vec<u8>, chunk: &[u8]) -> Result<(), WatchError> {
+    if buf.len() + chunk.len() > WATCH_MAX_FEED_BYTES {
+        return Err(WatchError::FeedTooLarge);
+    }
+    buf.extend_from_slice(chunk);
+    Ok(())
+}
+
+/// The replay map (URL → fixture). THE CORPUS IS THE MAP: the same bytes
+/// the live probes returned, per the README provenance. CISA replays the
+/// MARKED byte-prefix trim (5.7 MB does not belong in git; CI never
+/// downloads it); the arXiv RSS lane replays the LIVE-RECORDED Sunday
+/// state (the weekday-with-items shape is the marked-synthetic fixture,
+/// parsed directly in tests — the URL map never serves synthetic bytes).
+fn watch_replay_fixture_file(url: &str) -> Option<&'static str> {
+    // NAMED APART from scholar.rs's `replay_fixture_for` (the dup-guard's
+    // rename precedent): both are URL→fixture maps, but the contracts are
+    // the different corpora — scholar maps RECORDED API ENVELOPES by
+    // identifier slot; this maps WHOLE FEED TRANSCRIPTS by lane URL, into
+    // tests/fixtures/watch/. A shared helper would force the two maps into
+    // one abstraction they do not share.
+    if url.starts_with("https://export.arxiv.org/api/query") {
+        return Some("arxiv-atom.xml");
+    }
+    if url.starts_with("https://export.arxiv.org/rss/cs.CL") {
+        return Some("arxiv-rss-sunday-empty.xml");
+    }
+    if url.starts_with("https://lobste.rs/rss") {
+        return Some("lobsters.rss");
+    }
+    if url.starts_with("https://www.cisa.gov/cybersecurity-advisories/all.xml") {
+        return Some("cisa-trim-prefix3.xml");
+    }
+    if url.starts_with("https://www.nist.gov/news-events/news/rss.xml") {
+        return Some("nist.rss");
+    }
+    None
+}
+
+// ── S2: the arXiv param builder (the manual's escaping, by construction) ─
+
+/// Build the arXiv Atom API query URL for a lane: the search query with the
+/// manual's escaping (spaces as `+`, everything outside the unreserved set
+/// percent-encoded), the optional `submittedDate:[from TO to]` incremental
+/// window (YYYYMMDDhhmm forms), `sortBy=lastUpdatedDate`, and the slice cap
+/// at the manual's 2000 (clamped — the slice size is kernel policy, never an
+/// operator input).
+pub fn build_arxiv_query_url(
+    query: &str,
+    window: Option<(&str, &str)>,
+    max_results: u32,
+) -> String {
+    let mut search = encode_arxiv_value(query.trim());
+    if let Some((from, to)) = window {
+        search.push_str("+AND+submittedDate:%5B");
+        search.push_str(from.trim());
+        search.push_str("+TO+");
+        search.push_str(to.trim());
+        search.push_str("%5D");
+    }
+    let capped = max_results.min(2000);
+    format!(
+        "https://export.arxiv.org/api/query?search_query={search}&start=0&max_results={capped}&sortBy=lastUpdatedDate"
+    )
+}
+
+/// The manual's escaping: the unreserved set plus a few query-syntax
+/// punctuation pass through; space is `+`; everything else percent-encoded
+/// (the scholar encoder's law, retargeted to arXiv's documented table).
+fn encode_arxiv_value(v: &str) -> String {
+    let mut out = String::with_capacity(v.len());
+    for b in v.bytes() {
+        match b {
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'.'
+            | b'_'
+            | b'~'
+            | b'('
+            | b')'
+            | b'/'
+            | b':'
+            | b'+'
+            | b'*' => out.push(b as char),
+            b' ' => out.push('+'),
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
 }
