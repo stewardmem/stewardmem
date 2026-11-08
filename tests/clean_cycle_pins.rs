@@ -436,7 +436,7 @@ fn r48_the_route_tables_are_unchanged() {
     // create-loop suite's `route_tables_count_six_more_rows_than_the_prior_freeze`,
     // which states the same property positively and cannot be satisfied by
     // deleting rows.
-    const OPEN_ROUTES: usize = 222;
+    const OPEN_ROUTES: usize = 224;
     // +4 rows (208): the chat session store — the listing GET, the turn-page
     // GET, and the {session} path carrying PATCH rename (Write) and DELETE
     // erase (Read, the erasure posture) — a named act, not drift.
@@ -445,7 +445,12 @@ fn r48_the_route_tables_are_unchanged() {
     // +1 row (222/210): IMPROVE04's POST /ingest/document (Write) — the
     // document-ingestion core; openapi.yaml + docs/api.md updated in the
     // same commit — a named act, not drift.
-    const OPEN_GATES: usize = 210;
+    // +1 row (223/211): IMPROVE07 S2's POST /scholar/fetch (Write) — the
+    // scholarly fetch through the markdown door.
+    // +1 row (224/212): IMPROVE07 S3's POST /scholar/override (Admin) —
+    // the audited HITL retraction lift. Both named acts, not drift; the
+    // contract rows landed in the same commits.
+    const OPEN_GATES: usize = 212;
 
     let guards = read_repo("src/server/router/route_guards.rs");
     let between = |start: &str| -> String {

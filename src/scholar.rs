@@ -1567,6 +1567,62 @@ pub async fn fetch_crossref_witness(
     .await
 }
 
+/// The keyed esearch/esummary builders (S4): the free key rides as the
+/// `api_key` param (the 10 req/s tier). The key NEVER lands in a log line,
+/// an error string, or the audit detail — the builders are the only place
+/// it exists outside the key file.
+pub fn build_pubmed_esearch_url_keyed(term: &str, key: &str) -> Result<String, ScholarError> {
+    Ok(format!(
+        "{}&api_key={}",
+        build_pubmed_esearch_url(term)?,
+        encode_query_value(key)
+    ))
+}
+
+pub fn build_pubmed_esummary_url_keyed(uid: &str, key: &str) -> Result<String, ScholarError> {
+    Ok(format!(
+        "{}&api_key={}",
+        build_pubmed_esummary_url(uid)?,
+        encode_query_value(key)
+    ))
+}
+
+/// The KEYED PubMed fetch (S4): the two-step over the api_key param. The
+/// unkeyed [`fetch_pubmed`] stays the operator-gated live path at the
+/// 3 req/s tier; the keyed path is what the route drives when the key file
+/// is configured (the 10 req/s tier, the rate still bounded by the LOCAL
+/// bucket).
+pub async fn fetch_pubmed_keyed(
+    transport: &ScholarTransport,
+    id: &SourceIdentifier,
+    fetched_at: &str,
+    key: &str,
+) -> Result<SourceRecord, ScholarError> {
+    let uid = match id {
+        SourceIdentifier::Pmid(p) => p.trim().to_string(),
+        SourceIdentifier::Doi(doi) => {
+            let term = format!("{}[doi]", normalize_doi(doi));
+            let resp =
+                attempt_with_backoff(transport, &build_pubmed_esearch_url_keyed(&term, key)?)
+                    .await?;
+            if !(200..300).contains(&resp.status) {
+                return Err(rate_or_transport(resp.status));
+            }
+            let uids = parse_pubmed_esearch(&resp.body)?;
+            uids.into_iter()
+                .next()
+                .ok_or(ScholarError::EmptyResult { api: "pubmed" })?
+        }
+        SourceIdentifier::Query(_) => return Err(ScholarError::BadIdentifier),
+    };
+    fetch_with_backoff(
+        transport,
+        &build_pubmed_esummary_url_keyed(&uid, key)?,
+        |body| parse_pubmed_esummary(body, fetched_at),
+    )
+    .await
+}
+
 /// Fetch ONE identifier from PubMed (the two-step: a DOI resolves through
 /// esearch first; a PMID goes straight to esummary). The FALLBACK adapter.
 pub async fn fetch_pubmed(

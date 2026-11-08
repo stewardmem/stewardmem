@@ -1889,39 +1889,63 @@ pub(crate) async fn scholar_fetch(
 
     let fetched_at = chrono::Utc::now().to_rfc3339();
     let transport = crate::scholar::process_transport(profile.rate_per_sec);
-    let (record, api_name) = match selected {
-        Selected::EuropePmc => (
-            crate::scholar::fetch_epmc(transport, &id, &fetched_at).await,
-            "europepmc",
-        ),
-        Selected::PubMed => (
-            crate::scholar::fetch_pubmed(transport, &id, &fetched_at).await,
-            "pubmed",
-        ),
-    };
-    let mut record = match record {
-        Ok(r) => r,
-        Err(e) => {
-            // SA-3: the on-state audit row records the OUTCOME - including
-            // the failure. Identifier + allowlisted host + outcome only.
-            if let Ok(conn) = state.pool.get() {
-                crate::audit::record(
-                    &conn,
-                    crate::audit::AuditKind::Ingest,
-                    "scholar_route",
-                    &scholar_audit_target(&id),
-                    crate::audit::AuditStatus::Error,
-                    &format!("scholar_fetch {api_name} failed"),
-                );
-            }
-            let (code, message) = scholar_error_code(&e);
-            return Err(scholar_refuse(
-                axum::http::StatusCode::SERVICE_UNAVAILABLE,
-                code,
-                message,
-            ));
+    // The fetch: both arms unify through ONE named-refusal mapping (the
+    // EPMC arm returns the raw Result; the PubMed arm adds the secret-file
+    // read before its keyed two-step).
+    let fetched = match selected {
+        Selected::EuropePmc => crate::scholar::fetch_epmc(transport, &id, &fetched_at)
+            .await
+            .map(|r| (r, "europepmc".to_string())),
+        Selected::PubMed => {
+            // The secret-file law (S4): the key is read through the
+            // provider-secret contract — owner-only permissions, no
+            // symlinks, no key inline, never in an error string. A
+            // vanished/unreadable key file is the named OFF refusal (the
+            // adapter stays OFF rather than degraded — the boot validator
+            // already refuses enabled-without-configured, this covers the
+            // file disappearing between boot and now).
+            let key_path = profile
+                .pubmed_key_file
+                .as_deref()
+                .filter(|p| !p.trim().is_empty())
+                .ok_or_else(|| {
+                    scholar_refuse(
+                        axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                        "scholar_adapter_disabled",
+                        "pubmed is enabled but its key file is not configured".to_string(),
+                    )
+                })?;
+            let key_file = std::path::PathBuf::from(key_path);
+            let key = crate::secret_file::read_owner_only_token(&key_file).map_err(|_| {
+                scholar_refuse(
+                    axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                    "scholar_secret_file_invalid",
+                    "the pubmed key file is invalid (owner-only permissions, no symlink, non-empty)"
+                        .to_string(),
+                )
+            })?;
+            // The key rides the request as the E-utilities `api_key` param
+            // (the keyed builder), never logged, never echoed.
+            let keyed = crate::scholar::fetch_pubmed_keyed(transport, &id, &fetched_at, &key).await;
+            keyed.map(|r| (r, "pubmed".to_string()))
         }
     };
+    let (mut record, api_name) = fetched.map_err(|e: crate::scholar::ScholarError| {
+        // SA-3: the on-state audit row records the OUTCOME — including the
+        // failure. Identifier + allowlisted host + outcome only.
+        if let Ok(conn) = state.pool.get() {
+            crate::audit::record(
+                &conn,
+                crate::audit::AuditKind::Ingest,
+                "scholar_route",
+                &scholar_audit_target(&id),
+                crate::audit::AuditStatus::Error,
+                "scholar_fetch failed before a record resolved",
+            );
+        }
+        let (code, message) = scholar_error_code(&e);
+        scholar_refuse(axum::http::StatusCode::SERVICE_UNAVAILABLE, code, message)
+    })?;
 
     // The witness cross-check (IMPROVE07 S3): when the operator configured
     // the polite pool and the record carries a DOI, the Crossref witness
@@ -2027,10 +2051,16 @@ fn scholar_audit_target(id: &crate::scholar::SourceIdentifier) -> String {
 /// The retraction-lift payload (IMPROVE07 S3): the target document and the
 /// lift verb. `lift: true` sets `scholar_meta.retraction_override = true`
 /// (the floor rises); `lift: false` removes the key (the floor re-applies).
+/// BOTH fields are serde-defaulted — the authz matrix's `{}` probe must
+/// clear the extractor and reach the Admin gate (a 403, never a 422 from
+/// payload validation ahead of authz); the real fields are validated in
+/// the handler, AFTER the gate.
 #[derive(Debug, Deserialize)]
 pub(crate) struct ScholarOverridePayload {
-    document_id: String,
-    lift: bool,
+    #[serde(default)]
+    document_id: Option<String>,
+    #[serde(default)]
+    lift: Option<bool>,
 }
 
 /// THE audited HITL retraction lift (IMPROVE07 S3, SA-2). The tiebreak
@@ -2050,24 +2080,42 @@ pub(crate) async fn scholar_override(
             inner: crate::handlers::ApiError::new("forbidden", e.inner.message),
         },
     )?;
-    let doc_id = payload.document_id.trim().to_string();
-    if doc_id.is_empty() {
+    // Field validation AFTER the gate (the authz matrix's `{}` probe must
+    // 403, never 422 — the extractor defaults clear, the handler names the
+    // missing fields).
+    let Some(raw_doc) = payload
+        .document_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|d| !d.is_empty())
+    else {
         return Err(scholar_refuse(
             axum::http::StatusCode::BAD_REQUEST,
             "scholar_bad_identifier",
             "document_id is required".to_string(),
         ));
-    }
+    };
+    let doc_id = raw_doc.to_string();
+    let Some(lift) = payload.lift else {
+        return Err(scholar_refuse(
+            axum::http::StatusCode::BAD_REQUEST,
+            "scholar_lift_required",
+            "lift (true | false) is required".to_string(),
+        ));
+    };
     let actor = handlers::recall::principal_label(&principal.0);
     let pool = state.pool.clone();
-    let lift = payload.lift;
     let result = task::spawn_blocking(
         move || -> Result<Option<String>, crate::handlers::HandlerError> {
             let mut conn = pool
                 .get()
                 .map_err(|e| crate::handlers::HandlerError::internal(e.to_string()))?;
+            // A read-modify-write governance act takes the write lock
+            // UPFRONT (BEGIN IMMEDIATE — the domain-move precedent): the
+            // flag write and its audit row commit-or-roll-back as one unit
+            // under the same discipline as every other transition.
             let tx = conn
-                .transaction()
+                .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
                 .map_err(|e| crate::handlers::HandlerError::internal(e.to_string()))?;
             let meta: Option<String> = tx
                 .query_row(
@@ -2134,7 +2182,7 @@ pub(crate) async fn scholar_override(
     Ok(Json(serde_json::json!({
         "success": true,
         "document_id": payload.document_id,
-        "lift": payload.lift,
+        "lift": lift,
         "scholar_meta": result,
     })))
 }
