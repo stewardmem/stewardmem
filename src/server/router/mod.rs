@@ -229,6 +229,16 @@ pub fn app(state: Arc<AppState>) -> Router {
         axum::http::StatusCode::REQUEST_TIMEOUT,
         StdDuration::from_secs(crate::config::REQUEST_TIMEOUT_SECS),
     ))
+    // The document-ingest route merges AFTER the shared timeout (the
+    // import_router merge-order precedent): the Tier-2 converter's honest
+    // work is minutes-scale and the shared 30 s wall fired a generic 408
+    // before the kernel's named converter_timeout could answer (measured
+    // 2026-11-08). The route carries its own budget
+    // (config::DOCUMENT_INGEST_TIMEOUT_SECS); everything layered BELOW this
+    // point in source (CatchPanic, the RBAC route_layer, auth) still covers
+    // it — `.layer()` applies to routes registered so far, and this merge
+    // sits before them.
+    .merge(memory::document_ingest_router())
     .layer(CatchPanicLayer::new())
     // the RBAC evaluation middleware.
     //

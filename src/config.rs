@@ -18,6 +18,19 @@ pub const MAX_QUERY_LENGTH: usize = 2000;
 /// exactly how they diverge silently.
 pub const REQUEST_TIMEOUT_SECS: u64 = 30;
 
+/// The document-ingest route's own HTTP budget (IMPROVE06): the converter
+/// bound + the shared budget. The route is merged OUTSIDE the shared
+/// `REQUEST_TIMEOUT_SECS` TimeoutLayer (see `memory::document_ingest_router`)
+/// because the Tier-2 converter's honest work is minutes-scale — the
+/// measured 2026-11-08 e2e found a real 6-page clinical-guideline conversion
+/// taking 29.5 s warm, inside the 30 s wall by less than one second, and a
+/// cold load or a larger document would 408 before the kernel's named
+/// `converter_timeout` could ever answer. The tier's kernel-side kill stays
+/// `ingest_document::CONVERTER_TIMEOUT_SECS` (the tool cannot run past it);
+/// this constant is the HTTP headroom that lets the named refusal travel.
+pub const DOCUMENT_INGEST_TIMEOUT_SECS: u64 =
+    crate::ingest_document::CONVERTER_TIMEOUT_SECS + REQUEST_TIMEOUT_SECS;
+
 /// The margin a write handler holds back from [`REQUEST_TIMEOUT_SECS`] so its
 /// refusal has time to travel back to the client.
 ///

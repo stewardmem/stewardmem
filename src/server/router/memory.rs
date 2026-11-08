@@ -54,7 +54,6 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/v1/embeddings", post(embeddings))
         .route("/ingest/markdown", post(ingest_markdown))
-        .route("/ingest/document", post(ingest_document))
         .route("/reindex", post(reindex))
         .route("/get/{id}", get(get_chunk))
         .route("/multi-get", post(multi_get))
@@ -2437,10 +2436,10 @@ pub async fn ingest_document(
     } else {
         let (extracted, ocr_assembly, tier_ran) =
             tier0_extract_and_route_ocr(&pdf_bytes, ocr_sidecar, &tier).await?;
-        let provenance = match ocr_assembly {
-            Some(a) => crate::ingest_document::DocumentProvenance::Ocr(a),
-            None => crate::ingest_document::DocumentProvenance::TextLayer,
-        };
+        let provenance = ocr_assembly.map_or(
+            crate::ingest_document::DocumentProvenance::TextLayer,
+            crate::ingest_document::DocumentProvenance::Ocr,
+        );
         (extracted, provenance, tier_ran)
     };
 
@@ -3106,10 +3105,10 @@ fn rederive_document_markdown(
     } else {
         None
     };
-    let provenance = match ocr_assembly {
-        Some(a) => crate::ingest_document::DocumentProvenance::Ocr(a),
-        None => crate::ingest_document::DocumentProvenance::TextLayer,
-    };
+    let provenance = ocr_assembly.map_or(
+        crate::ingest_document::DocumentProvenance::TextLayer,
+        crate::ingest_document::DocumentProvenance::Ocr,
+    );
     let stripped_pages: Vec<String> = extracted
         .pages
         .iter()
@@ -4994,6 +4993,31 @@ pub fn import_router() -> Router<Arc<AppState>> {
         // default layered after this router.
         .layer(tower_http::limit::RequestBodyLimitLayer::new(
             1024 * 1024 * 1024,
+        ))
+}
+
+/// The document-ingest route, OUTSIDE the shared request timeout (IMPROVE06,
+/// the import_router merge-order precedent): merged into `mod.rs` AFTER the
+/// shared [`crate::config::REQUEST_TIMEOUT_SECS`] TimeoutLayer, so the 30 s
+/// wall never covers it — the Tier-2 converter's honest work is minutes-scale
+/// (`CONVERTER_TIMEOUT_SECS` = 300: the tool cold-loads GB-scale model
+/// artifacts), and the measured 2026-11-08 e2e found the wall firing at
+/// 30 s with a generic 408 BEFORE the kernel's own kill could answer
+/// `converter_timeout` — the tier's named bound was unreachable dead code.
+/// The route carries its OWN timeout instead:
+/// [`crate::config::DOCUMENT_INGEST_TIMEOUT_SECS`] = the converter bound +
+/// the shared budget (the handler's post-conversion work: strip, embed,
+/// write). Everything layered AFTER the merge point in mod.rs (CatchPanic,
+/// the RBAC route_layer, auth) still covers this route — `.layer()` applies
+/// to routes registered so far, and this merge sits before them in source.
+pub fn document_ingest_router() -> Router<Arc<AppState>> {
+    use axum::http::StatusCode;
+    use std::time::Duration;
+    Router::new()
+        .route("/ingest/document", post(ingest_document))
+        .layer(tower_http::timeout::TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            Duration::from_secs(crate::config::DOCUMENT_INGEST_TIMEOUT_SECS),
         ))
 }
 

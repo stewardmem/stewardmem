@@ -717,16 +717,31 @@ fn dc6_structural_the_deterministic_pipeline_is_pinned_by_omission() {
         "from docling_core.types.doc import ImageRefMode",
         "import docling",
     ];
-    for line in py.lines().filter(|l| {
-        (l.starts_with("from docling") || l.starts_with("import docling"))
-            && !l.trim_start().starts_with('#')
-    }) {
+    // The wrapper's docling import surface is a WHITELIST over STRIPPED
+    // lines: the imports live inside main() (indented), and the first draft
+    // of this pin filtered on column-0 `starts_with` only — the mutation
+    // proof (an injected VlmPipeline import) sailed through a VACUOUS pin.
+    // Stripped, every docling import line must be one of the allowed set;
+    // any other docling import (a VLM/generative surface) is a found bug.
+    let mut docling_imports = 0;
+    for line in py.lines() {
+        let t = line.trim();
+        if t.starts_with('#') || !t.starts_with("from docling") && !t.starts_with("import docling")
+        {
+            continue;
+        }
+        docling_imports += 1;
         assert!(
-            allowed.iter().any(|a| line.starts_with(a)),
-            "DC-6: the wrapper imports {line:?} — outside the deterministic-pipeline \
+            allowed.iter().any(|a| t.starts_with(a)),
+            "DC-6: the wrapper imports {t:?} — outside the deterministic-pipeline \
              whitelist (a generative/VLM import is a found bug)"
         );
     }
+    assert!(
+        docling_imports >= 4,
+        "DC-6: the whitelist saw {docling_imports} docling imports — the pin must be \
+         reading the real import surface, not passing vacuously"
+    );
     // the shim's invocation line carries no pipeline/VLM flag at all:
     for line in sh.lines() {
         let t = line.trim_start();
@@ -849,4 +864,53 @@ fn docling_goldens_round_trip_on_the_recorded_versions() {
             "docling goldens: candidate B's toolchain is absent — the split is recorded, the pin passes"
         );
     }
+}
+
+/// The Tier-2 budget topology (the r47 line-order shape): the document route
+/// merges AFTER the shared request timeout in mod.rs — the converter tier's
+/// named 300 s bound is reachable, never pre-empted by the shared 30 s wall
+/// (the measured 2026-11-08 e2e finding: a real 6-page clinical-guideline
+/// conversion took 29.5 s warm — inside the wall by 0.45 s — and answered a
+/// generic 408 before the named refusal could travel).
+#[test]
+fn the_document_route_merges_outside_the_shared_request_timeout() {
+    let mod_rs = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/server/router/mod.rs"
+    ));
+    let shared_timeout = mod_rs
+        .find(".layer(TimeoutLayer::with_status_code(")
+        .expect("the shared TimeoutLayer call exists");
+    let document_merge = mod_rs
+        .find(".merge(memory::document_ingest_router())")
+        .expect("the document router merge exists");
+    let catch_panic = mod_rs
+        .find(".layer(CatchPanicLayer::new())")
+        .expect("CatchPanic");
+    assert!(
+        document_merge > shared_timeout,
+        "the document route must merge AFTER the shared timeout (outside the 30 s wall)"
+    );
+    assert!(
+        document_merge < catch_panic,
+        "the document route must merge BEFORE CatchPanic/RBAC/auth — the later layers \
+         still cover it (the routes-registered-so-far rule)"
+    );
+    let memory_rs = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/server/router/memory.rs"
+    ));
+    assert!(
+        memory_rs.contains("config::DOCUMENT_INGEST_TIMEOUT_SECS"),
+        "the route's own budget is the named constant, not an inline literal"
+    );
+    assert!(
+        !memory_rs
+            .split("pub fn router()")
+            .next()
+            .expect("router() exists")
+            .contains("ingest/document"),
+        "the shared router no longer registers /ingest/document (it would sit inside \
+         the 30 s wall again)"
+    );
 }

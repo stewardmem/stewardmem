@@ -142,6 +142,12 @@ const KNOWN_ERRORS: &[(&str, &str, &str, &str)] = &[
         "service",
         "display",
     ),
+    // IMPROVE06's converter client. `service` category: the one-shot Tier-2
+    // tool's failure contract as the parent sees it (the OcrSidecarError
+    // shape): Failed's payload is the tool's BOUNDED stderr tail (512 bytes,
+    // whitespace-collapsed in the constructor's helper — never raw tool
+    // internals), and the other three variants are fixed classifications.
+    ("ConverterError", "ingest_document.rs", "service", "display"),
     // The drift census's operator-facing error. `service` category: it is a
     // cadence job's failure contract, and every variant is a fixed-prefix
     // string with the offending value interpolated by the CONSTRUCTOR, never by

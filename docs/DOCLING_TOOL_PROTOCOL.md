@@ -112,6 +112,31 @@ README warns its benchmark favors itself by construction, so its conformance
 claim is measured here, not trusted. The unadopted candidate stays committed
 and recorded with its measured numbers (the named-act discipline).
 
+## Why Docling — the recorded license posture (DC-4's record, verified 2026-11-08)
+
+The Tier-2 slot is a RECORDED REFUSAL first and a tool second. The
+alternatives were measured and refused on their current terms, in-repo, so
+the next "why not Marker" is answered without re-litigating:
+
+| Tool | License (verified 2026-11-08) | The refusal |
+|---|---|---|
+| **Marker** (`datalab-to/marker`) | code **Apache-2.0**; weights **AI PUBS Open RAIL-M (Modified)** | the weights' open-responsible-AI license carries use restrictions a commercial regulated pipeline (MemorySteward LLC's `modules/health-comply`) does not accept — the copyleft half of the old GPL-era refusal is retired, the use-restriction half survives |
+| **MinerU** (`opendatalab/MinerU`) | **Apache-2.0** + commercial thresholds (above 100 M MAU or USD 20 M monthly group revenue) + an online-service attribution obligation | the thresholds and the attribution obligation are a revenue-gated posture, refused for the same reason the threshold is recorded: the pipeline must not carry a license that changes shape at a revenue line |
+| **olmOCR** (`allenai/olmocr`) | Apache-2.0 | not refused — NVIDIA-CUDA-bound (vllm/FP8), so not runnable on this stack's platforms; recorded as the noted VLM-upgrade lane on plan 05's measured WER evidence, adopted (or refused) by a named act |
+| **Docling** (`docling-project/docling`, Python) | **MIT** (IBM Research Zurich origin, LF AI & Data) | **SANCTIONED** — no revenue gates, no use restrictions; the deterministic standard pipeline is model inference, not generation |
+| **docling.rs** (`docling-project/docling.rs`) | **MIT** ("matching upstream docling") | **SANCTIONED CANDIDATE** — the same models as ONNX (RT-DETR layout, PP-OCR, TableFormer), one static binary; sanctioned-vs-default is S3's measurement, not this table |
+
+The model artifacts carry their own upstream licenses (Docling's
+docling-models terms; docling.rs's `models.json` is digest-bound with
+per-asset SPDX records and a `MODELS_NOTICE.md` attribution file) — the
+operator installs them locally; no weights ship inside the kernel, the
+bundle, or this repository.
+
+The no-remote law is part of the posture: the sanctioned tools run with
+pre-fetched local artifacts and refuse remote-services configuration
+(exit 5) — a converter that phones home would violate the no-data-leaves
+law this tier exists to keep.
+
 ## The kernel-side refusals this protocol feeds
 
 `POST /ingest/document` at `tier:"docling"` maps the tool's outcomes to the
