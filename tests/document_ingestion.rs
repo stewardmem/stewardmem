@@ -400,12 +400,13 @@ async fn a_pdf_that_panics_the_extractor_refuses_named_never_kills_the_server() 
 
 #[tokio::test]
 async fn the_tier2_variant_refuses_named_in_every_environment() {
-    // THE S4 SEAM'S ROUTE LAW: tier=docling NEVER extracts — it refuses NAMED.
-    // Which named refusal depends on the operator's environment (the CI
-    // default — nothing configured — answers converter_unavailable; a
-    // configured path answers converter_not_implemented, the plans-05/06
-    // boundary). The exact three probe arms are pinned pure in
-    // ingest_document's tests; the config parsing is pinned in config's.
+    // THE TIER-2 ROUTE LAW (tightened in IMPROVE06 — the 501 boundary is
+    // gone): with nothing configured, tier=docling answers EXACTLY
+    // converter_unavailable (503) — the improve05-era tolerance (either this
+    // or the old boundary refusal) is retired with the boundary itself. The
+    // configured path's real pipeline and the named fallbacks are the DC
+    // pins' (tests/docling_pins.rs); the pure probe arms stay pinned in
+    // ingest_document's tests.
     let s = server();
     let (status, resp) = post_document(
         &s.state,
@@ -417,13 +418,14 @@ async fn the_tier2_variant_refuses_named_in_every_environment() {
         .to_string(),
     )
     .await;
-    let code = code_of(&resp);
-    assert!(
-        status == StatusCode::SERVICE_UNAVAILABLE || status == StatusCode::NOT_IMPLEMENTED,
-        "the Tier-2 variant refuses, never extracts: {status} {resp}"
+    assert_eq!(
+        status,
+        StatusCode::SERVICE_UNAVAILABLE,
+        "the unconfigured Tier-2 posture is 503: {status} {resp}"
     );
-    assert!(
-        code == "converter_unavailable" || code == "converter_not_implemented",
+    assert_eq!(
+        code_of(&resp),
+        "converter_unavailable",
         "the refusal names the posture: {resp}"
     );
     // Tier 0 is unaffected by any of it — the default still extracts.

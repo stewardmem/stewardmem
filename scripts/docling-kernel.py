@@ -24,8 +24,10 @@ Laws this file exists to keep (the plan's, restated where the code enforces):
   `docling-tools models download` tree). Remote/API configuration is refused
   BEFORE anything runs (exit 5): `DOCLING_SERVICE_URL` /
   `DOCLING_SERVICE_API_KEY` in the environment is a posture this tool does
-  not accept, and no remote client is imported anywhere (`docling
-  convert-remote` — the API subcommand — appears nowhere in this file).
+  not accept, and no remote client is imported anywhere (the Python CLI's
+  API subcommand is named in the protocol doc — it appears nowhere in this
+  file, not even in a comment; the structural pin greps this source byte-
+  literally).
 - **No LLM anywhere.** The STANDARD pipeline (layout + TableFormer +
   OCR-model inference) is DocumentConverter's default and stays the default
   by omission: no VlmPipeline import, no `--pipeline vlm`, no generative

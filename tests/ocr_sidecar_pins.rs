@@ -766,7 +766,7 @@ fn di3_row_check_fails_a_tampered_map_or_engine_by_name() {
         ig::TIER_MIXED,
         "2026-11-08T00:00:00+00:00",
         ig::LAYOUT_UNVERIFIED,
-        Some(&assembly),
+        &ig::DocumentProvenance::Ocr(assembly),
     );
     let row = ig::DocumentRow {
         id: 1,

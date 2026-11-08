@@ -234,7 +234,7 @@ fn di1_the_golden_fixtures_round_trip_byte_identically() {
             brain_server::ingest_document::TIER_TEXT_LAYER,
             GOLDEN_STAMP,
             brain_server::ingest_document::LAYOUT_UNVERIFIED,
-            None,
+            &brain_server::ingest_document::DocumentProvenance::TextLayer,
         );
         let golden_path = format!("{FIXTURES}/goldens/{name}.md");
         if std::env::var("BRAIN_REGEN_DOCUMENT_GOLDENS").is_ok() {
@@ -270,7 +270,7 @@ fn di1_the_only_volatile_field_is_extracted() {
             brain_server::ingest_document::TIER_TEXT_LAYER,
             stamp,
             brain_server::ingest_document::LAYOUT_UNVERIFIED,
-            None,
+            &brain_server::ingest_document::DocumentProvenance::TextLayer,
         )
     };
     let a = at("2026-11-07T00:00:00+00:00");

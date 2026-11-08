@@ -16,6 +16,7 @@ exists so a converter can lose or keep it measurably.
 BOXED WARNING: SYNTHETIC CONTENT. The knowledge extracted from this
 document must never leave the test domain. A converter that reorders or
 merges this warning with adjacent sections is recorded, not corrected.
+SYNTHETIC - educational fixture - not medical advice - page 1 of 2
 SYNTHETIC - educational fixture - not medical advice - page 2 of 2
 3. Dosing (synthetic values)
 stage        dose            route      interval
@@ -27,3 +28,4 @@ maximum      40 mg           oral       once daily
 Check the synthetic marker before each titration step. Record every
 measurement with its page anchor, so a citation can be traced to the
 section that stated it.
+SYNTHETIC - educational fixture - not medical advice - page 2 of 2

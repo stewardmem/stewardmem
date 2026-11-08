@@ -47,13 +47,19 @@
 
 use sha2::{Digest, Sha256};
 
-/// The Tier-0 tier label. `ocr` is IMPROVE05's vocabulary; `docling` stays
-/// the plan-06 seam.
+/// The Tier-0 tier label. `ocr` is IMPROVE05's vocabulary; `docling` is
+/// IMPROVE06's — the Tier-2 converter tier (the whole-document layout read).
 pub const TIER_TEXT_LAYER: &str = "text-layer";
 /// The all-OCR derived tier: every page came from the sidecar.
 pub const TIER_OCR: &str = "ocr";
 /// The mixed derived tier: at least one page from each source.
 pub const TIER_MIXED: &str = "mixed";
+/// The Tier-2 request/tier vocabulary: the whole document went through the
+/// operator-configured converter (docs/DOCLING_TOOL_PROTOCOL.md). The
+/// converter reads the WHOLE document (the layout model is whole-document by
+/// design — no per-page mixing this round), so a docling row's map is
+/// all-`docling` and the derived-tier function never produces this value.
+pub const TIER_DOCLING: &str = "docling";
 /// The extractor name the header and the row both carry.
 pub const EXTRACTOR_NAME: &str = "pdf-extract";
 /// The resolved pdf-extract version. Pinned against Cargo.lock by a test
@@ -73,6 +79,15 @@ pub const OCR_RASTER_DPI: u32 = 300;
 /// The one-shot sidecar's wall-clock bound (the extract-document bound —
 /// a hostile or hung document cannot pin a child forever).
 pub const OCR_SIDECAR_TIMEOUT_SECS: u64 = 30;
+/// The Tier-2 converter's wall-clock bound (IMPROVE06). Its own named
+/// constant — the tool cold-loads GB-scale model artifacts, so the 30 s
+/// extract-document/sidecar bound would refuse honest work. The kernel
+/// kills at the bound and answers `converter_timeout` itself: a tool-side
+/// deadline risks emitting a PARTIAL document that looks like success (the
+/// protocol doc's exit-4 note).
+pub const CONVERTER_TIMEOUT_SECS: u64 = 300;
+/// The literal marker the tool protocol pins between pages in `doc.md`.
+pub const CONVERTER_PAGE_MARKER: &str = "<!-- page-break -->";
 
 // ── extraction ───────────────────────────────────────────────────────────────
 
@@ -207,13 +222,56 @@ fn ocr_marker(engine: &str, confidence: Option<f64>) -> String {
     }
 }
 
+/// What produced the pages of an extracted document — the single source the
+/// emitter, the header, and the row all read (IMPROVE06's generalization of
+/// the improve05 assembly: one enum, three postures, no parallel Option
+/// fields to disagree).
+#[derive(Debug, Clone, PartialEq)]
+pub enum DocumentProvenance {
+    /// Tier 0: every page from the PDF's own text layer. No engine stamp,
+    /// no per-page map — the pre-improve05 shape, byte-identical.
+    TextLayer,
+    /// The IMPROVE05 hybrid: the sidecar's engine stamp + per-page marks.
+    Ocr(OcrAssembly),
+    /// The IMPROVE06 Tier-2 converter: the whole document went through the
+    /// operator-configured tool. The extractor name/version are the TOOL's
+    /// (meta.json's `tool`/`version` — recorded per run, never
+    /// lockfile-pinned); the header carries NO ocr-engine field and the
+    /// per-page map is all-`docling` (the whole-document read).
+    Converter { tool: String, version: String },
+}
+
+impl DocumentProvenance {
+    /// The extractor `<name>/<version>` the header renders for this posture.
+    pub fn extractor_stamp(&self) -> String {
+        match self {
+            Self::TextLayer => format!("{EXTRACTOR_NAME}/{EXTRACTOR_VERSION}"),
+            Self::Ocr(_) => format!("{EXTRACTOR_NAME}/{EXTRACTOR_VERSION}"),
+            Self::Converter { tool, version } => format!("{tool}/{version}"),
+        }
+    }
+
+    /// The per-page tier map over `page_count` pages, or `None` for the
+    /// postures that carry no map (Tier 0). The OCR map is what ran; the
+    /// converter map is all-`docling` (the whole-document read).
+    pub fn page_tier_map(&self, page_count: usize) -> Option<Vec<&'static str>> {
+        match self {
+            Self::TextLayer => None,
+            Self::Ocr(a) => Some(a.page_tier_map(page_count)),
+            Self::Converter { .. } => Some(vec![TIER_DOCLING; page_count]),
+        }
+    }
+}
+
 /// Emit the annotated markdown for an extracted document. Pure: the same
 /// arguments always produce the same bytes. `extracted_utc` rides in (the
 /// route's clock or a test's fixed stamp) — DI-1's volatile-field rule makes
-/// it the ONLY input that may move the output. `ocr` is the IMPROVE05
-/// assembly: `None` (Tier 0) leaves the output byte-identical to the
-/// pre-improve05 shape; `Some` adds the engine + per-page map to the header
-/// and one marker line per OCR page block.
+/// it the ONLY input that may move the output. `provenance` is what produced
+/// the pages: `TextLayer` leaves the output byte-identical to the
+/// pre-improve05 shape; `Ocr` adds the engine + per-page map to the header
+/// and one marker line per OCR page block; `Converter` stamps the tool's
+/// extractor name/version and the all-`docling` map — and NEVER an
+/// ocr-engine field or a confidence marker.
 pub fn emit_annotated_markdown(
     extracted: &ExtractedDocument,
     sha256: &str,
@@ -221,26 +279,22 @@ pub fn emit_annotated_markdown(
     tier: &str,
     extracted_utc: &str,
     layout: &str,
-    ocr: Option<&OcrAssembly>,
+    provenance: &DocumentProvenance,
 ) -> String {
     let mut out =
         String::with_capacity(128 + extracted.pages.iter().map(|p| p.len() + 40).sum::<usize>());
-    let ocr_engine_field = ocr
-        .map(|a| format!(" | ocr-engine: {}", a.engine))
-        .unwrap_or_default();
-    let pages_tier_field = ocr
-        .map(|a| {
-            format!(
-                " | pages-tier: {}",
-                a.page_tier_map(extracted.pages.len()).join(",")
-            )
-        })
+    let ocr_engine_field = match provenance {
+        DocumentProvenance::Ocr(a) => format!(" | ocr-engine: {}", a.engine),
+        _ => String::new(),
+    };
+    let pages_tier_field = provenance
+        .page_tier_map(extracted.pages.len())
+        .map(|map| format!(" | pages-tier: {}", map.join(",")))
         .unwrap_or_default();
     out.push_str(&format!(
-        "<!-- doc: {sha256} | source: {source} | pages: {n} | tier: {tier}{ocr_engine_field}\n     extracted: {extracted_utc} | extractor: {name}/{version} | layout: {layout}{pages_tier_field} -->\n",
+        "<!-- doc: {sha256} | source: {source} | pages: {n} | tier: {tier}{ocr_engine_field}\n     extracted: {extracted_utc} | extractor: {stamp} | layout: {layout}{pages_tier_field} -->\n",
         n = extracted.pages.len(),
-        name = EXTRACTOR_NAME,
-        version = EXTRACTOR_VERSION,
+        stamp = provenance.extractor_stamp(),
     ));
     for (i, page) in extracted.pages.iter().enumerate() {
         let n = i + 1;
@@ -250,7 +304,7 @@ pub fn emit_annotated_markdown(
         // a `<think>` span that closes after it). Trim the trailing newline
         // the extractor appends so the anchor lands deterministically.
         out.push_str(page.trim_end_matches('\n'));
-        if let Some(assembly) = ocr
+        if let DocumentProvenance::Ocr(assembly) = provenance
             && let Some(mark) = assembly.pages.iter().find(|p| p.index == n)
         {
             out.push('\n');
@@ -828,6 +882,254 @@ pub fn ocr_pages_via_sidecar(
     Ok(OcrSidecarReply { engine, pages: out })
 }
 
+// ── the Tier-2 converter (IMPROVE06, the tool protocol's kernel side) ────────
+
+/// How the converter run failed, from the kernel's seat (the route maps each
+/// arm to its named refusal; the protocol's exit codes are the vocabulary).
+#[derive(Debug)]
+pub enum ConverterError {
+    /// Exit 3 (or a crash / a non-protocol exit): the conversion failed.
+    /// The payload is the tool's bounded stderr tail — the refusal MESSAGE
+    /// carries it, never a row.
+    Failed(String),
+    /// The kernel killed the tool at `CONVERTER_TIMEOUT_SECS`.
+    Timeout,
+    /// Exit 5: the tool refused a remote/generative configuration posture.
+    RemoteRefused,
+    /// The tool "succeeded" but violated the contract: a file missing,
+    /// meta.json unparseable, or the marker count disagreeing with the
+    /// declared page count (DC-5's by-name failure). A half-answer is a
+    /// failed answer — the document is refused, never shipped with a hole.
+    ContractViolation(String),
+}
+
+impl std::fmt::Display for ConverterError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Failed(tail) => write!(f, "the converter failed: {tail}"),
+            Self::Timeout => write!(f, "the converter exceeded its wall-clock bound"),
+            Self::RemoteRefused => write!(f, "the converter refused a remote-services posture"),
+            Self::ContractViolation(what) => write!(f, "converter contract violation: {what}"),
+        }
+    }
+}
+
+/// What a successful converter run produced: the tool's own identity from
+/// meta.json and the per-page blocks split VERBATIM from `doc.md` (DC-2:
+/// the kernel never rewrites converter bytes — the only transformation is
+/// the split on the protocol's marker).
+#[derive(Debug, Clone)]
+pub struct ConverterOutput {
+    /// meta.json's `tool` — the implementation name (`docling`, `docling-rs`);
+    /// the row's `extractor` column and the header's extractor name.
+    pub tool: String,
+    /// meta.json's `version` — the operator-installed converter version,
+    /// recorded per run (the improve05 engine-pin law: a re-derive under a
+    /// moved version refuses).
+    pub version: String,
+    /// The per-page blocks, in order, split on `CONVERTER_PAGE_MARKER`.
+    pub pages: Vec<String>,
+}
+
+/// The bounded stderr tail a `Failed` refusal carries in its MESSAGE: the
+/// last 512 bytes, whitespace-collapsed to one line. Never a row — a failed
+/// conversion lands nothing.
+fn bounded_stderr_tail(stderr: &[u8]) -> String {
+    let raw = String::from_utf8_lossy(stderr);
+    let tail: String = raw
+        .chars()
+        .rev()
+        .take(512)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
+    tail.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Run the operator-configured converter tool against `pdf_bytes` per
+/// docs/DOCLING_TOOL_PROTOCOL.md: write the bytes to a process-private input
+/// file, spawn `<tool> <in.pdf> <out-dir>` ONE-SHOT (the extract-document
+/// lifecycle — a hung tool poisons no later document), kill at
+/// `CONVERTER_TIMEOUT_SECS`, and read the two output files back. The
+/// kernel's temp handling is std-only (no new dependency — the deny law):
+/// a unique directory under the OS temp root, removed on every exit path.
+///
+/// No temp dir is left behind on any path: the caller's guard removes the
+/// directory even when the tool crashed it full of output.
+pub fn run_converter(
+    tool: &std::path::Path,
+    pdf_bytes: &[u8],
+) -> Result<ConverterOutput, ConverterError> {
+    let unique = format!(
+        "brain-converter-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    );
+    let work = std::env::temp_dir().join(unique);
+    if std::fs::create_dir_all(&work).is_err() {
+        return Err(ConverterError::Failed(
+            "the kernel could not create the converter's working directory".into(),
+        ));
+    }
+    let result = run_converter_in(tool, pdf_bytes, &work);
+    let _ = std::fs::remove_dir_all(&work);
+    result
+}
+
+/// The testable core of [`run_converter`]: the same lifecycle against a
+/// caller-provided directory (the pins use it to keep the stub's outputs
+/// inspectable; the pure `run_converter` is this plus the private temp dir).
+pub fn run_converter_in(
+    tool: &std::path::Path,
+    pdf_bytes: &[u8],
+    work: &std::path::Path,
+) -> Result<ConverterOutput, ConverterError> {
+    use std::io::Read as _;
+    use std::process::{Command, Stdio};
+
+    let in_pdf = work.join("input.pdf");
+    let out_dir = work.join("out");
+    std::fs::write(&in_pdf, pdf_bytes)
+        .map_err(|_| ConverterError::Failed("the kernel could not stage the input bytes".into()))?;
+    std::fs::create_dir_all(&out_dir).map_err(|_| {
+        ConverterError::Failed("the kernel could not stage the output directory".into())
+    })?;
+
+    // ONE-SHOT: spawn, bound, reap. stderr is captured (the bounded tail);
+    // stdout is silenced (the tools print progress there; the protocol's
+    // answers ride the FILES, never the stream).
+    let mut child = Command::new(tool)
+        .arg(&in_pdf)
+        .arg(&out_dir)
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| ConverterError::Failed(format!("the tool could not be spawned: {e}")))?;
+    let deadline =
+        std::time::Instant::now() + std::time::Duration::from_secs(CONVERTER_TIMEOUT_SECS);
+    let mut timed_out = false;
+    let mut exited: Option<std::process::ExitStatus> = None;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                exited = Some(status);
+                break;
+            }
+            Ok(None) => {
+                if std::time::Instant::now() >= deadline {
+                    timed_out = true;
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(e) => {
+                return Err(ConverterError::Failed(format!(
+                    "the tool's exit status could not be read: {e}"
+                )));
+            }
+        }
+    }
+    if timed_out {
+        return Err(ConverterError::Timeout);
+    }
+    let status = exited.expect("the loop exits only with a status or the timeout");
+
+    // The protocol's exit vocabulary. A kill-by-signal or any other
+    // non-protocol exit is the Failed posture (the tool's internals are its
+    // own); the stderr tail rides the error.
+    match status.code() {
+        // The remote/generative refusal is the tool's own NAMED posture —
+        // its stderr said so; the kernel's answer names the posture.
+        Some(5) => return Err(ConverterError::RemoteRefused),
+        // A self-timed tool that refuses to emit a partial document (exit 4,
+        // the protocol's reserved code) is the honest-timeout posture: the
+        // kernel answers converter_timeout for it too. The kernel's own kill
+        // at CONVERTER_TIMEOUT_SECS lands in the same arm via `timed_out`.
+        Some(4) => return Err(ConverterError::Timeout),
+        Some(0) => {}
+        _ => {
+            let tail = child
+                .stderr
+                .take()
+                .map(|mut s| {
+                    let mut buf = Vec::new();
+                    let _ = s.read_to_end(&mut buf);
+                    bounded_stderr_tail(&buf)
+                })
+                .unwrap_or_else(|| "<no stderr>".into());
+            return Err(ConverterError::Failed(tail));
+        }
+    }
+
+    // The two output files. A missing one is a contract violation BY NAME.
+    let doc_md = std::fs::read_to_string(out_dir.join("doc.md"))
+        .map_err(|_| ConverterError::ContractViolation("the tool wrote no doc.md".to_string()))?;
+    let meta_raw = std::fs::read_to_string(out_dir.join("meta.json")).map_err(|_| {
+        ConverterError::ContractViolation("the tool wrote no meta.json".to_string())
+    })?;
+    #[derive(serde::Deserialize)]
+    struct ConverterMeta {
+        tool: String,
+        version: String,
+        pages: usize,
+    }
+    let meta: ConverterMeta = serde_json::from_str(&meta_raw).map_err(|e| {
+        ConverterError::ContractViolation(format!("meta.json is not the contract's object: {e}"))
+    })?;
+    if meta.tool.is_empty() || meta.version.is_empty() {
+        return Err(ConverterError::ContractViolation(
+            "meta.json carries an empty tool or version".to_string(),
+        ));
+    }
+
+    // DC-5: the markers, the declared pages, and the split blocks must all
+    // agree — pages == markers+1 == blocks. A mismatch fails BY NAME; the
+    // document is never ingested with a hole or a phantom page.
+    let blocks = split_converter_markdown(&doc_md);
+    let markers = doc_md.matches(CONVERTER_PAGE_MARKER).count();
+    if blocks.len() != meta.pages {
+        return Err(ConverterError::ContractViolation(format!(
+            "the tool's marker split yields {} blocks for {} declared pages",
+            blocks.len(),
+            meta.pages
+        )));
+    }
+    if markers != meta.pages - 1 {
+        return Err(ConverterError::ContractViolation(format!(
+            "the tool wrote {markers} page-break markers for {} declared pages",
+            meta.pages
+        )));
+    }
+    if blocks.iter().any(|p| p.contains(CONVERTER_PAGE_MARKER)) {
+        return Err(ConverterError::ContractViolation(
+            "a page block still carries a page-break marker after the split".to_string(),
+        ));
+    }
+
+    Ok(ConverterOutput {
+        tool: meta.tool,
+        version: meta.version,
+        pages: blocks,
+    })
+}
+
+/// Split the converter's markdown on the protocol's marker, VERBATIM (DC-2:
+/// the only transformation the kernel applies to converter bytes). The
+/// marker line itself never survives into a block — the block boundaries
+/// are the pages the tool meant.
+pub fn split_converter_markdown(doc_md: &str) -> Vec<String> {
+    doc_md
+        .split(CONVERTER_PAGE_MARKER)
+        .map(|block| block.trim().to_string())
+        .collect()
+}
+
 // ── the document row ─────────────────────────────────────────────────────────
 
 /// One row of the `documents` table — the provenance anchor for every chunk
@@ -1046,7 +1348,7 @@ mod tests {
             TIER_TEXT_LAYER,
             "2026-11-07T00:00:00+00:00",
             LAYOUT_UNVERIFIED,
-            None,
+            &DocumentProvenance::TextLayer,
         );
         let b = emit_annotated_markdown(
             &doc,
@@ -1055,7 +1357,7 @@ mod tests {
             TIER_TEXT_LAYER,
             "2026-11-07T00:00:00+00:00",
             LAYOUT_UNVERIFIED,
-            None,
+            &DocumentProvenance::TextLayer,
         );
         assert_eq!(a, b, "same arguments → byte-identical markdown");
         verify_anchor_contract(&a, 3).expect("the emitted markdown carries its own contract");
@@ -1102,7 +1404,7 @@ mod tests {
             TIER_TEXT_LAYER,
             utc,
             LAYOUT_UNVERIFIED,
-            None,
+            &DocumentProvenance::TextLayer,
         );
         let h = parse_document_header(&md).expect("the emitted header parses");
         assert_eq!(h.doc, "cafe123");

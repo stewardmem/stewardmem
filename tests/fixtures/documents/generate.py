@@ -544,11 +544,14 @@ def formula_expected_text() -> str:
 
 
 def regulated_expected_text() -> str:
-    """Both pages' exact text in content order, page footers included."""
+    """Both pages' exact text in content order — the footer is drawn TWICE
+    per page (a top stamp at y=PAGE_H-50 and a bottom stamp at y=120), so
+    the reference carries both copies in the order the bytes carry them."""
     blocks = []
     for page_no, page in enumerate((REGULATED_PAGE1, REGULATED_PAGE2_TABLE), start=1):
         lines = list(_regulated_footer(page_no, 2))
         lines.extend(page)
+        lines.extend(_regulated_footer(page_no, 2))
         blocks.append("\n".join(lines))
     return "\n".join(blocks) + "\n"
 

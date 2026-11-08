@@ -2203,21 +2203,19 @@ pub async fn ingest_document(
     })?;
 
     // Tier selection. Tier 0 (`text-layer`) is the DEFAULT and needs zero
-    // configuration. `docling` is the Tier-2 variant: the tool-detector seam
-    // (S4) probes the operator-configured converter path — absent →
-    // `converter_unavailable` (503, a posture the operator fixes by
-    // configuring BRAIN_DOCLING_PATH); present-but-unwired →
-    // `converter_not_implemented` (501, the plans-05/06 boundary: the seam
-    // detects, the conversion is not this build's work). Tier 0 is never
-    // touched by any of this.
+    // configuration. `docling` is the Tier-2 variant (IMPROVE06): the probe
+    // runs FIRST (OV-4's shape — the three probes are independent), and a
+    // present tool runs the REAL pipeline below. `ocr` is the IMPROVE05
+    // hybrid (the second probe). Tier 0 is never touched by any of this.
     let tier = payload
         .tier
         .clone()
         .unwrap_or_else(|| crate::ingest_document::TIER_TEXT_LAYER.to_string());
-    if tier == "docling" {
+    let converter_exe = if tier == crate::ingest_document::TIER_DOCLING {
         match crate::ingest_document::probe_document_converter(
             crate::config::document_converter_path().as_deref(),
         ) {
+            crate::ingest_document::ConverterProbe::Present(path) => Some(path),
             crate::ingest_document::ConverterProbe::Unconfigured
             | crate::ingest_document::ConverterProbe::PathMissing => {
                 return Err(document_error(
@@ -2228,17 +2226,10 @@ pub async fn ingest_document(
                         .to_string(),
                 ));
             }
-            crate::ingest_document::ConverterProbe::Present(_) => {
-                return Err(document_error(
-                    axum::http::StatusCode::NOT_IMPLEMENTED,
-                    "converter_not_implemented",
-                    "the converter seam detects the configured tool; the conversion itself is \
-                     plans 05/06 — Tier 0 (text-layer) remains the default"
-                        .to_string(),
-                ));
-            }
         }
-    }
+    } else {
+        None
+    };
     // IMPROVE05: the ocr arm — the THIRD probe sibling. The probe runs
     // BEFORE any extraction work (OV-4: absent → the named 503 posture;
     // Tier 0 and the docling arm are unaffected — the three probes are
@@ -2264,14 +2255,18 @@ pub async fn ingest_document(
         .tier
         .clone()
         .unwrap_or_else(|| crate::ingest_document::TIER_TEXT_LAYER.to_string());
-    if tier != crate::ingest_document::TIER_TEXT_LAYER && tier != crate::ingest_document::TIER_OCR {
+    if tier != crate::ingest_document::TIER_TEXT_LAYER
+        && tier != crate::ingest_document::TIER_OCR
+        && tier != crate::ingest_document::TIER_DOCLING
+    {
         return Err(document_error(
             axum::http::StatusCode::BAD_REQUEST,
             "unsupported_tier",
             format!(
-                "tier {tier:?} is not available in this build; supported: {}, {}",
+                "tier {tier:?} is not available in this build; supported: {}, {}, {}",
                 crate::ingest_document::TIER_TEXT_LAYER,
-                crate::ingest_document::TIER_OCR
+                crate::ingest_document::TIER_OCR,
+                crate::ingest_document::TIER_DOCLING
             ),
         ));
     }
@@ -2375,6 +2370,26 @@ pub async fn ingest_document(
                     format!("stored document can no longer be re-derived byte-identically: {e}"),
                 ));
             }
+            Err(RederiveFailure::ConverterUnavailable) => {
+                return Err(document_error(
+                    axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                    "converter_unavailable",
+                    "this stored document was converted by the Tier-2 tool, and it is not \
+                     available now (BRAIN_DOCLING_PATH unset/absent) — a re-serve re-derives \
+                     under the row's pinned converter or refuses"
+                        .to_string(),
+                ));
+            }
+            Err(RederiveFailure::RemoteRefused) => {
+                return Err(document_error(
+                    axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                    "converter_remote_refused",
+                    "the converter refused a remote-services posture during re-derivation \
+                     (DOCLING_SERVICE_URL / DOCLING_SERVICE_API_KEY / DOCLING_RS_VLM_ENDPOINT \
+                     set); the Tier-2 tier runs local-only"
+                        .to_string(),
+                ));
+            }
         };
         return Ok(Json(serde_json::json!({
             "success": true,
@@ -2389,6 +2404,286 @@ pub async fn ingest_document(
             "markdown": derived,
         })));
     }
+
+    // ── the extraction. The Tier-2 converter (IMPROVE06), when requested and
+    // configured, REPLACES both the Tier-0 parse and the OCR merge: the tool
+    // reads the whole document itself (the layout model is whole-document by
+    // design) and hands back per-page blocks through the protocol's files.
+    // Tier 0 and the ocr arm keep their pipeline verbatim (the helper below).
+    let (extracted, provenance, derived_tier) = if let Some(tool_exe) = converter_exe {
+        let pdf = pdf_bytes.clone();
+        let tool = tool_exe.clone();
+        let output =
+            task::spawn_blocking(move || crate::ingest_document::run_converter(&tool, &pdf))
+                .await
+                .map_err(|_| {
+                    HandlerError::internal("the converter task could not complete".to_string())
+                })?;
+        let output = match output {
+            Ok(output) => output,
+            Err(e) => return Err(converter_refusal(e)),
+        };
+        let provenance = crate::ingest_document::DocumentProvenance::Converter {
+            tool: output.tool.clone(),
+            version: output.version.clone(),
+        };
+        (
+            crate::ingest_document::ExtractedDocument {
+                pages: output.pages,
+            },
+            provenance,
+            crate::ingest_document::TIER_DOCLING.to_string(),
+        )
+    } else {
+        let (extracted, ocr_assembly, tier_ran) =
+            tier0_extract_and_route_ocr(&pdf_bytes, ocr_sidecar, &tier).await?;
+        let provenance = match ocr_assembly {
+            Some(a) => crate::ingest_document::DocumentProvenance::Ocr(a),
+            None => crate::ingest_document::DocumentProvenance::TextLayer,
+        };
+        (extracted, provenance, tier_ran)
+    };
+
+    // ── the doors, in the door order ──
+    // 1. the reasoning-trace strip, PER PAGE (the same pre-insert strip /add
+    //    applies — a <think> span inside a PDF does not survive ingest; and
+    //    because the strip runs before the anchors exist, a hostile page
+    //    cannot swallow its own anchor). The OCR text crosses the SAME
+    //    strip — no bypass exists because the assembled markdown crosses
+    //    the identical path DI-5 already pins.
+    let stripped_pages: Vec<String> = extracted
+        .pages
+        .iter()
+        .map(|p| hygiene::strip_reasoning_blocks(p))
+        .collect();
+    let stripped_doc = crate::ingest_document::ExtractedDocument {
+        pages: stripped_pages,
+    };
+    // 2. the deterministic emitter (the clock lands HERE — the only
+    //    volatile field in the output).
+    let extracted_utc = chrono::Utc::now().to_rfc3339();
+    let markdown = crate::ingest_document::emit_annotated_markdown(
+        &stripped_doc,
+        &sha,
+        &source,
+        &derived_tier,
+        &extracted_utc,
+        crate::ingest_document::LAYOUT_UNVERIFIED,
+        &provenance,
+    );
+    // 3. fail-closed self-check: the route refuses to ship its own malformed
+    //    output (DI-2's enforcement point).
+    crate::ingest_document::verify_anchor_contract(&markdown, extracted.pages.len())
+        .map_err(|e| HandlerError::internal(format!("anchor contract violated: {e}")))?;
+    // 4. the injection screen — the FULL two-layer screen, the markdown
+    //    door's verdict semantics (Reject → refusal; Quarantine → every
+    //    inserted chunk flagged, no vector).
+    let screen_result = screen::screen(&markdown, &title);
+    if screen_result == screen::ScreenResult::Reject {
+        return Err(document_error(
+            axum::http::StatusCode::BAD_REQUEST,
+            "invalid_document",
+            "Input contains suspicious patterns".to_string(),
+        ));
+    }
+    let quarantine_flagged = screen_result == screen::ScreenResult::Quarantine;
+
+    let markdown_sha = crate::ingest_document::sha256_hex(markdown.as_bytes());
+    let page_count = extracted.pages.len();
+    // the row's provenance (IMPROVE05/06): the map as a JSON array, the
+    // below-floor count, and the engine stamp — all derived from the SAME
+    // provenance the header was emitted from (OV-2's three-way agreement
+    // starts here, not at the check). A docling row: all-`docling` map,
+    // no engine, 0 flagged pages, extractor from the tool's meta.json.
+    let page_tiers_json = provenance
+        .page_tier_map(page_count)
+        .map(|map| serde_json::to_string(&map).expect("a string array serializes"));
+    let low_confidence_pages = match &provenance {
+        crate::ingest_document::DocumentProvenance::Ocr(a) => a.low_confidence_count() as i64,
+        _ => 0,
+    };
+    let ocr_engine = match &provenance {
+        crate::ingest_document::DocumentProvenance::Ocr(a) => Some(a.engine.clone()),
+        _ => None,
+    };
+    let (row_extractor, row_extractor_version) = match &provenance {
+        crate::ingest_document::DocumentProvenance::Converter { tool, version } => {
+            (tool.clone(), version.clone())
+        }
+        _ => (
+            crate::ingest_document::EXTRACTOR_NAME.to_string(),
+            crate::ingest_document::EXTRACTOR_VERSION.to_string(),
+        ),
+    };
+    // 5. the chunker (the markdown door's chunker — "## Page N" headings are
+    //    the chunk boundaries, so page provenance rides the stored text).
+    let chunks = chunker::chunk_markdown(&markdown);
+
+    // Seatbelt (the HITL gate): under the review posture the document ingest
+    // PROPOSES instead of inserting — one proposal per chunk (capped), no
+    // `knowledge` row, no vector, nothing auto-promoted. A PDF is NOT a new
+    // promotion path (DI-4; the case_run.rs:588-611 no-auto-publish pattern
+    // applied to the document path).
+    if crate::handlers::effective_write_posture(&principal.0) == "review" {
+        const MAX_REVIEW_CHUNKS: usize = 50;
+        if chunks.len() > MAX_REVIEW_CHUNKS {
+            return Err(document_error(
+                axum::http::StatusCode::BAD_REQUEST,
+                "too_many_chunks_for_review",
+                format!(
+                    "too_many_chunks_for_review (max 50 per document under review posture; got {})",
+                    chunks.len()
+                ),
+            ));
+        }
+        let mut proposal_ids = Vec::with_capacity(chunks.len());
+        for chunk in &chunks {
+            let p = crate::handlers::gate::create_proposal(
+                state.clone(),
+                principal.0.clone(),
+                crate::handlers::gate::ProposalRequest {
+                    content: chunk.text.clone(),
+                    kind: "fact".to_string(),
+                    source: Some(source.clone()),
+                    authority: None,
+                    observed_at: None,
+                    domain: Some(domain.clone()),
+                    title: None,
+                    source_prompt: None,
+                    origin_context: None,
+                },
+            )
+            .await
+            .map_err(|e| HandlerError::internal(e.inner.message))?;
+            proposal_ids.push(p.id);
+        }
+        return Err(HandlerError {
+            status: axum::http::StatusCode::ACCEPTED,
+            inner: crate::handlers::ApiError::new(
+                "proposal_pending",
+                serde_json::json!({
+                    "success": true,
+                    "status": "proposal_pending",
+                    "proposal_ids": proposal_ids,
+                })
+                .to_string(),
+            ),
+        });
+    }
+
+    // 6. embeddings (spawn_blocking, the markdown door's shape).
+    let chunk_texts: Vec<String> = chunks.iter().map(|c| c.text.clone()).collect();
+    let model = Arc::clone(&state.model);
+    let embeddings = task::spawn_blocking(move || {
+        let refs: Vec<&str> = chunk_texts.iter().map(String::as_str).collect();
+        model.encode(&refs)
+    })
+    .await
+    .map_err(|_| HandlerError::internal("Embedding task failed".to_string()))?;
+    if embeddings.len() != chunks.len() {
+        return Err(HandlerError::internal(
+            "Embedding count mismatch".to_string(),
+        ));
+    }
+
+    // 7. the write: document row + chunks + vec0 + source linkage + audit,
+    //    one tx — the document row commits or rolls back WITH its chunks.
+    let write_result = {
+        let pool = state.pool.clone();
+        let sha_for_row = sha.clone();
+        let tier_for_row = derived_tier.clone();
+        let page_tiers_for_row = page_tiers_json.clone();
+        let low_conf_for_row = low_confidence_pages;
+        let engine_for_row = ocr_engine.clone();
+        let source_for_row = source.clone();
+        let domain_for_row = domain.clone();
+        let owner_for_row = owner.clone();
+        let utc_for_row = extracted_utc.clone();
+        let markdown_sha_for_row = markdown_sha.clone();
+        let title_for_row = title.clone();
+        let extractor_for_row = row_extractor.clone();
+        let extractor_version_for_row = row_extractor_version.clone();
+        task::spawn_blocking(move || -> Result<DocumentIngestOutcome, HandlerError> {
+            let mut conn = pool
+                .get()
+                .map_err(|e| HandlerError::internal(e.to_string()))?;
+            let tx = conn
+                .transaction()
+                .map_err(|e| HandlerError::internal(e.to_string()))?;
+            let outcome = write_document_ingest(
+                &tx,
+                &crate::ingest_document::DocumentRow {
+                    id: 0,
+                    sha256: sha_for_row,
+                    title: title_for_row,
+                    tier: tier_for_row,
+                    extractor: extractor_for_row,
+                    extractor_version: extractor_version_for_row,
+                    pages: page_count as i64,
+                    layout_unverified: true,
+                    source: source_for_row,
+                    domain: domain_for_row,
+                    owner: owner_for_row,
+                    extracted_utc: utc_for_row,
+                    markdown_sha256: markdown_sha_for_row,
+                    page_tiers: page_tiers_for_row,
+                    low_confidence_pages: low_conf_for_row,
+                    ocr_engine: engine_for_row,
+                },
+                &chunks,
+                &embeddings,
+                quarantine_flagged,
+            )
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
+            tx.commit()
+                .map_err(|e| HandlerError::internal(e.to_string()))?;
+            Ok(outcome)
+        })
+        .await
+        .map_err(|_| HandlerError::internal("Task join error".to_string()))??
+    };
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "status": "created",
+        "document_id": write_result.document_id,
+        "sha256": sha,
+        "tier": derived_tier,
+        "extractor": format!("{}/{}", row_extractor, row_extractor_version),
+        "ocr_engine": ocr_engine,
+        "pages": page_count,
+        "page_tiers": page_tiers_json.map(|j| serde_json::from_str::<serde_json::Value>(&j).expect("the row map is JSON")),
+        "low_confidence_pages": low_confidence_pages,
+        "layout_unverified": true,
+        "chunk_ids": write_result.chunk_ids,
+        "entries_added": write_result.inserted,
+        "duplicates_skipped": write_result.duplicates,
+        "quarantined_chunk_ids": write_result.quarantined_chunk_ids,
+        "markdown": markdown,
+    })))
+}
+
+/// The Tier-0 + OCR pipeline, verbatim as the improve05 round landed it: the
+/// isolated child parse (pdf-extract is expect()-heavy on hostile and merely
+/// unusual input — the CHILD dies alone, the parent refuses named), the
+/// per-page emptiness routing, the VERBATIM merge, and the derived tier.
+/// IMPROVE06 moved it into a helper UNCHANGED so the Tier-2 converter can
+/// replace the whole lane when it runs — the doors downstream never know
+/// which lane produced the pages.
+#[allow(clippy::too_many_lines)]
+async fn tier0_extract_and_route_ocr(
+    pdf_bytes: &[u8],
+    ocr_sidecar: Option<std::path::PathBuf>,
+    tier: &str,
+) -> Result<
+    (
+        crate::ingest_document::ExtractedDocument,
+        Option<crate::ingest_document::OcrAssembly>,
+        String,
+    ),
+    crate::handlers::HandlerError,
+> {
+    use crate::handlers::HandlerError;
 
     // ── Tier-0 extraction — THE ISOLATED PARSE. The parse runs in the
     // extract-document CHILD process: pdf-extract is expect()-heavy on
@@ -2408,7 +2703,7 @@ pub async fn ingest_document(
                 "the extract-document isolation child is not installed beside the server; Tier 0 refuses rather than parse untrusted bytes in-process".to_string(),
             )
         })?;
-        let pdf = pdf_bytes.clone();
+        let pdf = pdf_bytes.to_vec();
         task::spawn_blocking(move || {
             crate::ingest_document::extract_pages_via_child(&child_exe, &pdf)
         })
@@ -2482,7 +2777,7 @@ pub async fn ingest_document(
             } else {
                 Some(empty_pages)
             };
-            let pdf = pdf_bytes.clone();
+            let pdf = pdf_bytes.to_vec();
             let exe = sidecar_exe.clone();
             let reply = task::spawn_blocking(move || {
                 crate::ingest_document::ocr_pages_via_sidecar(
@@ -2585,209 +2880,46 @@ pub async fn ingest_document(
         })
         .unwrap_or(crate::ingest_document::TIER_TEXT_LAYER)
         .to_string();
+    Ok((extracted, ocr_assembly, derived_tier))
+}
 
-    // ── the doors, in the door order ──
-    // 1. the reasoning-trace strip, PER PAGE (the same pre-insert strip /add
-    //    applies — a <think> span inside a PDF does not survive ingest; and
-    //    because the strip runs before the anchors exist, a hostile page
-    //    cannot swallow its own anchor). The OCR text crosses the SAME
-    //    strip — no bypass exists because the assembled markdown crosses
-    //    the identical path DI-5 already pins.
-    let stripped_pages: Vec<String> = extracted
-        .pages
-        .iter()
-        .map(|p| hygiene::strip_reasoning_blocks(p))
-        .collect();
-    let stripped_doc = crate::ingest_document::ExtractedDocument {
-        pages: stripped_pages,
-    };
-    // 2. the deterministic emitter (the clock lands HERE — the only
-    //    volatile field in the output).
-    let extracted_utc = chrono::Utc::now().to_rfc3339();
-    let markdown = crate::ingest_document::emit_annotated_markdown(
-        &stripped_doc,
-        &sha,
-        &source,
-        &derived_tier,
-        &extracted_utc,
-        crate::ingest_document::LAYOUT_UNVERIFIED,
-        ocr_assembly.as_ref(),
-    );
-    // 3. fail-closed self-check: the route refuses to ship its own malformed
-    //    output (DI-2's enforcement point).
-    crate::ingest_document::verify_anchor_contract(&markdown, extracted.pages.len())
-        .map_err(|e| HandlerError::internal(format!("anchor contract violated: {e}")))?;
-    // 4. the injection screen — the FULL two-layer screen, the markdown
-    //    door's verdict semantics (Reject → refusal; Quarantine → every
-    //    inserted chunk flagged, no vector).
-    let screen_result = screen::screen(&markdown, &title);
-    if screen_result == screen::ScreenResult::Reject {
-        return Err(document_error(
-            axum::http::StatusCode::BAD_REQUEST,
-            "invalid_document",
-            "Input contains suspicious patterns".to_string(),
-        ));
-    }
-    let quarantine_flagged = screen_result == screen::ScreenResult::Quarantine;
-
-    let markdown_sha = crate::ingest_document::sha256_hex(markdown.as_bytes());
-    let page_count = extracted.pages.len();
-    // the row's OCR provenance (IMPROVE05): the map as a JSON array, the
-    // below-floor count, and the engine stamp — all three derived from the
-    // SAME assembly the header was emitted from (OV-2's three-way agreement
-    // starts here, not at the check).
-    let page_tiers_json = ocr_assembly.as_ref().map(|a| {
-        serde_json::to_string(&a.page_tier_map(page_count)).expect("a string array serializes")
-    });
-    let low_confidence_pages = ocr_assembly
-        .as_ref()
-        .map(crate::ingest_document::OcrAssembly::low_confidence_count)
-        .unwrap_or(0) as i64;
-    let ocr_engine = ocr_assembly.as_ref().map(|a| a.engine.clone());
-    // 5. the chunker (the markdown door's chunker — "## Page N" headings are
-    //    the chunk boundaries, so page provenance rides the stored text).
-    let chunks = chunker::chunk_markdown(&markdown);
-
-    // Seatbelt (the HITL gate): under the review posture the document ingest
-    // PROPOSES instead of inserting — one proposal per chunk (capped), no
-    // `knowledge` row, no vector, nothing auto-promoted. A PDF is NOT a new
-    // promotion path (DI-4; the case_run.rs:588-611 no-auto-publish pattern
-    // applied to the document path).
-    if crate::handlers::effective_write_posture(&principal.0) == "review" {
-        const MAX_REVIEW_CHUNKS: usize = 50;
-        if chunks.len() > MAX_REVIEW_CHUNKS {
-            return Err(document_error(
-                axum::http::StatusCode::BAD_REQUEST,
-                "too_many_chunks_for_review",
-                format!(
-                    "too_many_chunks_for_review (max 50 per document under review posture; got {})",
-                    chunks.len()
-                ),
-            ));
-        }
-        let mut proposal_ids = Vec::with_capacity(chunks.len());
-        for chunk in &chunks {
-            let p = crate::handlers::gate::create_proposal(
-                state.clone(),
-                principal.0.clone(),
-                crate::handlers::gate::ProposalRequest {
-                    content: chunk.text.clone(),
-                    kind: "fact".to_string(),
-                    source: Some(source.clone()),
-                    authority: None,
-                    observed_at: None,
-                    domain: Some(domain.clone()),
-                    title: None,
-                    source_prompt: None,
-                    origin_context: None,
-                },
-            )
-            .await
-            .map_err(|e| HandlerError::internal(e.inner.message))?;
-            proposal_ids.push(p.id);
-        }
-        return Err(HandlerError {
-            status: axum::http::StatusCode::ACCEPTED,
-            inner: crate::handlers::ApiError::new(
-                "proposal_pending",
-                serde_json::json!({
-                    "success": true,
-                    "status": "proposal_pending",
-                    "proposal_ids": proposal_ids,
-                })
-                .to_string(),
+/// The converter's named refusals, each its own answer (the protocol's exit
+/// vocabulary mapped to the route's status codes): the bytes' fault is 422
+/// with the bounded stderr tail in the MESSAGE (never a row); the kernel's
+/// kill at the bound is 422; a remote/generative posture is 503. A contract
+/// violation (missing files, marker/page disagreement) is the bytes' fault
+/// named specifically — the document is refused, never shipped with a hole.
+fn converter_refusal(e: crate::ingest_document::ConverterError) -> crate::handlers::HandlerError {
+    use crate::ingest_document::ConverterError as E;
+    match e {
+        E::Failed(tail) => document_error(
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+            "converter_failed",
+            format!("the conversion failed: {tail}"),
+        ),
+        E::ContractViolation(what) => document_error(
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+            "converter_failed",
+            format!("the conversion failed: {what}"),
+        ),
+        E::Timeout => document_error(
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+            "converter_timeout",
+            format!(
+                "the converter exceeded CONVERTER_TIMEOUT_SECS ({} s) and was killed; \
+                 no document was ingested",
+                crate::ingest_document::CONVERTER_TIMEOUT_SECS
             ),
-        });
+        ),
+        E::RemoteRefused => document_error(
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            "converter_remote_refused",
+            "the converter refused a remote-services posture (DOCLING_SERVICE_URL / \
+             DOCLING_SERVICE_API_KEY / DOCLING_RS_VLM_ENDPOINT set); the Tier-2 tier \
+             runs local-only"
+                .to_string(),
+        ),
     }
-
-    // 6. embeddings (spawn_blocking, the markdown door's shape).
-    let chunk_texts: Vec<String> = chunks.iter().map(|c| c.text.clone()).collect();
-    let model = Arc::clone(&state.model);
-    let embeddings = task::spawn_blocking(move || {
-        let refs: Vec<&str> = chunk_texts.iter().map(String::as_str).collect();
-        model.encode(&refs)
-    })
-    .await
-    .map_err(|_| HandlerError::internal("Embedding task failed".to_string()))?;
-    if embeddings.len() != chunks.len() {
-        return Err(HandlerError::internal(
-            "Embedding count mismatch".to_string(),
-        ));
-    }
-
-    // 7. the write: document row + chunks + vec0 + source linkage + audit,
-    //    one tx — the document row commits or rolls back WITH its chunks.
-    let write_result = {
-        let pool = state.pool.clone();
-        let sha_for_row = sha.clone();
-        let tier_for_row = derived_tier.clone();
-        let page_tiers_for_row = page_tiers_json.clone();
-        let low_conf_for_row = low_confidence_pages;
-        let engine_for_row = ocr_engine.clone();
-        let source_for_row = source.clone();
-        let domain_for_row = domain.clone();
-        let owner_for_row = owner.clone();
-        let utc_for_row = extracted_utc.clone();
-        let markdown_sha_for_row = markdown_sha.clone();
-        let title_for_row = title.clone();
-        task::spawn_blocking(move || -> Result<DocumentIngestOutcome, HandlerError> {
-            let mut conn = pool
-                .get()
-                .map_err(|e| HandlerError::internal(e.to_string()))?;
-            let tx = conn
-                .transaction()
-                .map_err(|e| HandlerError::internal(e.to_string()))?;
-            let outcome = write_document_ingest(
-                &tx,
-                &crate::ingest_document::DocumentRow {
-                    id: 0,
-                    sha256: sha_for_row,
-                    title: title_for_row,
-                    tier: tier_for_row,
-                    extractor: crate::ingest_document::EXTRACTOR_NAME.to_string(),
-                    extractor_version: crate::ingest_document::EXTRACTOR_VERSION.to_string(),
-                    pages: page_count as i64,
-                    layout_unverified: true,
-                    source: source_for_row,
-                    domain: domain_for_row,
-                    owner: owner_for_row,
-                    extracted_utc: utc_for_row,
-                    markdown_sha256: markdown_sha_for_row,
-                    page_tiers: page_tiers_for_row,
-                    low_confidence_pages: low_conf_for_row,
-                    ocr_engine: engine_for_row,
-                },
-                &chunks,
-                &embeddings,
-                quarantine_flagged,
-            )
-            .map_err(|e| HandlerError::internal(e.to_string()))?;
-            tx.commit()
-                .map_err(|e| HandlerError::internal(e.to_string()))?;
-            Ok(outcome)
-        })
-        .await
-        .map_err(|_| HandlerError::internal("Task join error".to_string()))??
-    };
-
-    Ok(Json(serde_json::json!({
-        "success": true,
-        "status": "created",
-        "document_id": write_result.document_id,
-        "sha256": sha,
-        "tier": derived_tier,
-        "extractor": format!("{}/{}", crate::ingest_document::EXTRACTOR_NAME, crate::ingest_document::EXTRACTOR_VERSION),
-        "ocr_engine": ocr_engine,
-        "pages": page_count,
-        "page_tiers": page_tiers_json.map(|j| serde_json::from_str::<serde_json::Value>(&j).expect("the row map is JSON")),
-        "low_confidence_pages": low_confidence_pages,
-        "layout_unverified": true,
-        "chunk_ids": write_result.chunk_ids,
-        "entries_added": write_result.inserted,
-        "duplicates_skipped": write_result.duplicates,
-        "quarantined_chunk_ids": write_result.quarantined_chunk_ids,
-        "markdown": markdown,
-    })))
 }
 
 /// What a document write produced (the response fields the closure returns).
@@ -2808,16 +2940,79 @@ struct DocumentIngestOutcome {
 /// named.
 /// Why a stored document could not be re-derived. `Mismatch` is the DI-3
 /// refusal (the row moved under the bytes); `OcrUnavailable` is the OCR
-/// row's posture — the pinned engine's sidecar is not here.
+/// row's posture — the pinned engine's sidecar is not here;
+/// `ConverterUnavailable`/`RemoteRefused` are the docling row's postures —
+/// the converter is not runnable HERE/NOW (the improve05 shape, the
+/// Tier-2 seam's own names).
 enum RederiveFailure {
     Mismatch(String),
     OcrUnavailable,
+    ConverterUnavailable,
+    RemoteRefused,
 }
 
 fn rederive_document_markdown(
     pdf_bytes: &[u8],
     row: &crate::ingest_document::DocumentRow,
 ) -> Result<String, RederiveFailure> {
+    // IMPROVE06: a docling row re-derives by running the tool AGAIN — the
+    // same protocol spawn as the create path. The header it emits carries
+    // the FRESH run's extractor stamp, so a moved tool name or version
+    // fails verify_document_header BY NAME (the improve05 engine-pin law,
+    // extractor-shaped); an absent tool refuses ConverterUnavailable; a
+    // remote/generative posture in the operator's env refuses named.
+    if row.tier == crate::ingest_document::TIER_DOCLING {
+        let tool = match crate::ingest_document::probe_document_converter(
+            crate::config::document_converter_path().as_deref(),
+        ) {
+            crate::ingest_document::ConverterProbe::Present(path) => path,
+            crate::ingest_document::ConverterProbe::Unconfigured
+            | crate::ingest_document::ConverterProbe::PathMissing => {
+                return Err(RederiveFailure::ConverterUnavailable);
+            }
+        };
+        let output = match crate::ingest_document::run_converter(&tool, pdf_bytes) {
+            Ok(output) => output,
+            Err(crate::ingest_document::ConverterError::RemoteRefused) => {
+                return Err(RederiveFailure::RemoteRefused);
+            }
+            Err(crate::ingest_document::ConverterError::Timeout) => {
+                return Err(RederiveFailure::Mismatch(
+                    "the stored document's converter timed out on re-derivation".to_string(),
+                ));
+            }
+            Err(e) => {
+                return Err(RederiveFailure::Mismatch(format!(
+                    "the stored document's converter re-run failed: {e}"
+                )));
+            }
+        };
+        let stripped_pages: Vec<String> = output
+            .pages
+            .iter()
+            .map(|p| hygiene::strip_reasoning_blocks(p))
+            .collect();
+        let stripped_doc = crate::ingest_document::ExtractedDocument {
+            pages: stripped_pages,
+        };
+        let markdown = crate::ingest_document::emit_annotated_markdown(
+            &stripped_doc,
+            &row.sha256,
+            &row.source,
+            &row.tier,
+            &row.extracted_utc,
+            // The tool's layout reading is the TOOL's claim; the row was
+            // stored with the kernel's unverified posture either way.
+            crate::ingest_document::LAYOUT_UNVERIFIED,
+            &crate::ingest_document::DocumentProvenance::Converter {
+                tool: output.tool,
+                version: output.version,
+            },
+        );
+        crate::ingest_document::verify_document_header(&markdown, row)
+            .map_err(RederiveFailure::Mismatch)?;
+        return Ok(markdown);
+    }
     // the same isolated boundary as the create path — the duplicate
     // re-derivation parses the same untrusted bytes.
     let exe = crate::ingest_document::resolve_child_exe().ok_or(RederiveFailure::Mismatch(
@@ -2911,6 +3106,10 @@ fn rederive_document_markdown(
     } else {
         None
     };
+    let provenance = match ocr_assembly {
+        Some(a) => crate::ingest_document::DocumentProvenance::Ocr(a),
+        None => crate::ingest_document::DocumentProvenance::TextLayer,
+    };
     let stripped_pages: Vec<String> = extracted
         .pages
         .iter()
@@ -2927,7 +3126,7 @@ fn rederive_document_markdown(
         &row.extracted_utc,
         // Tier 0 stored this row, so the layout posture is the Tier-0 one.
         crate::ingest_document::LAYOUT_UNVERIFIED,
-        ocr_assembly.as_ref(),
+        &provenance,
     );
     crate::ingest_document::verify_document_header(&markdown, row)
         .map_err(RederiveFailure::Mismatch)?;
