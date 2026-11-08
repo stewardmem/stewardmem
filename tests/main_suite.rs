@@ -8782,10 +8782,14 @@ Final paragraph after the rule.";
         // 56 -> 57: IMPROVE07 — the scholarly provenance persist. ONE shape:
         // persist_scholar_meta's UPDATE (the scholar_meta flag lands by
         // document_id so a deduped re-serve still refreshes it). A named
-        // act, not drift; the F4-08 staged migration still owns the path
+        // act, not drift.
+        // 57 -> 59: IMPROVE07 S3 — the audited retraction lift: the
+        // override route's tx adds TWO shapes (the scholar_meta read and
+        // the flag UPDATE — the act is in-tx with its audit row). Named
+        // acts, not drift; the F4-08 staged migration still owns the path
         // forward.
         assert_eq!(
-            count, 57,
+            count, 59,
             "the router's rusqlite call-shape census moved — F4-08's staged              migration requires the delta to be a named act (update this              census in the same commit as the SQL change)"
         );
     }

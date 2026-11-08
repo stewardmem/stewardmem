@@ -542,6 +542,47 @@ paths:
         "400": { description: Named refusal (scholar_bad_identifier, scholar_unsupported_adapter) }
         "403": { description: Forbidden }
         "503": { description: Named refusal (scholar_unconfigured, scholar_adapter_disabled, scholar_rate_limited, ... ) }
+  /scholar/override:
+    post:
+      summary: The audited HITL retraction lift — the ONLY act that raises the scholarly trust floor
+      operationId: scholarOverride
+      description: >-
+        IMPROVE07 S3. The tiebreak floor reads the row's scholar_meta
+        `retracted` flag; this route writes `retraction_override`, and
+        NOTHING else does. Admin-gated; the act writes ONE audit row in-tx
+        (the retention-override precedent: the evidence commits or rolls
+        back WITH the write). lift=true sets the key (the floor rises to
+        the row's own lifecycle tier); lift=false removes it (the floor
+        re-applies). Named refusals: scholar_bad_identifier (400),
+        scholar_row_not_found (404), scholar_no_metadata (409 — the row
+        carries no scholarly metadata, nothing to lift),
+        scholar_meta_unreadable (409).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [document_id, lift]
+              properties:
+                document_id: { type: string }
+                lift: { type: boolean }
+      responses:
+        "200":
+          description: The lift recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  document_id: { type: string }
+                  lift: { type: boolean }
+                  scholar_meta: { type: string, nullable: true }
+        "400": { description: Named refusal (scholar_bad_identifier) }
+        "403": { description: Forbidden }
+        "404": { description: Named refusal (scholar_row_not_found) }
+        "409": { description: Named refusal (scholar_no_metadata, scholar_meta_unreadable) }
   /ingest/document:
     post:
       summary: Ingest a PDF document (Tier 0 text-layer extraction, requires title)

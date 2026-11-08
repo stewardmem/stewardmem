@@ -380,6 +380,19 @@ pub struct SearchResult {
     /// rather than a claim the row did not make).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub trust: Option<TrustTier>,
+    /// IMPROVE07 (SA-2): the row's PUBLISHED retraction flag, read from the
+    /// `scholar_meta` JSON column at the leg joins. Serialized (the
+    /// health-comply finding — the surface can flag a citation). The TIER
+    /// FLOOR is the tiebreak's input (below), never a stored rewrite of
+    /// `kcs_state` or `trust`: a retracted row ORDERS AS RAW until the
+    /// audited HITL `retraction_override` lifts it.
+    #[serde(default)]
+    pub retracted: bool,
+    /// IMPROVE07: the audited HITL lift — set ONLY by the operator override
+    /// act (which writes its own audit row). Skip-serialized: the wire
+    /// carries the FACT (`retracted`), not the governance state.
+    #[serde(skip, default)]
+    pub retraction_lifted: bool,
     /// who produced this memory (`human` / `model` / `agent` /
     /// `operator` / `imported`) — the write-side taint label. Serialized
     /// (Boundary); labels only, no enforcement here.
@@ -461,6 +474,8 @@ impl SearchResult {
             observed_at: None,
             authority: None,
             trust: None,
+            retracted: false,
+            retraction_lifted: false,
             origin: None,
             assertion_kind: None,
             confidence: None,
@@ -630,6 +645,8 @@ impl SearchResult {
                     observed_at: None,
                     authority: None,
                     trust: None,
+                    retracted: false,
+                    retraction_lifted: false,
                     origin: None,
                     assertion_kind: None,
                     confidence: None,
@@ -1141,6 +1158,8 @@ pub fn rrf_fuse(
             observed_at: r.observed_at.clone(),
             authority: r.authority,
             trust: r.trust,
+            retracted: r.retracted,
+            retraction_lifted: r.retraction_lifted,
             origin: r.origin.clone(),
             assertion_kind: r.assertion_kind.clone(),
             confidence: r.confidence,
@@ -1686,7 +1705,7 @@ pub fn vec0_knn(
         "SELECT k.id, k.title, k.content, v.distance, k.flagged,
                 k.observed_at, k.authority, k.assertion_kind, k.confidence,
                 k.expires_at, k.pii, k.source, k.node_kind, k.lawful_basis, k.region, k.origin,
-                k.kcs_state
+                k.kcs_state, k.scholar_meta
          FROM vec_knowledge v
          JOIN knowledge k ON k.id = v.knowledge_id
          LEFT JOIN source_revisions sr ON k.revision_id = sr.id
@@ -1787,6 +1806,13 @@ pub fn vec0_knn(
             r.region = row.get(14)?;
             r.origin = row.get(15)?;
             r.trust = Some(trust_tier(&row.get::<_, String>(16)?));
+            // IMPROVE07 (SA-2): the retraction pair from the row's
+            // scholar_meta — the FACT and the audited lift. NULL/absent
+            // (every pre-scholar row) is (false, false).
+            let meta: Option<String> = row.get(17)?;
+            let (retracted, lifted) = crate::scholar::scholar_meta_floor(meta.as_deref());
+            r.retracted = retracted;
+            r.retraction_lifted = lifted;
             Ok(r)
         })?
         .filter_map(|r| r.ok())
@@ -1805,7 +1831,7 @@ fn fts_search(
         "SELECT k.id, k.title, k.content, bm25(knowledge_fts) AS score, k.flagged,
                 k.observed_at, k.authority, k.assertion_kind, k.confidence,
                 k.expires_at, k.pii, k.source, k.node_kind, k.lawful_basis, k.region, k.origin,
-                k.kcs_state
+                k.kcs_state, k.scholar_meta
          FROM knowledge_fts
          JOIN knowledge k ON k.id = knowledge_fts.rowid
          LEFT JOIN source_revisions sr ON k.revision_id = sr.id
@@ -1902,6 +1928,13 @@ fn fts_search(
             r.region = row.get(14)?;
             r.origin = row.get(15)?;
             r.trust = Some(trust_tier(&row.get::<_, String>(16)?));
+            // IMPROVE07 (SA-2): the retraction pair from the row's
+            // scholar_meta — the FACT and the audited lift. NULL/absent
+            // (every pre-scholar row) is (false, false).
+            let meta: Option<String> = row.get(17)?;
+            let (retracted, lifted) = crate::scholar::scholar_meta_floor(meta.as_deref());
+            r.retracted = retracted;
+            r.retraction_lifted = lifted;
             Ok(r)
         })?
         .filter_map(|r| r.ok())
@@ -2390,8 +2423,22 @@ fn tiebreak_cmp(a: &SearchResult, b: &SearchResult) -> std::cmp::Ordering {
         // Lifecycle trust tier (blind-spot 7): Published > Approved > Raw,
         // inside the equal-score bucket only — never across a score gap,
         // never blended into any score.
-        let bt = b.trust.unwrap_or(TrustTier::Raw);
-        let at = a.trust.unwrap_or(TrustTier::Raw);
+        // IMPROVE07 (SA-2): the retraction FLOOR. A row carrying the
+        // published retraction flag orders AS RAW here regardless of its
+        // lifecycle state — the stored `kcs_state` keeps its value, the
+        // derived tier stays lifecycle-only (trust_tier is untouched),
+        // and the ONLY lift is the audited HITL `retraction_override`
+        // (carried as `retraction_lifted` from the row's scholar_meta).
+        let bt = if b.retracted && !b.retraction_lifted {
+            TrustTier::Raw
+        } else {
+            b.trust.unwrap_or(TrustTier::Raw)
+        };
+        let at = if a.retracted && !a.retraction_lifted {
+            TrustTier::Raw
+        } else {
+            a.trust.unwrap_or(TrustTier::Raw)
+        };
         let by_trust = bt.cmp(&at);
         if by_trust != Ordering::Equal {
             return by_trust;

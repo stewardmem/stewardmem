@@ -37,12 +37,12 @@ that applies them, not in prose that can drift from it.
 
 | Class | Tests | Share |
 |---|---:|---:|
-| `behavioral_pin` | 3424 | 85.9% |
-| `structural` | 424 | 10.6% |
+| `behavioral_pin` | 3432 | 85.8% |
+| `structural` | 427 | 10.7% |
 | `control` | 66 | 1.7% |
 | `residual_documentation` | 64 | 1.6% |
 | `unclassified` | 10 | 0.3% |
-| **total** | **3988** | |
+| **total** | **3999** | |
 
 Scope: `src/` + `tests/`, the two trees the badge's count comes from.
 The census reads HIGHER than the README badge for two reasons, both
@@ -63,9 +63,9 @@ eleven such cases). The census counts what the compiler does.
 | `src/workflow/decide/router.rs` | 59 |
 | `src/agentloop/run_loop.rs` | 56 |
 | `tests/authz_matrix.rs` | 56 |
+| `src/search/tests.rs` | 55 |
 | `src/workflow/delivery.rs` | 54 |
 | `src/bin/mcp.rs` | 53 |
-| `src/search/tests.rs` | 50 |
 | `src/bin/brain.rs` | 44 |
 | `src/screen.rs` | 43 |
 

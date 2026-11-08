@@ -59,6 +59,10 @@ pub fn router() -> Router<Arc<AppState>> {
         // door (ingest_markdown) below; no private insert exists to bypass
         // with. OFF unless configured (SA-3); audited per fetch.
         .route("/scholar/fetch", post(scholar_fetch))
+        // The audited HITL retraction lift (IMPROVE07 S3): the ONLY act
+        // that raises the tiebreak floor. Admin-gated; the act writes its
+        // own audit row in-tx (the retention-override precedent).
+        .route("/scholar/override", post(scholar_override))
         .route("/reindex", post(reindex))
         .route("/get/{id}", get(get_chunk))
         .route("/multi-get", post(multi_get))
@@ -1895,7 +1899,7 @@ pub(crate) async fn scholar_fetch(
             "pubmed",
         ),
     };
-    let record = match record {
+    let mut record = match record {
         Ok(r) => r,
         Err(e) => {
             // SA-3: the on-state audit row records the OUTCOME - including
@@ -1919,6 +1923,20 @@ pub(crate) async fn scholar_fetch(
         }
     };
 
+    // The witness cross-check (IMPROVE07 S3): when the operator configured
+    // the polite pool and the record carries a DOI, the Crossref witness
+    // refines the audit-grade fields (the notice DOI + date the primary
+    // flag lacks) — either lane's exact-vocabulary retraction stands (the
+    // honest-data caution, arXiv:2403.13339). A witness failure DEGRADES
+    // HONESTLY: the primary's signal stands and the response notes the gap.
+    let mut witness_ran = false;
+    if let (Some(mailto), Some(doi)) = (profile.crossref_mailto.clone(), record.doi.clone())
+        && let Ok(witness) =
+            crate::scholar::fetch_crossref_witness(transport, &doi, &mailto, &fetched_at).await
+    {
+        record = crate::scholar::merge_witness(record, witness);
+        witness_ran = true;
+    }
     // The fetch audit row (SA-3): the allowlisted host's API, the
     // identifier, the outcome - the operator's evidence that the surface
     // did what it did.
@@ -1989,6 +2007,7 @@ pub(crate) async fn scholar_fetch(
             "license": record.license,
             "retracted": record.retraction.is_some(),
             "updates_recorded": record.updates.len(),
+            "witness": witness_ran,
         }),
     );
     body.insert("ingest".to_string(), door.0);
@@ -2003,6 +2022,121 @@ fn scholar_audit_target(id: &crate::scholar::SourceIdentifier) -> String {
         crate::scholar::SourceIdentifier::Pmid(p) => format!("pmid:{p}"),
         crate::scholar::SourceIdentifier::Query(q) => format!("query:{q}"),
     }
+}
+
+/// The retraction-lift payload (IMPROVE07 S3): the target document and the
+/// lift verb. `lift: true` sets `scholar_meta.retraction_override = true`
+/// (the floor rises); `lift: false` removes the key (the floor re-applies).
+#[derive(Debug, Deserialize)]
+pub(crate) struct ScholarOverridePayload {
+    document_id: String,
+    lift: bool,
+}
+
+/// THE audited HITL retraction lift (IMPROVE07 S3, SA-2). The tiebreak
+/// floor reads `scholar_meta.retracted` — this route writes the
+/// `retraction_override` key, and NOTHING else does. The act is Admin-
+/// gated and writes ONE audit row in-tx (the retention-override
+/// precedent: the evidence commits or rolls back WITH the write). A row
+/// with no scholarly metadata has nothing to lift — the named refusal.
+pub(crate) async fn scholar_override(
+    State(state): State<Arc<AppState>>,
+    principal: crate::handlers::auth::OptPrincipal,
+    Json(payload): Json<ScholarOverridePayload>,
+) -> Result<Json<serde_json::Value>, crate::handlers::HandlerError> {
+    crate::handlers::authorize(&principal.0, crate::auth::Action::Admin, "", "global").map_err(
+        |e| crate::handlers::HandlerError {
+            status: axum::http::StatusCode::FORBIDDEN,
+            inner: crate::handlers::ApiError::new("forbidden", e.inner.message),
+        },
+    )?;
+    let doc_id = payload.document_id.trim().to_string();
+    if doc_id.is_empty() {
+        return Err(scholar_refuse(
+            axum::http::StatusCode::BAD_REQUEST,
+            "scholar_bad_identifier",
+            "document_id is required".to_string(),
+        ));
+    }
+    let actor = handlers::recall::principal_label(&principal.0);
+    let pool = state.pool.clone();
+    let lift = payload.lift;
+    let result = task::spawn_blocking(
+        move || -> Result<Option<String>, crate::handlers::HandlerError> {
+            let mut conn = pool
+                .get()
+                .map_err(|e| crate::handlers::HandlerError::internal(e.to_string()))?;
+            let tx = conn
+                .transaction()
+                .map_err(|e| crate::handlers::HandlerError::internal(e.to_string()))?;
+            let meta: Option<String> = tx
+                .query_row(
+                    "SELECT scholar_meta FROM knowledge WHERE document_id = ?1 LIMIT 1",
+                    [&doc_id],
+                    |r| r.get(0),
+                )
+                .map_err(|_| {
+                    scholar_refuse(
+                        axum::http::StatusCode::NOT_FOUND,
+                        "scholar_row_not_found",
+                        "no knowledge row carries this document_id".to_string(),
+                    )
+                })?;
+            let Some(raw) = meta else {
+                return Err(scholar_refuse(
+                    axum::http::StatusCode::CONFLICT,
+                    "scholar_no_metadata",
+                    "the row carries no scholarly metadata — nothing to lift".to_string(),
+                ));
+            };
+            let mut v: serde_json::Value = serde_json::from_str(&raw).map_err(|_| {
+                scholar_refuse(
+                    axum::http::StatusCode::CONFLICT,
+                    "scholar_meta_unreadable",
+                    "the row's scholar_meta is not valid JSON".to_string(),
+                )
+            })?;
+            if lift {
+                v["retraction_override"] = serde_json::Value::Bool(true);
+            } else {
+                if let Some(obj) = v.as_object_mut() {
+                    obj.remove("retraction_override");
+                }
+            }
+            let updated = v.to_string();
+            tx.execute(
+                "UPDATE knowledge SET scholar_meta = ?1 WHERE document_id = ?2",
+                rusqlite::params![updated, doc_id],
+            )
+            .map_err(|e| crate::handlers::HandlerError::internal(e.to_string()))?;
+            // THE ACT IS AUDITED: one row, in-tx (the retention-override
+            // precedent). The detail names the verb and the target — no
+            // content bytes.
+            crate::audit::record(
+                &tx,
+                crate::audit::AuditKind::Ingest,
+                actor.as_str(),
+                &doc_id,
+                crate::audit::AuditStatus::Ok,
+                if lift {
+                    "retraction_override lifted"
+                } else {
+                    "retraction_override removed"
+                },
+            );
+            tx.commit()
+                .map_err(|e| crate::handlers::HandlerError::internal(e.to_string()))?;
+            Ok::<Option<String>, crate::handlers::HandlerError>(Some(updated))
+        },
+    )
+    .await
+    .map_err(|_| crate::handlers::HandlerError::internal("Task join error".to_string()))??;
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "document_id": payload.document_id,
+        "lift": payload.lift,
+        "scholar_meta": result,
+    })))
 }
 
 pub(crate) async fn ingest_markdown(

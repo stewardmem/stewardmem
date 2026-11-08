@@ -1358,7 +1358,7 @@ fn the_graph_leg_honours_as_of_and_the_bitemporal_window() {
         access_scope TEXT DEFAULT 'private', valid_from TEXT, valid_to TEXT,
         expires_at INTEGER, node_kind TEXT, created_at TEXT DEFAULT '2026-01-01',
         revision_id INTEGER, pii INTEGER DEFAULT 0, origin TEXT, source TEXT,
-        kcs_state TEXT DEFAULT 'none');
+        kcs_state TEXT DEFAULT 'none', scholar_meta TEXT);
      CREATE TABLE source_revisions(id INTEGER PRIMARY KEY, source_id INTEGER,
         state TEXT, fetched_at TEXT);
      CREATE TABLE embeddings(knowledge_id INTEGER PRIMARY KEY, vector TEXT);
@@ -1671,6 +1671,121 @@ fn r6_id_is_the_final_stable_key() {
     let mut v = [lo, hi];
     v.sort_by(tiebreak_cmp);
     assert_eq!(v[0].id, 4, "id order is input-order independent");
+}
+
+// ── IMPROVE07 S3: the retraction trust-floor pins (SA-2) ────────────────
+// The floor is the TIEBREAK's input, never a stored rewrite: the derived
+// tier stays lifecycle-only (`trust_tier` untouched), the stored kcs_state
+// keeps its value, and the ONLY lift is the audited HITL
+// `retraction_override` (carried as `retraction_lifted`).
+
+#[test]
+fn r8_a_retracted_row_floors_to_raw_in_the_tiebreak() {
+    // An APPROVED retracted row vs a RAW clean peer at equal score. The id
+    // placement is the load-bearing part: the retracted row carries the id
+    // that the id-ASC final key would put LAST, so WITHOUT the floor the
+    // approved tier would still win the bucket (trust compares before id)
+    // — the raw peer first here PROVES the floor suppressed the tier
+    // inversion (a cite of a retracted paper is the audit finding). The
+    // floor is the TIEBREAK's trust INPUT floored to Raw: the stored
+    // kcs_state keeps its value, the derived tier stays lifecycle-only.
+    let approved_retracted = {
+        let mut r = sr_tier(2, 0.9, Some(TrustTier::Approved));
+        r.retracted = true;
+        r
+    };
+    let raw_clean = sr_tier(1, 0.9, Some(TrustTier::Raw));
+    let mut v = [approved_retracted, raw_clean];
+    v.sort_by(tiebreak_cmp);
+    assert_eq!(
+        v[0].id, 1,
+        "the retracted row must floor to Raw — its approved tier must NOT \
+         outrank the raw peer at equal score"
+    );
+    assert_eq!(v[1].id, 2);
+}
+
+#[test]
+fn r9_the_published_retracted_row_floors_below_the_raw_peer() {
+    // Even PUBLISHED: the retraction outranks the lifecycle. Same id
+    // discipline as r8 — the published tier would win without the floor.
+    let published_retracted = {
+        let mut r = sr_tier(2, 0.9, Some(TrustTier::Published));
+        r.retracted = true;
+        r
+    };
+    let raw_clean = sr_tier(1, 0.9, None);
+    let mut v = [published_retracted, raw_clean];
+    v.sort_by(tiebreak_cmp);
+    assert_eq!(
+        v[0].id, 1,
+        "published + retracted floors to Raw — the raw peer first"
+    );
+}
+
+#[test]
+fn r10_the_audited_override_is_the_only_lift() {
+    // The SAME retracted approved row WITH the audited lift: the lifecycle
+    // tier applies again — and now it WINS the bucket BY TIER even against
+    // the id that the id-ASC final key would put first (the lift restores
+    // exactly what the floor suppressed).
+    let lifted = {
+        let mut r = sr_tier(2, 0.9, Some(TrustTier::Approved));
+        r.retracted = true;
+        r.retraction_lifted = true;
+        r
+    };
+    let raw_clean = sr_tier(1, 0.9, Some(TrustTier::Raw));
+    let mut v = [raw_clean, lifted];
+    v.sort_by(tiebreak_cmp);
+    assert_eq!(
+        v[0].id, 2,
+        "retraction_lifted (the audited HITL act) restores the lifecycle order — \
+         nothing else lifts the floor"
+    );
+}
+
+#[test]
+fn r11_the_floor_never_crosses_a_score_gap() {
+    // The floor is a TIEBREAK input: across a score gap the comparator
+    // returns Equal and the STABLE sort preserves the input order — the
+    // RRF ranking is never reordered (the r2 law, restated with the floor
+    // present so a mutant cannot "fix" ranking by touching the floor arm).
+    let high_retracted = {
+        let mut r = sr_tier(1, 0.95, Some(TrustTier::Approved));
+        r.retracted = true;
+        r
+    };
+    let low_raw = sr_tier(2, 0.10, Some(TrustTier::Raw));
+    let mut v = [low_raw, high_retracted];
+    v.sort_by(tiebreak_cmp);
+    assert_eq!(
+        v[0].id, 2,
+        "the floor never reorders across a score gap — the comparator's Equal \
+         keeps the input order (the stable-sort law)"
+    );
+}
+
+#[test]
+fn r12_the_search_result_carries_the_flag() {
+    // The citation flag rides the wire (the health-comply finding): the
+    // retracted field serializes, the governance state does not.
+    let mut r = sr(1, 0.9, "x");
+    r.retracted = true;
+    let json = serde_json::to_value(&r).expect("serializable");
+    assert_eq!(json["retracted"].as_bool(), Some(true));
+    let mut clean = sr(2, 0.9, "y");
+    clean.retracted = false;
+    let json = serde_json::to_value(&clean).expect("serializable");
+    assert_eq!(
+        json["retracted"].as_bool(),
+        Some(false),
+        "the flag is ALWAYS serialized — the consumer can see the absence of the signal"
+    );
+    assert!(
+        json.get("retraction_lifted").is_none(),
+        "the governance state is skip-serialized — the wire carries the fact"
+    );
 }
 
 #[test]

@@ -1651,7 +1651,7 @@ pub fn render_record_markdown(rec: &SourceRecord) -> String {
         .unwrap_or_else(|| format!("{} record {}", rec.api.as_str(), rec.fetched_at));
     // Quote every value: the vault parser unquotes, and quoting survives
     // colons in titles and timestamps (the quoted-scalar law).
-    out.push_str(&format!("title: {}\n", yaml_quote(&title)));
+    out.push_str(&format!("title: {}\n", yaml_scalar_quote(&title)));
     if let Some(doi) = &rec.doi {
         out.push_str(&format!("doi: {doi}\n"));
     }
@@ -1659,7 +1659,10 @@ pub fn render_record_markdown(rec: &SourceRecord) -> String {
         out.push_str(&format!("pmid: {pmid}\n"));
     }
     out.push_str(&format!("source_api: {}\n", rec.api.as_str()));
-    out.push_str(&format!("fetched_at: {}\n", yaml_quote(&rec.fetched_at)));
+    out.push_str(&format!(
+        "fetched_at: {}\n",
+        yaml_scalar_quote(&rec.fetched_at)
+    ));
     if let Some(license) = &rec.license {
         out.push_str(&format!("license: {license}\n"));
     }
@@ -1696,6 +1699,84 @@ pub fn render_record_markdown(rec: &SourceRecord) -> String {
     out
 }
 
-fn yaml_quote(v: &str) -> String {
+/// The scholarly YAML scalar quote. DELIBERATELY NOT the ump
+/// (`handlers/ump.rs`) `yaml_quote`: that one escapes commas for its
+/// flow-context pairs, which would CORRUPT a value in this module's
+/// line-oriented scalars (a license like "cc by" must never become
+/// "cc\,by" on the row). Different contract, different name — the
+/// dup-guard's same-name law exists for same-purpose twins.
+fn yaml_scalar_quote(v: &str) -> String {
     format!("\"{}\"", v.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+/// THE MACHINE FLOOR FLAG (IMPROVE07 S3): read the row's `scholar_meta`
+/// JSON — the retraction is the `retracted` key present-and-non-empty (the
+/// renderer/frontmatter write the date, `retracted: true` is legal); the
+/// ONLY lift is the audited `retraction_override` key (a HITL act, written
+/// with its own audit row by the override route). Pure, zero-token, no ML
+/// — a malformed/garbage column is (false, false): never a silent floor on
+/// unreadable data, and never a silent lift.
+pub fn scholar_meta_floor(meta: Option<&str>) -> (bool, bool) {
+    // (retracted, lifted)
+    let Some(raw) = meta else {
+        return (false, false);
+    };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(raw) else {
+        return (false, false);
+    };
+    let retracted = v
+        .get("retracted")
+        .map(|r| match r {
+            serde_json::Value::Bool(b) => *b,
+            serde_json::Value::String(s) => !s.trim().is_empty(),
+            _ => true,
+        })
+        .unwrap_or(false);
+    let lifted = v
+        .get("retraction_override")
+        .and_then(|o| o.as_bool())
+        .unwrap_or(false);
+    (retracted, lifted)
+}
+
+/// Merge the Crossref witness into a primary record (IMPROVE07 S3). The
+/// honest-data caution (arXiv:2403.13339): upstream signals can be wrong or
+/// incomplete, so the witness CROSS-CHECKS a second lane — it refines the
+/// audit-grade fields (the notice DOI + date the primary flag lacks) and
+/// EITHER lane's exact-vocabulary retraction stands. Deterministic, pure:
+/// - the retraction: the witness's (more precise) when present, else the
+///   primary's; the notice DOI + date fill from whichever lane carries them.
+/// - the updates: BOTH lanes' recorded relationships (recorded, never
+///   floored except the exact vocabulary).
+pub fn merge_witness(primary: SourceRecord, witness: SourceRecord) -> SourceRecord {
+    let mut updates = primary.updates;
+    updates.extend(witness.updates);
+    let retraction = match (&witness.retraction, &primary.retraction) {
+        // The witness confirms: refine the notice fields it carries.
+        (Some(w), Some(p)) => Some(Retraction {
+            notice_doi: w.notice_doi.clone().or_else(|| p.notice_doi.clone()),
+            date: w.date.clone().or_else(|| p.date.clone()),
+            kind: RetractionKind::Retraction,
+        }),
+        // Either lane's exact-vocabulary signal stands alone.
+        (Some(w), None) => Some(w.clone()),
+        (None, Some(p)) => Some(p.clone()),
+        (None, None) => None,
+    };
+    SourceRecord {
+        doi: primary.doi,
+        pmid: primary.pmid.or(witness.pmid),
+        title: primary.title,
+        authors: primary.authors,
+        journal: primary.journal,
+        pub_year: primary.pub_year,
+        abstract_text: primary.abstract_text,
+        license: primary.license.or(witness.license),
+        open_access: primary.open_access,
+        fulltext_url: primary.fulltext_url,
+        updates,
+        retraction,
+        fetched_at: primary.fetched_at,
+        api: primary.api,
+    }
 }

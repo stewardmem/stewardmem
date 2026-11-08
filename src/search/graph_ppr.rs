@@ -398,7 +398,7 @@ pub fn graph_retrieve(
         "k.flagged = 0"
     };
     let mut sql = format!(
-        "SELECT k.id, k.title, k.content, k.pii, k.kcs_state \
+        "SELECT k.id, k.title, k.content, k.pii, k.kcs_state, k.scholar_meta \
          FROM knowledge k {revisions_join} \
          WHERE k.id IN ({placeholders}) \
            AND {flag_clause}",
@@ -482,28 +482,44 @@ pub fn graph_retrieve(
     }
     super::push_gate_filters(&mut sql, &mut params_vec, filters);
     let mut stmt = conn.prepare_cached(&sql)?;
-    let mut loaded: HashMap<i64, (Option<String>, String, bool, crate::search::TrustTier)> =
-        HashMap::new();
+    /// (title, content, pii, lifecycle tier, retracted, retraction_lifted)
+    type GraphRow = (
+        Option<String>,
+        String,
+        bool,
+        crate::search::TrustTier,
+        bool,
+        bool,
+    );
+    let mut loaded: HashMap<i64, GraphRow> = HashMap::new();
     for row in stmt.query_map(
         rusqlite::params_from_iter(params_vec.iter().map(|b| b.as_ref())),
         |row| {
+            // IMPROVE07 (SA-2): the retraction pair rides the batch load —
+            // the same scholar_meta read the vector and lexical legs do.
+            let meta: Option<String> = row.get(5)?;
+            let (retracted, lifted) = crate::scholar::scholar_meta_floor(meta.as_deref());
             Ok((
                 row.get(0)?,
                 row.get(1)?,
                 row.get(2)?,
                 row.get::<_, i64>(3)? != 0,
                 crate::search::trust_tier(&row.get::<_, String>(4)?),
+                retracted,
+                lifted,
             ))
         },
     )? {
-        let (id, title, content, pii, trust): (
+        let (id, title, content, pii, trust, retracted, lifted): (
             i64,
             Option<String>,
             String,
             bool,
             crate::search::TrustTier,
+            bool,
+            bool,
         ) = row?;
-        loaded.insert(id, (title, content, pii, trust));
+        loaded.insert(id, (title, content, pii, trust, retracted, lifted));
     }
     chunks.retain(|(id, _)| loaded.contains_key(id));
 
@@ -512,11 +528,13 @@ pub fn graph_retrieve(
     let results = chunks
         .into_iter()
         .filter_map(|(id, score)| {
-            let (title, content, pii, trust) = loaded.get(&id)?;
+            let (title, content, pii, trust, retracted, lifted) = loaded.get(&id)?;
             let mut r =
                 crate::search::SearchResult::raw(id, score as f32, title.clone(), content.clone());
             r.pii = *pii;
             r.trust = Some(*trust);
+            r.retracted = *retracted;
+            r.retraction_lifted = *lifted;
             r.source = Some(crate::search::SearchSource::Graph);
             Some(r)
         })
@@ -719,7 +737,8 @@ mod tests {
                  flagged INTEGER NOT NULL DEFAULT 0,
                  expires_at TEXT,
                  pii INTEGER NOT NULL DEFAULT 0,
-                 kcs_state TEXT NOT NULL DEFAULT 'none'
+                 kcs_state TEXT NOT NULL DEFAULT 'none',
+                 scholar_meta TEXT
              );",
         )
         .unwrap();
@@ -807,7 +826,8 @@ mod tests {
                  flagged INTEGER NOT NULL DEFAULT 0,
                  expires_at TEXT,
                  pii INTEGER NOT NULL DEFAULT 0,
-                 kcs_state TEXT NOT NULL DEFAULT 'none'
+                 kcs_state TEXT NOT NULL DEFAULT 'none',
+                 scholar_meta TEXT
              );",
         )
         .unwrap();
@@ -875,7 +895,8 @@ mod tests {
                  owner TEXT,
                  access_scope TEXT,
                  pii INTEGER NOT NULL DEFAULT 0,
-                 kcs_state TEXT NOT NULL DEFAULT 'none'
+                 kcs_state TEXT NOT NULL DEFAULT 'none',
+                 scholar_meta TEXT
              );",
         )
         .unwrap();
@@ -978,7 +999,8 @@ mod tests {
                  owner TEXT,
                  access_scope TEXT,
                  pii INTEGER NOT NULL DEFAULT 0,
-                 kcs_state TEXT NOT NULL DEFAULT 'none'
+                 kcs_state TEXT NOT NULL DEFAULT 'none',
+                 scholar_meta TEXT
              );",
         )
         .unwrap();

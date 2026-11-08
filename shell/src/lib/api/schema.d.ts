@@ -240,6 +240,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/scholar/override": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The audited HITL retraction lift — the ONLY act that raises the scholarly trust floor
+         * @description IMPROVE07 S3. The tiebreak floor reads the row's scholar_meta `retracted` flag; this route writes `retraction_override`, and NOTHING else does. Admin-gated; the act writes ONE audit row in-tx (the retention-override precedent: the evidence commits or rolls back WITH the write). lift=true sets the key (the floor rises to the row's own lifecycle tier); lift=false removes it (the floor re-applies). Named refusals: scholar_bad_identifier (400), scholar_row_not_found (404), scholar_no_metadata (409 — the row carries no scholarly metadata, nothing to lift), scholar_meta_unreadable (409).
+         */
+        post: operations["scholarOverride"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ingest/document": {
         parameters: {
             query?: never;
@@ -6367,6 +6387,66 @@ export interface operations {
             };
             /** @description Named refusal (scholar_unconfigured */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    scholarOverride: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    document_id: string;
+                    lift: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The lift recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success?: boolean;
+                        document_id?: string;
+                        lift?: boolean;
+                        scholar_meta?: string | null;
+                    };
+                };
+            };
+            /** @description Named refusal (scholar_bad_identifier) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Named refusal (scholar_row_not_found) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Named refusal (scholar_no_metadata */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
