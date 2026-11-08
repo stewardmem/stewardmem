@@ -169,6 +169,14 @@ const PARITY_TABLES: &[&str] = &[
     // evidence did not travel are indistinguishable from claims that were
     // never verified, and the loop's central gate is that evidence.
     "claim_evidence",
+    // the research watch's three tables (IMPROVE08). Lane config, seen-state,
+    // and tick accounting: a follower that lost them would re-file every feed
+    // item as a fresh proposal on the next tick (the seen-state law IS the
+    // dedupe), so parity here is what proves the restore kept the watch's
+    // memory of what it has already shown the human.
+    "watch_configs",
+    "watch_seen",
+    "watch_ticks",
 ];
 
 /// Size of the random vec0 spot-check. ponytail: 50 is a heuristic — the formal

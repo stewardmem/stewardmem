@@ -37,12 +37,12 @@ that applies them, not in prose that can drift from it.
 
 | Class | Tests | Share |
 |---|---:|---:|
-| `behavioral_pin` | 3437 | 85.8% |
-| `structural` | 427 | 10.7% |
-| `control` | 66 | 1.6% |
-| `residual_documentation` | 64 | 1.6% |
-| `unclassified` | 10 | 0.2% |
-| **total** | **4004** | |
+| `behavioral_pin` | 3447 | 85.8% |
+| `structural` | 427 | 10.6% |
+| `control` | 67 | 1.7% |
+| `residual_documentation` | 65 | 1.6% |
+| `unclassified` | 11 | 0.3% |
+| **total** | **4017** | |
 
 Scope: `src/` + `tests/`, the two trees the badge's count comes from.
 The census reads HIGHER than the README badge for two reasons, both
@@ -71,7 +71,7 @@ eleven such cases). The census counts what the compiler does.
 
 ## `unclassified` — the honesty check on the rule set
 
-10 tests drive no subject and read no tree.
+11 tests drive no subject and read no tree.
 They are listed so a reader can move them by adding evidence, not
 by re-deciding. Read this bucket as "the census could not see a drive", NOT as "this test is worthless": all six assert a
 constant or a declared bound, which is a real pin that happens to
@@ -89,6 +89,7 @@ have no call in it.
 | `src/workflow/gdl.rs:6977` `artifact_bounds_are_pinned_by_value` |
 | `src/workflow/reflection.rs:1173` `the_adversarial_fallback_value_is_frozen` |
 | `src/workflow/session_log.rs:1161` `scope_caps_are_pinned_by_value` |
+| `tests/watch_pins.rs:184` `rw8_the_etiquette_constants_are_pinned` |
 
 ## What this census does NOT police
 

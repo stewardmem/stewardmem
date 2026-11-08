@@ -163,6 +163,14 @@ const KNOWN_ERRORS: &[(&str, &str, &str, &str)] = &[
     ("RunError", "census.rs", "service", "display"),
     ("SecretError", "secrets.rs", "service", "display"),
     ("ProviderSecretError", "secret_file.rs", "input", "display"),
+    // IMPROVE08's research watch. `service` category: the feed-lane
+    // failure contract as the operator sees it (the ScholarError shape —
+    // feed bytes are untrusted data and never ride an error string; the
+    // one interpolated variant, LaneHostRefused, carries the egress
+    // screen's own fixed-shape reason for the OPERATOR's own host input,
+    // and ArxivErrorEntry's payload is the API's protocol-level error id,
+    // both rendered through fixed-prefix Display arms).
+    ("WatchError", "watch.rs", "service", "display"),
 ];
 
 /// Accepted renderer gaps: (error type, reason, owner). The test pins this

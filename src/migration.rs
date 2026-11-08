@@ -2328,6 +2328,8 @@ pub fn run_migration_with_store_dim(
     )?;
 
     // Bumped once per release that changes this function.
+    // v1.32.32 "WatchLanes" (IMPROVE08): the research watch's three tables
+    // (watch_configs / watch_seen / watch_ticks, guarded CREATEs) → 1.32.32.
     // v1.32.31 "ScholarMeta" (IMPROVE07): knowledge.scholar_meta — the
     // scholarly provenance JSON column (one guarded ALTER) → 1.32.31.
     // v1.32.16 "Attestations": delivery_attestations table + delivery_traces.seq
@@ -3314,9 +3316,59 @@ pub fn run_migration_with_store_dim(
         }
     }
 
+    // ── v1.32.32 "WatchLanes" (IMPROVE08): the research watch. ────────
+    // THREE guarded CREATEs. `watch_configs` is the lane row (the closed
+    // source-kind vocabulary arxiv_api|rss|atom|adapter; the feed URL +
+    // host, per-lane operator-configured and SSRF-screened at create; the
+    // destination is the CLOSED value 'proposals' — RW-1: the watch's only
+    // product is the proposal queue, never memory). `watch_seen` is the
+    // append-only seen-state, identity `(lane_id, item_key)` with
+    // `item_key` the named per-lane hash of the feed's own identity
+    // (arXiv id WITH version / guid / normalized link) + the
+    // normalized-title near-key (model-absent dedupe — RW-4). `watch_ticks`
+    // is the honest per-tick accounting (seen/deduped/filed/failed/
+    // skipped_fresh). The module holds NO knowledge INSERT — the HITL gate
+    // is the only door to memory.
+    {
+        db.execute_batch(
+            "CREATE TABLE IF NOT EXISTS watch_configs (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                source_kind TEXT NOT NULL,
+                feed_url TEXT NOT NULL,
+                host TEXT NOT NULL,
+                query TEXT,
+                cadence_secs INTEGER NOT NULL,
+                destination TEXT NOT NULL,
+                ttl_secs INTEGER,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS watch_seen (
+                lane_id INTEGER NOT NULL REFERENCES watch_configs(id) ON DELETE CASCADE,
+                item_key TEXT NOT NULL,
+                near_key TEXT,
+                seen_at TEXT NOT NULL,
+                PRIMARY KEY (lane_id, item_key)
+            );
+            CREATE TABLE IF NOT EXISTS watch_ticks (
+                id INTEGER PRIMARY KEY,
+                lane_id INTEGER NOT NULL REFERENCES watch_configs(id) ON DELETE CASCADE,
+                ticked_at TEXT NOT NULL,
+                items_seen INTEGER NOT NULL,
+                deduped INTEGER NOT NULL,
+                filed INTEGER NOT NULL,
+                failed INTEGER NOT NULL,
+                skipped_fresh INTEGER NOT NULL,
+                ok INTEGER NOT NULL,
+                detail TEXT
+            );",
+        )?;
+    }
+
     db.execute(
-        "INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1.32.31')
-         ON CONFLICT(key) DO UPDATE SET value = '1.32.31';",
+        "INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1.32.32')
+         ON CONFLICT(key) DO UPDATE SET value = '1.32.32';",
         [],
     )?;
 

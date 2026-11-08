@@ -13,7 +13,9 @@
 //   migration + the door persist landed with the pin.
 // - SA-8 stamp red: `assertion left == right failed: the guarded ALTER
 //   landed` (the pragma probe found 0 columns; the stamp assert never
-//   ran). Green: the stamp moved with the ALTER (1.32.30 → 1.32.31).
+//   ran). Green: the stamp moved with the ALTER (1.32.30 → 1.32.31;
+//   re-pinned to the current stamp by each later schema round — 1.32.32 at
+//   IMPROVE08).
 // - SA-6 single-normalizer red: panicked at the `find("fn
 //   scholar_meta_from_frontmatter")` expect — the helper (and its
 //   normalize_doi call) did not exist. Green:
@@ -280,8 +282,10 @@ fn sa8_the_migration_adds_the_scholar_column_and_moves_the_stamp() {
         )
         .expect("stamp");
     assert_eq!(
-        stamp, "1.32.31",
-        "run_migration must stamp 1.32.31 — the stamp and the column move together"
+        stamp, "1.32.32",
+        "run_migration must stamp the CURRENT ceiling — the stamp and the column moved \
+         together at 1.32.31, and each later schema round re-pins the stamp (1.32.32 at \
+         IMPROVE08)"
     );
     // The guard is REAL: a second run is a no-op (the pragma probe skips).
     brain_server::migration::run_migration(&mut conn, brain_server::config::DB_MMAP_SIZE_MIB)

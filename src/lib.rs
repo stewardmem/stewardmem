@@ -218,6 +218,17 @@ pub mod temporal;
 pub mod trace;
 pub mod transfers;
 pub mod vault;
+/// The research watch (IMPROVE08): deterministic lanes → HITL proposals.
+/// The tick core is a PURE function over `(lane, items, seen-state)` —
+/// model-absent, zero-token (RW-4); the lane's destination is the closed
+/// value `proposals` (RW-1: the watch files proposals, never memory); the
+/// watched host is per-lane operator-configured and SSRF-screened (RW-5);
+/// the publishers' etiquette (the arXiv 3 s delay, the once-per-day law,
+/// the RSS `<ttl>` hint) is by construction (RW-8). The parsers, the
+/// replay/live transport, the tick surfaces, and the filing ride the
+/// later steps of the round — this module starts at the deterministic
+/// core + the lane/seen/tick schema (1.32.32).
+pub mod watch;
 pub mod webhook;
 pub mod workflow;
 
