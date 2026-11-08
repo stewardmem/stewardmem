@@ -324,6 +324,9 @@ pub const SCHEMA_VERSION_V1_32_28: &str = "1.32.28";
 /// never silently an answer. NULL = predates the verdict (every pre-LL-04
 /// row). Presence-guarded ALTER; no column dropped, none rebuilt.
 pub const SCHEMA_VERSION_V1_32_29: &str = "1.32.29";
+/// v1.32.30 (IMPROVE05): the documents row's per-page OCR provenance
+/// (`page_tiers`, `low_confidence_pages`, `ocr_engine`).
+pub const SCHEMA_VERSION_V1_32_30: &str = "1.32.30";
 
 pub const SCHEMA_VERSION_V1_17_3: &str = "1.17.3";
 pub const SCHEMA_VERSION_V1_9_0: &str = "1.9.0";
@@ -345,7 +348,7 @@ pub const SCHEMA_VERSION_V0_9_9: &str = "0.9.9";
 /// Security posture: a source DB stamped NEWER than this is refused loudly
 /// ([`refuse_newer_schema`]) — migrating *down* would silently drop columns
 /// the newer release added, i.e. data loss dressed as a migration.
-pub const LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_29;
+pub const LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_30;
 
 /// Numeric dotted-version compare (std-only, no semver dependency).
 /// Non-numeric components are skipped (the `schema_ge` precedent in the
@@ -809,13 +812,15 @@ mod tests {
         // uninstall round (the register `removed_at` column) moved the ceiling to 1.32.28, so the
         // probe moved to 1.32.29, and the
         // LL-04 round (the chat `support_decision` verdict column) moved the ceiling to
-        // 1.32.29, so the probe moved to 1.32.30.
+        // 1.32.29, so the probe moved to 1.32.30, and the
+        // IMPROVE05 round (the documents row's per-page OCR provenance) moved
+        // the ceiling to 1.32.30, so the probe moved to 1.32.31.
         // A probe
         // pinned AT the ceiling silently tests `Equal`, not `Greater` — the assertion
         // would keep passing while a NEWER-schema database was blessed instead of
         // refused, which is the one failure this function exists to prevent.
-        assert!(is_newer_than_known(Some("1.32.30")));
-        assert!(!is_newer_than_known(Some("1.32.29")));
+        assert!(is_newer_than_known(Some("1.32.31")));
+        assert!(!is_newer_than_known(Some("1.32.30")));
         assert!(!is_newer_than_known(Some("1.32.9")));
         assert!(!is_newer_than_known(Some("1.28.9")));
     }

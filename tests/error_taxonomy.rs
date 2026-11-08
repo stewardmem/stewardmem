@@ -131,6 +131,17 @@ const KNOWN_ERRORS: &[(&str, &str, &str, &str)] = &[
         "service",
         "display",
     ),
+    // IMPROVE05's sidecar client. `service` category: the one-shot OCR
+    // sidecar's failure contract as the parent sees it (the
+    // ChildExtractError precedent — the child's internals are unknowable
+    // from the parent's seat; the variants are fixed classifications, and
+    // BadReply's text is a fixed framing-diagnostic).
+    (
+        "OcrSidecarError",
+        "ingest_document.rs",
+        "service",
+        "display",
+    ),
     // The drift census's operator-facing error. `service` category: it is a
     // cadence job's failure contract, and every variant is a fixed-prefix
     // string with the offending value interpolated by the CONSTRUCTOR, never by

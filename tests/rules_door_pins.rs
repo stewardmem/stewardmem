@@ -60,6 +60,9 @@ fn insert_args(rule_key: &str, revision: &str) -> Vec<String> {
 fn the_c1_fixture_rows_land_through_the_real_binary_and_the_replay_refuses() {
     let bin = env!("CARGO_BIN_EXE_brain");
     let dir = std::env::temp_dir().join(format!("brain-rules-door-{}", std::process::id()));
+    // pid reuse across runs is real (measured 2026-11-08: a reused pid found
+    // a stale db and the fixture replay refused it); the dir is THIS run's.
+    let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("temp dir");
     let db = migrated_db(&dir);
 

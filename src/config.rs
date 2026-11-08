@@ -2111,17 +2111,14 @@ pub fn ocr_bridge_path() -> Option<std::path::PathBuf> {
     };
     let manifest = env!("CARGO_MANIFEST_DIR");
     let build_dir = std::path::Path::new(manifest).join("shell-macos/.build");
-    for candidate in [
+    [
         build_dir.join(profile).join("shell-vision"),
         build_dir
             .join(format!("arm64-apple-macosx/{profile}"))
             .join("shell-vision"),
-    ] {
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-    None
+    ]
+    .into_iter()
+    .find(|candidate| candidate.is_file())
 }
 
 /// The chat tier the spine requests, verbatim, as the bridge wire's

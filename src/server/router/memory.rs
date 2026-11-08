@@ -2571,16 +2571,20 @@ pub async fn ingest_document(
     } else {
         None
     };
-    let derived_tier = match &ocr_assembly {
-        None => crate::ingest_document::TIER_TEXT_LAYER.to_string(),
-        Some(a) => {
+    // The derived tier reflects what RAN (never the request's label): the
+    // all-text shape is the Tier-0 vocabulary, all-OCR is `ocr`, both is
+    // `mixed`.
+    let derived_tier = ocr_assembly
+        .as_ref()
+        .map(|a| {
             if a.pages.len() == extracted.pages.len() {
-                crate::ingest_document::TIER_OCR.to_string()
+                crate::ingest_document::TIER_OCR
             } else {
-                crate::ingest_document::TIER_MIXED.to_string()
+                crate::ingest_document::TIER_MIXED
             }
-        }
-    };
+        })
+        .unwrap_or(crate::ingest_document::TIER_TEXT_LAYER)
+        .to_string();
 
     // ── the doors, in the door order ──
     // 1. the reasoning-trace strip, PER PAGE (the same pre-insert strip /add

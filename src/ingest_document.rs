@@ -614,6 +614,23 @@ pub enum OcrSidecarError {
     BadReply(String),
 }
 
+impl std::fmt::Display for OcrSidecarError {
+    /// Fixed strings only — the child's internals are unknowable by design
+    /// (the ChildExtractError precedent), so there is nothing raw to format.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SidecarFailed => {
+                write!(f, "the OCR sidecar died, timed out, or answered nonsense")
+            }
+            Self::RasterFailed => write!(f, "the OCR sidecar could not rasterize the document"),
+            Self::PageFailed(indices) => {
+                write!(f, "the OCR sidecar refused pages {indices:?}")
+            }
+            Self::BadReply(what) => write!(f, "the OCR sidecar's reply broke the framing: {what}"),
+        }
+    }
+}
+
 /// One recognized page from the sidecar's reply.
 #[derive(Debug, Clone)]
 pub struct OcrSidecarPage {
@@ -902,7 +919,7 @@ pub fn verify_document_header(markdown: &str, row: &DocumentRow) -> Result<(), S
     let row_map = row
         .page_tiers
         .as_deref()
-        .map(|raw| serde_json::from_str::<Vec<String>>(raw))
+        .map(serde_json::from_str::<Vec<String>>)
         .transpose()
         .map_err(|e| format!("page_tiers: the row's map is not a JSON array: {e}"))?;
     expect(
