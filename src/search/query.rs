@@ -322,6 +322,12 @@ pub const INGEST_KINDS: &[&str] = &[
     // ingested via POST /ingest/document. Recall can scope to it like any
     // other kind.
     "document",
+    // The scholarly kind (IMPROVE07): records fetched from the publisher
+    // APIs (POST /scholar/fetch — and any markdown carrying the scholarly
+    // frontmatter vocabulary) and stamped by write_markdown_ingest.
+    // `origin_for_source("scholarly")` derives `imported` unchanged — a
+    // fetched record is not a trusted local write.
+    "scholarly",
 ];
 
 /// Parse a raw `source` string into a [`SourceFilter`]. Lowercases nothing —

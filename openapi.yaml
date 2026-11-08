@@ -477,6 +477,71 @@ paths:
                 properties:
                   success: { type: boolean }
                   id: { type: integer }
+  /scholar/fetch:
+    post:
+      summary: Fetch one scholarly record from a publisher API and ingest it through the markdown door
+      operationId: scholarFetch
+      description: >-
+        IMPROVE07. ONE operator route over the scholarly source adapters
+        (Europe PMC primary, Crossref witness, PubMed fallback — see
+        docs/SCHOLAR_ADAPTERS.md). OFF unless configured (named refusal
+        scholar_unconfigured, 503); every on-state fetch writes an audit
+        row. The deterministic zero-token law: the retraction signal is
+        PUBLISHED metadata (Crossref updated-by / "Retracted Publication"
+        pub types) — no ML retraction detection exists. THE CORRECTION
+        TRAP: the floor vocabulary is EXACTLY the retraction signal — a
+        corrected-but-never-retracted record never floors. An adapter is a
+        FETCHER, never a promoter: the record renders YAML frontmatter +
+        abstract and crosses the EXISTING /ingest/markdown door's internals
+        (screen, chunk, HITL posture, dedupe, the ingest audit row); the
+        search kind is scholarly. Allowlist-pinned egress
+        (www.ebi.ac.uk | europepmc.org | eutils.ncbi.nlm.nih.gov |
+        api.crossref.org), redirect::none (a redirect is an allowlist
+        bypass), the local token-bucket throttle (BRAIN_SCHOLAR_RATE_PER_SEC,
+        default 1), named backoff on 429/5xx.
+        Named refusals: scholar_bad_identifier (400), scholar_unsupported_adapter
+        (400), scholar_unconfigured (503), scholar_config_invalid (503),
+        scholar_adapter_disabled (503), scholar_host_refused (503),
+        scholar_transport_failed (503), scholar_rate_limited (503),
+        scholar_malformed_json (503), scholar_wrong_schema (503),
+        scholar_empty_result (503), scholar_replay_gap (503 — replay-only
+        trees), scholar_ingest_refused (the door's own taxonomy verbatim).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                doi: { type: string, nullable: true, description: "The DOI to fetch (exactly one of doi/pmid)" }
+                pmid: { type: string, nullable: true, description: "The PubMed id to fetch (exactly one of doi/pmid)" }
+                adapter: { type: string, nullable: true, enum: [auto, europepmc, pubmed], description: "Default auto: Europe PMC when enabled, else PubMed" }
+      responses:
+        "200":
+          description: Fetch + ingest result (the ingest half mirrors POST /ingest/markdown's response)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fetched:
+                    type: object
+                    properties:
+                      doi: { type: string, nullable: true }
+                      pmid: { type: string, nullable: true }
+                      source_api: { type: string }
+                      fetched_at: { type: string }
+                      license: { type: string, nullable: true }
+                      retracted: { type: boolean }
+                      updates_recorded: { type: integer }
+                  ingest:
+                    type: object
+                    description: "The markdown door's own response (success/id/document_id/chunks/status)"
+        "202":
+          description: The door's HITL review posture — proposal_pending (the record proposed, not inserted)
+        "400": { description: Named refusal (scholar_bad_identifier, scholar_unsupported_adapter) }
+        "403": { description: Forbidden }
+        "503": { description: Named refusal (scholar_unconfigured, scholar_adapter_disabled, scholar_rate_limited, ... ) }
   /ingest/document:
     post:
       summary: Ingest a PDF document (Tier 0 text-layer extraction, requires title)

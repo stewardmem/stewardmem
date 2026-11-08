@@ -220,6 +220,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/scholar/fetch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fetch one scholarly record from a publisher API and ingest it through the markdown door
+         * @description IMPROVE07. ONE operator route over the scholarly source adapters (Europe PMC primary, Crossref witness, PubMed fallback — see docs/SCHOLAR_ADAPTERS.md). OFF unless configured (named refusal scholar_unconfigured, 503); every on-state fetch writes an audit row. The deterministic zero-token law: the retraction signal is PUBLISHED metadata (Crossref updated-by / "Retracted Publication" pub types) — no ML retraction detection exists. THE CORRECTION TRAP: the floor vocabulary is EXACTLY the retraction signal — a corrected-but-never-retracted record never floors. An adapter is a FETCHER, never a promoter: the record renders YAML frontmatter + abstract and crosses the EXISTING /ingest/markdown door's internals (screen, chunk, HITL posture, dedupe, the ingest audit row); the search kind is scholarly. Allowlist-pinned egress (www.ebi.ac.uk | europepmc.org | eutils.ncbi.nlm.nih.gov | api.crossref.org), redirect::none (a redirect is an allowlist bypass), the local token-bucket throttle (BRAIN_SCHOLAR_RATE_PER_SEC, default 1), named backoff on 429/5xx. Named refusals: scholar_bad_identifier (400), scholar_unsupported_adapter (400), scholar_unconfigured (503), scholar_config_invalid (503), scholar_adapter_disabled (503), scholar_host_refused (503), scholar_transport_failed (503), scholar_rate_limited (503), scholar_malformed_json (503), scholar_wrong_schema (503), scholar_empty_result (503), scholar_replay_gap (503 — replay-only trees), scholar_ingest_refused (the door's own taxonomy verbatim).
+         */
+        post: operations["scholarFetch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ingest/document": {
         parameters: {
             query?: never;
@@ -6277,6 +6297,80 @@ export interface operations {
                         id?: number;
                     };
                 };
+            };
+        };
+    };
+    scholarFetch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The DOI to fetch (exactly one of doi/pmid) */
+                    doi?: string | null;
+                    /** @description The PubMed id to fetch (exactly one of doi/pmid) */
+                    pmid?: string | null;
+                    /**
+                     * @description Default auto: Europe PMC when enabled, else PubMed
+                     * @enum {string|null}
+                     */
+                    adapter?: "auto" | "europepmc" | "pubmed" | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Fetch + ingest result (the ingest half mirrors POST /ingest/markdown's response) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        fetched?: {
+                            doi?: string | null;
+                            pmid?: string | null;
+                            source_api?: string;
+                            fetched_at?: string;
+                            license?: string | null;
+                            retracted?: boolean;
+                            updates_recorded?: number;
+                        };
+                        /** @description The markdown door's own response (success/id/document_id/chunks/status) */
+                        ingest?: Record<string, never>;
+                    };
+                };
+            };
+            /** @description The door's HITL review posture — proposal_pending (the record proposed, not inserted) */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Named refusal (scholar_bad_identifier */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Named refusal (scholar_unconfigured */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

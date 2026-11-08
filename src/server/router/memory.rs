@@ -54,6 +54,11 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/v1/embeddings", post(embeddings))
         .route("/ingest/markdown", post(ingest_markdown))
+        // The scholarly fetch (IMPROVE07): ONE operator route; an adapter is
+        // a FETCHER, never a promoter — the handler calls the REAL markdown
+        // door (ingest_markdown) below; no private insert exists to bypass
+        // with. OFF unless configured (SA-3); audited per fetch.
+        .route("/scholar/fetch", post(scholar_fetch))
         .route("/reindex", post(reindex))
         .route("/get/{id}", get(get_chunk))
         .route("/multi-get", post(multi_get))
@@ -212,6 +217,10 @@ const ADD_SOURCES_FOR_JWT: &[&str] = &[
     // POST /ingest/document. `origin_for_source("document")` derives
     // `imported` — an uploaded document is not a trusted local write.
     "document",
+    // The scholarly kind (IMPROVE07): publisher-API records through the
+    // markdown door. `origin_for_source("scholarly")` derives `imported`
+    // unchanged — a fetched record is not a trusted local write.
+    "scholarly",
     // Connector family kinds (see src/connector/kind.rs::CONNECTOR_KINDS).
     "github",
     "crm",
@@ -1705,6 +1714,297 @@ pub fn parse_annotations(content: &str) -> Vec<(String, String)> {
     results
 }
 
+/// The scholarly-fetch payload (IMPROVE07): exactly ONE identifier
+/// (`doi` or `pmid`), and optionally the adapter ("europepmc" | "pubmed";
+/// default "auto" = Europe PMC when enabled, else PubMed).
+#[derive(Debug, Deserialize)]
+pub(crate) struct ScholarFetchPayload {
+    #[serde(default)]
+    doi: Option<String>,
+    #[serde(default)]
+    pmid: Option<String>,
+    #[serde(default)]
+    adapter: Option<String>,
+}
+
+fn scholar_error_code(e: &crate::scholar::ScholarError) -> (&'static str, String) {
+    use crate::scholar::ScholarError as E;
+    match e {
+        E::MalformedJson { api } => (
+            "scholar_malformed_json",
+            format!("{api} response is not valid JSON"),
+        ),
+        E::WrongSchema { api, field } => (
+            "scholar_wrong_schema",
+            format!("{api} response has no {field}"),
+        ),
+        E::EmptyResult { api } => (
+            "scholar_empty_result",
+            format!("{api} response carries no records"),
+        ),
+        E::HostRefused => (
+            "scholar_host_refused",
+            "not an allowlisted scholarly host".to_string(),
+        ),
+        E::TransportFailed => (
+            "scholar_transport_failed",
+            "the fetch did not complete".to_string(),
+        ),
+        E::RateLimited => (
+            "scholar_rate_limited",
+            "the bounded backoff was exhausted - retry later".to_string(),
+        ),
+        E::ReplayGap => (
+            "scholar_replay_gap",
+            "no recorded fixture for this URL".to_string(),
+        ),
+        E::BadIdentifier => (
+            "scholar_bad_identifier",
+            "exactly one of doi/pmid is required".to_string(),
+        ),
+    }
+}
+
+/// The named-refusal helper (the document_error shape): every scholarly
+/// refusal is a closed code + fixed message - no API bytes in any string.
+fn scholar_refuse(
+    status: axum::http::StatusCode,
+    code: &'static str,
+    message: String,
+) -> crate::handlers::HandlerError {
+    crate::handlers::HandlerError {
+        status,
+        inner: crate::handlers::ApiError::new(code, message),
+    }
+}
+
+/// The scholarly fetch route (IMPROVE07). OFF unless configured (SA-3);
+/// every on-state fetch writes an audit row (SA-3); the record crosses the
+/// EXISTING markdown door by CALLING it - the doors-identical pin reads
+/// this call (no private insert exists to bypass with). The retraction
+/// signal the fetch carries is the S3 trust floor's input; the lift is
+/// only the audited HITL override.
+pub(crate) async fn scholar_fetch(
+    State(state): State<Arc<AppState>>,
+    principal: crate::handlers::auth::OptPrincipal,
+    Json(payload): Json<ScholarFetchPayload>,
+) -> Result<Json<serde_json::Value>, crate::handlers::HandlerError> {
+    crate::handlers::authorize(&principal.0, crate::auth::Action::Write, "", "global").map_err(
+        |e| crate::handlers::HandlerError {
+            status: axum::http::StatusCode::FORBIDDEN,
+            inner: crate::handlers::ApiError::new("forbidden", e.inner.message),
+        },
+    )?;
+
+    // The identifier: exactly one of doi/pmid.
+    let id = match (&payload.doi, &payload.pmid) {
+        (Some(d), None) if !d.trim().is_empty() => {
+            crate::scholar::SourceIdentifier::Doi(crate::scholar::normalize_doi(d))
+        }
+        (None, Some(p)) if !p.trim().is_empty() => {
+            crate::scholar::SourceIdentifier::Pmid(p.trim().to_string())
+        }
+        _ => {
+            return Err(scholar_refuse(
+                axum::http::StatusCode::BAD_REQUEST,
+                "scholar_bad_identifier",
+                "exactly one of doi/pmid is required".to_string(),
+            ));
+        }
+    };
+
+    // The profile: unconfigured = OFF (SA-3, the named refusal); partial =
+    // the boot validator already made that fatal, so a per-request Err is
+    // the same named refusal here.
+    let profile = crate::config::ScholarProfile::from_env()
+        .map_err(|_| {
+            scholar_refuse(
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                "scholar_config_invalid",
+                "the scholar profile is incomplete".to_string(),
+            )
+        })?
+        .ok_or_else(|| {
+            scholar_refuse(
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                "scholar_unconfigured",
+                "no scholarly adapter is configured (see docs/SCHOLAR_ADAPTERS.md, section 4)"
+                    .to_string(),
+            )
+        })?;
+
+    // The adapter dispatch. S2 wires the PRIMARY (Europe PMC); the fallback
+    // (PubMed) joins in S4 - requesting it before that lands is a named
+    // refusal, never a silent reroute.
+    enum Selected {
+        EuropePmc,
+        PubMed,
+    }
+    let selected = match payload.adapter.as_deref().map(str::trim) {
+        None | Some("") | Some("auto") => {
+            if profile.epmc_enabled {
+                Selected::EuropePmc
+            } else if profile.pubmed_enabled {
+                Selected::PubMed
+            } else {
+                return Err(scholar_refuse(
+                    axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                    "scholar_adapter_disabled",
+                    "no adapter is enabled for auto selection".to_string(),
+                ));
+            }
+        }
+        Some("europepmc") => {
+            if !profile.epmc_enabled {
+                return Err(scholar_refuse(
+                    axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                    "scholar_adapter_disabled",
+                    "europepmc is not enabled".to_string(),
+                ));
+            }
+            Selected::EuropePmc
+        }
+        Some("pubmed") => {
+            if !profile.pubmed_enabled {
+                return Err(scholar_refuse(
+                    axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                    "scholar_adapter_disabled",
+                    "pubmed is not enabled".to_string(),
+                ));
+            }
+            Selected::PubMed
+        }
+        Some(_) => {
+            return Err(scholar_refuse(
+                axum::http::StatusCode::BAD_REQUEST,
+                "scholar_unsupported_adapter",
+                "adapter must be auto, europepmc, or pubmed".to_string(),
+            ));
+        }
+    };
+
+    let fetched_at = chrono::Utc::now().to_rfc3339();
+    let transport = crate::scholar::process_transport(profile.rate_per_sec);
+    let (record, api_name) = match selected {
+        Selected::EuropePmc => (
+            crate::scholar::fetch_epmc(transport, &id, &fetched_at).await,
+            "europepmc",
+        ),
+        Selected::PubMed => (
+            crate::scholar::fetch_pubmed(transport, &id, &fetched_at).await,
+            "pubmed",
+        ),
+    };
+    let record = match record {
+        Ok(r) => r,
+        Err(e) => {
+            // SA-3: the on-state audit row records the OUTCOME - including
+            // the failure. Identifier + allowlisted host + outcome only.
+            if let Ok(conn) = state.pool.get() {
+                crate::audit::record(
+                    &conn,
+                    crate::audit::AuditKind::Ingest,
+                    "scholar_route",
+                    &scholar_audit_target(&id),
+                    crate::audit::AuditStatus::Error,
+                    &format!("scholar_fetch {api_name} failed"),
+                );
+            }
+            let (code, message) = scholar_error_code(&e);
+            return Err(scholar_refuse(
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                code,
+                message,
+            ));
+        }
+    };
+
+    // The fetch audit row (SA-3): the allowlisted host's API, the
+    // identifier, the outcome - the operator's evidence that the surface
+    // did what it did.
+    if let Ok(conn) = state.pool.get() {
+        crate::audit::record(
+            &conn,
+            crate::audit::AuditKind::Ingest,
+            "scholar_route",
+            &scholar_audit_target(&id),
+            crate::audit::AuditStatus::Ok,
+            &format!("scholar_fetch {api_name}"),
+        );
+    }
+
+    // Render (deterministic, zero-token) and cross the REAL markdown door:
+    // the door's own handler is CALLED, not copied - title law, caps, the
+    // screen, the HITL posture, the ingest audit row all run unchanged.
+    let rendered = crate::scholar::render_record_markdown(&record);
+    let mut door_payload = serde_json::Map::new();
+    door_payload.insert("content".to_string(), serde_json::Value::String(rendered));
+    if let Some(t) = record.title.clone() {
+        // The interactive-title law: the payload title carries the record's
+        // own title (the door enforces the 500-char bound).
+        door_payload.insert("title".to_string(), serde_json::Value::String(t));
+    }
+    let door_payload: MarkdownPayload =
+        serde_json::from_value(serde_json::Value::Object(door_payload)).map_err(|_| {
+            scholar_refuse(
+                axum::http::StatusCode::BAD_REQUEST,
+                "scholar_bad_identifier",
+                "the rendered record failed the door payload shape".to_string(),
+            )
+        })?;
+    let door = ingest_markdown(State(state), principal, Json(door_payload))
+        .await
+        .map_err(|e| {
+            // The door's own error taxonomy crosses verbatim (the
+            // doors-identical law): the AppError's status + message become the
+            // refusal shape.
+            let (status, message): (axum::http::StatusCode, String) = match &e {
+                AppError::BadRequest(m) => (axum::http::StatusCode::BAD_REQUEST, (*m).to_string()),
+                AppError::Forbidden(m) => (axum::http::StatusCode::FORBIDDEN, m.clone()),
+                AppError::Conflict(m) => (axum::http::StatusCode::CONFLICT, m.clone()),
+                AppError::InsufficientStorage(m) => {
+                    (axum::http::StatusCode::INSUFFICIENT_STORAGE, m.clone())
+                }
+                AppError::NotFound(m) => (axum::http::StatusCode::NOT_FOUND, (*m).to_string()),
+                AppError::Accepted(v) => (axum::http::StatusCode::ACCEPTED, v.to_string()),
+                AppError::Internal(_) => (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    "Internal error".to_string(),
+                ),
+            };
+            crate::handlers::HandlerError {
+                status,
+                inner: crate::handlers::ApiError::new("scholar_ingest_refused", message),
+            }
+        })?;
+
+    let mut body = serde_json::Map::new();
+    body.insert(
+        "fetched".to_string(),
+        serde_json::json!({
+            "doi": record.doi,
+            "pmid": record.pmid,
+            "source_api": record.api.as_str(),
+            "fetched_at": record.fetched_at,
+            "license": record.license,
+            "retracted": record.retraction.is_some(),
+            "updates_recorded": record.updates.len(),
+        }),
+    );
+    body.insert("ingest".to_string(), door.0);
+    Ok(Json(serde_json::Value::Object(body)))
+}
+
+/// The audit target for a scholarly fetch: the NORMALIZED identifier -
+/// the same identity the dedupe key and plan-08's seen table use.
+fn scholar_audit_target(id: &crate::scholar::SourceIdentifier) -> String {
+    match id {
+        crate::scholar::SourceIdentifier::Doi(d) => format!("doi:{d}"),
+        crate::scholar::SourceIdentifier::Pmid(p) => format!("pmid:{p}"),
+        crate::scholar::SourceIdentifier::Query(q) => format!("query:{q}"),
+    }
+}
+
 pub(crate) async fn ingest_markdown(
     State(state): State<Arc<AppState>>,
     principal: crate::handlers::auth::OptPrincipal,
@@ -2014,6 +2314,7 @@ pub(crate) async fn ingest_markdown(
             &raw_content_for_source,
             quarantine_flagged,
             &owner,
+            scholar_meta.as_deref(),
         )?;
         // The scholarly provenance persist (IMPROVE07): in-tx, AFTER the
         // rows exist (the UPDATE needs them), BEFORE the audit row — the
@@ -3394,7 +3695,17 @@ pub fn write_markdown_ingest(
     raw_content: &str,
     quarantine_flagged: bool,
     owner: &Option<String>,
+    scholar_meta: Option<&str>,
 ) -> Result<(i64, usize, usize, usize), AppError> {
+    // The ingest kind (IMPROVE07): scholarly frontmatter ⇒ the record IS a
+    // scholarly record — the kind stamps BOTH rows (the recall kind filter
+    // scopes on it). Plain markdown is byte-compatible with every row
+    // stored before the extension.
+    let source_kind = if scholar_meta.is_some() {
+        "scholarly"
+    } else {
+        "markdown"
+    };
     let mut first_id = 0;
     let mut inserted = 0usize;
     let mut duplicates = 0usize;
@@ -3491,11 +3802,13 @@ pub fn write_markdown_ingest(
         tx.execute(
             "INSERT INTO knowledge
                (title, content, source, content_hash, document_id, chunk_index,
-                heading_path, line_start, line_end, source_path, pii, owner, governance_hash)
-             VALUES (?1, ?2, 'markdown', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                heading_path, line_start, line_end, source_path, pii, owner, governance_hash,
+                scholar_meta)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 doc_title,
                 &chunk.text,
+                source_kind,
                 &content_hash,
                 doc_id,
                 idx as i64,
@@ -3518,6 +3831,7 @@ pub fn write_markdown_ingest(
                 // (the frontmatter domain move below recomputes the hash in
                 // the same tx as the move when the domain differs).
                 crate::service::ingest::governance_hash(owner.as_deref(), "private", "global",),
+                scholar_meta,
             ],
         )
         .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -3533,8 +3847,8 @@ pub fn write_markdown_ingest(
         // vector is silently degraded. Fail the batch; no half-stored chunks.
         tx.execute(
             "INSERT INTO vec_knowledge(knowledge_id, embedding_int8, embedding_bit, source, created_at)
-             VALUES (?1, vec_quantize_int8(?2, 'unit'), vec_quantize_binary(?2), 'markdown', datetime('now'))",
-            params![k_id, emb.as_bytes()],
+             VALUES (?1, vec_quantize_int8(?2, 'unit'), vec_quantize_binary(?2), ?3, datetime('now'))",
+            params![k_id, emb.as_bytes(), source_kind],
         )
         .map_err(|e| AppError::Internal(e.to_string()))?;
         inserted += 1;

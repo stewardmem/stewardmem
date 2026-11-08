@@ -186,7 +186,8 @@ const CRATE_TEST_FLOOR: usize = 2_758;
 /// 209 → 214 at the create-loop round: FIVE rows for SIX surfaces, because the
 /// base path carries both the proposal POST and the gated listing GET and this
 /// table is path-keyed. Measured after the wire change, not predicted.
-const OPENAPI_ROUTE_ROWS_FLOOR: usize = 214;
+/// 214 → 215 at IMPROVE07: the `/scholar/fetch` route row.
+const OPENAPI_ROUTE_ROWS_FLOOR: usize = 215;
 /// Route-authz table rows (`route_guards::AUTHZ_GATES`) — 141 gates at
 /// extraction (v1.28.54), 147 at the Wardline gate, 152 when Blackout's
 /// reverse-direction guard closed the table debt, 193 at the operate round.
@@ -196,7 +197,8 @@ const OPENAPI_ROUTE_ROWS_FLOOR: usize = 214;
 /// 194 → 200 at the create-loop round: the six claim-loop gates, where the base
 /// path carries a Read row first and its Write row last, so one path holds two
 /// rows and six surfaces cost six rows.
-const AUTHZ_TABLE_ROWS_FLOOR: usize = 200;
+/// 200 → 201 at IMPROVE07: the `/scholar/fetch` Write gate.
+const AUTHZ_TABLE_ROWS_FLOOR: usize = 201;
 
 fn count_needle(hay: &str, needle: &str) -> usize {
     hay.matches(needle).count()

@@ -447,6 +447,12 @@ pub fn bootstrap() -> Result<BootOutcome> {
     config::validate_gdl_provider_config()
         .map_err(|e| anyhow::anyhow!("fatal GDL provider config: {e}"))?;
 
+    // ── fail-closed scholarly-adapter posture (IMPROVE07) ───────────────
+    // The SAME region and law: a partial/invalid scholar profile is fatal
+    // at boot, not a degraded adapter at request time. Unconfigured is
+    // fine — every adapter is OFF (SA-3).
+    config::validate_scholar_config().map_err(|e| anyhow::anyhow!("fatal scholar config: {e}"))?;
+
     // ── fail-closed delivery-bindings posture ───────────
     // The SAME region and the SAME law as the provider gate above, because the
     // bindings are the machine's standing authority over an external system:

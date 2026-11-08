@@ -421,6 +421,137 @@ impl GdlProviderPosture {
     }
 }
 
+// ── the scholarly fetch profile (IMPROVE07) — the GDL all-or-nothing pattern ──
+
+/// The operator-configured scholarly-adapter profile. `None` means the
+/// operator has not configured the surface: every adapter is OFF (SA-3),
+/// the route refuses named, and NO byte leaves. A partial profile is a
+/// named configuration error (the GDL law). The request never selects any
+/// of these values — they are server-owned.
+#[derive(Clone)]
+pub(crate) struct ScholarProfile {
+    /// Europe PMC: the PRIMARY adapter, no key.
+    pub(crate) epmc_enabled: bool,
+    /// PubMed: the key-configured FALLBACK (S4 wires the adapter; the
+    /// config shape is validated now so a partial profile fails at boot).
+    pub(crate) pubmed_enabled: bool,
+    /// Read by the S4 adapter (the secret-file law's input). The config
+    /// shape is validated HERE so a partial profile fails at boot.
+    #[allow(dead_code)]
+    pub(crate) pubmed_key_file: Option<String>,
+    /// Crossref: the retraction WITNESS — its presence IS the on-switch
+    /// (the polite pool requires the mailto; no mailto, no witness). Read
+    /// by the S3 witness call.
+    #[allow(dead_code)]
+    pub(crate) crossref_mailto: Option<String>,
+    /// The LOCAL throttle (req/s, 1..=10) — the compliance mechanism.
+    pub(crate) rate_per_sec: u32,
+}
+
+fn scholar_flag_off(v: &str) -> bool {
+    v == "0" || v == "false" || v == "no" || v == "off"
+}
+
+impl ScholarProfile {
+    /// Resolve the profile without copying paths, credentials, or other
+    /// configuration values into an error string (the GDL law).
+    pub(crate) fn from_env() -> Result<Option<Self>, String> {
+        let decode = |name: &'static str| -> Result<Option<String>, String> {
+            std::env::var_os(name)
+                .map(|value| {
+                    value
+                        .into_string()
+                        .map_err(|_| "scholar profile is invalid".to_string())
+                })
+                .transpose()
+        };
+        let epmc_raw = decode("BRAIN_SCHOLAR_EPMC_ENABLED")?;
+        let pubmed_raw = decode("BRAIN_SCHOLAR_PUBMED_ENABLED")?;
+        let key_raw = decode("BRAIN_SCHOLAR_PUBMED_API_KEY_FILE")?;
+        let mailto_raw = decode("BRAIN_SCHOLAR_CROSSREF_MAILTO")?;
+        let rate_raw = decode("BRAIN_SCHOLAR_RATE_PER_SEC")?;
+
+        if epmc_raw.is_none()
+            && pubmed_raw.is_none()
+            && key_raw.is_none()
+            && mailto_raw.is_none()
+            && rate_raw.is_none()
+        {
+            return Ok(None);
+        }
+
+        // The all-or-nothing law, per adapter:
+        //  - Europe PMC: one flag.
+        //  - PubMed: the flag AND its key file — either alone is incomplete.
+        //  - Crossref: one value (the mailto).
+        //  - the rate: one value, default 1 when the surface is otherwise
+        //    unconfigured-adjacent.
+        let epmc_enabled = epmc_raw
+            .as_deref()
+            .map(|v| !scholar_flag_off(v.trim()))
+            .unwrap_or(false);
+        let pubmed_enabled = pubmed_raw
+            .as_deref()
+            .map(|v| !scholar_flag_off(v.trim()))
+            .unwrap_or(false);
+        // A key file configured for an EXPLICITLY-disabled adapter is not
+        // an error (the operator disabled the lane and left the mount in
+        // place); a key file with NO pubmed flag word is the incomplete half.
+        if pubmed_raw.is_none() && key_raw.is_some() {
+            return Err("scholar profile is incomplete".to_string());
+        }
+        if pubmed_enabled
+            && key_raw
+                .as_deref()
+                .map(|k| k.trim())
+                .unwrap_or("")
+                .is_empty()
+        {
+            return Err("scholar profile is incomplete".to_string());
+        }
+        let pubmed_key_file = key_raw.as_deref().map(|k| k.trim().to_string());
+
+        let crossref_mailto = mailto_raw
+            .as_deref()
+            .map(str::trim)
+            .filter(|m| !m.is_empty())
+            .map(str::to_string);
+        if let Some(m) = &crossref_mailto
+            && (m.chars().any(char::is_control) || m.len() > 254)
+        {
+            return Err("scholar profile is invalid".to_string());
+        }
+        if epmc_raw.is_none() && pubmed_raw.is_none() && crossref_mailto.is_none() {
+            // Only the rate was set: a throttle for no adapter — treat as
+            // the incomplete surface it is.
+            return Err("scholar profile is incomplete".to_string());
+        }
+
+        let rate_per_sec = match rate_raw.as_deref().map(str::trim) {
+            None => 1,
+            Some(v) => match v.parse::<u32>() {
+                Ok(n) if (1..=10).contains(&n) => n,
+                _ => return Err("scholar profile is invalid".to_string()),
+            },
+        };
+
+        Ok(Some(Self {
+            epmc_enabled,
+            pubmed_enabled,
+            pubmed_key_file,
+            crossref_mailto,
+            rate_per_sec,
+        }))
+    }
+}
+
+/// The boot-time fail-closed validator: a partial or invalid scholar
+/// profile is FATAL, before any socket or DB work (the GDL validator
+/// posture). Unconfigured is fine — the adapters are OFF.
+pub(crate) fn validate_scholar_config() -> Result<(), String> {
+    ScholarProfile::from_env().map(|_| ())
+}
+
 /// The GDL provider transport kind (`BRAIN_GDL_PROVIDER_KIND`) — the pilot
 /// round's D-P1 decision. `http` (the default) is today's OpenAI-compatible
 /// seam, byte-unchanged; `afm-stdio` routes the loop's propose calls through

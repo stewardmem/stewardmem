@@ -196,6 +196,22 @@ pub enum ScholarError {
     },
     /// The envelope is well-formed but carries no records.
     EmptyResult { api: &'static str },
+    /// The requested host is not on the allowlist (SA-1 — refused BY NAME
+    /// before a byte leaves; a redirect is an allowlist bypass and the
+    /// live client never follows one).
+    HostRefused,
+    /// The wire itself failed (connect/read/decode) or the status was
+    /// neither 2xx nor a rate-shaped refusal.
+    TransportFailed,
+    /// The bounded 429/5xx backoff was exhausted (SA-7 — the caller never
+    /// retries past the budget; the etiquette law outranks the fetch).
+    RateLimited,
+    /// The replay transport has no fixture for this URL (SA-4 — a replay
+    /// gap is a named gap, never a silent live fallback).
+    ReplayGap,
+    /// The route payload carried neither or both of doi/pmid, or an
+    /// identifier the adapter cannot speak.
+    BadIdentifier,
 }
 
 impl std::fmt::Display for ScholarError {
@@ -212,6 +228,33 @@ impl std::fmt::Display for ScholarError {
             }
             ScholarError::EmptyResult { api } => {
                 write!(f, "scholar_empty_result: {api} response carries no records")
+            }
+            ScholarError::HostRefused => {
+                write!(
+                    f,
+                    "scholar_host_refused: not an allowlisted scholarly host (www.ebi.ac.uk | europepmc.org | eutils.ncbi.nlm.nih.gov | api.crossref.org)"
+                )
+            }
+            ScholarError::TransportFailed => {
+                write!(f, "scholar_transport_failed: the fetch did not complete")
+            }
+            ScholarError::RateLimited => {
+                write!(
+                    f,
+                    "scholar_rate_limited: the bounded backoff was exhausted —                      retry later or lower BRAIN_SCHOLAR_RATE_PER_SEC"
+                )
+            }
+            ScholarError::ReplayGap => {
+                write!(
+                    f,
+                    "scholar_replay_gap: no recorded fixture for this URL —                      CI replays the frozen corpus only (SA-4)"
+                )
+            }
+            ScholarError::BadIdentifier => {
+                write!(
+                    f,
+                    "scholar_bad_identifier: exactly one of doi/pmid is required"
+                )
             }
         }
     }
@@ -1115,4 +1158,544 @@ mod tests {
         assert_eq!(rec.api, SourceApi::Crossref);
         assert!(rec.retraction.is_some());
     }
+}
+
+// ── S2: the client layer — the allowlist-pinned transport ────────────────
+
+use std::time::Duration;
+
+/// The allowlisted hosts (SA-1). The send path pins these structurally and
+/// refuses any other host BY NAME before a byte leaves. The live client
+/// additionally constructs with `redirect::Policy::none()` — a redirect is
+/// an allowlist bypass, never followed (the provider_http law).
+pub const ALLOWED_SCHOLAR_HOSTS: &[&str] = &[
+    "www.ebi.ac.uk",
+    "europepmc.org",
+    "eutils.ncbi.nlm.nih.gov",
+    "api.crossref.org",
+];
+
+/// The live client's named budget: the publisher APIs answer in
+/// sub-seconds; 20 s covers a cold TLS handshake plus a slow witness
+/// lookup, and stays far inside the router's shared 30 s deadline.
+pub(crate) const SCHOLAR_HTTP_TIMEOUT_SECS: u64 = 20;
+/// The bounded 429/5xx retry budget (total attempts) and its cap.
+pub(crate) const SCHOLAR_MAX_ATTEMPTS: u8 = 2;
+pub(crate) const SCHOLAR_BACKOFF_CAP_SECS: u64 = 5;
+
+/// A transport response, shaped for the parse layer: status, body, and the
+/// rate-limit hint the backoff decision reads.
+#[derive(Debug, Clone)]
+pub struct ScholarResponse {
+    pub status: u16,
+    pub body: String,
+    pub retry_after_secs: Option<u64>,
+}
+
+/// The host check — the allowlist's enforcement point. Shared by BOTH the
+/// live client and the replay transport: a test transport cannot bypass
+/// the allowlist either (SA-1 behavioral over the whole surface).
+pub(crate) fn assert_allowed_host(url: &str) -> Result<(), ScholarError> {
+    let host = url
+        .strip_prefix("https://")
+        .and_then(|rest| rest.split('/').next())
+        .ok_or(ScholarError::HostRefused)?;
+    if ALLOWED_SCHOLAR_HOSTS.contains(&host) {
+        Ok(())
+    } else {
+        Err(ScholarError::HostRefused)
+    }
+}
+
+/// The URL builders — deterministic, host-pinned by construction. Each
+/// returns a URL on an allowlisted host; the encoding is minimal and
+/// matches the recorded probe URLs (the replay corpus maps them).
+pub fn build_epmc_url(id: &SourceIdentifier) -> Result<String, ScholarError> {
+    match id {
+        SourceIdentifier::Doi(doi) => Ok(format!(
+            "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:%22{}%22&format=json&resultType=core",
+            encode_query_value(&normalize_doi(doi))
+        )),
+        SourceIdentifier::Pmid(pmid) => Ok(format!(
+            "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID:{}&format=json&resultType=core",
+            encode_query_value(pmid.trim())
+        )),
+        SourceIdentifier::Query(q) => Ok(format!(
+            "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={}&format=json&resultType=core",
+            encode_query_value(q.trim())
+        )),
+    }
+}
+
+pub fn build_crossref_url(doi: &str, mailto: &str) -> Result<String, ScholarError> {
+    Ok(format!(
+        "https://api.crossref.org/works/{}?mailto={}",
+        normalize_doi(doi),
+        encode_query_value(mailto.trim())
+    ))
+}
+
+pub fn build_pubmed_esearch_url(term: &str) -> Result<String, ScholarError> {
+    Ok(format!(
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term={}&retmode=json",
+        encode_query_value(term)
+    ))
+}
+
+pub fn build_pubmed_esummary_url(uid: &str) -> Result<String, ScholarError> {
+    Ok(format!(
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id={}&retmode=json",
+        encode_query_value(uid.trim())
+    ))
+}
+
+/// Minimal deterministic percent-encoding for a URL slot: the unreserved
+/// set plus the DOI charset pass through; space, quote, brackets, hash,
+/// percent encode. No regex dependency; byte-for-byte stable.
+fn encode_query_value(v: &str) -> String {
+    let mut out = String::with_capacity(v.len());
+    for b in v.bytes() {
+        match b {
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'.'
+            | b'_'
+            | b'~'
+            | b'('
+            | b')'
+            | b'/'
+            | b':'
+            | b'@'
+            | b'$'
+            | b'&'
+            | b'\''
+            | b'*'
+            | b'+'
+            | b','
+            | b';'
+            | b'='
+            | b'!' => out.push(b as char),
+            b'"' => out.push_str("%22"),
+            b'[' => out.push_str("%5B"),
+            b']' => out.push_str("%5D"),
+            b' ' => out.push_str("%20"),
+            b'#' => out.push_str("%23"),
+            b'%' => out.push_str("%25"),
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
+/// The rate-limit throttle (SA-7): ONE conservative token per interval,
+/// per transport instance. Holding the lock across the wait serializes
+/// fetchers — no thundering herd — and the interval is operator-tunable
+/// (`BRAIN_SCHOLAR_RATE_PER_SEC`, default 1). THE KERNEL'S OWN BUCKET IS
+/// THE COMPLIANCE MECHANISM: Europe PMC publishes no numeric limit, so the
+/// kernel defines its own, never the API's problem to discover.
+pub struct Throttle {
+    min_interval: Duration,
+    last: tokio::sync::Mutex<Option<std::time::Instant>>,
+}
+
+impl Throttle {
+    pub fn new(per_sec: u32) -> Self {
+        let per_sec = per_sec.max(1);
+        Self {
+            min_interval: Duration::from_secs_f64(1.0 / f64::from(per_sec)),
+            last: tokio::sync::Mutex::new(None),
+        }
+    }
+
+    /// Acquire one token. Callers await; the bucket is law, not advisory.
+    pub async fn acquire(&self) {
+        let mut last = self.last.lock().await;
+        loop {
+            let now = std::time::Instant::now();
+            match *last {
+                None => {
+                    *last = Some(now);
+                    return;
+                }
+                Some(t) => {
+                    let wait = self.min_interval.saturating_sub(now.duration_since(t));
+                    if wait.is_zero() {
+                        *last = Some(now);
+                        return;
+                    }
+                    tokio::time::sleep(wait).await;
+                }
+            }
+        }
+    }
+}
+
+/// The bounded 429/5xx backoff DECISION — pure, tested against the
+/// recorded 429 transcript. `attempt` is 1-based; the total budget is
+/// [`SCHOLAR_MAX_ATTEMPTS`].
+pub enum BackoffDecision {
+    Retry { wait_secs: u64 },
+    Refused,
+}
+
+pub fn backoff_decision(
+    status: u16,
+    retry_after_secs: Option<u64>,
+    attempt: u8,
+) -> BackoffDecision {
+    let rate_shaped = status == 429 || status >= 500;
+    if rate_shaped && attempt < SCHOLAR_MAX_ATTEMPTS {
+        BackoffDecision::Retry {
+            wait_secs: retry_after_secs
+                .unwrap_or(1)
+                .clamp(1, SCHOLAR_BACKOFF_CAP_SECS),
+        }
+    } else {
+        BackoffDecision::Refused
+    }
+}
+
+/// The transport. Enum dispatch (no dyn-async, no new dependencies): the
+/// LIVE arm is the reqwest construction below; the REPLAY arm serves the
+/// frozen fixture corpus (SA-4 — CI runs only this arm). The host check
+/// runs on BOTH arms.
+pub enum ScholarTransport {
+    Replay(ReplayTransport),
+    Live {
+        client: reqwest::Client,
+        throttle: Throttle,
+    },
+}
+
+impl ScholarTransport {
+    /// The LIVE construction — the SA-1 law in code.
+    pub fn live(rate_per_sec: u32) -> Self {
+        let client = reqwest::Client::builder()
+            // Redirects are never followed: the allowlist validated ONE
+            // host; a redirect is a different host (the named refusal).
+            .redirect(reqwest::redirect::Policy::none())
+            // The allowlist is meaningful only for a direct connection;
+            // never let ambient proxy variables bypass the pin.
+            .no_proxy()
+            .https_only(true)
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(SCHOLAR_HTTP_TIMEOUT_SECS))
+            .user_agent(user_agent())
+            .build()
+            .expect("scholar live client has no invalid defaults");
+        ScholarTransport::Live {
+            client,
+            throttle: Throttle::new(rate_per_sec),
+        }
+    }
+
+    /// The REPLAY construction (SA-4): serves the frozen corpus. CI and
+    /// the pins construct ONLY this arm (the structural pin reads the
+    /// test surface for it).
+    pub fn replay() -> Self {
+        ScholarTransport::Replay(ReplayTransport)
+    }
+
+    /// ONE GET, host-checked, throttled on the live arm. The named
+    /// backoff is the CALLER's (the adapter loop owns attempts).
+    pub async fn get(&self, url: &str) -> Result<ScholarResponse, ScholarError> {
+        assert_allowed_host(url)?;
+        match self {
+            ScholarTransport::Replay(replay) => replay.get(url).await,
+            ScholarTransport::Live { client, throttle } => {
+                throttle.acquire().await;
+                let resp = client
+                    .get(url)
+                    .header(reqwest::header::ACCEPT, "application/json")
+                    .send()
+                    .await
+                    .map_err(|_| ScholarError::TransportFailed)?;
+                let status = resp.status().as_u16();
+                let retry_after_secs = resp
+                    .headers()
+                    .get(reqwest::header::RETRY_AFTER)
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.trim().parse::<u64>().ok());
+                let body = resp
+                    .text()
+                    .await
+                    .map_err(|_| ScholarError::TransportFailed)?;
+                Ok(ScholarResponse {
+                    status,
+                    body,
+                    retry_after_secs,
+                })
+            }
+        }
+    }
+}
+
+/// The product-identifying User-Agent (the polite-pool law): names the
+/// product, the lane, and the contact posture — no host-specific claims.
+pub(crate) fn user_agent() -> &'static str {
+    concat!(
+        "brain-server/",
+        env!("CARGO_PKG_VERSION"),
+        " (scholarly-source-adapters; polite pool)"
+    )
+}
+
+/// The replay transport: URL → frozen fixture bytes. The map is the corpus
+/// itself — the SAME bytes the live probes returned (the ocr-real dual).
+/// A URL the corpus does not know is a named ReplayGap, never a silent
+/// live fallback.
+#[derive(Debug, Clone, Copy)]
+pub struct ReplayTransport;
+
+impl ReplayTransport {
+    async fn get(&self, url: &str) -> Result<ScholarResponse, ScholarError> {
+        let fixture = replay_fixture_for(url).ok_or(ScholarError::ReplayGap)?;
+        let body = std::fs::read_to_string(format!(
+            "{}/tests/fixtures/scholar/{fixture}",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .map_err(|_| ScholarError::ReplayGap)?;
+        Ok(ScholarResponse {
+            status: 200,
+            body,
+            retry_after_secs: None,
+        })
+    }
+}
+
+/// The URL → fixture map. The identifier slot is what varies; the
+/// envelopes are the recorded probes.
+fn replay_fixture_for(url: &str) -> Option<&'static str> {
+    if url.starts_with("https://www.ebi.ac.uk/europepmc/") {
+        return if url.contains("11096-0") {
+            Some("epmc-wakefield-core.json")
+        } else if url.contains("journal.pone.0266789") {
+            Some("epmc-clean-oa.json")
+        } else if url.contains("61729-2") {
+            Some("epmc-clean-noa.json")
+        } else {
+            None
+        };
+    }
+    if url.starts_with("https://api.crossref.org/works/") {
+        return if url.contains("11096-0") {
+            Some("cr-wakefield.json")
+        } else if url.contains("aaebdb") {
+            Some("cr-correction-control.json")
+        } else if url.contains("journal.pone.0266789") {
+            Some("cr-clean-oa.json")
+        } else if url.contains("61729-2") {
+            Some("cr-clean-noa.json")
+        } else {
+            None
+        };
+    }
+    if url.contains("esearch.fcgi") {
+        return if url.contains("11096-0") {
+            Some("pm-esearch-wakefield.json")
+        } else {
+            None
+        };
+    }
+    if url.contains("esummary.fcgi") {
+        return if url.contains("9500320") {
+            Some("pm-wakefield.json")
+        } else if url.contains("35476794") {
+            Some("pm-clean.json")
+        } else {
+            None
+        };
+    }
+    None
+}
+
+// ── the process transport seam ───────────────────────────────────────────
+// The route resolves the transport ONCE per process (the live client is
+// expensive per request); tests install the replay transport via the
+// cfg(test) setter (the SA-4 structural pin reads this surface).
+
+static TRANSPORT: std::sync::OnceLock<ScholarTransport> = std::sync::OnceLock::new();
+static TRANSPORT_RATE: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+
+/// The process transport. The rate comes from the profile; the FIRST
+/// resolution wins (a config change needs a restart — the same posture as
+/// every other boot-time config in this tree).
+pub(crate) fn process_transport(rate_per_sec: u32) -> &'static ScholarTransport {
+    let rate = TRANSPORT_RATE.get_or_init(|| rate_per_sec);
+    TRANSPORT.get_or_init(|| ScholarTransport::live(*rate))
+}
+
+/// Install the REPLAY transport for the process lifetime. Test-only BY
+/// CONTRACT (doc-hidden; the SA-4 pin asserts the route's production path
+/// never calls it and the replay constructor is named only here) — CI
+/// replays the frozen corpus, never a live call.
+#[doc(hidden)]
+pub fn install_replay_transport_for_tests() -> &'static ScholarTransport {
+    let _ = TRANSPORT_RATE.get_or_init(|| 1);
+    TRANSPORT.get_or_init(ScholarTransport::replay)
+}
+
+// ── the adapter loops (shared by the live and replay arms) ───────────────
+
+/// Fetch ONE identifier from Europe PMC (the PRIMARY adapter — no key)
+/// with the bounded backoff. Deterministic over the corpus.
+pub async fn fetch_epmc(
+    transport: &ScholarTransport,
+    id: &SourceIdentifier,
+    fetched_at: &str,
+) -> Result<SourceRecord, ScholarError> {
+    fetch_with_backoff(transport, &build_epmc_url(id)?, |body| {
+        parse_epmc_core(body, fetched_at)
+    })
+    .await
+}
+
+/// Fetch ONE DOI's witness record from Crossref (the polite pool). S3's
+/// trust floor consumes the witness fields (notice DOI + date +
+/// record-id-backed relationship).
+pub async fn fetch_crossref_witness(
+    transport: &ScholarTransport,
+    doi: &str,
+    mailto: &str,
+    fetched_at: &str,
+) -> Result<SourceRecord, ScholarError> {
+    fetch_with_backoff(transport, &build_crossref_url(doi, mailto)?, |body| {
+        parse_crossref_works(body, fetched_at)
+    })
+    .await
+}
+
+/// Fetch ONE identifier from PubMed (the two-step: a DOI resolves through
+/// esearch first; a PMID goes straight to esummary). The FALLBACK adapter.
+pub async fn fetch_pubmed(
+    transport: &ScholarTransport,
+    id: &SourceIdentifier,
+    fetched_at: &str,
+) -> Result<SourceRecord, ScholarError> {
+    let uid = match id {
+        SourceIdentifier::Pmid(p) => p.trim().to_string(),
+        SourceIdentifier::Doi(doi) => {
+            let term = format!("{}[doi]", normalize_doi(doi));
+            let resp = attempt_with_backoff(transport, &build_pubmed_esearch_url(&term)?).await?;
+            if !(200..300).contains(&resp.status) {
+                return Err(rate_or_transport(resp.status));
+            }
+            let uids = parse_pubmed_esearch(&resp.body)?;
+            uids.into_iter()
+                .next()
+                .ok_or(ScholarError::EmptyResult { api: "pubmed" })?
+        }
+        SourceIdentifier::Query(_) => return Err(ScholarError::BadIdentifier),
+    };
+    fetch_with_backoff(transport, &build_pubmed_esummary_url(&uid)?, |body| {
+        parse_pubmed_esummary(body, fetched_at)
+    })
+    .await
+}
+
+/// ONE identifier fetch with the bounded backoff: named refusal on 429/5xx
+/// exhaustion, `TransportFailed` on any other non-2xx, then the parser.
+async fn fetch_with_backoff<T>(
+    transport: &ScholarTransport,
+    url: &str,
+    parse: impl Fn(&str) -> Result<T, ScholarError>,
+) -> Result<T, ScholarError> {
+    let resp = attempt_with_backoff(transport, url).await?;
+    if !(200..300).contains(&resp.status) {
+        return Err(rate_or_transport(resp.status));
+    }
+    parse(&resp.body)
+}
+
+async fn attempt_with_backoff(
+    transport: &ScholarTransport,
+    url: &str,
+) -> Result<ScholarResponse, ScholarError> {
+    let mut attempt: u8 = 1;
+    loop {
+        let resp = transport.get(url).await?;
+        match backoff_decision(resp.status, resp.retry_after_secs, attempt) {
+            BackoffDecision::Retry { wait_secs } => {
+                tokio::time::sleep(Duration::from_secs(wait_secs)).await;
+                attempt += 1;
+            }
+            BackoffDecision::Refused => return Ok(resp),
+        }
+    }
+}
+
+fn rate_or_transport(status: u16) -> ScholarError {
+    if status == 429 || status >= 500 {
+        ScholarError::RateLimited
+    } else {
+        ScholarError::TransportFailed
+    }
+}
+
+// ── the record → markdown renderer ───────────────────────────────────────
+
+/// Render one record as the markdown door's payload: YAML frontmatter (the
+/// scholarly vocabulary) + a body whose first line is the deterministic
+/// status line when retracted, then the metadata line, then the abstract.
+/// Zero-token, pure; the door's title law and caps still apply downstream.
+/// THE STATUS LINE IS THE HUMAN VIEW (reviewer + chunk text); the persisted
+/// `scholar_meta` column is the machine flag the tier floor reads.
+pub fn render_record_markdown(rec: &SourceRecord) -> String {
+    let mut out = String::new();
+    out.push_str("---\n");
+    let title = rec
+        .title
+        .clone()
+        .unwrap_or_else(|| format!("{} record {}", rec.api.as_str(), rec.fetched_at));
+    // Quote every value: the vault parser unquotes, and quoting survives
+    // colons in titles and timestamps (the quoted-scalar law).
+    out.push_str(&format!("title: {}\n", yaml_quote(&title)));
+    if let Some(doi) = &rec.doi {
+        out.push_str(&format!("doi: {doi}\n"));
+    }
+    if let Some(pmid) = &rec.pmid {
+        out.push_str(&format!("pmid: {pmid}\n"));
+    }
+    out.push_str(&format!("source_api: {}\n", rec.api.as_str()));
+    out.push_str(&format!("fetched_at: {}\n", yaml_quote(&rec.fetched_at)));
+    if let Some(license) = &rec.license {
+        out.push_str(&format!("license: {license}\n"));
+    }
+    if let Some(r) = &rec.retraction {
+        match &r.date {
+            Some(date) => out.push_str(&format!("retracted: {date}\n")),
+            None => out.push_str("retracted: true\n"),
+        }
+    }
+    out.push_str("---\n\n");
+
+    if let Some(line) = rec.status_line() {
+        out.push_str(&line);
+        out.push_str("\n\n");
+    }
+    let mut meta = Vec::new();
+    if let Some(authors) = &rec.authors {
+        meta.push(authors.clone());
+    }
+    if let Some(journal) = &rec.journal {
+        meta.push(journal.clone());
+    }
+    if let Some(year) = &rec.pub_year {
+        meta.push(year.clone());
+    }
+    if !meta.is_empty() {
+        out.push_str(&meta.join(" · "));
+        out.push_str("\n\n");
+    }
+    if let Some(abstract_text) = &rec.abstract_text {
+        out.push_str(abstract_text);
+        out.push('\n');
+    }
+    out
+}
+
+fn yaml_quote(v: &str) -> String {
+    format!("\"{}\"", v.replace('\\', "\\\\").replace('"', "\\\""))
 }
