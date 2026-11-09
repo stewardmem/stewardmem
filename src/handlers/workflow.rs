@@ -514,6 +514,33 @@ pub async fn get_scoreboard(
         .await
         .map_err(|e| HandlerError::internal(format!("{e}")))?
         .map_err(HandlerError::internal)?;
+    // IMPROVE11: the HITL approver-measurement block rides the SAME
+    // DPO-gated read — the ledger the decisions themselves wrote (one row per
+    // act, in the act's own tx). Telemetry reads, never gates: nothing here
+    // influences an approval; the only consumer is the human reviewing their
+    // own pattern. An empty ledger serves zeros and nulls — absence is never
+    // dressed up as perfection.
+    let pool_hitl = super::resolve_domain_pool(&state.registry, None)?;
+    let hitl = tokio::task::spawn_blocking(move || -> Result<serde_json::Value, String> {
+        let conn = pool_hitl.get().map_err(|e| format!("{e}"))?;
+        let m = crate::workflow::calibration::hitl_measures(&conn).map_err(|e| format!("{e}"))?;
+        Ok(serde_json::json!({
+            "approved": m.approved,
+            "rejected": m.rejected,
+            "edited": m.edited,
+            "median_latency_ms": m.median_latency_ms,
+            "burst_max_acts_per_min": m.burst_max_acts_per_min,
+            "edit_depth_mean_chars": m.edit_depth_mean_chars,
+            "decay_vs_decision_by_source": m.decay_by_source.iter().map(|d| serde_json::json!({
+                "source": d.source,
+                "machine_expired": d.expired,
+                "human_decided": d.decided,
+            })).collect::<Vec<_>>(),
+        }))
+    })
+    .await
+    .map_err(|e| HandlerError::internal(format!("{e}")))?
+    .map_err(HandlerError::internal)?;
     let hot_topics: Vec<serde_json::Value> = hot
         .into_iter()
         .map(|(slug, n)| serde_json::json!({ "slug": slug, "feedback_count": n }))
@@ -568,6 +595,10 @@ pub async fn get_scoreboard(
         "review_independence_risk": risk,
         "approval_uniformity_ratio": uniformity,
         "review_decisions_window": ri_decisions,
+        // IMPROVE11: the HITL approver-measurement block — the same ledger
+        // the monthly report's `hitl:` segment derives from; the report and
+        // the board measure the same numbers.
+        "hitl": hitl,
     })))
 }
 

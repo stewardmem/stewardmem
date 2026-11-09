@@ -62,6 +62,12 @@ pub(crate) fn signature_blocked(conn: &Connection, now: i64) -> bool {
 /// row lands first (best-effort chain), then the cadence/baseline stamps.
 /// Stamps are transactional with each other; a failed stamp bumps nothing and
 /// the next call re-reports (idempotent at the gate).
+///
+/// The HITL telemetry rides the SAME audited row as the `hitl:` suffix
+/// (IMPROVE11, the complaints pattern): the approver-measurement segment,
+/// derived read-only from `hitl_decision_events` — absent-honest when the
+/// ledger is empty (no zero-cohort segment dressed up as data). Telemetry
+/// reads, never gates: no threshold in this file may influence an approval.
 pub fn record_report(
     conn: &Connection,
     score_units: i32,
@@ -72,10 +78,18 @@ pub fn record_report(
     // Baseline absent → uplift 0 (the first report anchors, never scores).
     let uplift = baseline.map_or(0, |b| score_units - b);
     let record = CalibrationRecord::new(last_kappa_units(conn), uplift, "");
-    let detail = if kcs_summary.is_empty() {
-        record.detail()
-    } else {
-        format!("{} {kcs_summary}", record.detail())
+    let detail = {
+        let base = if kcs_summary.is_empty() {
+            record.detail()
+        } else {
+            format!("{} {kcs_summary}", record.detail())
+        };
+        let hitl = hitl_summary(conn);
+        if hitl.is_empty() {
+            base
+        } else {
+            format!("{base} hitl:{hitl}")
+        }
     };
     super::audit_write_global(
         conn,
@@ -107,7 +121,10 @@ pub(crate) struct ConjunctionUnits {
 /// rides the SAME audited signature row as a suffix on the record detail,
 /// so the audit can verify the preregistered conjunction was honored
 /// (KM-4). `complaints_summary` is the complaints register extract that
-/// rides the same row — joined, never parallel machinery.
+/// rides the same row — joined, never parallel machinery. The HITL
+/// telemetry rides as the final `hitl:` suffix (IMPROVE11 — the
+/// measurement the operator signs beside κ; absent-honest when the ledger
+/// is empty).
 pub(crate) fn record_signed(
     conn: &Connection,
     conjunction: ConjunctionUnits,
@@ -131,6 +148,14 @@ pub(crate) fn record_signed(
     } else {
         format!("{base} complaints:{complaints_summary}")
     };
+    let detail = {
+        let hitl = hitl_summary(conn);
+        if hitl.is_empty() {
+            detail
+        } else {
+            format!("{detail} hitl:{hitl}")
+        }
+    };
     super::audit_write_global(
         conn,
         "calibration/sign",
@@ -146,6 +171,184 @@ pub(crate) fn record_signed(
     // A human signature re-anchors the baseline: deltas stay OUR-vs-US.
     meta_set(conn, KEY_BASELINE_UNITS, &score_units.to_string())?;
     Ok(())
+}
+
+// ── IMPROVE11: the HITL approver-measurement aggregate ──────────────────────
+// The derivation behind the monthly report's `hitl:` segment and the
+// DPO-gated scoreboard's `hitl` block — the report and the board measure
+// the SAME numbers. ALL SQL/Rust over `hitl_decision_events` +
+// `proposals`; NO model anywhere (law c). Read-only: nothing here writes,
+// and NO threshold here gates anything — the inalienability law's only
+// consumer is the human reviewing their own pattern.
+
+/// One per-source decay-vs-decision ratio: a proposal source that only ever
+/// TTL-expires is visible as noise-generation, informing source tuning
+/// (plan 11 §1.3). `expired` = proposals the MACHINE aged out
+/// (`expire_if_stale`, age past the TTL at decision); `decided` = proposals
+/// a HUMAN decided — DISTINCT proposals, not acts (an edit-then-approve pair
+/// is one decided proposal; both sides of the ratio count proposals).
+pub(crate) struct DecayRatio {
+    pub source: String,
+    pub expired: i64,
+    pub decided: i64,
+}
+
+/// The approver-measurement aggregate. Zeros and NULLs are honest answers:
+/// an empty ledger reads 0/0/0 with NULL latency and depth — absence is
+/// never dressed up as perfection (the aftersales law).
+pub(crate) struct HitlMeasures {
+    pub approved: i64,
+    pub rejected: i64,
+    pub edited: i64,
+    pub median_latency_ms: Option<i64>,
+    /// The burst signal: the largest count of acts by ONE actor inside one
+    /// wall-clock minute bucket (ts/60). 1 = no burst observed.
+    pub burst_max_acts_per_min: i64,
+    /// Mean of the ABSOLUTE edit deltas — the depth the human changed the
+    /// artifact by, averaged over edits (the signed raw deltas stay in the
+    /// ledger; this is the report-side magnitude).
+    pub edit_depth_mean_chars: Option<f64>,
+    pub decay_by_source: Vec<DecayRatio>,
+}
+
+pub(crate) fn hitl_measures(conn: &Connection) -> rusqlite::Result<HitlMeasures> {
+    let mut counts =
+        conn.prepare("SELECT decision, COUNT(*) FROM hitl_decision_events GROUP BY decision")?;
+    let mut approved = 0;
+    let mut rejected = 0;
+    let mut edited = 0;
+    let mut rows = counts.query([])?;
+    while let Some(r) = rows.next()? {
+        let (decision, n): (String, i64) = (r.get(0)?, r.get(1)?);
+        match decision.as_str() {
+            "approve" => approved = n,
+            "reject" => rejected = n,
+            "edit" => edited = n,
+            // the CHECK closes the vocabulary; an unknown value is not a row.
+            _ => {}
+        }
+    }
+    // Median latency: sorted collect, middle element (even count: the mean of
+    // the two middles). Empty → NULL.
+    let latencies: Vec<i64> = {
+        let mut stmt = conn.prepare(
+            "SELECT latency_ms FROM hitl_decision_events
+             WHERE latency_ms IS NOT NULL ORDER BY latency_ms",
+        )?;
+        let rows = stmt.query_map([], |r| r.get::<_, i64>(0))?;
+        rows.collect::<Result<Vec<_>, _>>()?
+    };
+    let median_latency_ms = if latencies.is_empty() {
+        None
+    } else if latencies.len() % 2 == 1 {
+        Some(latencies[latencies.len() / 2])
+    } else {
+        let hi = latencies.len() / 2;
+        Some((latencies[hi - 1] + latencies[hi]) / 2)
+    };
+    let burst_max_acts_per_min: i64 = conn.query_row(
+        "SELECT COALESCE(MAX(c), 0) FROM
+             (SELECT COUNT(*) AS c FROM hitl_decision_events
+              GROUP BY actor, ts / 60)",
+        [],
+        |r| r.get(0),
+    )?;
+    let edit_depth_mean_chars: Option<f64> = conn
+        .query_row(
+            "SELECT AVG(ABS(edit_depth_chars)) FROM hitl_decision_events
+             WHERE edit_depth_chars IS NOT NULL",
+            [],
+            |r| r.get::<_, Option<f64>>(0),
+        )
+        .ok()
+        .flatten();
+    // Decay-vs-decision per source. Machine-expired: rejected with an age at
+    // decision PAST the TTL — exactly `expire_if_stale`'s branch (the human
+    // paths refuse past-TTL rows, so a within-TTL reject is a human act with
+    // its ledger row). Human-decided: ledger rows joined to their proposal's
+    // source. Sources present in either set appear; NULL source reads
+    // 'unknown'.
+    let ttl = crate::config::proposal_ttl_secs();
+    let mut decay: std::collections::BTreeMap<String, (i64, i64)> = Default::default();
+    {
+        let mut stmt = conn.prepare(
+            "SELECT COALESCE(source, 'unknown'), COUNT(*) FROM proposals
+             WHERE status = 'rejected' AND decided_at IS NOT NULL
+               AND (decided_at - created_at) > ?1
+             GROUP BY 1",
+        )?;
+        let rows = stmt.query_map([ttl], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?;
+        for r in rows.flatten() {
+            decay.entry(r.0).or_default().0 = r.1;
+        }
+    }
+    {
+        let mut stmt = conn.prepare(
+            "SELECT COALESCE(p.source, 'unknown'), COUNT(DISTINCT p.id) FROM proposals p
+             JOIN hitl_decision_events e ON e.proposal_id = p.id
+             GROUP BY 1",
+        )?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?;
+        for r in rows.flatten() {
+            decay.entry(r.0).or_default().1 = r.1;
+        }
+    }
+    let decay_by_source = decay
+        .into_iter()
+        .map(|(source, (expired, decided))| DecayRatio {
+            source,
+            expired,
+            decided,
+        })
+        .collect();
+    Ok(HitlMeasures {
+        approved,
+        rejected,
+        edited,
+        median_latency_ms,
+        burst_max_acts_per_min,
+        edit_depth_mean_chars,
+        decay_by_source,
+    })
+}
+
+/// The report-segment renderer (the complaints pattern's shape): the compact
+/// `hitl:` payload, or EMPTY when the ledger carries no acts — absence is
+/// honest, never a zero-cohort segment. `pub` because the format is the
+/// fact the audit chain commits to: an auditor holding the chain verifies
+/// the segment against the ledger with this exact rendering (the SDK's
+/// `CalibrationRecord::detail` precedent).
+pub fn hitl_summary(conn: &Connection) -> String {
+    let Ok(m) = hitl_measures(conn) else {
+        return String::new();
+    };
+    if m.approved + m.rejected + m.edited == 0 {
+        return String::new();
+    }
+    let mut s = format!(
+        "approved:{} rejected:{} edited:{} median_latency_ms:{} \
+         burst_max_acts_per_min:{} edit_depth_mean_chars:{}",
+        m.approved,
+        m.rejected,
+        m.edited,
+        m.median_latency_ms
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "null".to_string()),
+        m.burst_max_acts_per_min,
+        m.edit_depth_mean_chars
+            .map(|v| format!("{v:.1}"))
+            .unwrap_or_else(|| "null".to_string()),
+    );
+    if !m.decay_by_source.is_empty() {
+        s.push_str(" decay:");
+        let parts: Vec<String> = m
+            .decay_by_source
+            .iter()
+            .map(|d| format!("{}:{}/{}", d.source, d.expired, d.decided))
+            .collect();
+        s.push_str(&parts.join(","));
+    }
+    s
 }
 
 #[cfg(test)]

@@ -168,6 +168,25 @@ async fn reject(state: &Arc<brain_server::AppState>, pid: i64) -> (StatusCode, s
     post_json(state, &format!("/proposals/{pid}/reject"), "{}").await
 }
 
+/// GET any route with the operator bearer and read (status, JSON) back.
+async fn get(state: &Arc<brain_server::AppState>, uri: &str) -> (StatusCode, serde_json::Value) {
+    let req = Request::builder()
+        .method("GET")
+        .uri(uri)
+        .header("authorization", format!("Bearer {OP_TOKEN}"))
+        .body(Body::empty())
+        .expect("request");
+    let res = app(state.clone()).oneshot(req).await.expect("oneshot");
+    let status = res.status();
+    let bytes = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .expect("body");
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
+}
+
 async fn edit(
     state: &Arc<brain_server::AppState>,
     pid: i64,
@@ -553,5 +572,184 @@ fn ht4_ledger_columns_and_the_closed_vocabulary() {
         refused.is_err(),
         "the CHECK law: a decision outside the closed vocabulary must be refused \
          at the storage layer, not merely by the recorder's discipline"
+    );
+}
+
+// ── HT-3 · the report and the board carry the measurement ──────────────────
+// (S2 pins, written before the S2 landing: the present-arms red by absence —
+// the report's audited detail has no `hitl:` suffix yet, the scoreboard body
+// has no `hitl` key yet — and the absent-arms green today, pinning the
+// honesty arm that must SURVIVE the landing.)
+
+/// The weekly report's audited detail carries the `hitl:` segment when
+/// decisions exist. Details are HASHED at rest, so the pin recomputes the
+/// expected detail — the SDK record's format plus the segment derived from
+/// the ledger's own row (the latency read back from the act's event, not
+/// assumed) — and matches the stored hash. This is the report the operator
+/// signs beside κ: measurement-first, never gating.
+#[tokio::test]
+async fn ht3_report_carries_the_hitl_segment_when_decisions_exist() {
+    let srv = server();
+    let now = chrono::Utc::now().timestamp();
+    let pid = {
+        let conn = srv.state.pool.get().expect("conn");
+        seed_proposal(&conn, "the report must carry the measurement", now)
+    };
+    let (status, _) = approve(&srv.state, pid).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let conn = srv.state.pool.get().expect("conn");
+    let latency: i64 = conn
+        .query_row(
+            "SELECT latency_ms FROM hitl_decision_events
+             WHERE proposal_id = ?1 AND decision = 'approve'",
+            [pid],
+            |r| r.get(0),
+        )
+        .expect("the act's row carries its latency");
+    brain_server::workflow::calibration::record_report(&conn, 9000, now, "").expect("report");
+    let expected = format!(
+        "{} hitl:approved:1 rejected:0 edited:0 median_latency_ms:{} \
+         burst_max_acts_per_min:1 edit_depth_mean_chars:null decay:agent:0/1",
+        brain_engine_sdk::calibration::CalibrationRecord::new(
+            brain_engine_sdk::calibration::NO_KAPPA,
+            0,
+            ""
+        )
+        .detail(),
+        latency
+    );
+    let detail_hash: String = conn
+        .query_row(
+            "SELECT detail_hash FROM audit_events
+             WHERE kind='workflow' AND target_hash = ?1",
+            [brain_server::audit::hash("calibration/report")],
+            |r| r.get(0),
+        )
+        .expect("the report's audit row");
+    assert_eq!(
+        detail_hash,
+        brain_server::audit::hash(&expected),
+        "the audited report must carry the hitl segment beside κ — the segment \
+         omitted reds here, the segment drifting from the derivation reds here"
+    );
+}
+
+/// The absent-honest arm: with NO decisions, the report's detail is the
+/// record's own format EXACTLY — no empty `hitl:` suffix dressed up as data.
+/// Greens today (the current state IS absence) and must stay green after the
+/// landing: the segment appears only when decisions exist.
+#[test]
+fn ht3_report_is_absent_honest_when_no_decisions_exist() {
+    let conn = {
+        brain_server::register_sqlite_vec::register_sqlite_vec();
+        let mut c = rusqlite::Connection::open_in_memory().expect("memory db");
+        brain_server::migration::run_migration(&mut c, 1).expect("migration");
+        c
+    };
+    brain_server::workflow::calibration::record_report(&conn, 9000, 100, "").expect("report");
+    let expected = brain_engine_sdk::calibration::CalibrationRecord::new(
+        brain_engine_sdk::calibration::NO_KAPPA,
+        0,
+        "",
+    )
+    .detail();
+    let detail_hash: String = conn
+        .query_row(
+            "SELECT detail_hash FROM audit_events
+             WHERE kind='workflow' AND target_hash = ?1",
+            [brain_server::audit::hash("calibration/report")],
+            |r| r.get(0),
+        )
+        .expect("the report's audit row");
+    assert_eq!(
+        detail_hash,
+        brain_server::audit::hash(&expected),
+        "an empty ledger must leave the report's detail byte-stable — no \
+         zero-cohort hitl segment dressed up as measurement"
+    );
+}
+
+/// The DPO-gated scoreboard serves the hitl block with the derived numbers —
+/// the report and the board measure the same ledger. An edit-then-approve
+/// sequence shows both acts: edited 1, approved 1, a non-null median over the
+/// decided act, and the per-source decay-vs-decision ratio.
+#[tokio::test]
+async fn ht3_scoreboard_serves_the_hitl_block() {
+    let srv = server();
+    let now = chrono::Utc::now().timestamp();
+    let pid = {
+        let conn = srv.state.pool.get().expect("conn");
+        seed_proposal(&conn, "the board must serve the measurement", now)
+    };
+    let (es, _) = edit(
+        &srv.state,
+        pid,
+        "the board must serve the measurement, edited",
+    )
+    .await;
+    assert_eq!(es, StatusCode::OK, "edit must succeed");
+    let (status, body) = approve(&srv.state, pid).await;
+    assert_eq!(status, StatusCode::OK, "approve must succeed: {body}");
+
+    let (st, board) = get(&srv.state, "/workflow/scoreboard").await;
+    assert_eq!(
+        st,
+        StatusCode::OK,
+        "the DPO-gated board must serve: {board}"
+    );
+    let hitl = &board["hitl"];
+    assert!(
+        !hitl.is_null(),
+        "the scoreboard must carry a hitl block (the DPO-gated surface the \
+         block rides — never a public route)"
+    );
+    assert_eq!(hitl["approved"], 1, "one approve act");
+    assert_eq!(hitl["edited"], 1, "one edit act");
+    assert_eq!(hitl["rejected"], 0);
+    assert!(
+        hitl["median_latency_ms"].is_i64(),
+        "the decided act's latency is non-null: {}",
+        hitl["median_latency_ms"]
+    );
+    assert!(
+        hitl["burst_max_acts_per_min"].is_i64(),
+        "the burst measure serves even for a single act"
+    );
+    let decay = hitl["decay_vs_decision_by_source"]
+        .as_array()
+        .expect("decay array");
+    assert_eq!(decay.len(), 1, "one source observed");
+    assert_eq!(decay[0]["source"], "agent");
+    assert_eq!(
+        decay[0]["machine_expired"], 0,
+        "no TTL expiry in this witness"
+    );
+    assert_eq!(decay[0]["human_decided"], 1, "one human decision");
+}
+
+/// The zero-cohort arm: with NO decisions the block still serves — zeros and
+/// nulls, never dressed up as perfection (the aftersales absence law).
+#[tokio::test]
+async fn ht3_scoreboard_zero_cohort_is_absent_honest() {
+    let srv = server();
+    let (st, board) = get(&srv.state, "/workflow/scoreboard").await;
+    assert_eq!(st, StatusCode::OK, "{board}");
+    let hitl = &board["hitl"];
+    assert!(!hitl.is_null(), "the block serves even when empty");
+    assert_eq!(hitl["approved"], 0);
+    assert_eq!(hitl["edited"], 0);
+    assert_eq!(hitl["rejected"], 0);
+    assert!(
+        hitl["median_latency_ms"].is_null(),
+        "no decisions → no median, null is the honest answer"
+    );
+    assert_eq!(
+        hitl["decay_vs_decision_by_source"]
+            .as_array()
+            .expect("decay array")
+            .len(),
+        0,
+        "no proposals → no decay ratios"
     );
 }

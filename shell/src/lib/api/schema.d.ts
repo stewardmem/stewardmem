@@ -11007,6 +11007,29 @@ export interface operations {
                         approval_uniformity_ratio?: number;
                         /** @description approved + rejected decisions in the uniformity sample (the denominator context). */
                         review_decisions_window?: number;
+                        /** @description IMPROVE11: the HITL approver-measurement block — the same ledger (`hitl_decision_events`, one append-only row per decided act, written in the act's own transaction) the monthly calibration report's `hitl:` segment derives from. Telemetry reads, never gates: no threshold here may influence an approval. Zeros and nulls are honest answers. */
+                        hitl?: {
+                            /** @description Approve acts recorded in the ledger. */
+                            approved?: number;
+                            /** @description Reject acts recorded in the ledger. */
+                            rejected?: number;
+                            /** @description Edit acts recorded in the ledger. */
+                            edited?: number;
+                            /** @description Median of (decided_at − created_at) over decided acts, in milliseconds at the clocks' second granularity; null when no decision exists. */
+                            median_latency_ms?: number | null;
+                            /** @description Largest count of acts by ONE actor inside one wall-clock minute bucket — the burst signal. */
+                            burst_max_acts_per_min?: number;
+                            /** @description Mean ABSOLUTE signed char delta over edit acts (the depth the human changed the artifact by); null when no edit exists. */
+                            edit_depth_mean_chars?: number | null;
+                            /** @description Per-proposal-source decay-vs-decision ratio: a source that only ever TTL-expires is visible as noise-generation, informing source tuning. */
+                            decay_vs_decision_by_source?: {
+                                source?: string;
+                                /** @description Proposals the machine aged out past the TTL. */
+                                machine_expired?: number;
+                                /** @description Proposals a human decided (ledger rows). */
+                                human_decided?: number;
+                            }[];
+                        };
                     };
                 };
             };

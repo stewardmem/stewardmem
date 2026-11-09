@@ -4974,6 +4974,61 @@ paths:
                   review_decisions_window:
                     type: integer
                     description: approved + rejected decisions in the uniformity sample (the denominator context).
+                  hitl:
+                    type: object
+                    description: >-
+                      IMPROVE11: the HITL approver-measurement block — the same
+                      ledger (`hitl_decision_events`, one append-only row per
+                      decided act, written in the act's own transaction) the
+                      monthly calibration report's `hitl:` segment derives from.
+                      Telemetry reads, never gates: no threshold here may
+                      influence an approval. Zeros and nulls are honest answers.
+                    properties:
+                      approved:
+                        type: integer
+                        description: Approve acts recorded in the ledger.
+                      rejected:
+                        type: integer
+                        description: Reject acts recorded in the ledger.
+                      edited:
+                        type: integer
+                        description: Edit acts recorded in the ledger.
+                      median_latency_ms:
+                        type: integer
+                        nullable: true
+                        description: >-
+                          Median of (decided_at − created_at) over decided acts,
+                          in milliseconds at the clocks' second granularity;
+                          null when no decision exists.
+                      burst_max_acts_per_min:
+                        type: integer
+                        description: >-
+                          Largest count of acts by ONE actor inside one
+                          wall-clock minute bucket — the burst signal.
+                      edit_depth_mean_chars:
+                        type: number
+                        nullable: true
+                        description: >-
+                          Mean ABSOLUTE signed char delta over edit acts (the
+                          depth the human changed the artifact by); null when no
+                          edit exists.
+                      decay_vs_decision_by_source:
+                        type: array
+                        description: >-
+                          Per-proposal-source decay-vs-decision ratio: a source
+                          that only ever TTL-expires is visible as
+                          noise-generation, informing source tuning.
+                        items:
+                          type: object
+                          properties:
+                            source:
+                              type: string
+                            machine_expired:
+                              type: integer
+                              description: Proposals the machine aged out past the TTL.
+                            human_decided:
+                              type: integer
+                              description: Proposals a human decided (ledger rows).
         "401":
           description: Not authenticated
         "403":
