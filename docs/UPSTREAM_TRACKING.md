@@ -21,6 +21,9 @@ bump with its receipts.
   re-verification (2026-11-09) is the second seeding.
 - **Filing discipline:** NO upstream filing by the agent. Drafts live in this
   repo (`§D-1`, `§D-2`); filing on GitHub is the operator's outward-facing act.
+  `§D-1` is positioned AFTER the bump re-probe (main's #663 may close the
+  finding — it files as a confirmation with fresh data or a closed-it report,
+  by measurement).
 
 ## The table
 
@@ -109,3 +112,96 @@ Main-classes checklist extracted from the compare `3b339ad6...main`
 - **Model wave — NOT adoption targets (the roster is fixed at seven MLX
   tiers):** Qwen 3.8 · Nemotron 3.5 (#712; arXiv 2610.38095) · Gemma 4 ·
   LFM2.5/LFM3 · MiniCPM5 · Mellum 2.1 · EmbeddingGemma 2.
+
+## §D-1 · DRAFT — the C-6 upstream report (file ONLY after the bump re-probe)
+
+> Status: `proposed — draft filed by the operator`. The bump re-probe comes
+> FIRST (the checklist's act 5): main's #663/#644 may close the finding; this
+> draft then files as either a confirmation with fresh data or a
+> closed-by-the-fix report. Target repo: ml-explore/mlx-swift-lm.
+
+**Title:** Qwen3.5 chat template: the primed-think render is not
+prefix-stable across turns — the native prompt cache cannot hit on
+multi-turn (`cachedPromptTokenCount == 0` on turn 2)
+
+**Body (verbatim draft):**
+
+We run a local-first memory server on mlx-swift-lm **3.32.3** (`3b339ad6`,
+so #155's `ArraysCache`/`MambaCache`/`CacheList` prompt-cache round-trip IS
+in our build), swift-transformers 1.4.0, swift-jinja 3.0.0, macOS 27.2
+arm64 / M1 Pro 16 GB.
+
+On every Qwen3.5 tier we serve (the 2B/9B/9B-heretic/4B GDN-family 4-bit
+MLX repos), the second turn of a same-session conversation reports the
+native split as **`promptTokenCount` = N (all fresh), `cachedPromptTokenCount`
+= 0** — the prompt cache never serves the shared prefix, on any KV scheme we
+run. The control tier (`Qwen3-8B-4bit`, non-GDN) shows **`cached=227`** on
+the same two-turn shape.
+
+As far as we can trace it (the `template-debug` bisect): once the final
+assistant turn carries content, the primed-think template renders the
+conversation differently turn-over-turn (the reasoning block handling), so
+turn 2's rendered token sequence is NOT an extension of turn 1's — the miss
+happens upstream of the cache classes, in the rendered prompt bytes. #155's
+round-trip fix does not change this (verified at 3.32.3).
+
+We see #663 ("Fix Qwen reasoning history reconstruction") and #644 ("Report
+the reused cache prefix before prefill") on main as likely-related. **We are
+holding this report until our next tagged bump** and will re-probe the
+instrument then: if the render is fixed, this closes with our fresh
+measurement attached; if not, it files with fresh data on the new pin.
+
+Our instrument: a multi-turn probe reading the engine's own
+`promptTokenCount`/`cachedPromptTokenCount` split per turn (no wire-sum
+inference), plus per-tier tok/s and `phys_footprint` tables. Happy to share
+the full tables.
+
+## §D-2 · DRAFT — the spec-decode engagement (the MTP question + the measurement offer)
+
+> Status: `proposed — draft filed by the operator`. No bump gating on this
+> one — the question stands now that #545/#581 have landed; the operator
+> files when ready. Target repo: ml-explore/mlx-swift-lm (discussion or
+> issue per the maintainers' preference).
+
+**Title:** Speculative decoding on GDN/hybrid towers: does the new
+tower-native MTP path clear a ≥40% acceptance gate on the Qwen3.5 tiers?
+(measurement offer + our preregistered harness)
+
+**Body (verbatim draft):**
+
+We run a local-first memory server with a fixed roster of seven MLX tiers
+(Qwen3-8B + five Qwen3.5 GDN-family 4-bit/5-bit repos) on M1 Pro 16 GB, and
+we preregister our spec-decode posture: **a tier moves OFF → ON only above
+40% acceptance** measured off the engine's own
+`SpeculativeDecodingTelemetry.acceptanceRate` (pinned in our suite — the
+gate, a seven-tier OFF posture, and a drafter-not-loaded law; the pins are
+the harness).
+
+What we measured on the **draft-model path** (mlx-swift-lm 3.32.3, 0.6B
+drafter beside the 8B target): acceptance **25–47% across arms** — crossing
+our gate on some arms — but turn-2 throughput **collapsed 28.5 → 9.6 tok/s**
+(cold → 6.7; long-context → 6.3) and `phys_footprint` grew **~1.5–4 GiB**
+with the drafter resident. The gate proved necessary-not-sufficient; the
+measured throughput decides. That is why our GDN tiers stayed OFF.
+
+The question, now that #545/#581 have landed the **tower-native MTP path**
+(`MTPSpeculativeTokenIterator`, sliding-window-aware, min block 2): **does
+MTP clear ≥40% acceptance on the Qwen3.5 GDN tiers without the throughput
+collapse?** We will measure at our next tagged bump and share the per-tier
+table either way — the tiers stay OFF unless BOTH the acceptance gate and
+the measured throughput clear.
+
+For context, the 2026 literature we are tracking on this exact class:
+TreeWY (2608.20961), Twig (2608.01651), SpecLA (2607.16673), ReaDy
+(2610.20503), component-aware self-speculation (2605.01106); HybridSpec
+(2611.04055 — verification-length choice for hybrid GDN-MoE targets),
+SpecOPD (2611.02846), ReplaySSM (2610.13778), H-Spec (2609.24197); the MTP
+class: AngelSpec (2607.25852), Windowed-MTP (2607.21535), DLoop
+(2610.07659), HyCo (2610.21436), Long-Context Drafting (2610.20865); and
+Nemotron 3.5 (2610.38095) as the MTP reference design behind #712.
+
+Offer: our harness is preregistered and reusable (the 40% gate, the OFF
+posture, the per-tier probe tables with tok/s + phys_footprint). If a
+tagged release carries MTP for the Qwen3.5 family, we will publish our
+table; if the maintainers want a specific workload shape measured, we will
+take it.

@@ -135,9 +135,35 @@ mutation proofs of the same code paths a future bad row would hit.
 
 ## 6 · The engagement drafts (in-repo; the operator files)
 
-Landed in S3 — `§D-1` (the C-6 report) and `§D-2` (the spec-decode
-engagement) recorded verbatim in `docs/UPSTREAM_TRACKING.md`. NO GitHub
-filing by the agent.
+Recorded VERBATIM in `docs/UPSTREAM_TRACKING.md` (§D-1, §D-2), pins green
+over them (6/6). **NO GitHub filing by the agent** — the table's review-date
+fields carry the follow-up; filing is the operator's outward-facing act.
+
+- **§D-1 — the C-6 report** (target: ml-explore/mlx-swift-lm): the
+  `cachedPromptTokenCount == 0` turn-2 finding on the Qwen3.5 GDN tiers vs
+  the 8B's `cached=227` control; the template-debug bisect's cause
+  (the primed-think render is not prefix-stable once the final assistant
+  turn has content); #155 verified present-and-not-covering (our pin
+  3.32.3 carries it); the #663/#644 hook named. **Positioned AFTER the
+  bump re-probe** (§0.5 fact 4): the draft files as a confirmation with
+  fresh data OR a closed-by-the-fix report, by measurement — the header
+  carries the file-only-after gate.
+- **§D-2 — the spec-decode engagement** (target: ml-explore/mlx-swift-lm):
+  the MTP question — does the tower-native MTP path (#545/#581) clear the
+  ≥40% acceptance gate on the Qwen3.5 GDN tiers WITHOUT the throughput
+  collapse — with our CG-11 draft-model data (acceptance 25–47% yet
+  28.5 → 6.3–9.6 tok/s, ~1.5–4 GiB drafter cost), the preregistered
+  harness offered as the measurement, and the literature set (the plan's
+  five + HybridSpec 2611.04055 / SpecOPD 2611.02846 / ReplaySSM 2610.13778
+  / H-Spec 2609.24197 + the MTP class AngelSpec 2607.25852 / Windowed-MTP
+  2607.21535 / DLoop 2610.07659 / HyCo 2610.21436 / Long-Context Drafting
+  2610.20865 + Nemotron 3.5 2610.38095 behind #712).
+
+**S4 (the swift-jinja re-check) is folded into this commit** per the
+execution prompt's allowance ("One commit with S2/S3's doc state or its own
+— either is fine; the row must carry the fresh date"): the live probe
+(§4 above, `jinja-compare.json` — identical, ahead_by 0, 2026-11-09) is the
+step's act; the table's jinja row has carried the fresh date since S2.
 
 ## 7 · Honest notes
 
