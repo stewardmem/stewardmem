@@ -42,6 +42,7 @@
 import Foundation
 import Foundation
 import MachO
+import CryptoKit
 import MLXFMProbe
 import MLXLMCommon
 import MLXFoundationModels
@@ -200,10 +201,298 @@ func askChat(_ session: ChatSession, _ prompt: String) async -> TurnMeasure {
         measure.text = "THREW: \(error)"
         return measure
     }
-    measure.wallSeconds = Double(
-        (ContinuousClock.now - wallStart).components.attoseconds) / 1e18
+    // IMPROVE10 S1 instrument fix: Duration.components is (seconds,
+    // attoseconds) — attoseconds alone is the SUB-SECOND part, so the old
+    // computation reported the fraction of a second as if it were the
+    // whole. CG-11's wall_s column carried that defect (its tables read
+    // promptTime/generateTime, the engine's own measures, so no verdict
+    // changes); the matrix rows read wall properly.
+    let wallDur = ContinuousClock.now - wallStart
+    measure.wallSeconds =
+        Double(wallDur.components.seconds) + Double(wallDur.components.attoseconds) / 1e18
     measure.text = out.trimmingCharacters(in: .whitespacesAndNewlines)
     return measure
+}
+
+// ── MATRIX MODE (IMPROVE10 S1) ────────────────────────────────────────────
+// The preregistered matrix row driver. Design contract lives at the
+// PROBE_MATRIX gate inside run() and in the preregistration doc; the two
+// laws that shape the CODE are: (a) the fence inherits ARM L's
+// BRAIN_UNTRUSTED_CONTEXT shape, parametrized to the ladder lengths;
+// (b) the instruments are recorded, never inferred — every timing is the
+// engine's own or a ContinuousClock wall, every memory number is
+// phys_footprint measured here, and the row carries a content hash so a
+// re-run is comparable byte-for-byte.
+
+/// One needle: a distinct lookup key, a distinct planted code, and the
+/// depth (percent of the fence) its line sits at — the RULER multi-query
+/// shape (arXiv:2404.06654): one needle per depth, all distinct.
+struct MatrixNeedle {
+    let depth: Double
+    let key: String
+    let code: String
+}
+
+/// The preregistered needle set — five distinct keys and codes. Codes are
+/// MN-prefixed and never collide with filler content; keys are distinct
+/// places so each question names exactly one needle.
+let MATRIX_NEEDLE_KEYS: [(String, String)] = [
+    ("lighthouse", "MN-4471"), ("ferry", "MN-8123"), ("aqueduct", "MN-2965"),
+    ("belltower", "MN-6108"), ("observatory", "MN-9542"),
+]
+
+/// The filler line, ARM L's shape verbatim (the fence the CG-11 tables
+/// were read on), parametrized by index.
+func matrixFillerLine(_ i: Int) -> String {
+    "Memory \(i): the \(["garden", "harbor", "library", "archive", "greenhouse"][i % 5]) "
+        + "ledger for week \(i % 12) lists \(3 + (i * 7) % 40) entries, "
+        + "the largest weighing \(2 + (i * 3) % 17) kilograms, "
+        + "reviewed on day \(i % 28) by the keeper on duty."
+}
+
+/// JSON string escaping, std-only — rows are hand-built so field order is
+/// deterministic (the run hash hashes the row's canonical form).
+func jsonEscape(_ s: String) -> String {
+    var out = ""
+    for ch in s.unicodeScalars {
+        switch ch {
+        case "\"": out += "\\\""
+        case "\\": out += "\\\\"
+        case "\n": out += "\\n"
+        case "\r": out += "\\r"
+        case "\t": out += "\\t"
+        default:
+            if ch.value < 0x20 { out += String(format: "\\u%04x", ch.value) } else { out += String(ch) }
+        }
+    }
+    return out
+}
+
+/// Builds the fence at ~target tokens by composing filler lines, encoding,
+/// and adjusting line count until within ~0.5% — token-accurate ladders,
+/// not line-count guesses. Needles land at their requested depths measured
+/// over the FINAL line array; each needle's memory id is 100_000 + its
+/// final line index (filler ids never reach six digits, so citations are
+/// unambiguous).
+func buildMatrixFence(
+    _ container: ModelContainer, targetTokens: Int, needles: [MatrixNeedle]
+) async throws -> (prompt: String, fenceTokens: Int, positions: [Int], totalLines: Int) {
+    let sample = matrixFillerLine(0)
+    let sampleTokens = await container.encode(sample).count
+    let perLine = max(1, sampleTokens)
+    var count = max(8, targetTokens / perLine)
+    // Compose filler lines, then weave the needles in at their depths.
+    func compose(_ fillerCount: Int) -> (lines: [String], positions: [Int]) {
+        let lines = (0..<fillerCount).map(matrixFillerLine)
+        var positions: [Int] = []
+        for (k, needle) in needles.enumerated() {
+            let pos = min(
+                max(Int((Double(fillerCount + needles.count) * needle.depth / 100.0).rounded()), k + 1),
+                fillerCount + needles.count - (needles.count - k))
+            positions.append(pos)
+        }
+        // Insert ascending; each needle's id is 100_000 + its FINAL index.
+        var woven: [String] = []
+        var nextFiller = 0
+        for (k, needle) in needles.enumerated() {
+            while woven.count < positions[k] && nextFiller < fillerCount {
+                woven.append(lines[nextFiller])
+                nextFiller += 1
+            }
+            woven.append(
+                "Memory \(100_000 + woven.count): the registration code for the \(needle.key) is \(needle.code).")
+        }
+        while nextFiller < fillerCount {
+            woven.append(lines[nextFiller])
+            nextFiller += 1
+        }
+        return (woven, positions)
+    }
+    var composed = compose(count)
+    var prompt =
+        "=== BRAIN_UNTRUSTED_CONTEXT BEGIN ===\n\(composed.lines.joined(separator: "\n"))\n=== BRAIN_UNTRUSTED_CONTEXT END ==="
+    var tokens = await container.encode(prompt).count
+    // Adjust: add or shed filler lines until the fence lands within 0.5%
+    // of the ladder target (bounded iterations; the row records the true
+    // token count either way).
+    var guardIterations = 0
+    while (tokens < targetTokens * 995 / 1000 || tokens > targetTokens * 1005 / 1000)
+        && guardIterations < 40
+    {
+        guardIterations += 1
+        let delta = targetTokens - tokens
+        count = max(8, count + delta / perLine + (delta > 0 ? 1 : -1))
+        composed = compose(count)
+        prompt =
+            "=== BRAIN_UNTRUSTED_CONTEXT BEGIN ===\n\(composed.lines.joined(separator: "\n"))\n=== BRAIN_UNTRUSTED_CONTEXT END ==="
+        tokens = await container.encode(prompt).count
+    }
+    return (prompt, tokens, composed.positions, composed.lines.count)
+}
+
+@available(macOS 27.0, *)
+func runMatrix(_ container: ModelContainer, kvScheme: String?) async throws {
+    let env = ProcessInfo.processInfo.environment
+    guard let lengthsRaw = env["PROBE_LENGTHS"], !lengthsRaw.isEmpty else {
+        print("PROBE_MATRIX=1 requires PROBE_LENGTHS (comma-separated target token counts)")
+        exit(2)
+    }
+    let lengths = lengthsRaw.split(separator: ",").compactMap {
+        Int($0.trimmingCharacters(in: .whitespaces))
+    }
+    guard !lengths.isEmpty else {
+        print("PROBE_LENGTHS parsed to nothing: \(lengthsRaw)")
+        exit(2)
+    }
+    let depthsRaw = env["PROBE_DEPTHS"] ?? "10,25,50,75,90"
+    let depths = depthsRaw.split(separator: ",").compactMap {
+        Double($0.trimmingCharacters(in: .whitespaces))
+    }
+    let needleCount = Int(env["PROBE_NEEDLES"] ?? "5") ?? 5
+    let maxTok = Int(env["PROBE_MAXTOK"] ?? "512") ?? 512
+    let tier = env["PROBE_TIER"] ?? env["PROBE_MODEL_ID"] ?? "unknown"
+    let outPath = env["PROBE_MATRIX_OUT"] ?? "kv_matrix_rows.jsonl"
+    let scheme = kvScheme ?? "nil"
+    let needles: [MatrixNeedle] = (0..<needleCount).map { i in
+        let (key, code) = MATRIX_NEEDLE_KEYS[i % MATRIX_NEEDLE_KEYS.count]
+        let depth = depths.count > i
+            ? depths[i] : Double(i + 1) * 100.0 / Double(needleCount + 1)
+        return MatrixNeedle(depth: depth, key: key, code: code)
+    }
+    let params = GenerateParameters(maxTokens: maxTok, kvScheme: kvScheme, temperature: 0)
+    let lengthsStr = lengths.map { String($0) }.joined(separator: ",")
+    let depthsStr = depths.map { String(Int($0)) }.joined(separator: "/")
+    print("matrix: tier=\(tier) scheme=\(scheme) lengths=\(lengthsStr) depths=\(depthsStr) needles=\(needleCount) maxTok=\(maxTok)")
+    let engineTag = "3.32.3"
+    let engineCommit = "3b339ad6e3b3f44c8121ecff5131c7fd55e075e6"
+    let physAfterLoad = Double(physFootprint()) / 1_048_576
+    let physLoadStr = String(format: "%.0f", physAfterLoad)
+    let isoTS = ISO8601DateFormatter().string(from: Date())
+
+    for target in lengths {
+        print("\n=== matrix row: target \(target) tokens ===")
+        let fence = try await buildMatrixFence(container, targetTokens: target, needles: needles)
+        print("  fence tokens: \(fence.fenceTokens) (lines \(fence.totalLines))")
+        let session = ChatSession(container, speculativeDecoding: nil, generateParameters: params)
+        var askRows: [String] = []
+        var recallHits = 0, recallMisses = 0, citationOk = 0, citationBad = 0
+        var t2Tokens = 0, t2Cached = 0
+        var t2Ms = 0.0, t2PerTok = 0.0, t2plusMean = 0.0
+        var t2plusPerTok: [Double] = []
+        var physAfterFenceMib = 0.0
+        for (i, needle) in needles.enumerated() {
+            let question =
+                "Which memory entry holds the registration code for the \(needle.key)? "
+                    + "Answer with the memory number and the code, nothing else."
+            let prompt = i == 0
+                ? fence.prompt + "\n\n" + question
+                : question
+            let m = await askChat(session, prompt)
+            let recall = m.text.contains(needle.code)
+            let needleId = 100_000 + fence.positions[i]
+            let citation = m.text.contains(String(needleId))
+            if recall { recallHits += 1 } else { recallMisses += 1 }
+            if citation { citationOk += 1 } else { citationBad += 1 }
+            let perTok = m.promptTokens > 0
+                ? m.promptTime * 1000.0 / Double(m.promptTokens) : 0
+            if i == 0 {
+                physAfterFenceMib = Double(physFootprint()) / 1_048_576
+                let hitStr = recall ? "HIT" : "MISS"
+                let citStr = citation ? "ok" : "BAD"
+                print("  ask1 [\(m.line)]: recall \(hitStr) citation \(citStr)")
+            } else {
+                if i == 1 {
+                    t2Tokens = m.promptTokens
+                    t2Cached = m.cachedTokens
+                    t2Ms = m.promptTime * 1000.0
+                    t2PerTok = perTok
+                }
+                t2plusPerTok.append(perTok)
+                let hitStr = recall ? "HIT" : "MISS"
+                let citStr = citation ? "ok" : "BAD"
+                print("  ask\(i + 1) d\(Int(needle.depth))% [\(m.line)]: recall \(hitStr) citation \(citStr)")
+            }
+            let promptMs = String(format: "%.1f", m.promptTime * 1000.0)
+            let genMs = String(format: "%.1f", m.generateTime * 1000.0)
+            let wallS = String(format: "%.3f", m.wallSeconds)
+            let tps = String(format: "%.2f", m.tokPerSec)
+            let textEsc = jsonEscape(String(m.text.prefix(200)))
+            let keyEsc = jsonEscape(needle.key)
+            let askRow =
+                "{\"i\":\(i + 1),\"depth_pct\":\(Int(needle.depth)),\"needle_id\":\(needleId),"
+                + "\"key\":\"\(keyEsc)\",\"code\":\"\(needle.code)\","
+                + "\"prompt_tokens\":\(m.promptTokens),\"cached_tokens\":\(m.cachedTokens),\"out_tokens\":\(m.outTokens),"
+                + "\"prompt_ms\":\(promptMs),\"gen_ms\":\(genMs),\"wall_s\":\(wallS),\"tok_per_sec\":\(tps),"
+                + "\"recall\":\(recall),\"citation\":\(citation),"
+                + "\"text\":\"\(textEsc)\"}"
+            askRows.append(askRow)
+        }
+        let physFinal = Double(physFootprint()) / 1_048_576
+        // The cache-scoped instrument, recorded honestly for the pin:
+        // KVCacheStatus on 3.32.3 carries no per-layer memoryBytes (that
+        // lands with upstream #639) — cache_memory_bytes is null on every
+        // row and the memory axes are phys_footprint (measured here) plus
+        // the config-derived arithmetic (the preregistration's table).
+        var cachePhase = "", cacheStrategies = ""
+        var cacheLayers = 0
+        var cacheProcessed: Int? = nil
+        if let status = try? await session.cacheStatus() {
+            cachePhase = "\(status.phase)"
+            cacheLayers = status.layers.count
+            cacheProcessed = status.processedTokenCount
+            let names = status.layers.compactMap { $0.resolvedStrategy }.map { String(describing: $0) }
+            cacheStrategies = Set(names).sorted().joined(separator: ",")
+        }
+        let cacheProcStr = cacheProcessed.map { String($0) } ?? "null"
+        if !t2plusPerTok.isEmpty {
+            t2plusMean = t2plusPerTok.reduce(0, +) / Double(t2plusPerTok.count)
+        }
+        let fenceTokStr = String(fence.fenceTokens)
+        let t2TokStr = String(t2Tokens)
+        let t2CachedStr = String(t2Cached)
+        let t2MsStr = String(format: "%.1f", t2Ms)
+        let t2PerTokStr = String(format: "%.4f", t2PerTok)
+        let t2plusMeanStr = String(format: "%.4f", t2plusMean)
+        let physFenceStr = String(format: "%.0f", physAfterFenceMib)
+        let physFinalStr = String(format: "%.0f", physFinal)
+        let asksJoined = askRows.joined(separator: ";")
+        // The canonical form: every measurement field, fixed order — the
+        // run hash hashes THIS string, so a re-run of the same row is
+        // comparable field-for-field.
+        let canonical =
+            "engine=\(engineCommit)|tier=\(tier)|scheme=\(scheme)|target=\(target)|fence=\(fenceTokStr)"
+            + "|asks=[\(asksJoined)]"
+            + "|t2_ptok=\(t2TokStr)|t2_cached=\(t2CachedStr)|t2_ms=\(t2MsStr)|t2_per_tok=\(t2PerTokStr)|t2plus_mean_per_tok=\(t2plusMeanStr)"
+            + "|hits=\(recallHits)|miss=\(recallMisses)|cit_ok=\(citationOk)|cit_bad=\(citationBad)"
+            + "|cache_phase=\(cachePhase)|cache_layers=\(cacheLayers)|cache_proc=\(cacheProcStr)|cache_strat=\(cacheStrategies)"
+            + "|phys_load=\(physLoadStr)|phys_fence=\(physFenceStr)|phys_final=\(physFinalStr)"
+        let runHash = SHA256.hash(data: Data(canonical.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+        let asksJson = askRows.joined(separator: ",")
+        let depthsJson = depths.map { String(Int($0)) }.joined(separator: ",")
+        let row =
+            "{\"engine_tag\":\"\(engineTag)\",\"engine_commit\":\"\(engineCommit)\",\"tier\":\"\(jsonEscape(tier))\","
+            + "\"scheme\":\"\(scheme)\",\"target_tokens\":\(target),\"fence_tokens\":\(fenceTokStr),\"total_lines\":\(fence.totalLines),"
+            + "\"depths\":[\(depthsJson)],\"needles\":\(needleCount),\"max_tokens\":\(maxTok),\"temperature\":0,"
+            + "\"asks\":[\(asksJson)],"
+            + "\"t2_prompt_tokens\":\(t2TokStr),\"t2_cached_tokens\":\(t2CachedStr),\"t2_prompt_ms\":\(t2MsStr),\"t2_prompt_ms_per_token\":\(t2PerTokStr),\"t2plus_mean_prompt_ms_per_token\":\(t2plusMeanStr),"
+            + "\"recall_hits\":\(recallHits),\"recall_misses\":\(recallMisses),\"citation_ok\":\(citationOk),\"citation_bad\":\(citationBad),"
+            + "\"cache_phase\":\"\(cachePhase)\",\"cache_layers\":\(cacheLayers),\"cache_processed_tokens\":\(cacheProcStr),\"cache_strategies\":\"\(cacheStrategies)\",\"cache_memory_bytes\":null,"
+            + "\"phys_after_load_mib\":\(physLoadStr),\"phys_after_fence_mib\":\(physFenceStr),\"phys_final_mib\":\(physFinalStr),"
+            + "\"ts\":\"\(isoTS)\",\"run_hash\":\"\(runHash)\"}"
+        print(row)
+        print("  phys_footprint: after load \(physLoadStr) MiB, after fence \(physFenceStr) MiB, final \(physFinalStr) MiB")
+        print("  recall: \(recallHits)/\(needles.count) citation: \(citationOk)/\(needles.count)")
+        let line = row + "\n"
+        if let handle = FileHandle(forWritingAtPath: outPath) {
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: Data(line.utf8))
+            try? handle.close()
+        } else {
+            try? Data(line.utf8).write(to: URL(fileURLWithPath: outPath))
+        }
+    }
 }
 
 @available(macOS 27.0, *)
@@ -260,6 +549,28 @@ func run() async throws {
         print("spec decode: ON (Qwen3-0.6B-4bit drafter, numDraftTokens=5)")
     } else {
         print("spec decode: off")
+    }
+    // ── MATRIX MODE (IMPROVE10 S1): the KV ratchet's tier-scoped matrix ────
+    // PROBE_MATRIX=1 replaces the standard arms with the preregistered
+    // measurement rows (docs/REKRA_PLAN_PREREGISTRATION_2026-11-09.md — the
+    // matrix runs are gated on that commit, KR-1). One invocation = one row
+    // of the matrix = one fresh ChatSession per ladder length:
+    //   PROBE_LENGTHS="16000"   the ladder row's target fence tokens (required)
+    //   PROBE_DEPTHS="10,25,50,75,90"   needle depth percentages (the RULER
+    //                           multi-query shape; the preregistered default)
+    //   PROBE_NEEDLES="5"       needles per run, one per depth, distinct keys
+    //                           and codes (the preregistered default)
+    //   PROBE_TIER="qwen3-8b-4bit"  the wire tier id recorded on the row
+    //   PROBE_MAXTOK="512"      the per-ask clamp (the product's own clamp —
+    //                           an unclosed think block burning it is the
+    //                           CG-11 kill-arm shape, recorded as a miss)
+    //   PROBE_MATRIX_OUT=path   the JSONL file rows append to (also stdout)
+    // PROBE_KV_SCHEME stays the scheme knob (unset = the nil baseline). The
+    // nil run of a tier × length is the FIDELITY GOLDEN — orchestration runs
+    // it FIRST; verdict-time comparison reads the recorded rows.
+    if ProcessInfo.processInfo.environment["PROBE_MATRIX"] == "1" {
+        try await runMatrix(container, kvScheme: kvScheme)
+        return
     }
     let secret = SECRET
 

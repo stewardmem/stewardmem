@@ -174,6 +174,10 @@ let package = Package(
                 .product(name: "HuggingFace", package: "swift-huggingface"),
             ],
             swiftSettings: [.swiftLanguageMode(.v5)],
+            // IMPROVE10 S1: the matrix rows carry a per-run content hash —
+            // CryptoKit is a system framework (zero new dependencies), the
+            // target just needs the link.
+            linkerSettings: [.linkedFramework("CryptoKit")],
         ),
         // CG-10 diagnostic: bisects the Qwen3.5 turn-2 raise through the real
         // Jinja engine (swift-transformers -> johnmai-dev/Jinja). A measurement
