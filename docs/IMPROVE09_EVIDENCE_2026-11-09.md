@@ -111,7 +111,27 @@ would have run first; it did not trigger.
 
 ## 5 · The pins ledger (UT-3, red-first)
 
-Landed in S2 — recorded here with the transcripts.
+`tests/upstream_tracking_pins.rs` — six tests, std-only (zero new deps; the
+date check is a byte-level YYYY-MM-DD parse, not a crate). The genuine
+red-first order held: **the pins were written and run BEFORE the table's
+seed rows existed** (only S1's posture row landed first, per the
+one-commit-per-step order; the red-by-absence ran before ANY of the doc
+existed):
+
+| # | run | transcript | result |
+|---|---|---|---|
+| R1 | absence — the doc did not exist | `pins-red-absence.txt` (cargo exit 101) | **5 failed** (`the_one_home_table_exists`, `…closed_vocabulary`, `…review_date`, `…our_evidence`, `…checklist_present`), each panicking `the one home does not exist: …/docs/UPSTREAM_TRACKING.md — the tracking table is the round's deliverable, never delete it`; the grammar test (`a_declined_row_must_carry_its_reason`) passed — it reads no doc |
+| G1 | the table seeded (S1's row + S2's seven rows) | `pins-green-seeded.txt` (exit 0) | **6 passed; 0 failed** |
+| R2 | mutation — a field-less row appended (empty status + empty review-date) | `pins-red-mutation-fieldless.txt` (exit 101) | **2 failed, naming the row**: ``row `a row added later without the fields` carries status `` — empty status`` and ``…carries review-date `` — not a YYYY-MM-DD date…(UT-3)`` — the future-path re-red demonstrated |
+| R3 | mutation — a bare `declined` row appended (no reason) | `pins-red-mutation-declined.txt` (exit 101) | **1 failed**: ``row `a declined row without its reason` carries status `declined` — declined WITHOUT a reason — the closed vocabulary is `declined+reason`…`` — the grammar's reason clause fires |
+| G2 | restored (the mutation rows removed) | `pins-green-restored.txt` (cargo exit 0) | **6 passed; 0 failed** — the committed state is the G2 state |
+
+The pins' laws: UT-3 (every row carries a closed-vocabulary status AND a
+review-date), UT-2's receipt face (every row cites our evidence) and
+CI-orderable face (the bump-validation checklist must be present — deleting
+the gate is loud). Note: the pins landed after S1's posture row by the
+round's commit order; R1 is the real absence run (pre-doc), R2/R3 are the
+mutation proofs of the same code paths a future bad row would hit.
 
 ## 6 · The engagement drafts (in-repo; the operator files)
 
