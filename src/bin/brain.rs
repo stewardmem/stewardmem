@@ -765,6 +765,12 @@ const BOOL_FLAGS: &[&str] = &[
 const VALUE_FLAGS: &[&str] = &[
     "action",
     "case",
+    // the research watch's lane-create flags (IMPROVE08 S3)
+    "kind",
+    "url",
+    "cadence",
+    "query",
+    "destination",
     "tier",
     "locales",
     "alg",
