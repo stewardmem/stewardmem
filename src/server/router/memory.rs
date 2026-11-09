@@ -71,6 +71,13 @@ pub fn router() -> Router<Arc<AppState>> {
         // fails the tick). Admin-gated; the payload is serde-defaulted so
         // the authz matrix's `{}` probe 403s, never 422s.
         .route("/watch/tick", post(watch_tick))
+        // The external synthesis provider's ONE explicit per-task act
+        // (IMPROVE08 S4, RW-2): the kernel NEVER calls a provider on its
+        // own — this route is the only invocation site, Admin-gated, the
+        // output lands as a PROPOSAL (source "synthesis") with the
+        // provider + model + task named in the deterministic header.
+        // Unconfigured → the named research_unconfigured (the OFF posture).
+        .route("/research/synthesize", post(research_synthesize))
         .route("/reindex", post(reindex))
         .route("/get/{id}", get(get_chunk))
         .route("/multi-get", post(multi_get))
@@ -2250,6 +2257,7 @@ fn watch_error_status(e: &crate::watch::WatchError) -> axum::http::StatusCode {
         W::ReplayGap | W::AuditWriteFailed | W::Db(_) => {
             axum::http::StatusCode::INTERNAL_SERVER_ERROR
         }
+        W::SynthesisOutputTooLarge => axum::http::StatusCode::UNPROCESSABLE_ENTITY,
     }
 }
 
@@ -2372,6 +2380,163 @@ pub(crate) async fn watch_tick(
         "skipped_fresh_count": report.accounting.skipped_fresh,
         "proposal_ids": report.proposal_ids,
         "audit_id": report.audit_id,
+    })))
+}
+
+/// `POST /research/synthesize` — the explicit per-task synthesis act
+/// (IMPROVE08 S4). Admin-gated (the operator names the research task; the
+/// kernel NEVER invokes a provider autonomously — RW-2). The payload is
+/// serde-defaulted and validated AFTER the gate (the `{}`-probe law).
+/// Unconfigured → the named `research_unconfigured`; the key rides the
+/// owner-only secret file (the scholar law — a vanished/bad key is the
+/// named refusal, never a degraded call); the output lands as a PROPOSAL
+/// (source `synthesis`) through the REAL gate wrapper — never memory.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ResearchSynthesizePayload {
+    /// The research task, e.g. "produce a briefing on X with sources".
+    #[serde(default)]
+    pub task: Option<String>,
+    /// The proposal's domain (the queue scopes by it; default global).
+    #[serde(default)]
+    pub domain: Option<String>,
+}
+
+pub(crate) async fn research_synthesize(
+    State(state): State<Arc<AppState>>,
+    principal: crate::handlers::auth::OptPrincipal,
+    Json(payload): Json<ResearchSynthesizePayload>,
+) -> Result<Json<serde_json::Value>, crate::handlers::HandlerError> {
+    crate::handlers::authorize(&principal.0, crate::auth::Action::Admin, "", "global").map_err(
+        |e| crate::handlers::HandlerError {
+            status: axum::http::StatusCode::FORBIDDEN,
+            inner: crate::handlers::ApiError::new("forbidden", e.inner.message),
+        },
+    )?;
+    // Field validation AFTER the gate (the `{}`-probe law).
+    let Some(task) = payload
+        .task
+        .as_deref()
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+    else {
+        return Err(watch_refuse(
+            axum::http::StatusCode::BAD_REQUEST,
+            "research_task_required",
+            "task (the research brief) is required".to_string(),
+        ));
+    };
+    if task.chars().count() > crate::handlers::MAX_PROPOSAL_CONTENT {
+        return Err(watch_refuse(
+            axum::http::StatusCode::BAD_REQUEST,
+            "research_task_too_long",
+            format!(
+                "task exceeds {} chars",
+                crate::handlers::MAX_PROPOSAL_CONTENT
+            ),
+        ));
+    }
+    // The profile: unconfigured = OFF (the named refusal); partial = the
+    // boot validator made it fatal, so a per-request Err is the same named
+    // refusal here.
+    let profile = crate::config::ResearchProviderProfile::from_env()
+        .map_err(|_| {
+            watch_refuse(
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                "research_config_invalid",
+                "the research provider profile is incomplete".to_string(),
+            )
+        })?
+        .ok_or_else(|| {
+            watch_refuse(
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                "research_unconfigured",
+                "no research provider is configured (see the BRAIN_RESEARCH_PROVIDER_* profile)"
+                    .to_string(),
+            )
+        })?;
+    // The secret-file law: the key is read through the owner-only reader
+    // (600/0400, no symlink); a vanished/bad key file is the named refusal
+    // — OFF, not degraded.
+    let key =
+        crate::secret_file::read_owner_only_token(std::path::Path::new(&profile.api_key_file))
+            .map_err(|e| {
+                watch_refuse(
+                    axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                    "research_secret_file_invalid",
+                    e,
+                )
+            })?;
+
+    let actor = handlers::recall::principal_label(&principal.0);
+    let fetched_at = chrono::Utc::now().to_rfc3339();
+    // The act is audited BEFORE the network leg: the evidence row exists
+    // even if the provider fails (the failure is itself evidence), the
+    // task rides AS A HASH (never plaintext).
+    let task_digest = crate::audit::hash(task);
+    let audit_detail = format!(
+        "research_synthesize provider_host={} model={} task_sha={task_digest}",
+        crate::watch::watch_provider_host_of(&profile.base_url),
+        profile.model,
+    );
+    {
+        let conn = state.pool.clone();
+        let detail = audit_detail.clone();
+        let actor2 = actor.clone();
+        task::spawn_blocking(move || -> Result<i64, crate::handlers::HandlerError> {
+            let conn = conn
+                .get()
+                .map_err(|e| crate::handlers::HandlerError::internal(e.to_string()))?;
+            crate::audit::record_tenant_checked(
+                &conn,
+                crate::audit::AuditKind::Ingest,
+                &actor2,
+                &task_digest,
+                crate::audit::AuditStatus::Ok,
+                &detail,
+                crate::audit::DEFAULT_TENANT,
+            )
+            .map_err(|_| {
+                crate::handlers::HandlerError::internal("research audit write failed".to_string())
+            })
+        })
+        .await
+        .map_err(|e| crate::handlers::HandlerError::internal(format!("task join error: {e}")))??
+    };
+
+    // The ONE provider call (the structural pin's only call site).
+    let outcome =
+        crate::watch::synthesize_task(&profile.base_url, key.trim(), &profile.model, task)
+            .await
+            .map_err(|e| watch_refuse(watch_error_status(&e), e.code(), e.to_string()))?;
+
+    // THE OUTPUT LANDS AS A PROPOSAL (RW-2): the REAL gate wrapper — the
+    // screen, the bounds, the owner attribution, the alerts — never a
+    // private memory write.
+    let (content, title) = crate::watch::render_synthesis_proposal(&outcome, task, &fetched_at);
+    let filed = crate::handlers::gate::create_proposal(
+        Arc::clone(&state),
+        principal.0.clone(),
+        crate::handlers::gate::ProposalRequest {
+            content,
+            kind: "fact".to_string(),
+            source: Some("synthesis".to_string()),
+            origin_context: None,
+            authority: None,
+            observed_at: None,
+            domain: payload.domain.clone(),
+            title: Some(title),
+            source_prompt: None,
+        },
+    )
+    .await?;
+
+    let _ = audit_detail;
+    Ok(Json(serde_json::json!({
+        "proposal_id": filed.id,
+        "status": filed.status,
+        "provider_host": outcome.host,
+        "model": outcome.model,
+        "output_chars": outcome.output.chars().count()
     })))
 }
 

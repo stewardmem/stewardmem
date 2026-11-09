@@ -554,6 +554,173 @@ pub(crate) fn validate_scholar_config() -> Result<(), String> {
     ScholarProfile::from_env().map(|_| ())
 }
 
+/// The external research provider's profile (IMPROVE08 S4) — the
+/// GDL/ScholarProfile all-or-nothing pattern: `BRAIN_RESEARCH_PROVIDER_BASE_URL`
+/// (the FULL endpoint the operator's agent answers, e.g. a local
+/// GPT-Researcher `/research`), `BRAIN_RESEARCH_PROVIDER_API_KEY_FILE`
+/// (the secret-file law's input — owner-only, no symlink), and
+/// `BRAIN_RESEARCH_PROVIDER_MODEL`. NONE of the three = unconfigured (the
+/// surface is OFF — the explicit per-task act refuses the named
+/// `research_unconfigured`); PARTIAL = the named fatal at boot via
+/// [`validate_research_config`]. Fixed error strings; no configured value
+/// or path ever rides one.
+pub(crate) struct ResearchProviderProfile {
+    pub(crate) base_url: String,
+    pub(crate) api_key_file: String,
+    pub(crate) model: String,
+}
+
+impl ResearchProviderProfile {
+    /// Resolve the profile without copying paths, credentials, or other
+    /// configuration values into an error string (the GDL law).
+    pub(crate) fn from_env() -> Result<Option<Self>, String> {
+        let decode = |name: &'static str| -> Result<Option<String>, String> {
+            std::env::var_os(name)
+                .map(|value| {
+                    value
+                        .into_string()
+                        .map_err(|_| "research provider profile is invalid".to_string())
+                })
+                .transpose()
+        };
+        let base_raw = decode("BRAIN_RESEARCH_PROVIDER_BASE_URL")?;
+        let key_raw = decode("BRAIN_RESEARCH_PROVIDER_API_KEY_FILE")?;
+        let model_raw = decode("BRAIN_RESEARCH_PROVIDER_MODEL")?;
+        let present =
+            base_raw.is_some() as usize + key_raw.is_some() as usize + model_raw.is_some() as usize;
+        if present == 0 {
+            return Ok(None);
+        }
+        if present != 3 {
+            return Err("research provider profile is incomplete".to_string());
+        }
+        let base_url = base_raw.as_deref().map(str::trim).filter(|s| !s.is_empty());
+        let api_key_file = key_raw.as_deref().map(str::trim).filter(|s| !s.is_empty());
+        let model = model_raw
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        let (Some(base_url), Some(api_key_file), Some(model)) = (base_url, api_key_file, model)
+        else {
+            return Err("research provider profile is incomplete".to_string());
+        };
+        // URL shape: bounded, parseable, with a host (the provider_http
+        // law's pre-DNS bound). The scheme law: https anywhere; http ONLY
+        // so the local-endpoint posture survives (the plan's
+        // "local-endpoint preferred" — an operator who names a loopback
+        // agent is not refused; the SSRF screen + BRAIN_EGRESS_ALLOW_PRIVATE
+        // still govern what the client may reach).
+        if base_url.len() > 2048 {
+            return Err("research provider profile is invalid".to_string());
+        }
+        let parsed = reqwest::Url::parse(base_url)
+            .map_err(|_| "research provider profile is invalid".to_string())?;
+        if !matches!(parsed.scheme(), "https" | "http") || parsed.host_str().is_none() {
+            return Err("research provider profile is invalid".to_string());
+        }
+        if model.len() > 256 {
+            return Err("research provider profile is invalid".to_string());
+        }
+        Ok(Some(Self {
+            base_url: base_url.to_string(),
+            api_key_file: api_key_file.to_string(),
+            model: model.to_string(),
+        }))
+    }
+}
+
+/// The boot-time fail-closed validator (the ScholarProfile sibling, IMPROVE08):
+/// a partial or invalid research provider profile is FATAL, before any
+/// socket or DB work. Unconfigured is fine — the surface is OFF.
+pub(crate) fn validate_research_config() -> Result<(), String> {
+    ResearchProviderProfile::from_env().map(|_| ())
+}
+
+#[cfg(test)]
+mod research_profile_tests {
+    // The all-or-nothing law, pinned in-crate (the surface is pub(crate) —
+    // the external pins file cannot see it; the law travels with the type).
+    use super::*;
+
+    fn clear() {
+        for name in [
+            "BRAIN_RESEARCH_PROVIDER_BASE_URL",
+            "BRAIN_RESEARCH_PROVIDER_API_KEY_FILE",
+            "BRAIN_RESEARCH_PROVIDER_MODEL",
+        ] {
+            // SAFETY: the config test module's env discipline (set + restore
+            // within the test; no other thread reads these concurrently).
+            unsafe {
+                std::env::remove_var(name);
+            }
+        }
+    }
+
+    #[test]
+    fn research_profile_is_all_or_nothing() {
+        clear();
+        // None = unconfigured, the OFF posture.
+        assert!(matches!(ResearchProviderProfile::from_env(), Ok(None)));
+        let full = [
+            (
+                "BRAIN_RESEARCH_PROVIDER_BASE_URL",
+                "http://127.0.0.1:8000/research",
+            ),
+            ("BRAIN_RESEARCH_PROVIDER_API_KEY_FILE", "/tmp/keyfile"),
+            ("BRAIN_RESEARCH_PROVIDER_MODEL", "gpt-researcher"),
+        ];
+        // Any PARTIAL set = the named fatal.
+        for drop in 0..3 {
+            for (i, (name, value)) in full.iter().enumerate() {
+                if i == drop {
+                    continue;
+                }
+                // SAFETY: as above.
+                unsafe {
+                    std::env::set_var(name, value);
+                }
+            }
+            let err = ResearchProviderProfile::from_env()
+                .err()
+                .expect("a two-of-three profile must refuse");
+            assert!(
+                err.contains("incomplete") || err.contains("invalid"),
+                "the named refusal: {err}"
+            );
+            clear();
+        }
+        // One var alone = incomplete too (the set/reset loops above cover
+        // pairs; the singles ride the same present-count check).
+        unsafe {
+            std::env::set_var("BRAIN_RESEARCH_PROVIDER_MODEL", "solo");
+        }
+        assert!(ResearchProviderProfile::from_env().is_err());
+        unsafe {
+            std::env::remove_var("BRAIN_RESEARCH_PROVIDER_MODEL");
+        }
+        // The full set boots — the local-endpoint posture (http loopback
+        // is the plan's preferred shape).
+        for (name, value) in full.iter() {
+            // SAFETY: as above.
+            unsafe {
+                std::env::set_var(name, value);
+            }
+        }
+        let profile = ResearchProviderProfile::from_env()
+            .ok()
+            .flatten()
+            .expect("the full profile");
+        assert_eq!(profile.model, "gpt-researcher");
+        assert!(validate_research_config().is_ok());
+        // An empty-string half is incomplete, not a silent default.
+        unsafe {
+            std::env::set_var("BRAIN_RESEARCH_PROVIDER_MODEL", "   ");
+        }
+        assert!(ResearchProviderProfile::from_env().is_err());
+        clear();
+    }
+}
+
 /// The GDL provider transport kind (`BRAIN_GDL_PROVIDER_KIND`) — the pilot
 /// round's D-P1 decision. `http` (the default) is today's OpenAI-compatible
 /// seam, byte-unchanged; `afm-stdio` routes the loop's propose calls through

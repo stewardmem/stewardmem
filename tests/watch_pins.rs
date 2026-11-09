@@ -1216,3 +1216,152 @@ fn rw1_the_watch_module_writes_no_knowledge() {
         "the tick handler must hold no knowledge INSERT (RW-1)"
     );
 }
+
+// ── S4: the synthesis provider posture (RW-2 pins) ──────────────────────
+//
+// RED LEDGER (2026-11-09): compile-presence — ResearchProviderProfile /
+// validate_research_config / synthesize_task / render_synthesis_proposal
+// did not exist; this section did not compile until the profile, the boot
+// validator, the route, and the contract rows landed in the same commit.
+
+/// Env-serializing guard for the profile pins (the config tests' restore
+/// discipline: the pin leaves the environment exactly as it found it).
+static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+fn env_set(name: &str, value: Option<&str>) {
+    // SAFETY: single-threaded per test under ENV_LOCK; no other thread in
+    // this binary reads these vars concurrently.
+    unsafe {
+        match value {
+            Some(v) => std::env::set_var(name, v),
+            None => std::env::remove_var(name),
+        }
+    }
+}
+/// RW-2, structural: the provider call site is ONE — `synthesize_task` is
+/// defined in watch.rs and invoked ONLY by the synthesize route (no tick,
+/// no loop, no schedule, no CLI names it). And the boot validator rides
+/// beside the scholar validator (the fail-closed region).
+#[test]
+fn rw2_the_provider_is_invoked_only_on_its_route() {
+    let callers: Vec<String> = ["src/", "tests/"]
+        .iter()
+        .flat_map(|root| walk(root))
+        .filter(|p| p.ends_with(".rs"))
+        .filter_map(|p| std::fs::read_to_string(&p).ok().map(|s| (p, s)))
+        .filter(|(_, s)| s.contains("synthesize_task("))
+        .map(|(p, _)| p)
+        .collect();
+    let in_src: Vec<&String> = callers.iter().filter(|p| p.starts_with("src/")).collect();
+    assert_eq!(
+        in_src.len(),
+        2,
+        "the provider call site is ONE (definition + the route): {in_src:?}"
+    );
+    // The CLI never calls it either.
+    assert!(
+        !callers.iter().any(|p| p.contains("bin/")),
+        "the CLI must never invoke the provider autonomously (RW-2)"
+    );
+    let boot = std::fs::read_to_string("src/server/bootstrap.rs").expect("boot");
+    assert!(
+        boot.contains("config::validate_research_config()")
+            && boot.contains("config::validate_scholar_config()"),
+        "the research validator rides beside the scholar validator"
+    );
+}
+
+fn walk(root: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let stack = vec![root.to_string()];
+    let mut todo = stack;
+    while let Some(dir) = todo.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                todo.push(path.to_string_lossy().to_string());
+            } else {
+                out.push(path.to_string_lossy().to_string());
+            }
+        }
+    }
+    out
+}
+
+/// RW-2: no lane can name synthesis as a destination — the closed
+/// vocabulary has ONE value and "synthesis" is not it (the belt: even a
+/// future vocabulary edit cannot route watch output at the provider).
+#[test]
+fn rw2_no_lane_destination_names_synthesis() {
+    assert!(matches!(
+        brain_server::watch::Destination::parse("synthesis"),
+        Err(brain_server::watch::WatchError::DestinationInvalid)
+    ));
+}
+
+/// RW-2, behavioral over a LOCAL stub: the pinned client posts the task,
+/// reads the GPT-Researcher-shaped field, and the outcome carries the
+/// provenance. The loopback endpoint is the plan's preferred posture —
+/// admitted ONLY under BRAIN_EGRESS_ALLOW_PRIVATE=1 (the webhook's loud
+/// opt-out; the screen refuses private addresses without it — that refusal
+/// is pinned here too).
+#[tokio::test]
+async fn rw2_the_network_leg_posts_pinned_and_extracts_the_report() {
+    // (the env lock is taken in a scoped block below — never across an
+    // await; the stub server runs outside it)
+    // A tiny axum stub answering the research shape.
+    let app = axum::Router::new().route(
+        "/research",
+        axum::routing::post(|body: String| async move {
+            assert!(body.contains("the research task"), "the task rides: {body}");
+            axum::Json(serde_json::json!({ "report": "the briefing with sources", "sources": [] }))
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let addr = listener.local_addr().expect("addr");
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.expect("serve");
+    });
+    let base_url = format!("http://{addr}/research");
+
+    // WITHOUT the opt-out: the private address refuses (the SSRF screen).
+    // The env lock scopes the MUTATION only — never held across an await
+    // (the only env-mutating tests in this binary serialize on this lock,
+    // so the set→call window cannot interleave with another mutator).
+    {
+        let _g = ENV_LOCK.lock().unwrap();
+        env_set("BRAIN_EGRESS_ALLOW_PRIVATE", None);
+    }
+    let err = brain_server::watch::synthesize_task(&base_url, "k", "m", "the research task")
+        .await
+        .expect_err("a private endpoint refuses without the loud opt-out");
+    assert!(matches!(
+        err,
+        brain_server::watch::WatchError::LaneHostRefused(_)
+    ));
+
+    // WITH it: the pinned client posts, the extractor takes `report`.
+    {
+        let _g = ENV_LOCK.lock().unwrap();
+        env_set("BRAIN_EGRESS_ALLOW_PRIVATE", Some("1"));
+    }
+    let outcome =
+        brain_server::watch::synthesize_task(&base_url, "k", "gpt-researcher", "the research task")
+            .await
+            .expect("the stub answers");
+    {
+        let _g = ENV_LOCK.lock().unwrap();
+        env_set("BRAIN_EGRESS_ALLOW_PRIVATE", None);
+    }
+    assert_eq!(outcome.output, "the briefing with sources");
+    assert_eq!(outcome.host, "127.0.0.1");
+    assert_eq!(outcome.model, "gpt-researcher");
+
+    env_set("BRAIN_EGRESS_ALLOW_PRIVATE", None);
+    server.abort();
+    let _ = server.await;
+}

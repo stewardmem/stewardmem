@@ -260,6 +260,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/watch/tick": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run ONE research-watch lane tick (deterministic, HITL-filed)
+         * @description IMPROVE08 S3. The per-lane tick: the freshness floors hold BEFORE any fetch (the arXiv once-per-day law and the RSS ttl hint land as the honest skipped_fresh accounting line — never a second fetch); the fetch + parse run OUTSIDE the transaction; then ONE BEGIN IMMEDIATE carries the seen inserts (the (lane_id, item_key) identity), the gate filings through the ONE proposal seam (source: "watch", full provenance header, the injection screen riding), the accounting row, and the CHECKED audit row — a tick whose accounting INSERT fails FAILS, named. The watch files PROPOSALS, never memory (RW-1). The transport is the replay corpus unless BRAIN_WATCH_LIVE_PROBE=1 (the operator-gated live arm; CI never fetches). Named refusals: watch_lane_required (400 — fields validate AFTER the authz gate), watch_lane_not_found (404), watch_lane_disabled (409), watch_fetch_host_mismatch (403), watch_feed_dtd_refused / watch_feed_malformed / watch_feed_wrong_schema / watch_feed_too_large / watch_arxiv_error_entry (422), watch_transport_failed (502), watch_audit_write_failed (500).
+         */
+        post: operations["watchTick"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/research/synthesize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The explicit per-task external synthesis act (output lands as a PROPOSAL)
+         * @description IMPROVE08 S4 (RW-2). The kernel NEVER calls a provider on its own — this route is the ONLY invocation site, Admin-gated, operator-named task. The provider is the GDL-shaped profile (BRAIN_RESEARCH_PROVIDER_BASE_URL/_API_KEY_FILE/_MODEL — none = unconfigured → research_unconfigured (503); partial = fatal at boot). The key rides the owner-only secret file (a vanished/bad key → research_secret_file_invalid, 503 — OFF, never degraded). The endpoint is SSRF-screened; the client pins redirect::none + no_proxy + the validated DNS set. THE OUTPUT LANDS AS A PROPOSAL (source "synthesis") through the real gate — the deterministic header names provider host + model + task; the output is DATA below it and rides the injection screen. Named refusals: research_task_required (400 — fields validate AFTER the authz gate), research_unconfigured / research_config_invalid / research_secret_file_invalid (503), research_output_too_large (422), watch_transport_failed (502).
+         */
+        post: operations["researchSynthesize"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ingest/document": {
         parameters: {
             query?: never;
@@ -6447,6 +6487,153 @@ export interface operations {
             };
             /** @description Named refusal (scholar_no_metadata */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    watchTick: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    lane?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description The tick's honest report */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        lane?: string;
+                        skipped_fresh?: boolean;
+                        refusal?: string | null;
+                        items_seen?: number;
+                        deduped?: number;
+                        filed?: number;
+                        failed?: number;
+                        skipped_fresh_count?: number;
+                        proposal_ids?: number[];
+                        audit_id?: number;
+                    };
+                };
+            };
+            /** @description Named refusal (watch_lane_required) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden (the empty-object probe lands here, never 422) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Named refusal (watch_lane_not_found) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Named refusal (watch_lane_disabled) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Feed refusals (watch_feed_dtd_refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Named refusal (watch_transport_failed) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    researchSynthesize: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    task?: string | null;
+                    domain?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description The synthesis filed as a pending proposal */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        proposal_id?: number;
+                        status?: string;
+                        provider_host?: string;
+                        model?: string;
+                        output_chars?: number;
+                    };
+                };
+            };
+            /** @description Named refusal (research_task_required) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden (the empty-object probe lands here, never 422) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Named refusal (research_output_too_large) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Named refusal (watch_transport_failed) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Named refusals (research_unconfigured */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

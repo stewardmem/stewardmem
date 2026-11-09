@@ -453,6 +453,14 @@ pub fn bootstrap() -> Result<BootOutcome> {
     // fine — every adapter is OFF (SA-3).
     config::validate_scholar_config().map_err(|e| anyhow::anyhow!("fatal scholar config: {e}"))?;
 
+    // ── fail-closed research-provider posture (IMPROVE08) ──────────────
+    // The SAME region and law: a partial/invalid research provider profile
+    // is fatal at boot. Unconfigured is fine — /research/synthesize refuses
+    // the named `research_unconfigured` (the explicit per-task act; the
+    // kernel never invokes a provider on its own).
+    config::validate_research_config()
+        .map_err(|e| anyhow::anyhow!("fatal research provider config: {e}"))?;
+
     // ── fail-closed delivery-bindings posture ───────────
     // The SAME region and the SAME law as the provider gate above, because the
     // bindings are the machine's standing authority over an external system:

@@ -632,11 +632,59 @@ paths:
                   proposal_ids: { type: array, items: { type: integer } }
                   audit_id: { type: integer }
         "400": { description: Named refusal (watch_lane_required) }
-        "403": { description: Forbidden (the {} probe lands here, never 422) }
+        "403": { description: 'Forbidden (the empty-object probe lands here, never 422)' }
         "404": { description: Named refusal (watch_lane_not_found) }
         "409": { description: Named refusal (watch_lane_disabled) }
         "422": { description: Feed refusals (watch_feed_dtd_refused, watch_feed_malformed, watch_feed_wrong_schema, watch_feed_too_large, watch_arxiv_error_entry) }
         "502": { description: Named refusal (watch_transport_failed) }
+  /research/synthesize:
+    post:
+      summary: The explicit per-task external synthesis act (output lands as a PROPOSAL)
+      operationId: researchSynthesize
+      description: >-
+        IMPROVE08 S4 (RW-2). The kernel NEVER calls a provider on its own —
+        this route is the ONLY invocation site, Admin-gated, operator-named
+        task. The provider is the GDL-shaped profile
+        (BRAIN_RESEARCH_PROVIDER_BASE_URL/_API_KEY_FILE/_MODEL — none =
+        unconfigured → research_unconfigured (503); partial = fatal at
+        boot). The key rides the owner-only secret file (a vanished/bad key
+        → research_secret_file_invalid, 503 — OFF, never degraded). The
+        endpoint is SSRF-screened; the client pins redirect::none +
+        no_proxy + the validated DNS set. THE OUTPUT LANDS AS A PROPOSAL
+        (source "synthesis") through the real gate — the deterministic
+        header names provider host + model + task; the output is DATA below
+        it and rides the injection screen. Named refusals:
+        research_task_required (400 — fields validate AFTER the authz
+        gate), research_unconfigured / research_config_invalid /
+        research_secret_file_invalid (503), research_output_too_large
+        (422), watch_transport_failed (502).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                task: { type: string, nullable: true }
+                domain: { type: string, nullable: true }
+      responses:
+        "200":
+          description: The synthesis filed as a pending proposal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  proposal_id: { type: integer }
+                  status: { type: string }
+                  provider_host: { type: string }
+                  model: { type: string }
+                  output_chars: { type: integer }
+        "400": { description: Named refusal (research_task_required) }
+        "403": { description: 'Forbidden (the empty-object probe lands here, never 422)' }
+        "422": { description: Named refusal (research_output_too_large) }
+        "502": { description: Named refusal (watch_transport_failed) }
+        "503": { description: Named refusals (research_unconfigured, research_config_invalid, research_secret_file_invalid) }
   /ingest/document:
     post:
       summary: Ingest a PDF document (Tier 0 text-layer extraction, requires title)

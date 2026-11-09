@@ -244,6 +244,9 @@ pub enum WatchError {
     /// The CHECKED audit write failed — the tick FAILS, named (RW-3): the
     /// whole transaction rolls back, nothing is half-recorded.
     AuditWriteFailed,
+    /// The synthesis provider's response exceeded the named bound
+    /// (`research_output_too_large`).
+    SynthesisOutputTooLarge,
     /// A storage error inside the tick's transaction.
     Db(String),
 }
@@ -270,6 +273,7 @@ impl WatchError {
             WatchError::TransportFailed => "watch_transport_failed",
             WatchError::LaneDisabled => "watch_lane_disabled",
             WatchError::AuditWriteFailed => "watch_audit_write_failed",
+            WatchError::SynthesisOutputTooLarge => "research_output_too_large",
             WatchError::Db(_) => "watch_db_error",
         }
     }
@@ -356,6 +360,10 @@ impl fmt::Display for WatchError {
                 f,
                 "watch_audit_write_failed: the tick's CHECKED accounting insert failed — the \
                  tick fails, the transaction rolls back (RW-3)"
+            ),
+            WatchError::SynthesisOutputTooLarge => write!(
+                f,
+                "research_output_too_large: the provider's response exceeded the named bound"
             ),
             WatchError::Db(e) => write!(f, "watch_db_error: {e}"),
         }
@@ -1723,4 +1731,254 @@ fn load_seen_keys(
         set.insert(row.map_err(WatchError::from)?);
     }
     Ok(set)
+}
+
+// ── S4: the external synthesis leg (RW-2) ───────────────────────────────
+//
+// THE EXPLICIT PER-TASK ACT: the kernel NEVER invokes a provider on its
+// own — no tick, no loop, no schedule names this path; the ONLY caller is
+// POST /research/synthesize (the structural pin scans the production tree
+// for it). The provider is the operator's configured external agent (a
+// local GPT-Researcher, STORM, a hosted API) under the GDL posture: the
+// profile is all-or-nothing fatal at boot (`validate_research_config`),
+// the key rides the owner-only secret file, the endpoint is SSRF-screened
+// and the client pinned per the provider_http construction law
+// (`redirect::Policy::none()` — a redirect is a screen bypass —
+// `no_proxy`, the named timeouts, the DNS pin to the validated set), the
+// output is bounded, and THE OUTPUT LANDS AS A PROPOSAL, never memory:
+// the route files through the gate's wrapper with `source: "synthesis"`
+// and the deterministic header naming provider + model + task.
+
+/// The synthesis response bound (the provider_http law's own ceiling —
+/// a research report never needs more; a wall that size is hostile).
+pub const WATCH_MAX_SYNTHESIS_BYTES: usize =
+    crate::agentloop::provider_http::DEFAULT_MAX_RESPONSE_BYTES;
+
+/// One synthesis outcome: the provider's text + the provenance the header
+/// names (the endpoint HOST — never the full URL with any credential — and
+/// the model id).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SynthesisOutcome {
+    pub output: String,
+    pub host: String,
+    pub model: String,
+}
+
+/// Post ONE research task to the operator's provider endpoint. `base_url`
+/// is the FULL endpoint (already validated by the boot profile check);
+/// `api_key` is the OWNER-ONLY secret read (never logged, never echoed,
+/// never in an error string). The output is the provider's text: a JSON
+/// body's `report`/`content`/`text`/`output` string field when present
+/// (the GPT-Researcher shape), else the raw body as text.
+pub async fn synthesize_task(
+    base_url: &str,
+    api_key: &str,
+    model: &str,
+    task: &str,
+) -> Result<SynthesisOutcome, WatchError> {
+    let url = reqwest::Url::parse(base_url.trim()).map_err(|_| WatchError::TransportFailed)?;
+    let host = url
+        .host_str()
+        .map(|h| h.to_ascii_lowercase())
+        .ok_or(WatchError::TransportFailed)?
+        .to_string();
+    let port = url.port_or_known_default().unwrap_or(443);
+    // The SSRF screen — the ONE egress screen, `allow_private` governed by
+    // the webhook's own loud opt-out (the local-endpoint posture: an
+    // operator whose agent lives on the loopback opts in explicitly).
+    let allow_private = std::env::var("BRAIN_EGRESS_ALLOW_PRIVATE").as_deref() == Ok("1");
+    let addrs = crate::webhook::resolve_and_validate_sink(&host, port, allow_private)
+        .map_err(|e| WatchError::LaneHostRefused(e.to_string()))?;
+    let client = reqwest::Client::builder()
+        // A redirect is a screen bypass: the validated ONE endpoint or
+        // nothing (the provider_http law).
+        .redirect(reqwest::redirect::Policy::none())
+        .no_proxy()
+        .https_only(url.scheme() == "https")
+        .connect_timeout(std::time::Duration::from_secs(
+            WATCH_HTTP_CONNECT_TIMEOUT_SECS,
+        ))
+        .timeout(std::time::Duration::from_secs(
+            WATCH_HTTP_TOTAL_TIMEOUT_SECS * 12,
+        ))
+        // The DNS pin: every connection goes to the validated set (a
+        // later rebinding loses — the boot-frozen pin's per-request form).
+        .resolve_to_addrs(&host, &addrs)
+        .build()
+        .map_err(|_| WatchError::TransportFailed)?;
+    let resp = client
+        .post(url)
+        .header(reqwest::header::AUTHORIZATION, format!("Bearer {api_key}"))
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(serde_json::json!({ "task": task }).to_string())
+        .send()
+        .await
+        .map_err(|_| WatchError::TransportFailed)?;
+    if !resp.status().is_success() {
+        return Err(WatchError::TransportFailed);
+    }
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|_| WatchError::TransportFailed)?;
+    if bytes.len() > WATCH_MAX_SYNTHESIS_BYTES {
+        return Err(WatchError::SynthesisOutputTooLarge);
+    }
+    let text = String::from_utf8(bytes.to_vec()).map_err(|_| WatchError::TransportFailed)?;
+    let output = extract_report_text(&text);
+    Ok(SynthesisOutcome {
+        output,
+        host,
+        model: model.to_string(),
+    })
+}
+
+/// The provider's report text: a JSON object's `report` | `content` |
+/// `text` | `output` string field when one is present (the
+/// GPT-Researcher/STORM shapes), else the raw body. Untrusted text either
+/// way — it lands below the deterministic header as DATA and rides the
+/// injection screen at filing like every capture.
+fn extract_report_text(body: &str) -> String {
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(body.trim())
+        && let Some(obj) = v.as_object()
+    {
+        for key in ["report", "content", "text", "output"] {
+            if let Some(s) = obj.get(key).and_then(|x| x.as_str()) {
+                return s.to_string();
+            }
+        }
+    }
+    body.to_string()
+}
+
+/// The deterministic proposal header for a synthesis output — names the
+/// provider (host), the model, and the TASK (bounded; the full task rides
+/// the audit row as a hash only). The output lands BELOW the header as
+/// quarantined DATA for the human reviewer.
+pub fn render_synthesis_proposal(
+    outcome: &SynthesisOutcome,
+    task: &str,
+    fetched_at: &str,
+) -> (String, String) {
+    let title = bound_chars(task.trim(), WATCH_TITLE_MAX_CHARS);
+    let mut h = String::new();
+    h.push_str("[Synthesis] provider host: ");
+    h.push_str(&outcome.host);
+    h.push('\n');
+    h.push_str("Model: ");
+    h.push_str(&outcome.model);
+    h.push('\n');
+    h.push_str("Task: ");
+    h.push_str(&bound_chars(task.trim(), 500));
+    h.push('\n');
+    h.push_str(&format!("Fetched: {fetched_at}\n"));
+    h.push_str("Provenance: operator-invoked external agent (POST /research/synthesize) — the kernel never calls a provider on its own\n");
+    h.push('\n');
+    h.push_str(&bound_chars(&outcome.output, WATCH_SUMMARY_MAX_CHARS));
+    h.push('\n');
+    (h, title)
+}
+
+/// The host of a URL, lowercased — the provenance header's provider line
+/// (never the full URL: a credential must never ride a proposal header).
+/// NAMED APART from brain-connector-crm.rs's `host_of` (the dup-guard's
+/// rename precedent): both extract a lowercase host from a URL, but the
+/// CRM connector's variant carries its own connector-specific fallback
+/// contract; a shared helper would couple the watch's provenance header
+/// to a connector binary.
+pub fn watch_provider_host_of(url: &str) -> String {
+    reqwest::Url::parse(url.trim())
+        .ok()
+        .and_then(|u| u.host_str().map(|h| h.to_ascii_lowercase()))
+        .unwrap_or_else(|| "unparseable".to_string())
+}
+
+#[cfg(test)]
+mod synthesis_tests {
+    // The RW-2 filing law, pinned in-crate (create_proposal_core is
+    // pub(crate) — the external pins file cannot see it): the provider's
+    // output lands as a PROPOSAL (source `synthesis`, status pending)
+    // through the REAL core; the header names provider + model + task; the
+    // output is DATA below it; and the knowledge side holds NOTHING.
+    use super::*;
+
+    #[test]
+    fn rw2_the_output_lands_as_a_proposal_never_memory() {
+        crate::register_sqlite_vec::register_sqlite_vec();
+        let mut conn = rusqlite::Connection::open_in_memory().expect("db");
+        crate::migration::run_migration(&mut conn, crate::config::DB_MMAP_SIZE_MIB)
+            .expect("migration");
+        let outcome = SynthesisOutcome {
+            output: "A briefing with sources.\n\n1. source one".to_string(),
+            host: "127.0.0.1".to_string(),
+            model: "gpt-researcher".to_string(),
+        };
+        let (content, title) = render_synthesis_proposal(
+            &outcome,
+            "brief the kernel on the watch posture",
+            "2026-11-09T13:00:00Z",
+        );
+        assert!(content.contains("[Synthesis] provider host: 127.0.0.1"));
+        assert!(content.contains("Model: gpt-researcher"));
+        assert!(content.contains("Task: brief the kernel"));
+        let model = crate::embed::StaticEmbedder::new(crate::config::MODEL_ID).expect("model");
+        let (resp, verdict) = crate::handlers::gate::create_proposal_core(
+            &conn,
+            &model,
+            crate::handlers::gate::ProposalRequest {
+                content,
+                kind: "fact".to_string(),
+                source: Some("synthesis".to_string()),
+                origin_context: None,
+                authority: None,
+                observed_at: None,
+                domain: None,
+                title: Some(title),
+                source_prompt: None,
+            },
+            None,
+        )
+        .expect("the synthesis files");
+        assert_eq!(verdict, crate::screen::ScreenResult::Clean);
+        let (source, status): (String, String) = conn
+            .query_row(
+                "SELECT source, status FROM proposals WHERE id = ?1",
+                [resp.id],
+                |r| {
+                    Ok((
+                        r.get::<_, Option<String>>(0)?.unwrap_or_default(),
+                        r.get(1)?,
+                    ))
+                },
+            )
+            .expect("the proposal row");
+        assert_eq!(source, "synthesis");
+        assert_eq!(status, "pending", "the queue is the product — never memory");
+        let knowledge: i64 = conn
+            .query_row("SELECT COUNT(*) FROM knowledge", [], |r| r.get(0))
+            .expect("knowledge count");
+        assert_eq!(knowledge, 0, "the synthesis output never lands as memory");
+    }
+
+    /// The report extractor: the GPT-Researcher shape's field, else the
+    /// raw body — untrusted text either way.
+    #[test]
+    fn rw2_the_report_extractor_takes_the_field_or_the_body() {
+        assert_eq!(
+            extract_report_text(r#"{"report":"the briefing","sources":[]}"#),
+            "the briefing"
+        );
+        assert_eq!(
+            extract_report_text(r#"{"content":"alt shape"}"#),
+            "alt shape"
+        );
+        assert_eq!(
+            extract_report_text("plain markdown body"),
+            "plain markdown body"
+        );
+        assert_eq!(
+            extract_report_text(r#"{"unrelated":1}"#),
+            r#""{"unrelated":1}""#.trim_matches('"')
+        );
+    }
 }
