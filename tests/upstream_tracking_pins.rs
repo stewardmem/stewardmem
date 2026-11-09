@@ -73,7 +73,10 @@ fn parse_table_from(text: &str) -> Result<(Vec<String>, Vec<Row>), String> {
             .split('|')
             .map(|c| c.trim().to_string())
             .collect();
-        if cells.iter().all(|c| c.is_empty() || c.chars().all(|ch| ch == '-' || ch == ':')) {
+        if cells
+            .iter()
+            .all(|c| c.is_empty() || c.chars().all(|ch| ch == '-' || ch == ':'))
+        {
             continue; // the |---|---| separator
         }
         match &header {
@@ -87,8 +90,7 @@ fn parse_table_from(text: &str) -> Result<(Vec<String>, Vec<Row>), String> {
             }
             Some(cols) => {
                 let idx = |name: &str| -> Option<usize> {
-                    cols.iter()
-                        .position(|c| c.to_lowercase() == name)
+                    cols.iter().position(|c| c.to_lowercase() == name)
                 };
                 let cell = |i: Option<usize>| -> String {
                     i.and_then(|i| cells.get(i).cloned()).unwrap_or_default()
@@ -125,7 +127,10 @@ fn status_head_is_closed(status: &str) -> Result<(), String> {
     match head {
         "tracking" | "proposed" | "landed" => Ok(()),
         "declined" => {
-            let reason = s[head.len()..].trim().trim_start_matches(['—', '–', '-', ':']).trim();
+            let reason = s[head.len()..]
+                .trim()
+                .trim_start_matches(['—', '–', '-', ':'])
+                .trim();
             if reason.is_empty() {
                 Err("declined WITHOUT a reason — the closed vocabulary is `declined+reason`: record why the item is refused".to_string())
             } else {
@@ -176,7 +181,11 @@ fn every_row_carries_a_status_in_the_closed_vocabulary() {
             Ok(()) => {}
             Err(why) => panic!(
                 "row `{}` carries status `{}` — {why}\n  at: {}",
-                if row.item.is_empty() { "(unnamed)" } else { &row.item },
+                if row.item.is_empty() {
+                    "(unnamed)"
+                } else {
+                    &row.item
+                },
                 row.status,
                 row.raw
             ),
@@ -192,7 +201,11 @@ fn every_row_carries_a_review_date() {
         assert!(
             is_iso_date(row.review_date.trim()),
             "row `{}` carries review-date `{}` — not a YYYY-MM-DD date; every row must say when it was last re-checked (UT-3)\n  at: {}",
-            if row.item.is_empty() { "(unnamed)" } else { &row.item },
+            if row.item.is_empty() {
+                "(unnamed)"
+            } else {
+                &row.item
+            },
             row.review_date,
             row.raw
         );
@@ -209,7 +222,11 @@ fn every_row_carries_our_evidence() {
         assert!(
             !row.evidence.trim().is_empty(),
             "row `{}` carries no `our evidence` cell — every row cites our receipt (the CG evidence files, the pins, the round evidence)\n  at: {}",
-            if row.item.is_empty() { "(unnamed)" } else { &row.item },
+            if row.item.is_empty() {
+                "(unnamed)"
+            } else {
+                &row.item
+            },
             row.raw
         );
     }
@@ -239,11 +256,20 @@ fn a_declined_row_must_carry_its_reason() {
     // exists today; the grammar function is exercised on synthetic cells
     // so the law is pinned regardless of the table's live posture.
     assert!(status_head_is_closed("declined — moved to the v3 boundary act").is_ok());
-    assert!(status_head_is_closed("declined").is_err(), "bare `declined` must red");
-    assert!(status_head_is_closed("declined ").is_err(), "whitespace-only reason must red");
+    assert!(
+        status_head_is_closed("declined").is_err(),
+        "bare `declined` must red"
+    );
+    assert!(
+        status_head_is_closed("declined ").is_err(),
+        "whitespace-only reason must red"
+    );
     assert!(status_head_is_closed("tracking").is_ok());
     assert!(status_head_is_closed("proposed — draft filed by the operator").is_ok());
     assert!(status_head_is_closed("landed").is_ok());
-    assert!(status_head_is_closed("promoted").is_err(), "outside the vocabulary");
+    assert!(
+        status_head_is_closed("promoted").is_err(),
+        "outside the vocabulary"
+    );
     assert!(status_head_is_closed("").is_err(), "empty status must red");
 }

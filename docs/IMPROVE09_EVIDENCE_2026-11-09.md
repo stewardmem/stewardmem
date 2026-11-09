@@ -184,5 +184,19 @@ step's act; the table's jinja row has carried the fresh date since S2.
 
 ## 8 · Verify-after
 
-Landed with the final commit — the battery, fmt/clippy, the census, the
-badge verify-count, docs-truth, the stash check.
+| gate | result |
+|---|---|
+| `cargo test --features bench` (the battery) | **104 binaries** (103 + `upstream_tracking_pins`), **0 failed**, 3,969 cargo-counted passed (`battery.txt`, exit 0) |
+| `cargo fmt --check` | green — after the tree-demanded fix to the new pins file (line-wrap only, semantics identical; the drift-guard caught it) |
+| `cargo clippy --features bench --all-targets` | 0 warnings |
+| `scripts/test-census.py --check` | green after the re-derivation: structural 430 → **435**, behavioral 3,467 → **3,468** (the grammar pin's bare call), control/residual/unclassified unchanged, total 4,040 → **4,046** (+6) |
+| the badge derivation (`scripts/badges.sh`, the recipe's own cargo run with the platform skips) | **3,981 → 3,987** (+6, the pins file's tests); the README badge re-derived; `badges.sh --verify-count` **exit 0** |
+| docs-truth | exit 0, **LOW=17** — the recorded parity (the new docs are prose, not contract surface; openapi/api.md/cli-reference untouched) |
+| the swift suite | 38/38 hermetic + 38/38 live (§3) on the unchanged pin |
+| `git stash list` | **UNCHANGED**: `stash@{0}: R79 'Locks' WIP (RECOVERED …)` present at open and at the close |
+| the lipstyk gate | green on the changed lines before the push |
+| dependencies | **zero new** — Cargo.lock untouched by the round (the pins file is std-only) |
+| kernel `src/` | **untouched** — `git diff 667592d8..HEAD -- src/` is empty |
+
+The round's commit chain: `3c2c2e33` (S1) → `32aa286d` (S2) → `fe872bb5`
+(S3+S4) → the tree-demanded commit (fmt + census + badge + this §8).
