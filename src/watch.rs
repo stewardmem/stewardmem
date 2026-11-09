@@ -772,10 +772,9 @@ fn render_proposal(lane: &WatchLane, item: &FeedItem, fetched_at: &str, near: &s
 pub fn freshness_floor_secs(kind: SourceKind, cadence_secs: u64, ttl_secs: Option<u64>) -> u64 {
     match kind {
         SourceKind::ArxivApi => cadence_secs.max(WATCH_ARXIV_CADENCE_SECS),
-        SourceKind::Rss | SourceKind::Atom => match ttl_secs {
-            Some(ttl) => cadence_secs.min(ttl.saturating_mul(60)),
-            None => cadence_secs,
-        },
+        SourceKind::Rss | SourceKind::Atom => ttl_secs
+            .map(|ttl| cadence_secs.min(ttl.saturating_mul(60)))
+            .unwrap_or(cadence_secs),
         SourceKind::Adapter => cadence_secs,
     }
 }
@@ -784,10 +783,9 @@ pub fn freshness_floor_secs(kind: SourceKind, cadence_secs: u64, ttl_secs: Optio
 /// the floor ago. `false` = the tick honors the floor as the honest
 /// `skipped_fresh` accounting line.
 pub fn is_stale(floor_secs: u64, last_fetch_epoch: Option<i64>, now_epoch: i64) -> bool {
-    match last_fetch_epoch {
-        None => true,
-        Some(last) => now_epoch.saturating_sub(last) >= floor_secs as i64,
-    }
+    last_fetch_epoch
+        .map(|last| now_epoch.saturating_sub(last) >= floor_secs as i64)
+        .unwrap_or(true)
 }
 
 // ── S2: the feed parsers (the hand-rolled std-side scanner) ─────────────
@@ -1126,10 +1124,9 @@ fn extract_element_attrs<'a>(
 /// tag) yields None.
 fn read_tag_name(text: &str, pos: usize) -> Option<(&str, usize, bool, bool)> {
     let after = &text[pos + 1..];
-    let (is_close, after) = match after.strip_prefix('/') {
-        Some(rest) => (true, rest),
-        None => (false, after),
-    };
+    let (is_close, after) = after
+        .strip_prefix('/')
+        .map_or((false, after), |rest| (true, rest));
     let name_end = after
         .find(|c: char| c.is_whitespace() || c == '>' || c == '/')
         .unwrap_or(after.len());
@@ -1610,13 +1607,12 @@ pub async fn run_tick(ctx: TickContext<'_>) -> Result<TickReport, WatchError> {
             title: Some(proposal.title.clone()),
             source_prompt: None,
         };
-        match crate::handlers::gate::create_proposal_core(tx.tx(), ctx.model, req, None) {
-            Ok((resp, _verdict)) => {
-                proposal_ids.push(resp.id);
-            }
-            Err(_) => {
-                accounting.failed += 1;
-            }
+        if let Ok((resp, _verdict)) =
+            crate::handlers::gate::create_proposal_core(tx.tx(), ctx.model, req, None)
+        {
+            proposal_ids.push(resp.id);
+        } else {
+            accounting.failed += 1;
         }
     }
 
