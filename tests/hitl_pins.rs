@@ -753,3 +753,384 @@ async fn ht3_scoreboard_zero_cohort_is_absent_honest() {
         "no proposals → no decay ratios"
     );
 }
+
+// ── HT-2 · the inalienability law: telemetry reads, never gates ────────────
+// (S3 pins. The structural scan pins the tree as it stands; the CONTROLS
+// prove the scan is not vacuous: planted gate-shaped reads MUST red the
+// scanner, named. The inalienability law is the product — no threshold,
+// score, or aggregate may influence an approval; the telemetry's only
+// consumer is the human reviewing their own pattern.)
+
+/// The telemetry needles, split by ROLE.
+///
+/// The LEDGER-READ class — the storage surface's names. Any code that READS
+/// the telemetry must spell the table (Rust cannot read a table anonymously),
+/// so a zero-hit scan outside the reader set is a real absence, not a
+/// spelling race. `interval_ms` and `latency_ms` are deliberately NOT
+/// needles: generic column words with pre-existing lives elsewhere; the
+/// table's name is the gate every reader must pass through.
+const LEDGER_NAME_NEEDLES: [&str; 2] = ["hitl_decision_events", "edit_depth_chars"];
+
+/// The ONLY files allowed to name the LEDGER, each with its reason:
+/// - `migration.rs` — the CREATE itself.
+/// - `service/review.rs` — the recorder (the INSERT + its two in-tx
+///   derivation SELECTs); writes the act, reads only its own row's ids.
+/// - `workflow/calibration.rs` — the report segment's read-only derivation.
+/// - `handlers/workflow.rs` — the DPO-gated board block's read-only
+///   derivation.
+/// - `bin/brain_migrate_rehearse.rs` — the rehearsal inventory (names every
+///   table by design — the row-count parity drift-guard).
+/// - `storage_layout.rs` — the version const's doc names the table the
+///   version lands (schema provenance, not a data read).
+///
+/// The decision handlers — gate.rs — are NOT here: they never read the
+/// ledger.
+const LEDGER_NAME_READERS: [&str; 6] = [
+    "src/migration.rs",
+    "src/service/review.rs",
+    "src/workflow/calibration.rs",
+    "src/handlers/workflow.rs",
+    "src/bin/brain_migrate_rehearse.rs",
+    "src/storage_layout.rs",
+];
+
+/// The RECORDER-WRITE class — the tick's own name. It appears exactly where
+/// the act is WRITTEN in the act's own tx: the definition (review.rs) and the
+/// edit handler's single call site (gate.rs — the edit tick rides the edit's
+/// tx beside `apply_edit`; approve/reject write through the widened CAS).
+/// A recorder call ANYWHERE else is a write outside a decision tx — the
+/// accounting law's violation.
+const RECORDER_NEEDLE: [&str; 1] = ["record_hitl_decision"];
+const RECORDER_WRITERS: [&str; 2] = ["src/service/review.rs", "src/handlers/gate.rs"];
+
+/// The append-only law's forbidden shapes — INSERT is THE append and is not
+/// among them.
+const LEDGER_WRITE_SHAPES: [&str; 3] = [
+    "UPDATE hitl_decision_events",
+    "DELETE FROM hitl_decision_events",
+    "DROP TABLE hitl_decision_events",
+];
+
+/// The HT-2 scanner, parameterized over (path, content) pairs so the controls
+/// can plant gate-shaped reads in synthetic trees and prove the scan isn't
+/// vacuous. Returns the files that name a telemetry needle outside its
+/// role's allowed set.
+fn telemetry_reference_violations(trees: &[(String, String)]) -> Vec<String> {
+    trees
+        .iter()
+        .filter(|(path, content)| {
+            let path = path.as_str();
+            let ledger_hit = LEDGER_NAME_NEEDLES.iter().any(|n| content.contains(n));
+            let recorder_hit = RECORDER_NEEDLE.iter().any(|n| content.contains(n));
+            (!LEDGER_NAME_READERS.contains(&path) && ledger_hit)
+                || (!RECORDER_WRITERS.contains(&path) && recorder_hit)
+        })
+        .map(|(path, _)| path.clone())
+        .collect()
+}
+
+/// The append-only scanner, same parameterization: any UPDATE / DELETE / DROP
+/// against the ledger anywhere is a violation (INSERT is the append itself).
+fn ledger_write_violations(trees: &[(String, String)]) -> Vec<String> {
+    trees
+        .iter()
+        .filter(|(_, content)| LEDGER_WRITE_SHAPES.iter().any(|w| content.contains(w)))
+        .map(|(path, _)| path.clone())
+        .collect()
+}
+
+/// Walk src/ recursively (std-only), returning (repo-relative path, content).
+fn src_tree() -> Vec<(String, String)> {
+    fn walk(dir: &Path, root: &Path, out: &mut Vec<(String, String)>) {
+        for entry in std::fs::read_dir(dir).expect("src dir exists").flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                walk(&p, root, out);
+            } else if p.extension().map(|x| x == "rs").unwrap_or(false) {
+                let rel = p
+                    .strip_prefix(root)
+                    .expect("repo-relative")
+                    .to_string_lossy()
+                    .into_owned();
+                let content =
+                    std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {rel}: {e}"));
+                out.push((rel, content));
+            }
+        }
+    }
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut out = Vec::new();
+    walk(&root.join("src"), root, &mut out);
+    out
+}
+
+/// The real tree: no src file outside the closed reader set names the
+/// telemetry — no gate, no route, no code path even SPELLS the ledger's
+/// names, let alone branches on its values.
+#[test]
+fn ht2_no_file_outside_the_reader_set_names_the_telemetry() {
+    let violations = telemetry_reference_violations(&src_tree());
+    assert!(
+        violations.is_empty(),
+        "telemetry names outside the closed reader set: {violations:?} — \
+         a gate reading the ledger would appear here"
+    );
+}
+
+/// The sharp arm, named: the decision handlers never even name the LEDGER.
+/// approve/reject/edit write their act through the CAS (and the edit tick's
+/// one recorder call) and read nothing back — the approver is measured,
+/// never judged.
+#[test]
+fn ht2_the_decision_handlers_never_name_the_ledger() {
+    let gate = read_repo("src/handlers/gate.rs");
+    for needle in LEDGER_NAME_NEEDLES {
+        assert!(
+            !gate.contains(needle),
+            "gate.rs names {needle} — the decision path must never read the telemetry"
+        );
+    }
+}
+
+/// The append-only law: no UPDATE / DELETE / DROP touches the ledger anywhere
+/// in src/ — the only writes in the tree are the recorder's INSERTs.
+#[test]
+fn ht2_the_ledger_is_append_only() {
+    let violations = ledger_write_violations(&src_tree());
+    assert!(
+        violations.is_empty(),
+        "ledger write shapes found: {violations:?} — the ledger is append-only"
+    );
+}
+
+/// THE NON-VACUITY CONTROL (the execution prompt's first gating law): a
+/// planted gate-shaped read MUST red the scanner, named. The synthetic file
+/// is gate.rs-shaped: a threshold read off the telemetry feeding a refusal.
+/// If this control ever passes with an empty violations vector, the scan is
+/// decoration and HT-2 is vacuous.
+#[test]
+fn control_ht2_the_scan_reds_on_a_planted_gate_read() {
+    let planted_gate = "src/handlers/gate.rs".to_string();
+    let planted_content = r#"
+        // the planted gate-shaped read: a fatigue threshold refusing approvals
+        let fatigue: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM hitl_decision_events WHERE actor = ?1", ...)?;
+        if fatigue > 5 {
+            return Err(HandlerError::forbidden("approver_fatigue", "rest first"));
+        }
+    "#
+    .to_string();
+    let planted_tree = vec![
+        (planted_gate.clone(), planted_content),
+        ("src/service/review.rs".to_string(), "clean".to_string()),
+    ];
+    let violations = telemetry_reference_violations(&planted_tree);
+    assert_eq!(
+        violations,
+        vec![planted_gate],
+        "the scanner MUST red the planted gate-shaped read, naming the file — \
+         an empty result here would mean the pin cannot fail, which is the one \
+         defect a structural scan must never have"
+    );
+}
+
+/// The second control: the SAME telemetry text is legal in the reader set and
+/// a violation one directory over — the allowlist does real work, it is not a
+/// blanket grep of a word. The recorder needle follows the same rule by role:
+/// its one handler-side call site (the edit tick) is legal, anywhere else is
+/// a named violation.
+#[test]
+fn control_ht2_the_allowlist_discriminates_by_path() {
+    let content = "SELECT latency_ms FROM hitl_decision_events".to_string();
+    let legal = vec![("src/workflow/calibration.rs".to_string(), content.clone())];
+    assert!(
+        telemetry_reference_violations(&legal).is_empty(),
+        "the report surface names the ledger legally"
+    );
+    let illegal = vec![("src/handlers/mod.rs".to_string(), content)];
+    assert_eq!(
+        telemetry_reference_violations(&illegal),
+        vec!["src/handlers/mod.rs".to_string()],
+        "the same text outside the reader set is a named violation"
+    );
+    let write_legal = vec![(
+        "src/handlers/gate.rs".to_string(),
+        "record_hitl_decision(&tx, id, \"edit\", &actor, now, Some(depth))".to_string(),
+    )];
+    assert!(
+        telemetry_reference_violations(&write_legal).is_empty(),
+        "the edit tick's recorder call is the legal write in the decision's tx"
+    );
+    let write_illegal = vec![(
+        "src/handlers/chat.rs".to_string(),
+        "record_hitl_decision(&tx, 1, \"edit\", \"x\", 0, None)".to_string(),
+    )];
+    assert_eq!(
+        telemetry_reference_violations(&write_illegal),
+        vec!["src/handlers/chat.rs".to_string()],
+        "a recorder call outside a decision tx is a named violation"
+    );
+}
+
+/// The append-only control: planted write shapes MUST red, named.
+#[test]
+fn control_ht2_the_append_only_scan_reds_on_a_planted_write() {
+    let planted = vec![(
+        "src/service/review.rs".to_string(),
+        "DELETE FROM hitl_decision_events WHERE actor = ?1".to_string(),
+    )];
+    assert_eq!(
+        ledger_write_violations(&planted),
+        vec!["src/service/review.rs".to_string()],
+        "a planted DELETE must red the append-only scan even in a reader-set file"
+    );
+    let clean = vec![(
+        "src/service/review.rs".to_string(),
+        "INSERT INTO hitl_decision_events (proposal_id, decision) VALUES (?1, ?2)".to_string(),
+    )];
+    assert!(
+        ledger_write_violations(&clean).is_empty(),
+        "the INSERT is the append itself — never a violation"
+    );
+}
+
+// ── the S3 witness ─────────────────────────────────────────────────────────
+
+/// The scripted decision sequence, live through the real routes with real
+/// timing: a FAST BURST of three approvals back-to-back, then a
+/// SLOW-CONSIDERED edit → deliberate pause → approve. Every act's row, the
+/// report segment, and the board block are printed (cargo test
+/// --test hitl_pins witness_ -- --nocapture) and transcribed into the
+/// evidence. The timing assertions are the burst/considered distinction the
+/// telemetry exists to surface: the burst acts land within a second of each
+/// other; the considered act's interval and latency carry the pause.
+#[tokio::test]
+async fn witness_fast_burst_then_slow_considered_edit_and_approve() {
+    let srv = server();
+    let now = chrono::Utc::now().timestamp();
+    let (b1, b2, b3, slow) = {
+        let conn = srv.state.pool.get().expect("conn");
+        (
+            seed_proposal(&conn, "burst one", now),
+            seed_proposal(&conn, "burst two", now),
+            seed_proposal(&conn, "burst three", now),
+            seed_proposal(&conn, "the considered one", now),
+        )
+    };
+    // ── the fast burst ──
+    let (s1, _) = approve(&srv.state, b1).await;
+    let (s2, _) = approve(&srv.state, b2).await;
+    let (s3, _) = approve(&srv.state, b3).await;
+    assert_eq!(s1, StatusCode::OK);
+    assert_eq!(s2, StatusCode::OK);
+    assert_eq!(s3, StatusCode::OK);
+    // ── the slow-considered act: read, edit, THINK, then approve ──
+    let (es, _) = edit(
+        &srv.state,
+        slow,
+        "the considered one, revised after reading",
+    )
+    .await;
+    assert_eq!(es, StatusCode::OK, "edit must succeed");
+    tokio::time::sleep(std::time::Duration::from_millis(2100)).await;
+    let (s4, body) = approve(&srv.state, slow).await;
+    assert_eq!(s4, StatusCode::OK, "{body}");
+
+    // ── the rows ──
+    let conn = srv.state.pool.get().expect("conn");
+    let mut stmt = conn
+        .prepare(
+            "SELECT proposal_id, decision, actor, latency_ms, edit_depth_chars,
+                    interval_ms, ts, domain
+             FROM hitl_decision_events ORDER BY id",
+        )
+        .expect("rows query");
+    let rows: Vec<String> = stmt
+        .query_map([], |r| {
+            Ok(format!(
+                "proposal={} decision={} actor={} latency_ms={:?} edit_depth={:?} interval_ms={:?} ts={} domain={}",
+                r.get::<_, i64>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, Option<i64>>(3)?,
+                r.get::<_, Option<i64>>(4)?,
+                r.get::<_, Option<i64>>(5)?,
+                r.get::<_, i64>(6)?,
+                r.get::<_, String>(7)?,
+            ))
+        })
+        .expect("rows map")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("rows");
+    let summary = brain_server::workflow::calibration::hitl_summary(&conn);
+    let (st, board) = get(&srv.state, "/workflow/scoreboard").await;
+    assert_eq!(st, StatusCode::OK);
+    println!("════ IMPROVE11 S3 WITNESS — the approver measured ════");
+    for r in &rows {
+        println!("ROW   {r}");
+    }
+    println!("SEGMENT  hitl:{summary}");
+    println!(
+        "BOARD    hitl = {}",
+        serde_json::to_string_pretty(&board["hitl"]).expect("board json")
+    );
+
+    // ── the burst/considered distinction, asserted ──
+    let intervals = burst_intervals(&conn, &[b1, b2, b3]);
+    // burst one is this actor's FIRST act (interval NULL); two and three land
+    // inside the burst (non-null, sub-second — the loop ran back-to-back).
+    assert!(intervals[0].is_none(), "the burst's first act has no prior");
+    for (i, iv) in intervals[1..].iter().enumerate() {
+        let v = iv.expect("burst act carries its interval");
+        assert!(
+            v < 2000,
+            "burst act {} interval {v}ms must be sub-burst (<2s)",
+            i + 2
+        );
+    }
+    // the considered act: its interval reaches back over the deliberate pause
+    // (edit → 2.1s think → approve), and its LATENCY carries the pause too.
+    let considered: (Option<i64>, Option<i64>) = conn
+        .query_row(
+            "SELECT interval_ms, latency_ms FROM hitl_decision_events
+             WHERE proposal_id = ?1 AND decision = 'approve'",
+            [slow],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .expect("considered row");
+    let iv = considered.0.expect("the considered act has a prior event");
+    assert!(
+        iv >= 2000,
+        "the considered act's interval {iv}ms carries the deliberate pause (>=2s)"
+    );
+    let lat = considered.1.expect("the considered act carries latency");
+    assert!(
+        lat >= 2000,
+        "the considered act's latency {lat}ms spans the read-edit-think-approve arc"
+    );
+
+    // ── the report rides the same numbers ──
+    brain_server::workflow::calibration::record_report(&conn, 9000, now, "").expect("report");
+    let seg = brain_server::workflow::calibration::hitl_summary(&conn);
+    assert!(
+        seg.contains("approved:4"),
+        "the report segment counts the whole act: {seg}"
+    );
+    assert!(seg.contains("edited:1"), "the edit act counts: {seg}");
+    println!("REPORT   (post-report) hitl:{seg}");
+}
+
+/// The burst arm's intervals, oldest first, for the given proposals.
+fn burst_intervals(conn: &Connection, pids: &[i64]) -> Vec<Option<i64>> {
+    pids.iter()
+        .map(|pid| {
+            conn.query_row(
+                "SELECT interval_ms FROM hitl_decision_events
+                 WHERE proposal_id = ?1 AND decision = 'approve'",
+                [pid],
+                |r| r.get::<_, Option<i64>>(0),
+            )
+            .expect("interval row")
+        })
+        .collect()
+}
