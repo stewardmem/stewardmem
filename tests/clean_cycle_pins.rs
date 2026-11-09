@@ -369,7 +369,7 @@ fn r48_the_runbook_names_the_offsite_approval_requirement() {
 fn r48_adds_no_table_no_stamp_no_dependency() {
     let layout = read_repo("src/storage_layout.rs");
     assert!(
-        layout.contains("LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_32;"),
+        layout.contains("LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_33;"),
         "the schema stamp is re-pinned by each schema round: R48 adds no table and no stamp \
          (the ceiling itself is re-pinned by each schema round — R57b moved it, for the \
          trace citation, R60 moved it for the disproof condition's six columns on `claims`, \
@@ -380,8 +380,9 @@ fn r48_adds_no_table_no_stamp_no_dependency() {
          manages column, the uninstall round moved it for the register's removed_at column, \
          the LL-04 round moved it for the chat turn's support_decision verdict column, \
          IMPROVE05 moved it for the documents row's OCR provenance, IMPROVE07 moved it \
-         for the knowledge row's scholarly provenance column, and IMPROVE08 moved it \
-         last, for the research watch's three tables)"
+         for the knowledge row's scholarly provenance column, IMPROVE08 moved it \
+         for the research watch's three tables, and IMPROVE11 moved it last, \
+         for the HITL decision-event ledger)"
     );
     let manifest = read_repo("Cargo.toml");
     let deps = manifest

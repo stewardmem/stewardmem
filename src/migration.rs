@@ -2328,6 +2328,9 @@ pub fn run_migration_with_store_dim(
     )?;
 
     // Bumped once per release that changes this function.
+    // v1.32.33 "HitlTelemetry" (IMPROVE11): the hitl_decision_events table
+    // (one append-only row per decided act, written in the decision's own tx)
+    // → 1.32.33.
     // v1.32.32 "WatchLanes" (IMPROVE08): the research watch's three tables
     // (watch_configs / watch_seen / watch_ticks, guarded CREATEs) → 1.32.32.
     // v1.32.31 "ScholarMeta" (IMPROVE07): knowledge.scholar_meta — the
@@ -3366,9 +3369,44 @@ pub fn run_migration_with_store_dim(
         )?;
     }
 
+    // ── v1.32.33 "HitlTelemetry" (IMPROVE11): the HITL decision-event
+    // ledger. ONE additive guarded CREATE. The approver is measured the way
+    // the artifact always was: one append-only row per decided act
+    // (approve | reject | edit — the CHECK closes the vocabulary), written IN
+    // the decision's own BEGIN IMMEDIATE (the plan-08 CHECKED accounting
+    // pattern; a failing event write fails the DECISION, never the reverse).
+    // latency_ms is (decided_at − created_at) at the clocks' second
+    // granularity, expressed in ms (NULL on edit — an edit is not a
+    // decision); edit_depth_chars is the SIGNED char delta of the edit
+    // (NULL off edit); interval_ms reaches the actor's previous event.
+    // Telemetry READS, never gates — no threshold, score, or aggregate may
+    // influence an approval (the inalienability law). NO model anywhere: the
+    // depth is arithmetic, the grouping is SQL. TTL expiry is the MACHINE's
+    // act (`expire_if_stale`, audited `proposal_expired`) and deliberately
+    // records no row — this ledger measures the approver, not the timer.
+    {
+        db.execute_batch(
+            "CREATE TABLE IF NOT EXISTS hitl_decision_events (
+                id               INTEGER PRIMARY KEY,
+                proposal_id      INTEGER NOT NULL,
+                decision         TEXT NOT NULL CHECK (decision IN ('approve','reject','edit')),
+                actor            TEXT NOT NULL,
+                latency_ms       INTEGER,
+                edit_depth_chars INTEGER,
+                interval_ms      INTEGER,
+                ts               INTEGER NOT NULL,
+                domain           TEXT NOT NULL DEFAULT 'global'
+            );
+            CREATE INDEX IF NOT EXISTS idx_hitl_events_actor_ts
+                ON hitl_decision_events(actor, ts);
+            CREATE INDEX IF NOT EXISTS idx_hitl_events_proposal
+                ON hitl_decision_events(proposal_id);",
+        )?;
+    }
+
     db.execute(
-        "INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1.32.32')
-         ON CONFLICT(key) DO UPDATE SET value = '1.32.32';",
+        "INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1.32.33')
+         ON CONFLICT(key) DO UPDATE SET value = '1.32.33';",
         [],
     )?;
 

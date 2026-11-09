@@ -282,10 +282,10 @@ fn sa8_the_migration_adds_the_scholar_column_and_moves_the_stamp() {
         )
         .expect("stamp");
     assert_eq!(
-        stamp, "1.32.32",
+        stamp, "1.32.33",
         "run_migration must stamp the CURRENT ceiling — the stamp and the column moved \
          together at 1.32.31, and each later schema round re-pins the stamp (1.32.32 at \
-         IMPROVE08)"
+         IMPROVE08, 1.32.33 at IMPROVE11's hitl_decision_events)"
     );
     // The guard is REAL: a second run is a no-op (the pragma probe skips).
     brain_server::migration::run_migration(&mut conn, brain_server::config::DB_MMAP_SIZE_MIB)

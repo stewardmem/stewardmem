@@ -468,19 +468,19 @@ fn r61p_schema_stamp_moved_with_the_table() {
         "the new stamp must be declared"
     );
     assert!(
-        layout.contains("LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_32"),
+        layout.contains("LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_33"),
         "LATEST_KNOWN_SCHEMA must track the newest const or a newer-schema database is blessed \
          instead of refused"
     );
     let m = read("src/migration.rs");
     assert!(
-        m.contains("'schema_version', '1.32.32'"),
-        "run_migration must stamp 1.32.32 — the stamp and the ceiling move together"
+        m.contains("'schema_version', '1.32.33'"),
+        "run_migration must stamp 1.32.33 — the stamp and the ceiling move together"
     );
     // The refuse-newer probe sits ABOVE the ceiling by construction.
     assert!(
-        layout.contains(r#"assert!(is_newer_than_known(Some("1.32.33")));"#)
-            && layout.contains(r#"assert!(!is_newer_than_known(Some("1.32.32")));"#),
+        layout.contains(r#"assert!(is_newer_than_known(Some("1.32.34")));"#)
+            && layout.contains(r#"assert!(!is_newer_than_known(Some("1.32.33")));"#),
         "the refuse-newer probe must sit above the new ceiling; pinned AT it, it would silently \
          test Equal instead of Greater"
     );

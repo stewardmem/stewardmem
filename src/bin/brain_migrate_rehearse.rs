@@ -83,6 +83,12 @@ const PARITY_TABLES: &[&str] = &[
     "transfers",
     "clients",
     "proposals",
+    // the HITL decision-event ledger (IMPROVE11): ONE append-only row per
+    // decided act (approve/reject/edit), written in the decision's own tx.
+    // Row-count parity proves a rehearsal copied the approver-measurement
+    // layer — a rehearsal that dropped it would produce a server that has
+    // forgotten every approval act it ever recorded, and would say so nowhere.
+    "hitl_decision_events",
     "recall_traces",
     "dsar_requests",
     "suggest_feedback",

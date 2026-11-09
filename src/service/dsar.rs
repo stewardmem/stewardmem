@@ -1741,7 +1741,8 @@ mod tests {
             },
         )
         .expect("promote");
-        let moved = crate::service::review::cas_proposal_approved(&tx, 7, now).expect("cas");
+        let moved = crate::service::review::cas_proposal_approved(&tx, 7, now, "dsar-erasure-test")
+            .expect("cas");
         assert_eq!(moved, 1, "the proposal was genuinely approved");
         // The correspondence the erasure now walks, exactly as the generic
         // promote arm records it beside the CAS.

@@ -337,6 +337,10 @@ pub const SCHEMA_VERSION_V1_32_31: &str = "1.32.31";
 /// product is the proposal queue (RW-1): these tables carry lane config,
 /// seen-state, and tick accounting — never knowledge rows.
 pub const SCHEMA_VERSION_V1_32_32: &str = "1.32.32";
+/// v1.32.33 (IMPROVE11): the HITL decision-event ledger — ONE additive
+/// guarded CREATE (`hitl_decision_events`, append-only, one row per decided
+/// act, written in the decision's own tx). Telemetry reads, never gates.
+pub const SCHEMA_VERSION_V1_32_33: &str = "1.32.33";
 
 pub const SCHEMA_VERSION_V1_17_3: &str = "1.17.3";
 pub const SCHEMA_VERSION_V1_9_0: &str = "1.9.0";
@@ -358,7 +362,7 @@ pub const SCHEMA_VERSION_V0_9_9: &str = "0.9.9";
 /// Security posture: a source DB stamped NEWER than this is refused loudly
 /// ([`refuse_newer_schema`]) — migrating *down* would silently drop columns
 /// the newer release added, i.e. data loss dressed as a migration.
-pub const LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_32;
+pub const LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_33;
 
 /// Numeric dotted-version compare (std-only, no semver dependency).
 /// Non-numeric components are skipped (the `schema_ge` precedent in the
@@ -828,13 +832,15 @@ mod tests {
         // IMPROVE07 round (the knowledge row's `scholar_meta` column) moved
         // the ceiling to 1.32.31, so the probe moved to 1.32.32, and the
         // IMPROVE08 round (the research watch's three tables) moved
-        // the ceiling to 1.32.32, so the probe moved to 1.32.33.
+        // the ceiling to 1.32.32, so the probe moved to 1.32.33, and the
+        // IMPROVE11 round (the HITL decision-event ledger) moved
+        // the ceiling to 1.32.33, so the probe moved to 1.32.34.
         // A probe
         // pinned AT the ceiling silently tests `Equal`, not `Greater` — the assertion
         // would keep passing while a NEWER-schema database was blessed instead of
         // refused, which is the one failure this function exists to prevent.
-        assert!(is_newer_than_known(Some("1.32.33")));
-        assert!(!is_newer_than_known(Some("1.32.32")));
+        assert!(is_newer_than_known(Some("1.32.34")));
+        assert!(!is_newer_than_known(Some("1.32.33")));
         assert!(!is_newer_than_known(Some("1.32.9")));
         assert!(!is_newer_than_known(Some("1.28.9")));
     }

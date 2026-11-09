@@ -493,17 +493,26 @@ pub fn expire_if_stale(
 
 /// The reject CAS — `AND status = 'pending'` so a concurrent
 /// approve/reject can't both succeed. Rows-affected belongs to the caller
-/// (0 = the 404 path).
+/// (0 = the 404 path). The HITL accounting tick rides inside (IMPROVE11),
+/// same law as [`cas_proposal_approved`]: a successful rejection records its
+/// act in the caller's tx, a failing tick fails the decision. TTL expiry is
+/// the machine's act (`expire_if_stale` has its own UPDATE) and never passes
+/// through here.
 pub(crate) fn cas_rejected(
     tx: &rusqlite::Transaction<'_>,
     id: i64,
     now: i64,
+    actor: &str,
 ) -> rusqlite::Result<usize> {
-    tx.execute(
+    let n = tx.execute(
         "UPDATE proposals SET status = 'rejected', decided_at = ?1
          WHERE id = ?2 AND status = 'pending'",
         params![now, id],
-    )
+    )?;
+    if n > 0 {
+        record_hitl_decision(tx, id, "reject", actor, now, None)?;
+    }
+    Ok(n)
 }
 
 /// The stored proposal content — the digest input for the decided event +
@@ -687,6 +696,79 @@ pub(crate) fn insert_decision_run_proposal(
     Ok(id)
 }
 
+/// The HITL accounting tick (IMPROVE11) — ONE append-only `hitl_decision_events`
+/// row per decided act. Written IN the decision's own transaction (the caller
+/// passes its `Transaction`/connection): a failing event write propagates as an
+/// error and fails the DECISION (the tx rolls back), never the reverse. The
+/// telemetry's only consumer is the human reviewing their own pattern — no
+/// threshold, score, or aggregate may influence an approval (the inalienability
+/// law; nothing here reads anything but its own row's ids and the clock).
+///
+/// Derivation, all Rust/SQL — NO model:
+/// - `latency_ms` = (now − created_at) × 1000, from the row's own `created_at`
+///   read in this tx (NULL on edit — an edit is not a decision). The source
+///   clocks are second-granularity; the column is unit-honest, not
+///   precision-honest, and says so.
+/// - `edit_depth_chars` = the caller-computed SIGNED char delta
+///   (after − before), from the before-content the edit handler holds in hand
+///   (NULL off edit).
+/// - `interval_ms` = (now − MAX(ts)) × 1000 over the ACTOR's previous event,
+///   NULL on an actor's first recorded act — the burst signal.
+/// - `domain` is the proposal row's own residency stamp, read in this tx — the
+///   same label the decision bound itself to.
+pub(crate) fn record_hitl_decision(
+    conn: &Connection,
+    proposal_id: i64,
+    decision: &str,
+    actor: &str,
+    now: i64,
+    edit_depth_chars: Option<i64>,
+) -> rusqlite::Result<()> {
+    let latency_ms: Option<i64> = if decision == "edit" {
+        None
+    } else {
+        conn.query_row(
+            "SELECT created_at FROM proposals WHERE id = ?1",
+            params![proposal_id],
+            |r| r.get::<_, i64>(0),
+        )
+        .ok()
+        .map(|created_at| (now - created_at) * 1000)
+    };
+    let interval_ms: Option<i64> = conn
+        .query_row(
+            "SELECT MAX(ts) FROM hitl_decision_events WHERE actor = ?1",
+            params![actor],
+            |r| r.get::<_, Option<i64>>(0),
+        )
+        .ok()
+        .flatten()
+        .map(|prev_ts| (now - prev_ts) * 1000);
+    let domain: String = conn
+        .query_row(
+            "SELECT domain FROM proposals WHERE id = ?1",
+            params![proposal_id],
+            |r| r.get(0),
+        )
+        .unwrap_or_else(|_| "global".to_string());
+    conn.execute(
+        "INSERT INTO hitl_decision_events
+             (proposal_id, decision, actor, latency_ms, edit_depth_chars, interval_ms, ts, domain)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![
+            proposal_id,
+            decision,
+            actor,
+            latency_ms,
+            edit_depth_chars,
+            interval_ms,
+            now,
+            domain
+        ],
+    )?;
+    Ok(())
+}
+
 /// The shared decision CAS — one definition behind every approve branch
 /// (kcs publish, outreach consent, campaign/follow-up, channel template, the
 /// KCS capture, and the generic promote). `AND status = 'pending'` so a
@@ -694,16 +776,29 @@ pub(crate) fn insert_decision_run_proposal(
 /// IMMEDIATE tx this eliminates the double-promote race (the UNIQUE
 /// content_hash index is the last-resort backstop). Rows-affected belongs to
 /// the caller: 0 = concurrent decision won — the caller rolls back.
+///
+/// The HITL accounting tick rides INSIDE the CAS (IMPROVE11): every branch
+/// that successfully CASes records its act by construction — a branch that
+/// never CASes never decided (the quorum pending-second arm commits without a
+/// CAS and correctly records nothing). The tick is a SEPARATE write beside
+/// the UPDATE, not a column of it; a failing tick fails the decision (the
+/// caller's `?` maps it to an error and the tx rolls back). TTL expiry is the
+/// machine's act and never passes through here.
 pub(crate) fn cas_proposal_approved(
     conn: &Connection,
     id: i64,
     now: i64,
+    actor: &str,
 ) -> rusqlite::Result<usize> {
-    conn.execute(
+    let n = conn.execute(
         "UPDATE proposals SET status = 'approved', decided_at = ?1
          WHERE id = ?2 AND status = 'pending'",
         params![now, id],
-    )
+    )?;
+    if n > 0 {
+        record_hitl_decision(conn, id, "approve", actor, now, None)?;
+    }
+    Ok(n)
 }
 
 /// Bind the proposal→chunk correspondence for an approval that PROMOTED a
@@ -732,13 +827,27 @@ pub(crate) fn record_promoted_chunk(
 /// handler: this one branch stamps `decided_at = datetime('now')` (a SQL-side
 /// clock) instead of the bound unix-second param every other branch uses.
 /// Needs a pin or a fix — filed as a follow-up, NOT changed in the move.
-pub(crate) fn cas_translation_approved(conn: &Connection, id: i64) -> Result<usize, GateError> {
-    conn.execute(
-        "UPDATE proposals SET status = 'approved', decided_at = datetime('now')
-         WHERE id = ?1 AND status = 'pending'",
-        params![id],
-    )
-    .map_err(|e| GateError::Database(format!("update failed: {e}")))
+/// The HITL accounting tick still rides inside (IMPROVE11): the event's ts and
+/// latency use the Rust clock passed by the caller — same second granularity
+/// as the SQL stamp, a sub-second skew the quirk already tolerates.
+pub(crate) fn cas_translation_approved(
+    conn: &Connection,
+    id: i64,
+    actor: &str,
+) -> Result<usize, GateError> {
+    let n = conn
+        .execute(
+            "UPDATE proposals SET status = 'approved', decided_at = datetime('now')
+             WHERE id = ?1 AND status = 'pending'",
+            params![id],
+        )
+        .map_err(|e| GateError::Database(format!("update failed: {e}")))?;
+    if n > 0 {
+        let now = chrono::Utc::now().timestamp();
+        record_hitl_decision(conn, id, "approve", actor, now, None)
+            .map_err(|e| GateError::Database(format!("hitl event write failed: {e}")))?;
+    }
+    Ok(n)
 }
 
 /// Test seam: the stored draft-lint report for one proposal (the valet lint

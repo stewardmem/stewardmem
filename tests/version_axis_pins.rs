@@ -104,16 +104,16 @@ fn r51_schema_stamp_moved_with_the_axis() {
         "the schema ceiling must move to 1.32.20 with the additive column."
     );
     assert!(
-        layout.contains("LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_32"),
+        layout.contains("LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_33"),
         "LATEST_KNOWN_SCHEMA must track the newest const, or a newer-schema database would \
          not be refused. (Each schema round re-pins this: the approve-action round moved the \
          ceiling to 1.32.27 for the roster's manages column, and the uninstall round moved \
-         it to 1.32.28 for the register's removed_at column, and the LL-04 round moved it to 1.32.29 for the chat turn's support_decision column, and IMPROVE05 moved it to 1.32.30 for the documents row's per-page OCR provenance, and IMPROVE07 moved it to 1.32.31 for the knowledge row's scholarly provenance column, and IMPROVE08 moved it to 1.32.32 for the research watch's three tables.)"
+         it to 1.32.28 for the register's removed_at column, and the LL-04 round moved it to 1.32.29 for the chat turn's support_decision column, and IMPROVE05 moved it to 1.32.30 for the documents row's per-page OCR provenance, and IMPROVE07 moved it to 1.32.31 for the knowledge row's scholarly provenance column, and IMPROVE08 moved it to 1.32.32 for the research watch's three tables, and IMPROVE11 moved it to 1.32.33 for the HITL decision-event ledger.)"
     );
     let m = read("src/migration.rs");
     assert!(
-        m.contains("'schema_version', '1.32.32'"),
-        "run_migration must stamp 1.32.32 — the stamp and the ceiling move together."
+        m.contains("'schema_version', '1.32.33'"),
+        "run_migration must stamp 1.32.33 — the stamp and the ceiling move together."
     );
 }
 

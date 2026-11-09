@@ -972,8 +972,13 @@ pub async fn approve_proposal(
                 }
                 _ => HandlerError::internal("registry lifecycle approval failed"),
             })?;
-            let moved = crate::service::review::cas_proposal_approved(&tx, id, now_ts)
-                .map_err(|error| HandlerError::internal(error.to_string()))?;
+            let moved = crate::service::review::cas_proposal_approved(
+                &tx,
+                id,
+                now_ts,
+                &super::recall::principal_label(&principal.0),
+            )
+            .map_err(|error| HandlerError::internal(error.to_string()))?;
             if moved == 0 {
                 tx.rollback()
                     .map_err(|error| HandlerError::internal(error.to_string()))?;
@@ -1114,8 +1119,13 @@ pub async fn approve_proposal(
                 &format!("workflow/kcs/{action}"),
                 "global",
             );
-            let n = crate::service::review::cas_proposal_approved(&tx, id, now_ts)
-                .map_err(|e| HandlerError::internal(e.to_string()))?;
+            let n = crate::service::review::cas_proposal_approved(
+                &tx,
+                id,
+                now_ts,
+                &super::recall::principal_label(&principal.0),
+            )
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
             if n == 0 {
                 tx.rollback().map_err(|e| HandlerError::internal(e.to_string()))?;
                 return Err(HandlerError::conflict(format!(
@@ -1223,8 +1233,13 @@ pub async fn approve_proposal(
                 "gate/outreach_consent applied",
                 "global",
             );
-            let n = crate::service::review::cas_proposal_approved(&tx, id, now_ts)
-                .map_err(|e| HandlerError::internal(e.to_string()))?;
+            let n = crate::service::review::cas_proposal_approved(
+                &tx,
+                id,
+                now_ts,
+                &super::recall::principal_label(&principal.0),
+            )
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
             if n == 0 {
                 tx.rollback()
                     .map_err(|e| HandlerError::internal(e.to_string()))?;
@@ -1250,8 +1265,13 @@ pub async fn approve_proposal(
             || kind == crate::workflow::outreach::KIND_FOLLOWUP
         {
             let now_ts = chrono::Utc::now().timestamp();
-            let n = crate::service::review::cas_proposal_approved(&tx, id, now_ts)
-                .map_err(|e| HandlerError::internal(e.to_string()))?;
+            let n = crate::service::review::cas_proposal_approved(
+                &tx,
+                id,
+                now_ts,
+                &super::recall::principal_label(&principal.0),
+            )
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
             if n == 0 {
                 tx.rollback()
                     .map_err(|e| HandlerError::internal(e.to_string()))?;
@@ -1325,8 +1345,13 @@ pub async fn approve_proposal(
             // CAS pending→approved. n==0 means a concurrent decision already
             // committed: hand back the DECIDED receipt without re-dispatching
             // (moved:false — never a second send).
-            let moved = crate::service::review::cas_proposal_approved(&tx, id, now_ts)
-                .map_err(|e| HandlerError::internal(e.to_string()))?;
+            let moved = crate::service::review::cas_proposal_approved(
+                &tx,
+                id,
+                now_ts,
+                &super::recall::principal_label(&principal.0),
+            )
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
             if moved == 0 {
                 tx.rollback()
                     .map_err(|e| HandlerError::internal(e.to_string()))?;
@@ -1505,8 +1530,12 @@ pub async fn approve_proposal(
                 "workflow/kcs/translate",
                 "global",
             );
-            let n = crate::service::review::cas_translation_approved(&tx, id)
-                .map_err(|e| HandlerError::internal(e.to_string()))?;
+            let n = crate::service::review::cas_translation_approved(
+                &tx,
+                id,
+                &super::recall::principal_label(&principal.0),
+            )
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
             tx.commit()
                 .map_err(|e| HandlerError::internal(format!("commit failed: {e}")))?;
             return Ok(serde_json::json!({
@@ -1610,8 +1639,13 @@ pub async fn approve_proposal(
                 &format!("kcs/approve {kind} case:{case_ref}"),
                 "global",
             );
-            let n = crate::service::review::cas_proposal_approved(&tx, id, now_ts)
-                .map_err(|e| HandlerError::internal(e.to_string()))?;
+            let n = crate::service::review::cas_proposal_approved(
+                &tx,
+                id,
+                now_ts,
+                &super::recall::principal_label(&principal.0),
+            )
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
             if n == 0 {
                 tx.rollback()
                     .map_err(|e| HandlerError::internal(e.to_string()))?;
@@ -1764,6 +1798,7 @@ pub async fn approve_proposal(
             &tx,
             id,
             chrono::Utc::now().timestamp(),
+            &super::recall::principal_label(&principal.0),
         )
         .map_err(|e| HandlerError::internal(e.to_string()))?;
         if n == 0 {
@@ -2165,7 +2200,7 @@ pub async fn reject_proposal(
         ) {
             tracing::warn!("presence touch failed on reject: {e}");
         }
-        let n = crate::service::review::cas_rejected(&tx, id, now_ts)
+        let n = crate::service::review::cas_rejected(&tx, id, now_ts, &actor_label)
             .map_err(|e| HandlerError::internal(e.to_string()))?;
         tx.commit()
             .map_err(|e| HandlerError::internal(e.to_string()))?;
@@ -2388,6 +2423,21 @@ pub async fn edit_proposal(
                     "proposal {id} was already decided by a concurrent action"
                 )));
             }
+            // The HITL accounting tick rides the edit's own tx (IMPROVE11):
+            // an edit is an act the approver performed, even though it is not
+            // a decision. The depth is the SIGNED char delta computed from the
+            // before-content this handler holds in hand — arithmetic, no
+            // model; a failing tick fails the edit (the tx rolls back).
+            let edit_depth = content.chars().count() as i64 - before.chars().count() as i64;
+            crate::service::review::record_hitl_decision(
+                &tx,
+                id,
+                "edit",
+                &super::recall::principal_label(&principal_for_reauth),
+                now,
+                Some(edit_depth),
+            )
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
             tx.commit()
                 .map_err(|e| HandlerError::internal(format!("commit failed: {e}")))?;
 
