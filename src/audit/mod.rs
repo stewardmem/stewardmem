@@ -178,6 +178,13 @@ pub enum AuditKind {
     /// (`installed_packs`) carries the plaintext id/version; this row is
     /// the chain's evidence that the import HAPPENED.
     Plugin,
+    /// the research watch's per-tick accounting (IMPROVE08): ONE row per
+    /// tick, written through the CHECKED in-tx form (`record_tenant_checked`
+    /// — bare `audit::record` is best-effort and is NOT the tick's path)
+    /// so a tick whose accounting INSERT fails FAILS (RW-3). The detail
+    /// carries the closed-vocabulary accounting line
+    /// (seen/deduped/filed/failed/skipped_fresh) — no feed content.
+    Watch,
 }
 
 impl AuditKind {
@@ -206,6 +213,12 @@ impl AuditKind {
             AuditKind::Import => "import",
             AuditKind::Rules => "rules",
             AuditKind::Plugin => "plugin",
+            // the research watch's per-tick accounting (IMPROVE08): one
+            // row per tick, written through the CHECKED in-tx form so a
+            // tick whose accounting INSERT fails FAILS (RW-3) — the
+            // loop's health is derivable from the chain, never from a
+            // best-effort write.
+            AuditKind::Watch => "watch",
         }
     }
 }

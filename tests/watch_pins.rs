@@ -838,3 +838,381 @@ fn rw8_the_arxiv_param_builder_encodes_per_the_manual() {
         "the slice cap is the manual's 2000, clamped: {url}"
     );
 }
+
+// ── S3: the tick surfaces + the checked accounting (RW-1/3/4 pins) ──────
+//
+// RED LEDGER (2026-11-09): the ordering note — the S3 implementation
+// landed ahead of these pins (the create_proposal_core refactor made the
+// seams concrete first), so the red evidence here is the MUTATION PROOFS
+// recorded in the evidence file, not compile-presence: RW-3's pin was run
+// against the bare best-effort audit::record form (red: the tick
+// "succeeded" with no accounting row) and against the corrupt-epoch DB
+// (green: the tick FAILS named and rolls back).
+
+use brain_server::watch::{TickContext, WatchTransport, lane_by_name, run_tick};
+
+/// A real tick over the replay corpus against a REAL migrated DB: the
+/// filings ride the ONE seam, the seen-state lands, the accounting row +
+/// the CHECKED audit row commit. The tick's whole DB side is in the tx
+/// (RW-3's shape) and the proposals carry source `watch` (the approved
+/// row's verbatim kind — RW-1's queue product).
+#[tokio::test]
+async fn rw3_a_real_tick_files_seen_accounting_and_the_checked_audit_row() {
+    brain_server::register_sqlite_vec::register_sqlite_vec();
+    let mut conn = rusqlite::Connection::open_in_memory().expect("memory db");
+    brain_server::migration::run_migration(&mut conn, brain_server::config::DB_MMAP_SIZE_MIB)
+        .expect("migration");
+    let id = brain_server::watch::create_lane(
+        &conn,
+        &LaneSpec {
+            name: "lobsters-replay",
+            source_kind: "rss",
+            feed_url: "https://lobste.rs/rss.rss",
+            query: None,
+            cadence_secs: 3600,
+            destination: "proposals",
+        },
+        "2026-11-09T12:00:00Z",
+    )
+    .expect("lane create (the SSRF screen admits the public host)");
+    let lane = lane_by_name(&conn, "lobsters-replay")
+        .expect("read")
+        .expect("lane");
+    let model =
+        brain_server::embed::StaticEmbedder::new(brain_server::config::MODEL_ID).expect("model");
+    let transport = WatchTransport::replay();
+    let ctx = TickContext {
+        conn: &mut conn,
+        model: &model,
+        transport: &transport,
+        lane,
+        actor: "pins:watch".to_string(),
+        now_epoch: 1_794_225_600,
+        fetched_at: "2026-11-09T12:00:00Z".to_string(),
+    };
+    let report = run_tick(ctx).await.expect("the tick");
+    assert!(report.refusal.is_none());
+    assert!(!report.skipped_fresh);
+    assert!(report.accounting.filed >= 1, "the corpus item(s) filed");
+    assert_eq!(report.proposal_ids.len() as u64, report.accounting.filed);
+
+    // The seen-state landed (the replay's second tick dedupes — RW-4's DB form).
+    let seen: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM watch_seen WHERE lane_id = ?1",
+            [id],
+            |r| r.get(0),
+        )
+        .expect("seen count");
+    assert_eq!(seen as u64, report.accounting.filed);
+
+    // The accounting row landed.
+    let ticks: i64 = conn
+        .query_row("SELECT COUNT(*) FROM watch_ticks", [], |r| r.get(0))
+        .expect("tick count");
+    assert_eq!(ticks, 1);
+
+    // THE CHECKED AUDIT ROW: the tick's evidence is IN the chain (kind
+    // `watch`), and the detail rides AS A HASH (the chain never stores the
+    // plaintext) — verify the hash matches the report's accounting line,
+    // the checked form's own link.
+    let (kind, detail_hash): (String, String) = conn
+        .query_row(
+            "SELECT kind, detail_hash FROM audit_events WHERE id = ?1",
+            [report.audit_id],
+            |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+        )
+        .expect("audit row");
+    assert_eq!(kind, "watch");
+    assert_eq!(
+        detail_hash,
+        brain_server::audit::hash(&format!(
+            "seen={} deduped={} filed={} failed={} skipped_fresh={}",
+            report.accounting.items_seen,
+            report.accounting.deduped,
+            report.accounting.filed,
+            report.accounting.failed,
+            report.accounting.skipped_fresh
+        )),
+        "the accounting detail rides (hashed — the chain's own law)"
+    );
+
+    // The proposals are in the queue with source `watch`.
+    let source: String = conn
+        .query_row(
+            "SELECT source FROM proposals WHERE id = ?1",
+            [report.proposal_ids[0]],
+            |r| r.get(0),
+        )
+        .expect("proposal");
+    assert_eq!(source, "watch");
+}
+
+/// RW-4, the DB form: the SAME feed state ticked twice files nothing new —
+/// the second tick dedupes against the seen-state the first one wrote, and
+/// a FRESH DB over the same corpus produces the same proposal set (the
+/// pure-function law holds through the gate's scoring, model-absent
+/// identity).
+#[tokio::test]
+async fn rw4_the_replayed_tick_files_nothing_new_in_the_db() {
+    brain_server::register_sqlite_vec::register_sqlite_vec();
+    let model =
+        brain_server::embed::StaticEmbedder::new(brain_server::config::MODEL_ID).expect("model");
+    let transport = WatchTransport::replay();
+
+    let mut conn = rusqlite::Connection::open_in_memory().expect("db");
+    brain_server::migration::run_migration(&mut conn, brain_server::config::DB_MMAP_SIZE_MIB)
+        .expect("migration");
+    brain_server::watch::create_lane(
+        &conn,
+        &LaneSpec {
+            name: "lobsters-replay",
+            source_kind: "rss",
+            feed_url: "https://lobste.rs/rss.rss",
+            query: None,
+            cadence_secs: 3600,
+            destination: "proposals",
+        },
+        "t",
+    )
+    .expect("lane");
+    let lane = lane_by_name(&conn, "lobsters-replay").unwrap().unwrap();
+    let ctx = TickContext {
+        conn: &mut conn,
+        model: &model,
+        transport: &transport,
+        lane,
+        actor: "pins".into(),
+        now_epoch: 1_794_225_600,
+        fetched_at: "2026-11-09T12:00:00Z".into(),
+    };
+    let first = run_tick(ctx).await.expect("tick 1");
+    let lane = lane_by_name(&conn, "lobsters-replay").unwrap().unwrap();
+    let ctx = TickContext {
+        conn: &mut conn,
+        model: &model,
+        transport: &transport,
+        lane,
+        actor: "pins".into(),
+        // ONE HOUR later — past the floor (a sooner re-tick is the
+        // skipped_fresh line, pinned separately below).
+        now_epoch: 1_794_229_200,
+        fetched_at: "2026-11-09T13:00:00Z".into(),
+    };
+    let second = run_tick(ctx).await.expect("tick 2");
+    assert!(
+        second.proposal_ids.is_empty(),
+        "the replay files NOTHING new"
+    );
+    assert_eq!(second.accounting.deduped, first.accounting.filed);
+    assert_eq!(second.accounting.filed, 0);
+
+    // A fresh DB, same corpus: the same proposal SET (the identity law —
+    // the contents are byte-identical, the ids are db-local).
+    let mut conn2 = rusqlite::Connection::open_in_memory().expect("db2");
+    brain_server::migration::run_migration(&mut conn2, brain_server::config::DB_MMAP_SIZE_MIB)
+        .expect("migration");
+    brain_server::watch::create_lane(
+        &conn2,
+        &LaneSpec {
+            name: "lobsters-replay",
+            source_kind: "rss",
+            feed_url: "https://lobste.rs/rss.rss",
+            query: None,
+            cadence_secs: 3600,
+            destination: "proposals",
+        },
+        "t",
+    )
+    .expect("lane");
+    let lane2 = lane_by_name(&conn2, "lobsters-replay").unwrap().unwrap();
+    let ctx2 = TickContext {
+        conn: &mut conn2,
+        model: &model,
+        transport: &transport,
+        lane: lane2,
+        actor: "pins".into(),
+        now_epoch: 1_794_225_600,
+        fetched_at: "2026-11-09T12:00:00Z".into(),
+    };
+    let fresh = run_tick(ctx2).await.expect("fresh tick");
+    assert_eq!(fresh.accounting.filed, first.accounting.filed);
+    let mut contents_a: Vec<String> = first
+        .proposal_ids
+        .iter()
+        .map(|id| {
+            conn.query_row("SELECT content FROM proposals WHERE id=?1", [id], |r| {
+                r.get(0)
+            })
+            .unwrap()
+        })
+        .collect();
+    let mut contents_b: Vec<String> = fresh
+        .proposal_ids
+        .iter()
+        .map(|id| {
+            conn2
+                .query_row("SELECT content FROM proposals WHERE id=?1", [id], |r| {
+                    r.get(0)
+                })
+                .unwrap()
+        })
+        .collect();
+    contents_a.sort();
+    contents_b.sort();
+    assert_eq!(
+        contents_a, contents_b,
+        "same feed state → same proposal set"
+    );
+}
+
+/// RW-3, the behavioral pin: the CHECKED form means the tick FAILS when the
+/// accounting INSERT fails — here forced honestly (a corrupt chain epoch
+/// makes the checked audit write refuse), the tick returns the NAMED
+/// `watch_audit_write_failed` and the transaction rolled back: no proposals,
+/// no seen rows, no tick row. Nothing is half-recorded.
+#[tokio::test]
+async fn rw3_a_failed_accounting_insert_fails_the_tick_named_and_rolls_back() {
+    brain_server::register_sqlite_vec::register_sqlite_vec();
+    let mut conn = rusqlite::Connection::open_in_memory().expect("db");
+    brain_server::migration::run_migration(&mut conn, brain_server::config::DB_MMAP_SIZE_MIB)
+        .expect("migration");
+    // The poisoned epoch: the checked write refuses any scheme it cannot
+    // name — exactly the failure RW-3 says must fail the tick.
+    conn.execute(
+        "INSERT INTO schema_meta(key, value) VALUES ('audit_chain_epoch', 'bogus')
+         ON CONFLICT(key) DO UPDATE SET value = 'bogus'",
+        [],
+    )
+    .expect("poison the epoch");
+    brain_server::watch::create_lane(
+        &conn,
+        &LaneSpec {
+            name: "lobsters-replay",
+            source_kind: "rss",
+            feed_url: "https://lobste.rs/rss.rss",
+            query: None,
+            cadence_secs: 3600,
+            destination: "proposals",
+        },
+        "t",
+    )
+    .expect("lane");
+    let model =
+        brain_server::embed::StaticEmbedder::new(brain_server::config::MODEL_ID).expect("model");
+    let transport = WatchTransport::replay();
+    let lane = lane_by_name(&conn, "lobsters-replay").unwrap().unwrap();
+    let ctx = TickContext {
+        conn: &mut conn,
+        model: &model,
+        transport: &transport,
+        lane,
+        actor: "pins".into(),
+        now_epoch: 1_794_225_600,
+        fetched_at: "2026-11-09T12:00:00Z".into(),
+    };
+    let err = run_tick(ctx).await.expect_err("the tick must FAIL");
+    assert_eq!(
+        err.code(),
+        "watch_audit_write_failed",
+        "the named refusal, got {err:?}"
+    );
+    // THE ROLLBACK: nothing landed.
+    for (table, label) in [
+        ("watch_seen", "seen rows"),
+        ("watch_ticks", "tick rows"),
+        ("proposals", "proposals"),
+        ("audit_events", "audit rows"),
+    ] {
+        let n: i64 = conn
+            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
+            .expect(label);
+        assert_eq!(n, 0, "{label} must be empty after the failed tick");
+    }
+}
+
+/// RW-8, the tick-time face: re-ticking INSIDE the freshness floor skips
+/// honestly (skipped_fresh = the accounting line, never a second fetch) —
+/// and the skipped tick STILL writes its audited accounting row.
+#[tokio::test]
+async fn rw8_the_retick_inside_the_floor_is_the_honest_skip() {
+    brain_server::register_sqlite_vec::register_sqlite_vec();
+    let mut conn = rusqlite::Connection::open_in_memory().expect("db");
+    brain_server::migration::run_migration(&mut conn, brain_server::config::DB_MMAP_SIZE_MIB)
+        .expect("migration");
+    brain_server::watch::create_lane(
+        &conn,
+        &LaneSpec {
+            name: "lobsters-replay",
+            source_kind: "rss",
+            feed_url: "https://lobste.rs/rss.rss",
+            query: None,
+            cadence_secs: 3600,
+            destination: "proposals",
+        },
+        "t",
+    )
+    .expect("lane");
+    let model =
+        brain_server::embed::StaticEmbedder::new(brain_server::config::MODEL_ID).expect("model");
+    let transport = WatchTransport::replay();
+    let lane = lane_by_name(&conn, "lobsters-replay").unwrap().unwrap();
+    let ctx = TickContext {
+        conn: &mut conn,
+        model: &model,
+        transport: &transport,
+        lane,
+        actor: "pins".into(),
+        now_epoch: 1_794_225_600,
+        fetched_at: "2026-11-09T12:00:00Z".into(),
+    };
+    run_tick(ctx).await.expect("tick 1");
+    // 10 minutes later — inside the 3600 s floor.
+    let lane = lane_by_name(&conn, "lobsters-replay").unwrap().unwrap();
+    let ctx = TickContext {
+        conn: &mut conn,
+        model: &model,
+        transport: &transport,
+        lane,
+        actor: "pins".into(),
+        now_epoch: 1_794_226_200,
+        fetched_at: "2026-11-09T12:10:00Z".into(),
+    };
+    let report = run_tick(ctx).await.expect("the skipped tick");
+    assert!(report.skipped_fresh);
+    assert!(report.proposal_ids.is_empty());
+    assert_eq!(report.accounting.skipped_fresh, 1);
+    // The audited row still wrote.
+    let audit_rows: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM audit_events WHERE kind='watch'",
+            [],
+            |r| r.get(0),
+        )
+        .expect("audit rows");
+    assert_eq!(audit_rows, 2, "both ticks carry their accounting row");
+}
+
+/// RW-1, structural: the watch module holds NO knowledge INSERT — the
+/// watch's only write paths are the three watch tables + the proposal queue
+/// (through the gate's seam, which is not in this module).
+#[test]
+fn rw1_the_watch_module_writes_no_knowledge() {
+    let src = std::fs::read_to_string("src/watch.rs").expect("src");
+    assert!(
+        !src.contains("INSERT INTO knowledge"),
+        "the watch module must hold no knowledge INSERT (RW-1)"
+    );
+    let handler = std::fs::read_to_string("src/server/router/memory.rs").expect("router");
+    let handler_region = handler
+        .split("pub(crate) async fn watch_tick")
+        .nth(1)
+        .expect("the tick handler")
+        .split("pub(crate) async fn ingest_markdown")
+        .next()
+        .expect("the handler region");
+    assert!(
+        !handler_region.contains("INSERT INTO knowledge"),
+        "the tick handler must hold no knowledge INSERT (RW-1)"
+    );
+}

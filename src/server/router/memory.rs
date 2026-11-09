@@ -63,6 +63,14 @@ pub fn router() -> Router<Arc<AppState>> {
         // that raises the tiebreak floor. Admin-gated; the act writes its
         // own audit row in-tx (the retention-override precedent).
         .route("/scholar/override", post(scholar_override))
+        // The research watch's per-lane tick (IMPROVE08 S3): the ONE
+        // route into the deterministic ticker — freshness gate, fetch +
+        // parse outside the tx, then ONE BEGIN IMMEDIATE carrying the
+        // seen inserts + the gate filings (the ONE seam) + the accounting
+        // row + the CHECKED audit row (RW-3: breaking the audit write
+        // fails the tick). Admin-gated; the payload is serde-defaulted so
+        // the authz matrix's `{}` probe 403s, never 422s.
+        .route("/watch/tick", post(watch_tick))
         .route("/reindex", post(reindex))
         .route("/get/{id}", get(get_chunk))
         .route("/multi-get", post(multi_get))
@@ -235,6 +243,13 @@ const ADD_SOURCES_FOR_JWT: &[&str] = &[
     "notion",
     "hris",
     "ehr",
+    // `watch` and `synthesis` (IMPROVE08) are DELIBERATELY EXCLUDED, the
+    // `manual`-exclusion precedent: they are the KERNEL's filing kinds —
+    // the tick files watch items through the gate, and /research/synthesize
+    // files provider outputs — so a token-authenticated agent must not
+    // write source=watch (or =synthesis) through /add and forge the
+    // kernel's provenance. INGEST_KINDS gains both (the approved rows'
+    // verbatim source); this table does not.
 ];
 
 #[derive(Serialize, Default)]
@@ -2184,6 +2199,179 @@ pub(crate) async fn scholar_override(
         "document_id": payload.document_id,
         "lift": lift,
         "scholar_meta": result,
+    })))
+}
+
+/// `POST /watch/tick` — the research watch's per-lane tick (IMPROVE08 S3).
+///
+/// Admin-gated (the tick files proposals and writes the seen-state — a
+/// governed act, the case_run posture). The payload is serde-defaulted and
+/// validated AFTER the gate: the authz matrix's `{}` probe must land in the
+/// 403 pass cell, never the extractor's 422 (the S4 lesson, now a
+/// convention). The tick is per-lane (`{ lane: "name" }`); the transport is
+/// the replay corpus unless `BRAIN_WATCH_LIVE_PROBE=1` (the operator-gated
+/// live arm — the 07 ocr-real dual, inherited; CI never fetches, RW-6).
+#[derive(Debug, Deserialize)]
+pub(crate) struct WatchTickPayload {
+    /// The lane name (the `watch_configs.name` row). Absent → the named
+    /// 400 AFTER the gate.
+    #[serde(default)]
+    pub lane: Option<String>,
+}
+
+fn watch_refuse(
+    status: axum::http::StatusCode,
+    code: &'static str,
+    message: String,
+) -> crate::handlers::HandlerError {
+    crate::handlers::HandlerError {
+        status,
+        inner: crate::handlers::ApiError::new(code, message),
+    }
+}
+
+fn watch_error_status(e: &crate::watch::WatchError) -> axum::http::StatusCode {
+    use crate::watch::WatchError as W;
+    match e {
+        W::LaneHostRequired
+        | W::LaneNameInvalid
+        | W::SourceKindInvalid(_)
+        | W::DestinationInvalid
+        | W::CadenceInvalid
+        | W::ArxivCadenceTooShort => axum::http::StatusCode::BAD_REQUEST,
+        W::LaneHostRefused(_) | W::FetchHostMismatch => axum::http::StatusCode::FORBIDDEN,
+        W::LaneDisabled => axum::http::StatusCode::CONFLICT,
+        W::FeedTooLarge
+        | W::FeedDtdRefused
+        | W::FeedMalformed
+        | W::FeedWrongSchema
+        | W::ArxivErrorEntry(_) => axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+        W::TransportFailed => axum::http::StatusCode::BAD_GATEWAY,
+        W::ReplayGap | W::AuditWriteFailed | W::Db(_) => {
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
+}
+
+pub(crate) async fn watch_tick(
+    State(state): State<Arc<AppState>>,
+    principal: crate::handlers::auth::OptPrincipal,
+    Json(payload): Json<WatchTickPayload>,
+) -> Result<Json<serde_json::Value>, crate::handlers::HandlerError> {
+    crate::handlers::authorize(&principal.0, crate::auth::Action::Admin, "", "global").map_err(
+        |e| crate::handlers::HandlerError {
+            status: axum::http::StatusCode::FORBIDDEN,
+            inner: crate::handlers::ApiError::new("forbidden", e.inner.message),
+        },
+    )?;
+    // Field validation AFTER the gate (the `{}`-probe law).
+    let Some(lane_name) = payload
+        .lane
+        .as_deref()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+    else {
+        return Err(watch_refuse(
+            axum::http::StatusCode::BAD_REQUEST,
+            "watch_lane_required",
+            "lane (the watch_configs.name row) is required".to_string(),
+        ));
+    };
+
+    let actor = handlers::recall::principal_label(&principal.0);
+    let model = Arc::clone(&state.model);
+    let pool = state.pool.clone();
+    let lane_name = lane_name.to_string();
+    let fetched_at = chrono::Utc::now().to_rfc3339();
+    let now_epoch = chrono::Utc::now().timestamp();
+
+    let report = task::spawn_blocking(
+        move || -> Result<crate::watch::TickReport, crate::handlers::HandlerError> {
+            let mut conn = pool
+                .get()
+                .map_err(|e| crate::handlers::HandlerError::internal(e.to_string()))?;
+            let lane = crate::watch::lane_by_name(&conn, &lane_name)
+                .map_err(|e| {
+                    watch_refuse(
+                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        e.code(),
+                        e.to_string(),
+                    )
+                })?
+                .ok_or_else(|| {
+                    watch_refuse(
+                        axum::http::StatusCode::NOT_FOUND,
+                        "watch_lane_not_found",
+                        "no watch lane carries this name".to_string(),
+                    )
+                })?;
+            // The transport: the replay corpus unless the operator gates
+            // the live arm (RW-6 — CI never fetches; the live arm is the
+            // recorded dual). The client pins THE lane's host.
+            let transport = if std::env::var("BRAIN_WATCH_LIVE_PROBE").as_deref() == Ok("1") {
+                crate::watch::WatchTransport::live(&lane.host)
+                    .map_err(|e| watch_refuse(watch_error_status(&e), e.code(), e.to_string()))?
+            } else {
+                crate::watch::WatchTransport::replay()
+            };
+            let ctx = crate::watch::TickContext {
+                conn: &mut conn,
+                model: model.as_ref(),
+                transport: &transport,
+                lane,
+                actor: actor.clone(),
+                now_epoch,
+                fetched_at: fetched_at.clone(),
+            };
+            // run_tick is async (the fetch); drive it on this worker via a
+            // short-lived block-on INSIDE the blocking thread — the tick's
+            // network leg must not hold a r2d2 conn across awaits on the
+            // async runtime.
+            let rt = tokio::runtime::Handle::try_current()
+                .map_err(|_| crate::handlers::HandlerError::internal("no runtime".to_string()))?;
+            rt.block_on(crate::watch::run_tick(ctx))
+                .map_err(|e| watch_refuse(watch_error_status(&e), e.code(), e.to_string()))
+        },
+    )
+    .await
+    .map_err(|e| crate::handlers::HandlerError::internal(format!("task join error: {e}")))??;
+
+    // The queue signals (the wrapper's posture): one publish per filed
+    // proposal, payloads are ids — never content.
+    let now = chrono::Utc::now().timestamp();
+    for id in &report.proposal_ids {
+        crate::alert::publish(
+            &state,
+            crate::alert::ALERT_KIND_PENDING,
+            serde_json::json!({
+                "proposal_id": id,
+                "screen_verdict": "clean",
+                "created_at": now,
+                "expires_at": now + crate::config::proposal_ttl_secs(),
+            }),
+        );
+        crate::alert::publish(
+            &state,
+            crate::alert::ALERT_KIND_PROPOSAL,
+            crate::proposal_events::open(
+                crate::proposal_events::ProposalId(*id),
+                now + crate::config::proposal_ttl_secs(),
+                &format!("watch:{}", report.lane),
+            ),
+        );
+    }
+
+    Ok(Json(serde_json::json!({
+        "lane": report.lane,
+        "skipped_fresh": report.skipped_fresh,
+        "refusal": report.refusal,
+        "items_seen": report.accounting.items_seen,
+        "deduped": report.accounting.deduped,
+        "filed": report.accounting.filed,
+        "failed": report.accounting.failed,
+        "skipped_fresh_count": report.accounting.skipped_fresh,
+        "proposal_ids": report.proposal_ids,
+        "audit_id": report.audit_id,
     })))
 }
 

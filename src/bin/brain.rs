@@ -203,6 +203,24 @@ const SUBCOMMANDS: &[Subcommand] = &[
         usage: "brain verify-governance [--db PATH]",
     },
     Subcommand {
+        name: "watch add",
+        json: false,
+        run: cmd_watch_add,
+        usage: "brain watch add <name> --kind arxiv_api|rss|atom|adapter --url <https-url>\n                 --cadence <secs> [--query Q] [--destination proposals] [--db PATH]\n                 (the destination is the CLOSED value \"proposals\" — the watch files\n                 proposals, never memory; arXiv lanes refuse cadence < 86400)",
+    },
+    Subcommand {
+        name: "watch tick",
+        json: true,
+        run: cmd_watch_tick,
+        usage: "brain watch tick <lane> [--db PATH]\n                 (replay transport unless BRAIN_WATCH_LIVE_PROBE=1 — the operator-\n                 gated live arm; CI never fetches)",
+    },
+    Subcommand {
+        name: "watch list",
+        json: true,
+        run: cmd_watch_list,
+        usage: "brain watch list [--db PATH]",
+    },
+    Subcommand {
         name: "source-delete",
         json: false,
         run: cmd_source_delete,
@@ -8957,6 +8975,191 @@ fn at_rest_doctor_distinguishes_detected_missing_and_unknown_encryption() {
     {
         assert!(line.contains("SQLite DB/WAL/SHM are plaintext while mounted"));
     }
+}
+
+// ── the research watch CLI (IMPROVE08 S3) ──────────────────────────────
+
+/// Open the watch DB: --db PATH | BRAIN_DB_PATH | the default, the vec
+/// extension registered (the auto-extension every DB-touching path needs),
+/// then the migration (a CLI act rides the same guarded run).
+fn watch_open_db(args: &[String]) -> Result<rusqlite::Connection, String> {
+    let (_positionals, flags) = parse_flags(args)?;
+    let db = flags
+        .get("db")
+        .and_then(|o| o.clone())
+        .map(PathBuf::from)
+        .unwrap_or_else(default_db_path);
+    if !db.exists() {
+        return Err(format!(
+            "no DB at {db:?} — pass --db PATH or set BRAIN_DB_PATH"
+        ));
+    }
+    brain_server::register_sqlite_vec::register_sqlite_vec();
+    let mut conn = rusqlite::Connection::open(&db).map_err(|e| format!("open {db:?}: {e}"))?;
+    brain_server::migration::run_migration(&mut conn, brain_server::config::DB_MMAP_SIZE_MIB)
+        .map_err(|e| format!("migration: {e}"))?;
+    Ok(conn)
+}
+
+/// `brain watch add <name> --kind K --url URL --cadence SECS [--query Q]
+/// [--destination proposals]`: lane create — the closed vocabularies, the
+/// URL law, the arXiv daily law, and the SSRF screen all ride
+/// `watch::create_lane`. An operator act; the resolution is the boot-frozen
+/// egress pin's first entry.
+fn cmd_watch_add(args: &[String]) -> Result<(), String> {
+    let (positionals, flags) = parse_flags(args)?;
+    let name = require_positional(&positionals, "name")?;
+    let one = |key: &str| -> Result<String, String> {
+        flags
+            .get(key)
+            .and_then(|o| o.clone())
+            .ok_or_else(|| format!("--{key} is required"))
+    };
+    let kind = one("kind")?;
+    let url = one("url")?;
+    let cadence = one("cadence")?
+        .parse::<u64>()
+        .map_err(|_| "--cadence must be seconds (an integer)")?;
+    let query = flags.get("query").and_then(|o| o.clone());
+    let destination = flags
+        .get("destination")
+        .and_then(|o| o.clone())
+        .unwrap_or_else(|| "proposals".to_string());
+    let spec = brain_server::watch::LaneSpec {
+        name: name.as_str(),
+        source_kind: kind.as_str(),
+        feed_url: url.as_str(),
+        query: query.as_deref(),
+        cadence_secs: cadence,
+        destination: destination.as_str(),
+    };
+    let conn = watch_open_db(args)?;
+    let created_at = chrono::Utc::now().to_rfc3339();
+    let id =
+        brain_server::watch::create_lane(&conn, &spec, &created_at).map_err(|e| e.to_string())?;
+    println!("watch lane created: id={id} name={name}");
+    Ok(())
+}
+
+/// The retrieval model, loaded SYNC for the CLI (the server loads in the
+/// background; a CLI tick has no boot to hide it behind). Bounded wait —
+/// the tick refuses named rather than file unscored proposals (the core
+/// refuses empty embeddings, so an unready model would fail every item).
+fn watch_cli_model() -> Result<std::sync::Arc<dyn brain_server::embed::Embedder>, String> {
+    // LazyEmbedder needs Arc<Self> for the background load.
+    let profile = brain_server::config::model_profile();
+    let lazy = std::sync::Arc::new(brain_server::embed::LazyEmbedder::new(
+        profile,
+        brain_server::config::model_id_for_profile(profile),
+        brain_server::embed::dim_for_profile(profile),
+    ));
+    lazy.start_background_load();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    loop {
+        if !brain_server::embed::Embedder::encode_one(lazy.as_ref(), "ready?").is_empty() {
+            return Ok(lazy);
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(
+                "watch_model_unready: the retrieval model did not load within 60s — the tick \
+                 refuses rather than file unscored proposals"
+                    .to_string(),
+            );
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+}
+
+/// `brain watch tick <lane>`: the CLI twin of POST /watch/tick — the same
+/// run_tick, the same replay/live gate (BRAIN_WATCH_LIVE_PROBE=1), the same
+/// CHECKED accounting. External cron drives the cadence; this is never a
+/// daemon (the drift-census posture).
+fn cmd_watch_tick(args: &[String]) -> Result<(), String> {
+    let (positionals, _flags) = parse_flags(args)?;
+    let lane_name = require_positional(&positionals, "lane")?;
+    let mut conn = watch_open_db(args)?;
+    let model = watch_cli_model()?;
+    let lane = brain_server::watch::lane_by_name(&conn, &lane_name)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("no watch lane named {lane_name:?}"))?;
+    let transport = if std::env::var("BRAIN_WATCH_LIVE_PROBE").as_deref() == Ok("1") {
+        brain_server::watch::WatchTransport::live(&lane.host).map_err(|e| e.to_string())?
+    } else {
+        brain_server::watch::WatchTransport::replay()
+    };
+    let ctx = brain_server::watch::TickContext {
+        conn: &mut conn,
+        model: model.as_ref(),
+        transport: &transport,
+        lane,
+        actor: "cli:watch".to_string(),
+        now_epoch: chrono::Utc::now().timestamp(),
+        fetched_at: chrono::Utc::now().to_rfc3339(),
+    };
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| format!("runtime: {e}"))?;
+    let report = rt
+        .block_on(brain_server::watch::run_tick(ctx))
+        .map_err(|e| e.to_string())?;
+    println!(
+        "{}",
+        serde_json::json!({
+            "lane": report.lane,
+            "skipped_fresh": report.skipped_fresh,
+            "refusal": report.refusal,
+            "items_seen": report.accounting.items_seen,
+            "deduped": report.accounting.deduped,
+            "filed": report.accounting.filed,
+            "failed": report.accounting.failed,
+            "skipped_fresh_count": report.accounting.skipped_fresh,
+            "proposal_ids": report.proposal_ids,
+            "audit_id": report.audit_id,
+        })
+    );
+    Ok(())
+}
+
+/// `brain watch list`: the lanes + each one's LAST tick accounting (the
+/// loop's health at a glance).
+fn cmd_watch_list(args: &[String]) -> Result<(), String> {
+    let conn = watch_open_db(args)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT c.id, c.name, c.source_kind, c.host, c.cadence_secs, c.destination, c.enabled, \
+                    t.ticked_at, t.items_seen, t.deduped, t.filed, t.failed, t.skipped_fresh
+             FROM watch_configs c
+             LEFT JOIN watch_ticks t
+               ON t.id = (SELECT id FROM watch_ticks WHERE lane_id = c.id ORDER BY id DESC LIMIT 1)
+             ORDER BY c.id",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |r| {
+            Ok(serde_json::json!({
+                "id": r.get::<_, i64>(0)?,
+                "name": r.get::<_, String>(1)?,
+                "source_kind": r.get::<_, String>(2)?,
+                "host": r.get::<_, String>(3)?,
+                "cadence_secs": r.get::<_, i64>(4)?,
+                "destination": r.get::<_, String>(5)?,
+                "enabled": r.get::<_, i64>(6)? != 0,
+                "last_tick": r.get::<_, Option<String>>(7)?,
+                "items_seen": r.get::<_, Option<i64>>(8)?,
+                "deduped": r.get::<_, Option<i64>>(9)?,
+                "filed": r.get::<_, Option<i64>>(10)?,
+                "failed": r.get::<_, Option<i64>>(11)?,
+                "skipped_fresh": r.get::<_, Option<i64>>(12)?,
+            }))
+        })
+        .map_err(|e| e.to_string())?;
+    let mut lanes = Vec::new();
+    for row in rows {
+        lanes.push(row.map_err(|e| e.to_string())?);
+    }
+    println!("{}", serde_json::json!({ "lanes": lanes }));
+    Ok(())
 }
 
 #[cfg(test)]

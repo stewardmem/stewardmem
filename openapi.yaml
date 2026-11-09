@@ -583,6 +583,60 @@ paths:
         "403": { description: Forbidden }
         "404": { description: Named refusal (scholar_row_not_found) }
         "409": { description: Named refusal (scholar_no_metadata, scholar_meta_unreadable) }
+  /watch/tick:
+    post:
+      summary: Run ONE research-watch lane tick (deterministic, HITL-filed)
+      operationId: watchTick
+      description: >-
+        IMPROVE08 S3. The per-lane tick: the freshness floors hold BEFORE any
+        fetch (the arXiv once-per-day law and the RSS ttl hint land as the
+        honest skipped_fresh accounting line — never a second fetch); the
+        fetch + parse run OUTSIDE the transaction; then ONE BEGIN IMMEDIATE
+        carries the seen inserts (the (lane_id, item_key) identity), the
+        gate filings through the ONE proposal seam (source: "watch", full
+        provenance header, the injection screen riding), the accounting row,
+        and the CHECKED audit row — a tick whose accounting INSERT fails
+        FAILS, named. The watch files PROPOSALS, never memory (RW-1). The
+        transport is the replay corpus unless BRAIN_WATCH_LIVE_PROBE=1
+        (the operator-gated live arm; CI never fetches). Named refusals:
+        watch_lane_required (400 — fields validate AFTER the authz gate),
+        watch_lane_not_found (404), watch_lane_disabled (409),
+        watch_fetch_host_mismatch (403), watch_feed_dtd_refused /
+        watch_feed_malformed / watch_feed_wrong_schema /
+        watch_feed_too_large / watch_arxiv_error_entry (422),
+        watch_transport_failed (502), watch_audit_write_failed (500).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                lane: { type: string, nullable: true }
+      responses:
+        "200":
+          description: The tick's honest report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lane: { type: string }
+                  skipped_fresh: { type: boolean }
+                  refusal: { type: string, nullable: true }
+                  items_seen: { type: integer }
+                  deduped: { type: integer }
+                  filed: { type: integer }
+                  failed: { type: integer }
+                  skipped_fresh_count: { type: integer }
+                  proposal_ids: { type: array, items: { type: integer } }
+                  audit_id: { type: integer }
+        "400": { description: Named refusal (watch_lane_required) }
+        "403": { description: Forbidden (the {} probe lands here, never 422) }
+        "404": { description: Named refusal (watch_lane_not_found) }
+        "409": { description: Named refusal (watch_lane_disabled) }
+        "422": { description: Feed refusals (watch_feed_dtd_refused, watch_feed_malformed, watch_feed_wrong_schema, watch_feed_too_large, watch_arxiv_error_entry) }
+        "502": { description: Named refusal (watch_transport_failed) }
   /ingest/document:
     post:
       summary: Ingest a PDF document (Tier 0 text-layer extraction, requires title)

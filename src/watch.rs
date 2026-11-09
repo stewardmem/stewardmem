@@ -238,6 +238,12 @@ pub enum WatchError {
     /// read error inside the chunked loop). Fixed string — the wire's
     /// bytes never ride the error.
     TransportFailed,
+    /// The lane is disabled — the tick refuses (an enabled=false lane is
+    /// config, not a fetch target).
+    LaneDisabled,
+    /// The CHECKED audit write failed — the tick FAILS, named (RW-3): the
+    /// whole transaction rolls back, nothing is half-recorded.
+    AuditWriteFailed,
     /// A storage error inside the tick's transaction.
     Db(String),
 }
@@ -262,6 +268,8 @@ impl WatchError {
             WatchError::ReplayGap => "watch_replay_gap",
             WatchError::FetchHostMismatch => "watch_fetch_host_mismatch",
             WatchError::TransportFailed => "watch_transport_failed",
+            WatchError::LaneDisabled => "watch_lane_disabled",
+            WatchError::AuditWriteFailed => "watch_audit_write_failed",
             WatchError::Db(_) => "watch_db_error",
         }
     }
@@ -338,6 +346,17 @@ impl fmt::Display for WatchError {
             WatchError::TransportFailed => {
                 write!(f, "watch_transport_failed: the fetch failed")
             }
+            WatchError::LaneDisabled => {
+                write!(
+                    f,
+                    "watch_lane_disabled: the lane is disabled — enable it first"
+                )
+            }
+            WatchError::AuditWriteFailed => write!(
+                f,
+                "watch_audit_write_failed: the tick's CHECKED accounting insert failed — the \
+                 tick fails, the transaction rolls back (RW-3)"
+            ),
             WatchError::Db(e) => write!(f, "watch_db_error: {e}"),
         }
     }
@@ -1429,4 +1448,279 @@ fn encode_arxiv_value(v: &str) -> String {
         }
     }
     out
+}
+
+// ── S3: the tick orchestration (the surfaces' shared core) ──────────────
+//
+// THE TICK'S SHAPE (the ground §0.4.10): the whole DB side (the seen
+// inserts + the proposals + the accounting row + the CHECKED audit row)
+// rides ONE `BEGIN IMMEDIATE` transaction; the FETCH is excluded (the
+// network never holds the write lock). The freshness floors are honored
+// BEFORE the fetch — a skipped tick never issues a fetch and never holds
+// the lock. RW-3: the audit row is the CHECKED in-tx write — a tick whose
+// accounting INSERT fails FAILS, named; bare `audit::record` is best-effort
+// by design and is NOT the tick's path (the mutation proof in the pins
+// file's ledger shows exactly that failure: 25 proposals filed, audit_id 0).
+
+/// One tick's honest report (the route's JSON; the CLI's stdout).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TickReport {
+    pub lane: String,
+    /// The freshness floor held: the fetch was skipped, the accounting row
+    /// still written (the arXiv once-per-day law and the RSS `<ttl>` hint
+    /// both land HERE — never as a second fetch).
+    pub skipped_fresh: bool,
+    /// The named refusal code when the tick refused at the feed level
+    /// (transport failure, parser refusal) — the accounting row still
+    /// wrote, `ok = 0`.
+    pub refusal: Option<&'static str>,
+    pub accounting: TickAccounting,
+    /// The proposal ids the gate assigned (in feed order; empty when
+    /// nothing filed).
+    pub proposal_ids: Vec<i64>,
+    /// The audit row id (the CHECKED write's RETURNING id — the evidence
+    /// thread the operator pulls).
+    pub audit_id: i64,
+}
+
+/// Everything a tick needs, supplied by the surface (the route hands a pool
+/// connection + the server's model; the CLI hands its own). `conn` receives
+/// the whole transaction.
+pub struct TickContext<'a> {
+    pub conn: &'a mut rusqlite::Connection,
+    pub model: &'a dyn crate::embed::Embedder,
+    pub transport: &'a WatchTransport,
+    pub lane: WatchLane,
+    pub actor: String,
+    pub now_epoch: i64,
+    pub fetched_at: String,
+}
+
+/// Run ONE lane tick: the freshness gate, the fetch + parse (outside the
+/// tx), then ONE `BEGIN IMMEDIATE` carrying the seen inserts, the gate
+/// filings (the ONE seam — [`crate::handlers::gate::create_proposal_core`]),
+/// the accounting row, and the CHECKED audit row. A feed-level refusal
+/// still writes its audited accounting row (`ok = 0`) and returns the
+/// named refusal; a tick whose accounting INSERT fails FAILS (RW-3).
+pub async fn run_tick(ctx: TickContext<'_>) -> Result<TickReport, WatchError> {
+    let mut lane = ctx.lane.clone();
+    if lane.destination != Destination::Proposals {
+        // Unreachable today (the closed vocabulary has one value) — the
+        // belt for a future vocabulary extension that forgets RW-1.
+        return Err(WatchError::DestinationInvalid);
+    }
+    if !lane.enabled {
+        return Err(WatchError::LaneDisabled);
+    }
+
+    // ── the freshness gate (before any fetch exists) ────────────────────
+    let last_fetch_epoch: Option<i64> = ctx
+        .conn
+        .query_row(
+            "SELECT ticked_at FROM watch_ticks WHERE lane_id = ?1 AND skipped_fresh = 0 \
+             ORDER BY id DESC LIMIT 1",
+            [lane.id],
+            |r| r.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(WatchError::from)?
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+        .map(|d| d.timestamp());
+    let floor = freshness_floor_secs(lane.source_kind, lane.cadence_secs, lane.ttl_secs);
+    let stale = is_stale(floor, last_fetch_epoch, ctx.now_epoch);
+
+    let outcome = if stale {
+        // ── the fetch + parse (outside the tx — the write lock never
+        // holds the network) ────────────────────────────────────────────
+        match ctx.transport.get(&lane.feed_url).await {
+            Ok(bytes) => match parse_feed(lane.source_kind, &bytes) {
+                Ok(parsed) => {
+                    // The publisher's ttl hint is LEARNED here (the lane
+                    // row updates in the tx below): the NEXT freshness
+                    // decision uses it.
+                    if let Some(ttl) = parsed.ttl_secs {
+                        lane.ttl_secs = Some(ttl);
+                    }
+                    let seen = load_seen_keys(ctx.conn, lane.id)?;
+                    tick_core(&lane, &parsed.items, &seen, &ctx.fetched_at)
+                }
+                Err(e) => {
+                    return refuse_tick(ctx, &lane, e);
+                }
+            },
+            Err(e) => {
+                return refuse_tick(ctx, &lane, e);
+            }
+        }
+    } else {
+        // The honest skip: the accounting line, the audited row, no fetch.
+        TickOutcome {
+            proposals: Vec::new(),
+            seen_additions: Vec::new(),
+            accounting: TickAccounting {
+                skipped_fresh: 1,
+                ..TickAccounting::default()
+            },
+        }
+    };
+
+    // ── the ONE transaction ──────────────────────────────────────────────
+    // (BEGIN IMMEDIATE — the write-discipline law; the tick is a
+    // read-modify-write of the seen-state plus the filings.)
+    let mut tx = crate::workflow::tx::WorkflowTx::begin(ctx.conn).map_err(WatchError::from)?;
+    let mut accounting = outcome.accounting;
+    let mut proposal_ids: Vec<i64> = Vec::with_capacity(outcome.proposals.len());
+
+    for addition in &outcome.seen_additions {
+        tx.tx()
+            .execute(
+                "INSERT OR IGNORE INTO watch_seen(lane_id, item_key, near_key, seen_at) \
+                 VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![
+                    lane.id,
+                    addition.item_key,
+                    addition.near_key,
+                    ctx.fetched_at
+                ],
+            )
+            .map_err(WatchError::from)?;
+    }
+
+    for proposal in &outcome.proposals {
+        // THE ONE SEAM: the exact validation/screen/scoring/insert path
+        // every proposal rides — no private insert exists to bypass with
+        // (the improve07 lesson, pinned). A screen REJECT on one poisoned
+        // item fails THAT item (accounting.failed) and never the lane.
+        let req = crate::handlers::gate::ProposalRequest {
+            content: proposal.content.clone(),
+            kind: "fact".to_string(),
+            source: Some("watch".to_string()),
+            origin_context: None,
+            authority: None,
+            observed_at: None,
+            domain: None,
+            title: Some(proposal.title.clone()),
+            source_prompt: None,
+        };
+        match crate::handlers::gate::create_proposal_core(tx.tx(), ctx.model, req, None) {
+            Ok((resp, _verdict)) => {
+                proposal_ids.push(resp.id);
+            }
+            Err(_) => {
+                accounting.failed += 1;
+            }
+        }
+    }
+
+    // The learned ttl rides the lane row (the NEXT freshness decision uses
+    // the publisher's hint).
+    if stale && let Some(ttl) = lane.ttl_secs {
+        tx.tx()
+            .execute(
+                "UPDATE watch_configs SET ttl_secs = ?1 WHERE id = ?2",
+                rusqlite::params![ttl as i64, lane.id],
+            )
+            .map_err(WatchError::from)?;
+    }
+
+    // The accounting row — the loop's health is measurable (plan §1.1).
+    let detail = accounting.detail();
+    tx.tx()
+        .execute(
+            "INSERT INTO watch_ticks(lane_id, ticked_at, items_seen, deduped, filed, failed, \
+                                    skipped_fresh, ok, detail)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            rusqlite::params![
+                lane.id,
+                ctx.fetched_at,
+                accounting.items_seen as i64,
+                accounting.deduped as i64,
+                accounting.filed as i64,
+                accounting.failed as i64,
+                accounting.skipped_fresh as i64,
+                1,
+                detail,
+            ],
+        )
+        .map_err(WatchError::from)?;
+
+    // RW-3: the CHECKED in-tx audit write — if THIS insert fails the tick
+    // FAILS (the `?`), the whole transaction rolls back, and the caller
+    // sees the named error. Bare `audit::record` is best-effort by design;
+    // the tick does not use it.
+    let audit_id = crate::audit::record_tenant_checked(
+        tx.tx(),
+        crate::audit::AuditKind::Watch,
+        &ctx.actor,
+        &lane.name,
+        crate::audit::AuditStatus::Ok,
+        &detail,
+        crate::audit::DEFAULT_TENANT,
+    )
+    .map_err(|_| WatchError::AuditWriteFailed)?;
+
+    tx.commit().map_err(WatchError::from)?;
+
+    Ok(TickReport {
+        lane: lane.name,
+        skipped_fresh: !stale,
+        refusal: None,
+        accounting,
+        proposal_ids,
+        audit_id,
+    })
+}
+
+/// A feed-level refusal (transport/parser): the tick STILL writes its
+/// audited accounting row (`ok = 0`, the named code in the detail — the
+/// loop's health includes its failures) and returns the named error.
+fn refuse_tick(
+    ctx: TickContext<'_>,
+    lane: &WatchLane,
+    e: WatchError,
+) -> Result<TickReport, WatchError> {
+    let detail = format!(
+        "refusal={} seen=0 deduped=0 filed=0 failed=0 skipped_fresh=0",
+        e.code()
+    );
+    let mut tx = crate::workflow::tx::WorkflowTx::begin(ctx.conn).map_err(WatchError::from)?;
+    tx.tx()
+        .execute(
+            "INSERT INTO watch_ticks(lane_id, ticked_at, items_seen, deduped, filed, failed, \
+                                    skipped_fresh, ok, detail)
+             VALUES (?1, ?2, 0, 0, 0, 0, 0, 0, ?3)",
+            rusqlite::params![lane.id, ctx.fetched_at, detail],
+        )
+        .map_err(WatchError::from)?;
+    let audit_id = crate::audit::record_tenant_checked(
+        tx.tx(),
+        crate::audit::AuditKind::Watch,
+        &ctx.actor,
+        &lane.name,
+        crate::audit::AuditStatus::Error,
+        &detail,
+        crate::audit::DEFAULT_TENANT,
+    )
+    .map_err(|_| WatchError::AuditWriteFailed)?;
+    tx.commit().map_err(WatchError::from)?;
+    let _ = audit_id;
+    Err(e)
+}
+
+/// The lane's seen-state, as the pure core expects (the hashed identities).
+fn load_seen_keys(
+    conn: &rusqlite::Connection,
+    lane_id: i64,
+) -> Result<HashSet<String>, WatchError> {
+    let mut stmt = conn
+        .prepare("SELECT item_key FROM watch_seen WHERE lane_id = ?1")
+        .map_err(WatchError::from)?;
+    let rows = stmt
+        .query_map([lane_id], |r| r.get::<_, String>(0))
+        .map_err(WatchError::from)?;
+    let mut set = HashSet::new();
+    for row in rows {
+        set.insert(row.map_err(WatchError::from)?);
+    }
+    Ok(set)
 }

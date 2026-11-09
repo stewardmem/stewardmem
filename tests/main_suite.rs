@@ -8224,9 +8224,12 @@ Final paragraph after the rule.";
             // service (`screen_structured`); the handler orchestrates it.
             (ingest_core_src, "screen_structured"),
             (proc_src, "create"),
-            // the screen lives in the shared `create_proposal` core since the
-            // review posture made it a multi-caller seam.
-            (gate_src, "create_proposal"),
+            // the screen lives in the shared `create_proposal_core` since the
+            // review posture made it a multi-caller seam (IMPROVE08 moved it
+            // down one level: the async wrapper is caller-shaped — pool +
+            // alerts — and the tick files through the core on its own tx;
+            // the screen rides the CORE either way).
+            (gate_src, "create_proposal_core"),
         ];
         for (src, handler) in sites {
             let body = handler_body(src, handler)

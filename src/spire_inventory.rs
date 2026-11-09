@@ -188,7 +188,8 @@ const CRATE_TEST_FLOOR: usize = 2_758;
 /// table is path-keyed. Measured after the wire change, not predicted.
 /// 214 → 215 at IMPROVE07: the `/scholar/fetch` route row.
 /// 215 → 216 at IMPROVE07 S3: the `/scholar/override` route row.
-const OPENAPI_ROUTE_ROWS_FLOOR: usize = 216;
+/// 216 → 217 at IMPROVE08 S3: the `/watch/tick` route row.
+const OPENAPI_ROUTE_ROWS_FLOOR: usize = 217;
 /// Route-authz table rows (`route_guards::AUTHZ_GATES`) — 141 gates at
 /// extraction (v1.28.54), 147 at the Wardline gate, 152 when Blackout's
 /// reverse-direction guard closed the table debt, 193 at the operate round.
@@ -200,7 +201,8 @@ const OPENAPI_ROUTE_ROWS_FLOOR: usize = 216;
 /// rows and six surfaces cost six rows.
 /// 200 → 201 at IMPROVE07: the `/scholar/fetch` Write gate.
 /// 201 → 202 at IMPROVE07 S3: the `/scholar/override` Admin gate.
-const AUTHZ_TABLE_ROWS_FLOOR: usize = 202;
+/// 202 → 203 at IMPROVE08 S3: the `/watch/tick` Admin gate.
+const AUTHZ_TABLE_ROWS_FLOOR: usize = 203;
 
 fn count_needle(hay: &str, needle: &str) -> usize {
     hay.matches(needle).count()

@@ -1135,8 +1135,13 @@ fn r45_0_correction_leaves_the_audit_chain_module_byte_untouched() {
 // row's presence, kind, target digest, and chain verification among them),
 // seven red-first drills, and the live drill's chain evidence (one import
 // row on a real store, `verify_chain` green, head = the import row).
+// IMPROVE08 S3 moved it again: the touch is ONE enum variant + its as_str
+// arm — `AuditKind::Watch`, the research watch's per-tick accounting row
+// (the Import precedent exactly); NO verdict, key, epoch, chain-link,
+// scheme, check, or audit-row WRITE shape moved. The tick's row is pinned
+// behaviorally in tests/watch_pins.rs (the CHECKED form + the rollback law).
 const CHAIN_MODULE_SHA256: &str =
-    "2b556b0e306e47befc06632dc6fec299d269b740053ccf8e9bc4ce118f83558e";
+    "8c6f31f0a4d46b76730317fc965fa5f75ad51038211b5f778e898945940c1360";
 
 /// E8's second half: the correction adds no key material and no audit row.
 #[test]

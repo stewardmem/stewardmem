@@ -328,6 +328,19 @@ pub const INGEST_KINDS: &[&str] = &[
     // `origin_for_source("scholarly")` derives `imported` unchanged — a
     // fetched record is not a trusted local write.
     "scholarly",
+    // The watch kind (IMPROVE08): items ticked from an operator-configured
+    // research lane and filed as proposals through the gate — the approved
+    // proposal's source lands on the knowledge row VERBATIM, so the row is
+    // recall-scopable like any other kind. The kernel files these (the
+    // tick), which is exactly why ADD_SOURCES_FOR_JWT deliberately does
+    // NOT gain this value: a token-authenticated agent must not write
+    // source=watch through /add (the manual-exclusion precedent).
+    "watch",
+    // The synthesis kind (IMPROVE08): outputs of the operator-invoked
+    // external research provider (POST /research/synthesize), landed as
+    // proposals with the provider named in provenance — never memory
+    // directly. Same JWT exclusion law as `watch`.
+    "synthesis",
 ];
 
 /// Parse a raw `source` string into a [`SourceFilter`]. Lowercases nothing —

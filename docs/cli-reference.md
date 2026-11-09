@@ -17,6 +17,9 @@ on the HTTP API or the client console.
 | `brain status` | Counts, model, version |
 | `brain check-consistency` | Report duplicates, conflicts, stale sources, near-duplicates |
 | `brain verify-governance` [`--db PATH`] | Row-level governance-integrity scan: recount every knowledge row's SHA-256 over its governance tuple (owner, access_scope, domain); reports ok / tampered (ids) / legacy_unhashed, exit ≠ 0 on tampering |
+| `brain watch add <name> --kind arxiv_api\|rss\|atom\|adapter --url URL --cadence SECS [--query Q] [--destination proposals] [--db PATH] | Create a research-watch lane (IMPROVE08): the closed vocabularies, the https/host/no-userinfo URL law, the arXiv once-per-day cadence law (sub-daily refuses), the SSRF screen at create (private/metadata hosts refuse). The destination is the CLOSED value `proposals` — the watch files proposals, never memory |
+| `brain watch tick <lane> [--db PATH]` | Run ONE lane tick (IMPROVE08): freshness floors before any fetch (`skipped_fresh` is the honest accounting line), fetch+parse outside the tx, then ONE `BEGIN IMMEDIATE` — seen inserts, gate filings (source `watch`), the accounting row, the CHECKED audit row. Replay transport unless `BRAIN_WATCH_LIVE_PROBE=1`; external cron drives the cadence — never a daemon |
+| `brain watch list [--db PATH]` | List the watch lanes with each one's LAST tick accounting (seen/deduped/filed/failed/skipped_fresh) — the loop's health at a glance |
 | `brain snapshot-status` | Show the point-in-time snapshot state |
 | `brain setup [domain] [--profile NAME] [--yes]` | Interactive first-run: pick a profile preset, preview its knobs, bind it to a domain (`--yes` scripts it) |
 | `brain bench` | Benchmark harness (always compiled into `brain`; the `bench` Cargo feature gates the separate `bench` BINARY) |

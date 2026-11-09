@@ -120,9 +120,132 @@ pub(crate) async fn create_proposal(
 ) -> Result<ProposalResponse, HandlerError> {
     let domain = req
         .domain
+        .as_deref()
+        .map(str::trim)
+        .filter(|d| !d.is_empty())
+        .unwrap_or("global")
+        .to_string();
+    super::authorize(&principal, crate::auth::Action::Write, "", &domain)?;
+    // And the label is DERIVED for the agent class (the class law, now at
+    // the proposal seam itself instead of only /ingest): whatever the caller
+    // asserted, an agent's capture is channel-grade. (The vocabulary check
+    // lives in [`create_proposal_core`] — the ONE seam the research watch's
+    // tick also files through; this caller-shaped law stays here.)
+    if crate::handlers::agent_class(&principal) {
+        req.origin_context = Some("channel".to_string());
+    }
+    // attribute the candidate to the acting agent so the
+    // supervisor's QA queue can scope by owner. `None` (loopback/opaque) →
+    // unowned, the legacy default.
+    let owner = principal_to_owner(&principal);
+    // The alerts' content digest (the core owns the validated copy; the
+    // digest input is the same trimmed content).
+    let content = req.content.trim().to_string();
+    let pool = super::resolve_domain_pool(&state.registry, Some(&domain))?;
+    let model = Arc::clone(&state.model);
+
+    let filed = tokio::task::spawn_blocking(
+        move || -> Result<(ProposalResponse, crate::screen::ScreenResult), HandlerError> {
+            let conn = pool.get().map_err(HandlerError::db_down)?;
+            create_proposal_core(&conn, model.as_ref(), req, owner.as_deref())
+        },
+    )
+    .await
+    .map_err(|e| HandlerError::internal(format!("task join error: {e}")))??;
+
+    let (resp, screen_res) = filed;
+    #[cfg(feature = "otel")]
+    {
+        let span = tracing::Span::current();
+        span.record("proposal_id", resp.id);
+        span.record(
+            "screen_verdict",
+            crate::otel::screen_verdict_span(screen_res),
+        );
+        span.record("principal", super::recall::principal_label(&principal));
+        span.record("domain", crate::otel::sanitize_span_attribute(&domain));
+    }
+
+    // alert the console a candidate is awaiting review
+    // (pending), and separately when the injection screen tripped (screen).
+    // Payloads are signals, never content/PII.
+    let now = chrono::Utc::now().timestamp();
+    crate::alert::publish(
+        &state,
+        crate::alert::ALERT_KIND_PENDING,
+        json!({
+            "proposal_id": resp.id,
+            "screen_verdict": crate::screen::screen_verdict_label(screen_res),
+            "created_at": now,
+            "expires_at": now + crate::config::proposal_ttl_secs(),
+        }),
+    );
+    // the conversation-event producer — `proposal/open` with its
+    // whole-value checkpoints (digest, SLA deadline, role gate), so the
+    // client's review-job node can join/replay from any stream point.
+    crate::alert::publish(
+        &state,
+        crate::alert::ALERT_KIND_PROPOSAL,
+        crate::proposal_events::open(
+            crate::proposal_events::ProposalId(resp.id),
+            now + crate::config::proposal_ttl_secs(),
+            &review_digest(&content),
+        ),
+    );
+    if screen_res != crate::screen::ScreenResult::Clean {
+        crate::alert::publish(
+            &state,
+            crate::alert::ALERT_KIND_SCREEN,
+            json!({ "verdict": crate::screen::screen_verdict_label(screen_res) }),
+        );
+    }
+
+    Ok(resp)
+}
+
+/// The proposal-creation CORE — the ONE filing seam, callable on a
+/// CALLER-SUPPLIED connection (IMPROVE08: the research watch's tick files
+/// through this exact path inside its own `BEGIN IMMEDIATE` transaction;
+/// before this round the only entry was the async route wrapper, which owns
+/// a pool connection and cannot ride the tick's tx). The full validation
+/// law rides: the origin_context vocabulary, content/title bounds, the
+/// injection screen on BOTH (a Reject refuses the whole proposal before any
+/// write), source_prompt/source bounds, strict kind validation, the
+/// registry lifecycle payload check, the deterministic scoring, and the
+/// [`crate::service::review::insert_proposal`] write. Returns the response
+/// AND the screen verdict (the wrapper's otel + alerts name it; the tick's
+/// accounting counts a Reject as a failed item — one poisoned feed item
+/// never fails the whole lane).
+///
+/// Blocks (embedding + KNN + the insert); callers wrap in
+/// `spawn_blocking`. `owner` is caller-shaped attribution (the wrapper
+/// derives it from the principal; the kernel's tick passes `None`).
+/// The proposal-creation CORE — the ONE filing seam, callable on a CALLER-
+/// SUPPLIED connection (IMPROVE08: the research watch's tick files through
+/// this exact path inside its own `BEGIN IMMEDIATE` transaction; before
+/// this round the only entry was the async route wrapper, which owns a pool
+/// connection and cannot ride the tick's tx). The full validation law rides:
+/// origin_context vocabulary, content/title bounds, the injection screen on
+/// BOTH (a Reject refuses the whole proposal before any write),
+/// source_prompt/source bounds, strict kind validation, the registry
+/// lifecycle payload check, the deterministic scoring, and the
+/// [`crate::service::review::insert_proposal`] write. Returns the response
+/// AND the screen verdict (the wrapper's otel + alerts name it; the tick's
+/// accounting counts a Reject as a failed item).
+///
+/// Blocks (embedding + KNN + the insert); callers wrap in
+/// `spawn_blocking`. `owner` is the caller-shaped attribution (the wrapper
+/// derives it from the principal; the kernel's tick passes `None`).
+pub(crate) fn create_proposal_core(
+    conn: &rusqlite::Connection,
+    model: &dyn crate::embed::Embedder,
+    req: ProposalRequest,
+    owner: Option<&str>,
+) -> Result<(ProposalResponse, crate::screen::ScreenResult), HandlerError> {
+    let domain = req
+        .domain
         .filter(|d| !d.trim().is_empty())
         .unwrap_or_else(|| "global".to_string());
-    super::authorize(&principal, crate::auth::Action::Write, "", &domain)?;
     // The taint input, the closed vocabulary `/ingest` enforces — ONE seam
     // for every proposal surface (`/ingest/proposal`, the router capture
     // sites, the UMP revise lane): an unknown value is a 400, never a
@@ -135,12 +258,6 @@ pub(crate) async fn create_proposal(
             "invalid_origin_context",
             format!("origin_context must be \"owner\" or \"channel\", got \"{o}\""),
         ));
-    }
-    // And the label is DERIVED for the agent class (the class law, now at
-    // the proposal seam itself instead of only /ingest): whatever the caller
-    // asserted, an agent's capture is channel-grade.
-    if crate::handlers::agent_class(&principal) {
-        req.origin_context = Some("channel".to_string());
     }
     let content = req.content.trim().to_string();
     if content.is_empty() {
@@ -248,170 +365,110 @@ pub(crate) async fn create_proposal(
             "unknown memory_kind; must be one of: fact, procedure, step, decision, episodic, entitlement, draft (channel/template is a governed channel act, proposal-only)",
         ));
     }
-
-    let pool = super::resolve_domain_pool(&state.registry, Some(&domain))?;
-    let model = Arc::clone(&state.model);
     let content_for_task = content.clone();
     let row_domain = domain.clone();
     let row_title = title.clone();
-    // attribute the candidate to the acting agent so the
-    // supervisor's QA queue can scope by owner. `None` (loopback/opaque) →
-    // unowned, the legacy default.
-    let owner = principal_to_owner(&principal);
-
-    let resp = tokio::task::spawn_blocking(move || -> Result<ProposalResponse, HandlerError> {
-        let conn = pool.get().map_err(HandlerError::db_down)?;
-        if is_registry_lifecycle {
-            crate::workflow::registry::validate_lifecycle_payload(&conn, &content_for_task)
-                .map_err(|error| match error {
-                    crate::workflow::registry::RegistryError::PayloadInvalid(message) => {
-                        HandlerError::bad_request("registry_payload_invalid", message)
-                    }
-                    crate::workflow::registry::RegistryError::RowAbsent => {
-                        HandlerError::bad_request(
-                            "registry_row_absent",
-                            "referenced registry row is absent",
-                        )
-                    }
-                    crate::workflow::registry::RegistryError::RowDigestMismatch => {
-                        HandlerError::bad_request(
-                            "registry_row_digest_mismatch",
-                            "the proposed row bytes do not digest to the live row",
-                        )
-                    }
-                    crate::workflow::registry::RegistryError::TransitionIllegal {
-                        action,
-                        from,
-                    } => HandlerError::conflict_with(
+    if is_registry_lifecycle {
+        crate::workflow::registry::validate_lifecycle_payload(conn, &content_for_task).map_err(
+            |error| match error {
+                crate::workflow::registry::RegistryError::PayloadInvalid(message) => {
+                    HandlerError::bad_request("registry_payload_invalid", message)
+                }
+                crate::workflow::registry::RegistryError::RowAbsent => HandlerError::bad_request(
+                    "registry_row_absent",
+                    "referenced registry row is absent",
+                ),
+                crate::workflow::registry::RegistryError::RowDigestMismatch => {
+                    HandlerError::bad_request(
+                        "registry_row_digest_mismatch",
+                        "the proposed row bytes do not digest to the live row",
+                    )
+                }
+                crate::workflow::registry::RegistryError::TransitionIllegal { action, from } => {
+                    HandlerError::conflict_with(
                         "registry_transition_illegal",
                         "the requested lifecycle transition is not legal",
                         serde_json::json!({ "action": action, "from": from }),
-                    ),
-                    _ => HandlerError::internal("registry lifecycle validation failed"),
-                })?;
-        }
-        // Deterministic scoring: novelty via vec0 KNN, conflict via the
-        // consolidate machinery, salience via the length/entity heuristic.
-        let embedding = model.encode_one(&content_for_task);
-        if embedding.is_empty() {
-            return Err(HandlerError::internal("embedding generation failed"));
-        }
-        let novelty = crate::gate::novelty(&conn, &embedding).unwrap_or(1.0); // first memory / no index → max novelty
-        let conflict_with = crate::service::review::find_conflict(&conn, &content_for_task);
-        let entity_count = crate::linker::extract_vocabulary(&content_for_task, &[])
-            .entities
-            .len();
-        let salience = crate::gate::salience(&content_for_task, entity_count);
-        let now = chrono::Utc::now().timestamp();
-
-        // Advisory lint for drafts: computed at creation, rides the proposal,
-        // NEVER gates approval (the human outranks the linter).
-        let lint_json: Option<String> = if is_draft {
-            let (banned, hash) = crate::valet_style::style_memory(&conn);
-            let report = crate::valet_style::style_check(&content_for_task, &banned, &hash);
-            Some(
-                serde_json::to_string(&report)
-                    .map_err(|e| HandlerError::internal(format!("lint serialize failed: {e}")))?,
-            )
-        } else {
-            None
-        };
-
-        // The origin badge (the origin-labeling line): a channel capture
-        // stamps the proposal's SOURCE as `channel-capture` — the review
-        // queue renders the source, so the operator sees "captured from
-        // channel traffic" at approve time with zero new machinery. The
-        // approved knowledge row inherits the label (origin column).
-        let effective_source = if req.origin_context.as_deref() == Some("channel") {
-            Some("channel-capture")
-        } else {
-            req.source.as_deref()
-        };
-        let id = crate::service::review::insert_proposal(
-            &conn,
-            &crate::service::review::NewProposal {
-                kind: &req.kind,
-                content: &content_for_task,
-                source: effective_source,
-                authority: req.authority,
-                observed_at: req.observed_at,
-                novelty,
-                conflict_with,
-                salience,
-                created_at: now,
-                source_prompt: req
-                    .source_prompt
-                    .as_deref()
-                    .map(crate::gate::screen_source_prompt)
-                    .as_deref(),
-                owner: owner.as_deref(),
-                lint_json: lint_json.as_deref(),
-                // the SAME label the write was authorized against — the
-                // queue scopes by this value (Triage).
-                domain: &row_domain,
-                title: row_title.as_deref(),
+                    )
+                }
+                _ => HandlerError::internal("registry lifecycle validation failed"),
             },
-        )
-        .map_err(|e| HandlerError::internal(e.to_string()))?;
+        )?;
+    }
+    // Deterministic scoring: novelty via vec0 KNN, conflict via the
+    // consolidate machinery, salience via the length/entity heuristic.
+    let embedding = model.encode_one(&content_for_task);
+    if embedding.is_empty() {
+        return Err(HandlerError::internal("embedding generation failed"));
+    }
+    let novelty = crate::gate::novelty(conn, &embedding).unwrap_or(1.0); // first memory / no index → max novelty
+    let conflict_with = crate::service::review::find_conflict(conn, &content_for_task);
+    let entity_count = crate::linker::extract_vocabulary(&content_for_task, &[])
+        .entities
+        .len();
+    let salience = crate::gate::salience(&content_for_task, entity_count);
+    let now = chrono::Utc::now().timestamp();
 
-        Ok(ProposalResponse {
+    // Advisory lint for drafts: computed at creation, rides the proposal,
+    // NEVER gates approval (the human outranks the linter).
+    let lint_json: Option<String> = if is_draft {
+        let (banned, hash) = crate::valet_style::style_memory(conn);
+        let report = crate::valet_style::style_check(&content_for_task, &banned, &hash);
+        Some(
+            serde_json::to_string(&report)
+                .map_err(|e| HandlerError::internal(format!("lint serialize failed: {e}")))?,
+        )
+    } else {
+        None
+    };
+
+    // The origin badge (the origin-labeling line): a channel capture
+    // stamps the proposal's SOURCE as `channel-capture` — the review
+    // queue renders the source, so the operator sees "captured from
+    // channel traffic" at approve time with zero new machinery. The
+    // approved knowledge row inherits the label (origin column).
+    let effective_source = if req.origin_context.as_deref() == Some("channel") {
+        Some("channel-capture")
+    } else {
+        req.source.as_deref()
+    };
+    let id = crate::service::review::insert_proposal(
+        conn,
+        &crate::service::review::NewProposal {
+            kind: &req.kind,
+            content: &content_for_task,
+            source: effective_source,
+            authority: req.authority,
+            observed_at: req.observed_at,
+            novelty,
+            conflict_with,
+            salience,
+            created_at: now,
+            source_prompt: req
+                .source_prompt
+                .as_deref()
+                .map(crate::gate::screen_source_prompt)
+                .as_deref(),
+            owner,
+            lint_json: lint_json.as_deref(),
+            // the SAME label the write was authorized against — the
+            // queue scopes by this value (Triage).
+            domain: &row_domain,
+            title: row_title.as_deref(),
+        },
+    )
+    .map_err(|e| HandlerError::internal(e.to_string()))?;
+
+    Ok((
+        ProposalResponse {
             id,
             status: "pending",
             novelty,
             conflict_with,
             salience,
-        })
-    })
-    .await
-    .map_err(|e| HandlerError::internal(format!("task join error: {e}")))??;
-
-    #[cfg(feature = "otel")]
-    {
-        let span = tracing::Span::current();
-        span.record("proposal_id", resp.id);
-        span.record(
-            "screen_verdict",
-            crate::otel::screen_verdict_span(screen_res),
-        );
-        span.record("principal", super::recall::principal_label(&principal));
-        span.record("domain", crate::otel::sanitize_span_attribute(&domain));
-    }
-
-    // alert the console a candidate is awaiting review
-    // (pending), and separately when the injection screen tripped (screen).
-    // Payloads are signals, never content/PII.
-    let now = chrono::Utc::now().timestamp();
-    crate::alert::publish(
-        &state,
-        crate::alert::ALERT_KIND_PENDING,
-        json!({
-            "proposal_id": resp.id,
-            "screen_verdict": crate::screen::screen_verdict_label(screen_res),
-            "created_at": now,
-            "expires_at": now + crate::config::proposal_ttl_secs(),
-        }),
-    );
-    // the conversation-event producer — `proposal/open` with its
-    // whole-value checkpoints (digest, SLA deadline, role gate), so the
-    // client's review-job node can join/replay from any stream point.
-    crate::alert::publish(
-        &state,
-        crate::alert::ALERT_KIND_PROPOSAL,
-        crate::proposal_events::open(
-            crate::proposal_events::ProposalId(resp.id),
-            now + crate::config::proposal_ttl_secs(),
-            &review_digest(&content),
-        ),
-    );
-    if screen_res != crate::screen::ScreenResult::Clean {
-        crate::alert::publish(
-            &state,
-            crate::alert::ALERT_KIND_SCREEN,
-            json!({ "verdict": crate::screen::screen_verdict_label(screen_res) }),
-        );
-    }
-
-    Ok(resp)
+        },
+        screen_res,
+    ))
 }
 
 #[derive(Debug, Deserialize)]
