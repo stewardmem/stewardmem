@@ -194,7 +194,7 @@ step's act; the table's jinja row has carried the fresh date since S2.
 | docs-truth | exit 0, **LOW=17** — the recorded parity (the new docs are prose, not contract surface; openapi/api.md/cli-reference untouched) |
 | the swift suite | 38/38 hermetic + 38/38 live (§3) on the unchanged pin |
 | `git stash list` | **UNCHANGED**: `stash@{0}: R79 'Locks' WIP (RECOVERED …)` present at open and at the close |
-| the lipstyk gate | green on the changed lines before the push |
+| the lipstyk gate | **exit 0** — the round changed no line under the scanned trees (`src client plugin crates shell/src-tauri shell/src`; the gate runs `--exclude-tests` BY DESIGN, `lipstyk-gate.sh:99`), so the default mode refused-vacuous (its fail-closed law) and the `--hook` mode recorded the honest docs-only pass ("nothing to lint… vs `667592d8`"). The new pins file's lint coverage is clippy + fmt + the battery, all green above |
 | dependencies | **zero new** — Cargo.lock untouched by the round (the pins file is std-only) |
 | kernel `src/` | **untouched** — `git diff 667592d8..HEAD -- src/` is empty |
 
