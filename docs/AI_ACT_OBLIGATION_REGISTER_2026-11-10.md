@@ -48,5 +48,36 @@ register's zero-uncited discipline covers them too:
 
 ## Appendix — dated closures (append-only)
 
-*(none yet — S4 appends the transparency closure and the privacy-manifest
-review verdict here, dated 2026-11-10)*
+### 2026-11-10 — S4 closure: the Art 50(1) transparency arm + the privacy-manifest review
+
+**The transparency closure.** The Art 50(1) gap row above is CLOSED by this
+dated append — the gap row itself stays, per the append-only law. What
+landed: the plain-language AI-interaction key `chat.disclosure.ai_interaction`
+in all five catalogs (`shell/src/lib/i18n/en.json:419` beside the
+`chat.tier` vocabulary, with the de/fr/es/nl siblings carrying the same key
+— 528 keys each), and the chat page consumes it in the chat-empty state
+beside the greeting (`shell/src/routes/+page.svelte`, `data-testid=
+"chat-ai-disclosure"`) — the disclosure a person meets BEFORE the first
+turn, with the per-turn tier and support labels carrying the ongoing
+provenance. Pinned from the kernel:
+`tests/ai_act_pins.rs::ai_act_transparency_deliverable_is_declared` and
+`::ai_act_transparency_closure_is_recorded_in_the_register` — RED at S3
+(the red-first transcript recorded in the round evidence), green with this
+append. Pinned from the shell: `shell/tests/i18n-parity.test.ts` — the
+AA-3 key-set parity across the five paraglide JSONs plus the planted-
+missing-key control (paraglide's base-locale fallback makes a missing
+non-en key compile green and silently serve English, so parity is a pinned
+law, not a convention).
+
+**The privacy-manifest review (verdict: no gap named, no edit).**
+`shell/src-tauri/privacy/PrivacyInfo.xcprivacy`, reviewed 2026-11-10
+against the model-processing question (does on-device model inference move
+any manifest row?): the manifest's truthful posture is "Data Not
+Collected" (NSPrivacyTracking false, NSPrivacyCollectedDataTypes empty) —
+local model inference processes user content ON the device and transmits
+nothing, so no collected-data type moves; the required-reason closure
+(FileTimestamp DDA9.1/3B52.1, DiskSpace E174.1/85F4.1) is measured to what
+the linked binaries actually touch, and model inference touches none of
+the required-reason API categories (the manifest's own header records the
+measured absences). Verdict recorded here per the S4 acceptance; the file
+is UNEDITED — a gap row exists only if a gap is named, and none was.

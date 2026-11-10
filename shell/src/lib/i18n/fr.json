@@ -416,6 +416,7 @@
   "chat.sessions.delete.description": "« {name} » et tout son historique seront effacés du noyau. Cette action est irréversible.",
   "chat.sessions.delete.confirm": "Supprimer",
   "chat.tier": "généré sur l'appareil ({tier})",
+  "chat.disclosure.ai_interaction": "Cette conversation est un assistant IA. Les réponses sont générées sur cet appareil à partir de votre propre mémoire — il peut se tromper, c'est pourquoi chaque affirmation cite sa source, ou l'assistant décline de répondre.",
   "chat.stop": "Arrêter",
   "chat.stream.bridge_unavailable": "Le modèle sur l'appareil est indisponible pour le moment ; cette réponse vient donc de votre seule mémoire.",
   "chat.stream.locale_fallback": "Le modèle sur l'appareil ne peut pas écrire en {locale} ; cette réponse vient donc de votre seule mémoire.",

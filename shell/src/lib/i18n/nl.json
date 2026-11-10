@@ -416,6 +416,7 @@
   "chat.sessions.delete.description": "„{name}” en de volledige geschiedenis worden uit de kernel gewist. Dit kan niet ongedaan worden gemaakt.",
   "chat.sessions.delete.confirm": "Verwijderen",
   "chat.tier": "op het apparaat gegenereerd ({tier})",
+  "chat.disclosure.ai_interaction": "Deze chat is een AI-assistent. Antwoorden worden op dit apparaat gegenereerd vanuit je eigen geheugen — hij kan zich vergissen, daarom noemt elke bewering zijn bron, of de assistent weigert te antwoorden.",
   "chat.stop": "Stop",
   "chat.stream.bridge_unavailable": "Het model op het apparaat is nu niet beschikbaar, dus dit antwoord komt alleen uit je geheugen.",
   "chat.stream.locale_fallback": "Het model op het apparaat kan niet in {locale} schrijven, dus dit antwoord komt alleen uit je geheugen.",

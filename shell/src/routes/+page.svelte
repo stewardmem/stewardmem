@@ -720,6 +720,16 @@
 	{#if turns.length === 0}
 		<div class="my-auto grid gap-4 py-10 text-center" data-testid="chat-empty">
 			<p class="text-xl font-semibold tracking-tight">{m['chat.empty.greeting']()}</p>
+			<!-- Art 50(1) — the plain-language AI-interaction disclosure
+			     (improve12 S4): the person is told they are interacting with an
+			     AI system BEFORE the first turn, beside the greeting; the
+			     per-turn tier and support labels below carry the ongoing
+			     provenance. The kernel pins the key's presence in all five
+			     catalogs AND this consumption (ai_act_transparency_deliverable_
+			     is_declared); the shell pins key-set parity (i18n-parity). -->
+			<p class="mx-auto max-w-md text-sm text-muted-foreground" data-testid="chat-ai-disclosure">
+				{m['chat.disclosure.ai_interaction']()}
+			</p>
 			<!-- The three-chip law (M3-b), now registry-backed: coreChat
 			     contributes the chips, each with its OWN act (the ask chip
 			     focuses the composer by id — the recorded jsdom discipline,

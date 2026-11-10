@@ -416,6 +416,7 @@
   "chat.sessions.delete.description": "\"{name}\" and its whole transcript will be erased from the kernel. This cannot be undone.",
   "chat.sessions.delete.confirm": "Delete",
   "chat.tier": "generated on-device ({tier})",
+  "chat.disclosure.ai_interaction": "This chat is an AI assistant. Answers are generated on this device from your own memory — it can be wrong, so every claim names its source, or the assistant declines to answer.",
   "chat.stop": "Stop",
   "chat.stream.bridge_unavailable": "The on-device model is unavailable right now, so this answer came from your memory alone.",
   "chat.stream.locale_fallback": "The on-device model cannot write in {locale}, so this answer came from your memory alone.",

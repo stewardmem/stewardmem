@@ -416,6 +416,7 @@
   "chat.sessions.delete.description": "«{name}» y todo su historial se borrarán del kernel. Esta acción no se puede deshacer.",
   "chat.sessions.delete.confirm": "Eliminar",
   "chat.tier": "generado en el dispositivo ({tier})",
+  "chat.disclosure.ai_interaction": "Este chat es un asistente de IA. Las respuestas se generan en este dispositivo a partir de tu propia memoria: puede equivocarse, por eso cada afirmación cita su fuente, o el asistente declina responder.",
   "chat.stop": "Detener",
   "chat.stream.bridge_unavailable": "El modelo en el dispositivo no está disponible ahora mismo, así que esta respuesta proviene solo de tu memoria.",
   "chat.stream.locale_fallback": "El modelo en el dispositivo no puede escribir en {locale}, así que esta respuesta proviene solo de tu memoria.",

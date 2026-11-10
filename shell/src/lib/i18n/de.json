@@ -416,6 +416,7 @@
   "chat.sessions.delete.description": "„{name}“ und ihr gesamter Verlauf werden aus dem Kernel gelöscht. Das kann nicht widerrufen werden.",
   "chat.sessions.delete.confirm": "Löschen",
   "chat.tier": "auf dem Gerät generiert ({tier})",
+  "chat.disclosure.ai_interaction": "Dieser Chat ist ein KI-Assistent. Antworten werden auf diesem Gerät aus Ihrem eigenen Speicher generiert — er kann irren, deshalb nennt jede Aussage ihre Quelle, oder der Assistent lehnt eine Antwort ab.",
   "chat.stop": "Stopp",
   "chat.stream.bridge_unavailable": "Das Modell auf dem Gerät ist gerade nicht verfügbar — diese Antwort stammt allein aus Ihrem Speicher.",
   "chat.stream.locale_fallback": "Das Modell auf dem Gerät kann nicht auf {locale} schreiben — diese Antwort stammt allein aus Ihrem Speicher.",
