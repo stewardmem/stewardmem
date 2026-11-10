@@ -59,6 +59,15 @@ export const QUEUE_LIMITS = {
 
 export type ScreenVerdict = 'clean' | 'quarantine';
 
+/**
+ * The PATH-ASSIGNED provenance marker's closed vocabulary (kernel schema
+ * 1.32.34 "MemformStamps"). The kernel stamps it at each producer's INSERT —
+ * the wire CANNOT set it (no request field exists), so what renders here is
+ * what the calling context said, never what a caller claimed. `legacy` marks
+ * pre-marker rows.
+ */
+export type DerivedFrom = 'operator' | 'agent' | 'watch' | 'legacy';
+
 /** The fields a row carries whether it is live or cached. */
 export interface QueueRowCore {
 	readonly id: number;
@@ -79,6 +88,8 @@ export interface QueueRowCore {
 	readonly criticalSecs: number;
 	readonly screenVerdict: ScreenVerdict;
 	readonly qaScore: number | null;
+	readonly derivedFrom: DerivedFrom;
+	readonly producerRef: string | null;
 }
 
 /**
@@ -150,6 +161,20 @@ function screenVerdict(value: unknown): ScreenVerdict | null {
 }
 
 /**
+ * The provenance marker's parser. ABSENT reads `legacy` (a pre-1.32.34
+ * kernel's rows carry no marker; the honest label is "unknown", never a
+ * guess). An UNKNOWN value is a wire that does not match the contract and
+ * is refused — the marker is kernel-stamped, so a value outside the closed
+ * vocabulary cannot be displayed truthfully.
+ */
+function derivedFrom(value: unknown): DerivedFrom | null {
+	if (value === undefined) return 'legacy';
+	return value === 'operator' || value === 'agent' || value === 'watch' || value === 'legacy'
+		? value
+		: null;
+}
+
+/**
  * Parse ONE wire row. Every field is proved, every collection bounded, and a
  * row that cannot be proved is REFUSED — the whole page is then refused,
  * because a queue that silently drops rows would under-report the work
@@ -168,6 +193,7 @@ function parseRow(value: unknown): QueueRow | null {
 	const warnSecs = optionalInteger(value['warn_secs'], 0, QUEUE_LIMITS.idMax);
 	const criticalSecs = optionalInteger(value['critical_secs'], 0, QUEUE_LIMITS.idMax);
 	const verdict = screenVerdict(value['screen_verdict']);
+	const marker = derivedFrom(value['derived_from']);
 
 	if (
 		id === null ||
@@ -179,7 +205,8 @@ function parseRow(value: unknown): QueueRow | null {
 		expiresAt === null ||
 		warnSecs === null ||
 		criticalSecs === null ||
-		verdict === null
+		verdict === null ||
+		marker === null
 	) {
 		return null;
 	}
@@ -222,6 +249,8 @@ function parseRow(value: unknown): QueueRow | null {
 		criticalSecs,
 		screenVerdict: verdict,
 		qaScore: optionalInteger(value['qa_score'], 0, QUEUE_LIMITS.idMax),
+		derivedFrom: marker,
+		producerRef: optionalString(value['producer_ref'], QUEUE_LIMITS.identifierChars),
 		content,
 		contentDigest: digest
 	};
@@ -267,7 +296,9 @@ export function toQueueMetadata(row: QueueRow): QueueRowMetadata {
 		warnSecs: row.warnSecs,
 		criticalSecs: row.criticalSecs,
 		screenVerdict: row.screenVerdict,
-		qaScore: row.qaScore
+		qaScore: row.qaScore,
+		derivedFrom: row.derivedFrom,
+		producerRef: row.producerRef
 	};
 }
 
@@ -310,6 +341,8 @@ export function toDisplayRow(
 		criticalSecs: row.criticalSecs,
 		screenVerdict: row.screenVerdict,
 		qaScore: row.qaScore,
+		derivedFrom: row.derivedFrom,
+		producerRef: row.producerRef,
 		content,
 		contentDigest
 	};
@@ -368,7 +401,9 @@ function readCachedRow(value: unknown): QueueRowMetadata | null {
 		warnSecs: optionalInteger(value['warnSecs'], 0, QUEUE_LIMITS.idMax) ?? 0,
 		criticalSecs: optionalInteger(value['criticalSecs'], 0, QUEUE_LIMITS.idMax) ?? 0,
 		screenVerdict: verdict,
-		qaScore: optionalInteger(value['qaScore'], 0, QUEUE_LIMITS.idMax)
+		qaScore: optionalInteger(value['qaScore'], 0, QUEUE_LIMITS.idMax),
+		derivedFrom: derivedFrom(value['derivedFrom']) ?? 'legacy',
+		producerRef: optionalString(value['producerRef'], QUEUE_LIMITS.identifierChars)
 	};
 }
 

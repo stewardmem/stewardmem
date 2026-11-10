@@ -1607,9 +1607,18 @@ pub async fn run_tick(ctx: TickContext<'_>) -> Result<TickReport, WatchError> {
             title: Some(proposal.title.clone()),
             source_prompt: None,
         };
-        if let Ok((resp, _verdict)) =
-            crate::handlers::gate::create_proposal_core(tx.tx(), ctx.model, req, None)
-        {
+        if let Ok((resp, _verdict)) = crate::handlers::gate::create_proposal_core(
+            tx.tx(),
+            ctx.model,
+            req,
+            None,
+            // the PATH-ASSIGNED stamp: the lane's tick files
+            // per-item proposals — the lane id is the grouping reference.
+            crate::handlers::gate::ProposalStamp::new(
+                crate::handlers::gate::ProposalOrigin::Watch,
+                format!("watch-lane:{}", lane.id),
+            ),
+        ) {
             proposal_ids.push(resp.id);
         } else {
             accounting.failed += 1;
@@ -1933,6 +1942,10 @@ mod synthesis_tests {
                 source_prompt: None,
             },
             None,
+            crate::handlers::gate::ProposalStamp::new(
+                crate::handlers::gate::ProposalOrigin::Watch,
+                "watch-synthesis",
+            ),
         )
         .expect("the synthesis files");
         assert_eq!(verdict, crate::screen::ScreenResult::Clean);

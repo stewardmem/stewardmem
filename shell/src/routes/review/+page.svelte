@@ -42,7 +42,8 @@
 		toQueueMetadata,
 		writeQueueCache,
 		type QueueCache,
-		type QueueDisplayRow
+		type QueueDisplayRow,
+		type DerivedFrom
 	} from '#lib/queue/model.js';
 	import { Alert } from '#lib/components/ui/alert/index.js';
 	import { Badge } from '#lib/components/ui/badge/index.js';
@@ -63,6 +64,17 @@
 	type ApproveState =
 		| { readonly id: number; readonly phase: 'busy' }
 		| { readonly id: number; readonly phase: 'done'; readonly outcome: ApproveOutcome };
+
+	// The provenance marker's labels (v1.32.34): the approver SEES who wrote
+	// the text at decision time — the marker is kernel-stamped (the wire
+	// cannot set it), so this badge states the calling context, never a
+	// caller's claim. It informs the decision; it never gates it.
+	const provenanceLabel: Record<DerivedFrom, () => string> = {
+		operator: () => m['review.provenance.operator'](),
+		agent: () => m['review.provenance.agent'](),
+		watch: () => m['review.provenance.watch'](),
+		legacy: () => m['review.provenance.legacy']()
+	};
 
 	let view = $state<View>({ kind: 'loading' });
 	let approveState = $state<ApproveState | null>(null);
@@ -186,6 +198,17 @@
 						<Badge variant="secondary" data-testid="review-row-clean">
 							{m['review.row.clean']()}
 						</Badge>
+					{/if}
+					<Badge variant="outline" data-testid="review-row-derived-from">
+						{provenanceLabel[row.derivedFrom]()}
+					</Badge>
+					{#if row.producerRef !== null}
+						<span
+							class="text-xs text-muted-foreground"
+							data-testid="review-row-producer-ref"
+						>
+							{m['review.provenance.ref']({ ref: row.producerRef })}
+						</span>
 					{/if}
 				</div>
 				<dl class="grid gap-x-3 gap-y-1 text-sm sm:grid-cols-[10rem_1fr]">

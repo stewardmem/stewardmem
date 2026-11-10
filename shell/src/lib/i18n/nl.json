@@ -526,5 +526,10 @@
   "settings.import.reverted.line": "De import is teruggedraaid; de herinneringen zijn gemarkeerd als verwijderd.",
   "settings.import.refused": "De import is geweigerd: {reason}",
   "settings.import.inert": "Niets te importeren in deze editie.",
-  "settings.import.progress": "Bezig met importeren…"
+  "settings.import.progress": "Bezig met importeren…",
+  "review.provenance.operator": "Ingediend door de operator.",
+  "review.provenance.agent": "Geschreven door het model (agent) — gecontroleerd, wacht op uw beslissing.",
+  "review.provenance.watch": "Geschreven door de research-watch.",
+  "review.provenance.legacy": "Herkomst onbekend — ontstaan voordat provenantiemarkers bestonden.",
+  "review.provenance.ref": "Producentreferentie: {ref}"
 }

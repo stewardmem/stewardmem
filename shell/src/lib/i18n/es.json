@@ -526,5 +526,10 @@
   "settings.import.reverted.line": "La importación se deshizo; los recuerdos quedan marcados borrados.",
   "settings.import.refused": "La importación fue rechazada: {reason}",
   "settings.import.inert": "Nada que importar en esta edición.",
-  "settings.import.progress": "Importando…"
+  "settings.import.progress": "Importando…",
+  "review.provenance.operator": "Presentado por el operador.",
+  "review.provenance.agent": "Redactado por el modelo (agente): verificado, espera su decisión.",
+  "review.provenance.watch": "Redactado por la vigilancia de investigación.",
+  "review.provenance.legacy": "Procedencia desconocida: creado antes de que existieran los marcadores.",
+  "review.provenance.ref": "Referencia del productor: {ref}"
 }

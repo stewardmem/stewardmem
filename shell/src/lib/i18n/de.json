@@ -526,5 +526,10 @@
   "settings.import.reverted.line": "Der Import wurde zurückgenommen; die Erinnerungen sind als gelöscht markiert.",
   "settings.import.refused": "Der Import wurde abgelehnt: {reason}",
   "settings.import.inert": "In dieser Ausgabe gibt es nichts zu importieren.",
-  "settings.import.progress": "Importiere…"
+  "settings.import.progress": "Importiere…",
+  "review.provenance.operator": "Vom Operator eingereicht.",
+  "review.provenance.agent": "Vom Modell (Agent) verfasst — geregelt, wartet auf Ihre Entscheidung.",
+  "review.provenance.watch": "Vom Research-Watch verfasst.",
+  "review.provenance.legacy": "Herkunft unbekannt — entstand vor den Provenienz-Markern.",
+  "review.provenance.ref": "Produzenten-Referenz: {ref}"
 }

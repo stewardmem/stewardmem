@@ -7426,33 +7426,41 @@ Final paragraph after the rule.";
                     // shared `run_*`/`*_one` core (the `/recall` + `/ingest` bindings
                     // route through `run_recall`/`ingest_one`), so the scan follows
                     // the delegation when the handler itself delegates.
-                    let delegated_gate = [
-                        "run_recall(",
-                        "ingest_one(",
-                        "post_legal_hold_for_domain(",
-                        "create_proposal(",
-                    ]
-                    .into_iter()
-                    .find(|d| body.contains(d))
-                    .and_then(|core| handler_body(src, &core[..core.len() - 1]))
-                    .is_some_and(|b| b.contains("authorize"));
+                    // some handlers delegate their whole body to a shared
+                    // core (the `/recall` + `/ingest` bindings route through
+                    // `run_recall`/`ingest_one`), so the scan follows the
+                    // delegation CHAIN hop by hop (bounded) until a body
+                    // with the gate appears — the ingest wrapper derives the
+                    // provenance stamp and delegates one hop further.
+                    // the walked chain, kept for the Action:: enforcement
+                    // arm below: the bodies the delegation passes through.
+                    let mut chain_bodies: Vec<String> = Vec::new();
+                    let mut current: Option<String> = Some(body.clone());
+                    for _hop in 0..4 {
+                        let Some(b) = current else { break };
+                        chain_bodies.push(b.clone());
+                        let next = [
+                            "run_recall(",
+                            "ingest_one(",
+                            "post_legal_hold_for_domain(",
+                            "create_proposal(",
+                            "create_proposal_as(",
+                        ]
+                        .into_iter()
+                        .find(|d| b.contains(d))
+                        .and_then(|core| handler_body(src, &core[..core.len() - 1]));
+                        match next {
+                            Some(nb) => current = Some(nb),
+                            None => break,
+                        }
+                    }
+                    let delegated_gate = chain_bodies.iter().any(|b| b.contains("authorize"));
                     assert!(
                         body.contains("authorize") || delegated_gate,
                         "{method} {route} (`{handler_name}`) has no authorize() gate"
                     );
-                    if body.contains(&format!("Action::{action}"))
-                        || (delegated_gate
-                            && [
-                                "run_recall(",
-                                "ingest_one(",
-                                "post_legal_hold_for_domain(",
-                                "create_proposal(",
-                            ]
-                            .into_iter()
-                            .find(|d| body.contains(d))
-                            .and_then(|core| handler_body(src, &core[..core.len() - 1]))
-                            .is_some_and(|b| b.contains(&format!("Action::{action}"))))
-                    {
+                    let action_label = format!("Action::{action}");
+                    if chain_bodies.iter().any(|b| b.contains(&action_label)) {
                         action_seen = true;
                     }
                 }
@@ -19889,12 +19897,12 @@ mod r38_delivery {
         let db = test_db();
         assert_eq!(
             brain_server::storage_layout::schema_version(&db).as_deref(),
-            Some(brain_server::storage_layout::SCHEMA_VERSION_V1_32_33),
+            Some(brain_server::storage_layout::SCHEMA_VERSION_V1_32_34),
             "the migration literal and the ceiling const must agree on the current stamp"
         );
         assert_eq!(
             brain_server::storage_layout::LATEST_KNOWN_SCHEMA,
-            "1.32.33",
+            "1.32.34",
             "LATEST_KNOWN_SCHEMA must move with the stamp — refuse_newer must not bless a DB \
              this binary cannot migrate"
         );
@@ -20631,12 +20639,12 @@ mod r40_attestations {
         // round; what moves is the ceiling, and it moves for both.
         assert_eq!(
             brain_server::storage_layout::schema_version(&db).as_deref(),
-            Some(brain_server::storage_layout::SCHEMA_VERSION_V1_32_33),
+            Some(brain_server::storage_layout::SCHEMA_VERSION_V1_32_34),
             "the ceiling const and the migration literal must move together"
         );
         assert_eq!(
             brain_server::storage_layout::LATEST_KNOWN_SCHEMA,
-            "1.32.33",
+            "1.32.34",
             "LATEST_KNOWN_SCHEMA must move with the stamp — refuse_newer must not bless a DB \
              this binary cannot migrate"
         );
@@ -21432,17 +21440,18 @@ mod r41_replay {
         // The stamp moved, and moved with the table.
         assert_eq!(
             brain_server::storage_layout::LATEST_KNOWN_SCHEMA,
-            "1.32.33",
+            "1.32.34",
             "the release round is a schema round: the stamp moves with the table that earns it. \
              Later schema rounds re-pin the CURRENT stamp — the model-citation-key round moved \
              it to 1.32.25, the proposal-edge round moved it to 1.32.26, the approve-action \
              round moved it to 1.32.27 for the roster's manages column, the uninstall \
              round moved it to 1.32.28 for the register's removed_at column, and the LL-04 \
-             round moved it to 1.32.29 for the chat turn's support_decision column"
+             round moved it to 1.32.29 for the chat turn's support_decision column, and \
+             IMPROVE13 moved it to 1.32.34 for the MemForm provenance stamps"
         );
         assert_eq!(
             brain_server::storage_layout::schema_version(&db).as_deref(),
-            Some(brain_server::storage_layout::SCHEMA_VERSION_V1_32_33),
+            Some(brain_server::storage_layout::SCHEMA_VERSION_V1_32_34),
         );
         // ...and the parity table the migration rehearsal walks carries the new
         // table: a rehearsal that came back with zero bindings would produce a
@@ -21936,14 +21945,14 @@ mod r42_authority_bindings {
         let db = test_db();
         assert_eq!(
             brain_server::storage_layout::LATEST_KNOWN_SCHEMA,
-            "1.32.33",
-            "the bindings stamp pin moves with each schema round's stamp (last: IMPROVE11, \
-             the hitl_decision_events ledger): each schema round re-pins the \
+            "1.32.34",
+            "the bindings stamp pin moves with each schema round's stamp (last: IMPROVE13, \
+             the MemformStamps columns): each schema round re-pins the \
              CURRENT stamp, so a stale ceiling fails loudly here"
         );
         assert_eq!(
             brain_server::storage_layout::schema_version(&db).as_deref(),
-            Some("1.32.33"),
+            Some("1.32.34"),
             "what the migration stamps must be what the ceiling declares"
         );
     }
@@ -22852,7 +22861,7 @@ mod r42_authority_bindings {
             .find("CREATE TABLE IF NOT EXISTS delivery_bindings")
             .expect("the table DDL must exist in the migration's production region");
         let stamp_at = migration
-            .find("'schema_version', '1.32.33'")
+            .find("'schema_version', '1.32.34'")
             .expect("the stamp must move to the current schema round's stamp");
         assert!(
             ddl_at < stamp_at,
@@ -22861,7 +22870,7 @@ mod r42_authority_bindings {
         // The stamp's two arms stay in lockstep — the lockstep pin derives both
         // sides, and a half-edited stamp makes `refuse-newer` lie.
         assert!(
-            migration.contains("DO UPDATE SET value = '1.32.33'"),
+            migration.contains("DO UPDATE SET value = '1.32.34'"),
             "both arms of the schema_version upsert must move together"
         );
         // Rehearsal parity: the new table is walked by the migration rehearsal,
@@ -23082,7 +23091,7 @@ mod r43_releases {
         let db = test_db();
         assert_eq!(
             brain_server::storage_layout::LATEST_KNOWN_SCHEMA,
-            "1.32.33",
+            "1.32.34",
             "the release round is a schema round: the stamp moves with the table that earns it. \
              Each schema round re-pins the CURRENT stamp — the per-domain axis round left it at \
              1.32.24, the model-citation-key round moved it to 1.32.25 for the two registry-key \
@@ -23094,15 +23103,16 @@ mod r43_releases {
              for the documents row's per-page OCR provenance, IMPROVE07 moved it to \
              1.32.31 for the knowledge row's scholarly provenance column, IMPROVE08 \
              moved it to 1.32.32 for the research watch's three tables, and IMPROVE11 \
-             moved it to 1.32.33 for the HITL decision-event ledger"
+             moved it to 1.32.33 for the HITL decision-event ledger, and IMPROVE13 \
+             moved it to 1.32.34 for the MemForm provenance stamps"
         );
         assert_eq!(
             brain_server::storage_layout::schema_version(&db).as_deref(),
-            Some("1.32.33"),
+            Some("1.32.34"),
         );
         let migration = src("src/migration.rs");
         assert!(
-            migration.contains("DO UPDATE SET value = '1.32.33'"),
+            migration.contains("DO UPDATE SET value = '1.32.34'"),
             "both arms of the schema_version upsert must move together"
         );
         let layout = src("src/storage_layout.rs");
@@ -24204,7 +24214,7 @@ mod r44_outcomes {
         // approve-action round moved it again for the roster's manages column, and the
         // uninstall round moved it again for the register's removed_at column.
         assert!(
-            layout.contains("pub const LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_33;")
+            layout.contains("pub const LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_34;")
                 && layout.contains("\"1.32.31\""),
             "the schema stamp is the lockstep triple: LATEST_KNOWN_SCHEMA must name the \
              newest SCHEMA_VERSION_* const and that const must carry the same literal. R44 \
@@ -24218,7 +24228,8 @@ mod r44_outcomes {
              approve-action round moved it to 1.32.27 for the roster's manages column, the \
              uninstall round moved it to 1.32.28 for the register's removed_at column, the \
              LL-04 round moved it to 1.32.29 for the chat turn's support_decision column, and \
-             IMPROVE11 moved it to 1.32.33 for the HITL decision-event ledger."
+             IMPROVE11 moved it to 1.32.33 for the HITL decision-event ledger, and IMPROVE13 \
+             moved it to 1.32.34 for the MemForm provenance stamps."
         );
         let rehearse = src("src/bin/brain_migrate_rehearse.rs");
         assert!(

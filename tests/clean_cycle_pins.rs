@@ -369,7 +369,7 @@ fn r48_the_runbook_names_the_offsite_approval_requirement() {
 fn r48_adds_no_table_no_stamp_no_dependency() {
     let layout = read_repo("src/storage_layout.rs");
     assert!(
-        layout.contains("LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_33;"),
+        layout.contains("LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_34;"),
         "the schema stamp is re-pinned by each schema round: R48 adds no table and no stamp \
          (the ceiling itself is re-pinned by each schema round — R57b moved it, for the \
          trace citation, R60 moved it for the disproof condition's six columns on `claims`, \

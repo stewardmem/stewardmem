@@ -1285,7 +1285,7 @@ fn r45_0_governing_spec_call_site_count_matches_measurement() {
         ("provenance.rs", 122, 269),
         ("provenance.rs", 826, 269),
         ("workflow/parcels.rs", 242, 525),
-        ("workflow/parcels.rs", 721, 525),
+        ("workflow/parcels.rs", 722, 525),
         ("ump_integrity.rs", 552, 450),
         ("ump_integrity.rs", 555, 450),
         ("ump_integrity.rs", 564, 450),

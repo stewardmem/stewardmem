@@ -447,9 +447,9 @@ pub fn detect_duplicate_opens(conn: &Connection, now: i64) -> Result<Vec<i64>> {
         });
         conn.execute(
             "INSERT INTO proposals(kind, content, source, authority, observed_at,
-                                  novelty, conflict_with, salience, created_at)
-             VALUES (?1, ?2, 'agent', NULL, NULL, 1.0, NULL, 1.0, ?3)",
-            rusqlite::params![KIND_CASE_MERGE_SUGGESTED, content.to_string(), now],
+                                  novelty, conflict_with, salience, created_at, derived_from, producer_ref)
+             VALUES (?1, ?2, 'agent', NULL, NULL, 1.0, NULL, 1.0, ?3, 'agent', ?4)",
+            rusqlite::params![KIND_CASE_MERGE_SUGGESTED, content.to_string(), now, format!("crm-merge:{digest}")],
         )?;
         proposed.push(conn.last_insert_rowid());
     }
@@ -726,7 +726,8 @@ mod tests {
                 id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL,
                 content TEXT NOT NULL, source TEXT, authority TEXT, observed_at TEXT,
                 novelty REAL, conflict_with INTEGER, salience REAL, status TEXT DEFAULT 'pending',
-                created_at INTEGER, source_prompt TEXT, owner TEXT);",
+                created_at INTEGER, source_prompt TEXT, owner TEXT,
+                derived_from TEXT NOT NULL DEFAULT 'legacy', producer_ref TEXT);",
         )
         .unwrap_or_else(|e| panic!("schema: {e}"));
         let subject = hash_subject(SOURCE_ZENDESK, "acme", "requester:991");
@@ -772,7 +773,8 @@ mod tests {
                 id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL,
                 content TEXT NOT NULL, source TEXT, authority TEXT, observed_at TEXT,
                 novelty REAL, conflict_with INTEGER, salience REAL, status TEXT DEFAULT 'pending',
-                created_at INTEGER, source_prompt TEXT, owner TEXT);",
+                created_at INTEGER, source_prompt TEXT, owner TEXT,
+                derived_from TEXT NOT NULL DEFAULT 'legacy', producer_ref TEXT);",
         )
         .unwrap_or_else(|e| panic!("schema: {e}"));
         for (id, ident) in [("41", "requester:991"), ("42", "requester:992")] {

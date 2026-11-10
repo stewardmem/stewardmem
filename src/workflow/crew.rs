@@ -509,9 +509,9 @@ pub(crate) fn file_skills_proposal(
     now: i64,
 ) -> rusqlite::Result<i64> {
     tx.query_row(
-        "INSERT INTO proposals(kind, content, novelty, salience, created_at, owner, domain)
-         VALUES (?1, ?2, 0.5, 0.5, ?3, ?4, ?5) RETURNING id",
-        params![KIND_SKILLS_UPDATE, content, now, owner, domain],
+        "INSERT INTO proposals(kind, content, novelty, salience, created_at, owner, domain, derived_from, producer_ref)
+         VALUES (?1, ?2, 0.5, 0.5, ?3, ?4, ?5, 'agent', ?6) RETURNING id",
+        params![KIND_SKILLS_UPDATE, content, now, owner, domain, format!("crew-skills:{domain}")],
         |r| r.get(0),
     )
 }

@@ -307,7 +307,7 @@ fn the_reviewer_id_is_a_payload_field_and_not_a_column() {
     );
     let layout = read("src/storage_layout.rs");
     assert!(
-        layout.contains("LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_33"),
+        layout.contains("LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_34"),
         "the schema version is re-pinned by each schema round (the model-citation-key round \
          moved it to 1.32.25, the proposal-edge round to 1.32.26, the approve-action round \
          to 1.32.27 — the roster manages column, the uninstall round to 1.32.28 — the \
@@ -315,7 +315,8 @@ fn the_reviewer_id_is_a_payload_field_and_not_a_column() {
          support_decision verdict column, IMPROVE05 to 1.32.30 — the documents row's OCR \
          provenance, IMPROVE07 to 1.32.31 — the knowledge row's scholarly provenance \
          column, IMPROVE08 to 1.32.32 — the research watch's three tables, and IMPROVE11 \
-         to 1.32.33 — the HITL decision-event ledger; this \
+         to 1.32.33 — the HITL decision-event ledger, and IMPROVE13 to 1.32.34 — the \
+         MemForm provenance stamps; this \
          round ships no migration of its own)"
     );
     // And the reviewer rides the parsed payload, keyed with the rest.

@@ -108,6 +108,65 @@ pub async fn ingest_proposal(
 
 /// The proposal-creation core, shared by `POST /proposals` and (since
 /// the Seatbelt posture) every agent-facing write surface under
+/// The PATH-ASSIGNED provenance stamp the kernel derives (the
+/// provenance-marker schema round): the origin class + the producer/gate
+/// reference. This
+/// travels KERNEL-SIDE ONLY, from the calling context — `ProposalRequest`
+/// gains no such field, so the wire cannot set the marker (request-borne
+/// provenance is the MemForm defeat). The marker informs the human
+/// approval; it never gates it (HITL sacred).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProposalOrigin {
+    /// the operator ingest surfaces (the route, the operator write paths,
+    /// the chat-abstention capture — the user's own words).
+    Operator,
+    /// agent/machinery-authored rows: the review-posture agent writes, the
+    /// GDL workflow artifacts, CRM/delivery/crew/channel machinery.
+    Agent,
+    /// the research watch's lane tick + its one-shot synthesis (RW-2).
+    Watch,
+}
+
+impl ProposalOrigin {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Operator => "operator",
+            Self::Agent => "agent",
+            Self::Watch => "watch",
+        }
+    }
+}
+
+/// The origin class + the kernel-set producer/gate reference, passed by
+/// each producer's call site (the calling context IS the path).
+#[derive(Debug, Clone)]
+pub(crate) struct ProposalStamp {
+    pub origin: ProposalOrigin,
+    pub producer_ref: Option<String>,
+}
+
+impl ProposalStamp {
+    pub(crate) fn new(origin: ProposalOrigin, producer_ref: impl Into<String>) -> Self {
+        Self {
+            origin,
+            producer_ref: Some(producer_ref.into()),
+        }
+    }
+    /// The derived stamp for the operator ingest surfaces: the identity
+    /// decides (the agent class law), the reference names the path.
+    pub(crate) fn derived_for_path(principal: &Option<crate::auth::Principal>, path: &str) -> Self {
+        let origin = if crate::handlers::agent_class(principal) {
+            ProposalOrigin::Agent
+        } else {
+            ProposalOrigin::Operator
+        };
+        Self {
+            origin,
+            producer_ref: Some(path.to_string()),
+        }
+    }
+}
+
 /// `BRAIN_WRITE_POSTURE=review` — agents propose, operators dispose.
 ///
 /// ponytail: does NOT add RBAC/jit-elevation; does NOT gate reads; does NOT
@@ -116,7 +175,24 @@ pub async fn ingest_proposal(
 pub(crate) async fn create_proposal(
     state: Arc<AppState>,
     principal: Option<crate::auth::Principal>,
+    req: ProposalRequest,
+) -> Result<ProposalResponse, HandlerError> {
+    // the derived stamp: the identity decides (the agent class law), the
+    // reference names the ingest path. Producers that are NOT plain ingest
+    // (the chat capture, UMP, the watch synthesis) call
+    // [`create_proposal_as`] with their explicit stamp.
+    let stamp = ProposalStamp::derived_for_path(&principal, "ingest-proposal");
+    create_proposal_as(state, principal, req, stamp).await
+}
+
+/// `create_proposal` with the PATH-ASSIGNED stamp explicit — the calling
+/// context states which producer path is filing (kernel-side, never the
+/// request body).
+pub(crate) async fn create_proposal_as(
+    state: Arc<AppState>,
+    principal: Option<crate::auth::Principal>,
     mut req: ProposalRequest,
+    stamp: ProposalStamp,
 ) -> Result<ProposalResponse, HandlerError> {
     let domain = req
         .domain
@@ -147,7 +223,7 @@ pub(crate) async fn create_proposal(
     let filed = tokio::task::spawn_blocking(
         move || -> Result<(ProposalResponse, crate::screen::ScreenResult), HandlerError> {
             let conn = pool.get().map_err(HandlerError::db_down)?;
-            create_proposal_core(&conn, model.as_ref(), req, owner.as_deref())
+            create_proposal_core(&conn, model.as_ref(), req, owner.as_deref(), stamp)
         },
     )
     .await
@@ -241,6 +317,7 @@ pub(crate) fn create_proposal_core(
     model: &dyn crate::embed::Embedder,
     req: ProposalRequest,
     owner: Option<&str>,
+    stamp: ProposalStamp,
 ) -> Result<(ProposalResponse, crate::screen::ScreenResult), HandlerError> {
     let domain = req
         .domain
@@ -455,6 +532,10 @@ pub(crate) fn create_proposal_core(
             // queue scopes by this value (Triage).
             domain: &row_domain,
             title: row_title.as_deref(),
+            // the PATH-ASSIGNED marker: the calling context's stamp, never
+            // the request body (the wire carries no such field).
+            derived_from: stamp.origin.as_str(),
+            producer_ref: stamp.producer_ref.as_deref(),
         },
     )
     .map_err(|e| HandlerError::internal(e.to_string()))?;
@@ -2379,6 +2460,8 @@ pub async fn edit_proposal(
                 qa_note,
                 domain: row_domain,
                 title,
+                derived_from,
+                producer_ref,
             } = row;
 
             // Triage: row-domain re-auth BEFORE the edit CAS — same by-id law
@@ -2483,7 +2566,10 @@ pub async fn edit_proposal(
                 qa_score,
                 domain: row_domain,
                 // the edit verb rewrites content only; the stored title (if
-                // any) keeps riding the view.
+                // any) keeps riding the view — and the provenance marker is
+                // the row's, never the editor's (an edit does not re-author).
+                derived_from,
+                producer_ref,
                 title,
             })
         })

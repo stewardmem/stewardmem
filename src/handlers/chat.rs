@@ -745,10 +745,17 @@ pub async fn chat_turn(
                 // (the proposal core writes the queue, never memory). A
                 // filing refusal (e.g. a principal the Write gate denies)
                 // is logged loud and never poisons the answered turn.
-                match crate::handlers::gate::create_proposal(
+                match crate::handlers::gate::create_proposal_as(
                     abstain_state,
                     abstain_principal,
                     abstain_capture,
+                    // the PATH-ASSIGNED stamp: the user's own
+                    // abstained prompt, filed by the capture path — the
+                    // operator class with the capture reference.
+                    crate::handlers::gate::ProposalStamp::new(
+                        crate::handlers::gate::ProposalOrigin::Operator,
+                        "chat-abstention",
+                    ),
                 )
                 .await
                 {
@@ -1662,13 +1669,14 @@ mod tests {
 
     /// EXACTLY ONE FILING SITE (abstention → proposal): the proposal
     /// core is called from precisely one place in this handler — the
-    /// abstain branch. A second call site (or none) reds.
+    /// abstain branch. A second call site (or none) reds. The needle
+    /// tracks the filing fn's current name (it gained the explicit-stamp
+    /// `_as` suffix when the provenance markers landed) and is assembled
+    /// so THIS test's own text never matches the scan.
     #[test]
     fn the_capture_proposal_has_exactly_one_call_site() {
         let src = include_str!("chat.rs");
-        // The needle is assembled so THIS test's own text never matches
-        // the scan (the file's own pin pattern).
-        let needle = concat!("create_", "proposal(");
+        let needle = concat!("create_", "proposal_as(");
         let count = src.matches(needle).count();
         assert_eq!(
             count, 1,

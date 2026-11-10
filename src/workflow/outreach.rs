@@ -351,8 +351,8 @@ pub(crate) fn propose_campaign(
     });
     conn.execute(
         "INSERT INTO proposals(kind, content, source, authority, observed_at,
-                               novelty, conflict_with, salience, status, created_at)
-         VALUES (?1, ?2, 'agent', NULL, NULL, 1.0, NULL, 0.6, 'pending', ?3)",
+                               novelty, conflict_with, salience, status, created_at, derived_from, producer_ref)
+         VALUES (?1, ?2, 'agent', NULL, NULL, 1.0, NULL, 0.6, 'pending', ?3, 'agent', 'outreach-campaign')",
         params![KIND_CAMPAIGN, content.to_string(), now],
     )?;
     let proposal_id = conn.last_insert_rowid();
@@ -518,8 +518,8 @@ pub(crate) fn schedule_followup(
     });
     conn.execute(
         "INSERT INTO proposals(kind, content, source, authority, observed_at,
-                               novelty, conflict_with, salience, status, created_at)
-         VALUES (?1, ?2, 'agent', NULL, NULL, 1.0, NULL, 0.5, 'pending', ?3)",
+                               novelty, conflict_with, salience, status, created_at, derived_from, producer_ref)
+         VALUES (?1, ?2, 'agent', NULL, NULL, 1.0, NULL, 0.5, 'pending', ?3, 'agent', 'outreach-followup')",
         params![KIND_FOLLOWUP, content.to_string(), now],
     )?;
     let proposal_id = conn.last_insert_rowid();

@@ -184,9 +184,9 @@ pub(crate) fn enqueue_capture_proposals(
             _ => ("gdl_proposal", format!("run {run_id}: capture proposal")),
         };
         wtx.tx().execute(
-            "INSERT INTO proposals(kind, content, source, novelty, salience, status, created_at)
-             VALUES (?1, ?2, 'gdl-capture', 0.5, 0.5, 'pending', ?3)",
-            rusqlite::params![kind, content, now],
+            "INSERT INTO proposals(kind, content, source, novelty, salience, status, created_at, derived_from, producer_ref)
+             VALUES (?1, ?2, 'gdl-capture', 0.5, 0.5, 'pending', ?3, 'agent', ?4)",
+            rusqlite::params![kind, content, now, format!("gdl-run:{run_id}")],
         )?;
         enqueued += 1;
     }

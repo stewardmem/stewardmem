@@ -442,8 +442,8 @@ pub fn import_parcel(conn: &Connection, draft: &ImportDraft) -> Result<ImportOut
         // the queue view.
         conn.execute(
             "INSERT INTO proposals(kind, content, title, source, authority, observed_at,
-                                  novelty, salience, status, created_at, domain)
-             VALUES ('fact', ?1, ?2, ?3, ?4, ?5, 0.5, 0.5, 'pending', ?6, ?7)",
+                                  novelty, salience, status, created_at, domain, derived_from, producer_ref)
+             VALUES ('fact', ?1, ?2, ?3, ?4, ?5, 0.5, 0.5, 'pending', ?6, ?7, 'agent', ?8)",
             params![
                 row.content,
                 row.title,
@@ -455,7 +455,8 @@ pub fn import_parcel(conn: &Connection, draft: &ImportDraft) -> Result<ImportOut
                 row.confidence,
                 row.observed_at,
                 now,
-                target_domain
+                target_domain,
+                format!("parcel:{target_domain}")
             ],
         )
         .map_err(ParcelError::from)?;

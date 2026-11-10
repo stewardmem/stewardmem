@@ -465,9 +465,9 @@ pub(crate) fn capture_on_case_close(
     let content = build_proposal_content(&action, &case_ref, &cited, &inputs);
     tx.execute(
         "INSERT INTO proposals(kind, content, source, authority, observed_at,
-                              novelty, conflict_with, salience, created_at, source_prompt, owner)
-         VALUES (?1, ?2, 'agent', NULL, NULL, 1.0, NULL, ?3, ?4, NULL, NULL)",
-        params![kind, content, salience, now],
+                              novelty, conflict_with, salience, created_at, source_prompt, owner, derived_from, producer_ref)
+         VALUES (?1, ?2, 'agent', NULL, NULL, 1.0, NULL, ?3, ?4, NULL, NULL, 'agent', ?5)",
+        params![kind, content, salience, now, format!("kcs-capture:{case_ref}")],
     )?;
     let proposal_id = tx.last_insert_rowid();
 
@@ -743,9 +743,9 @@ pub(crate) fn propose_translation(
     });
     conn.execute(
         "INSERT INTO proposals(kind, content, source, authority, observed_at,
-                              novelty, conflict_with, salience, created_at, source_prompt, owner)
-         VALUES (?1, ?2, 'human', NULL, NULL, 1.0, NULL, 1.0, ?3, NULL, ?4)",
-        params![KIND_TRANSLATE, content.to_string(), now, draft.translator],
+                              novelty, conflict_with, salience, created_at, source_prompt, owner, derived_from, producer_ref)
+         VALUES (?1, ?2, 'human', NULL, NULL, 1.0, NULL, 1.0, ?3, NULL, ?4, 'operator', ?5)",
+        params![KIND_TRANSLATE, content.to_string(), now, draft.translator, format!("kcs-translate:{}", draft.knowledge_id)],
     )?;
     Ok(conn.last_insert_rowid())
 }
@@ -1081,8 +1081,8 @@ pub(crate) fn file_publish_proposal(
     now: i64,
 ) -> Result<i64, String> {
     conn.execute(
-        "INSERT INTO proposals(kind, content, source, novelty, salience, status, created_at)
-         VALUES (?1, ?2, 'operator', 0.0, 0.5, 'pending', ?3)",
+        "INSERT INTO proposals(kind, content, source, novelty, salience, status, created_at, derived_from, producer_ref)
+         VALUES (?1, ?2, 'operator', 0.0, 0.5, 'pending', ?3, 'operator', 'kcs-publish')",
         params![KIND_PUBLISH, payload_json, now],
     )
     .map_err(|e| format!("insert failed: {e}"))?;

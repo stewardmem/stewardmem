@@ -5038,6 +5038,13 @@ export interface components {
             domain: string;
             /** @description v1.28.53: the optional caller title (autocapture source title, parcel row title); absent for bodies without one. */
             title?: string | null;
+            /**
+             * @description v1.32.34 "MemformStamps": the PATH-ASSIGNED provenance marker — which producer path wrote this proposal, stamped at the producer's INSERT from the CALLING CONTEXT (the request schema carries NO such field, so the wire cannot set it; a caller POSTing `derived_from` is ignored). Closed vocabulary: operator = the operator ingest surfaces (incl. the chat abstention capture — the user's own words); agent = agent/machinery-authored rows (the review-posture agent writes, the GDL workflow artifacts, CRM/delivery/crew/channel machinery); watch = the research watch's lane tick and its synthesis (RW-2); legacy = pre-marker rows (provenance beats guessing). The marker informs the human approval, it never gates it.
+             * @enum {string}
+             */
+            derived_from?: "operator" | "agent" | "watch" | "legacy";
+            /** @description v1.32.34: the kernel-set producer/gate reference (the run, lane, case, or path label the filing context held, e.g. `watch-lane:3`, `gdl-run:42`, `ingest-proposal`); absent where the path carries no stable subject id. */
+            producer_ref?: string | null;
         };
         /** @description One rendered I-PASS handoff section. */
         IpassSection: {

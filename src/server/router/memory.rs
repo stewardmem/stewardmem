@@ -2513,7 +2513,7 @@ pub(crate) async fn research_synthesize(
     // screen, the bounds, the owner attribution, the alerts — never a
     // private memory write.
     let (content, title) = crate::watch::render_synthesis_proposal(&outcome, task, &fetched_at);
-    let filed = crate::handlers::gate::create_proposal(
+    let filed = crate::handlers::gate::create_proposal_as(
         Arc::clone(&state),
         principal.0.clone(),
         crate::handlers::gate::ProposalRequest {
@@ -2527,6 +2527,13 @@ pub(crate) async fn research_synthesize(
             title: Some(title),
             source_prompt: None,
         },
+        // the PATH-ASSIGNED stamp: the provider's synthesized
+        // output is WATCH-authored — the route is one-shot (the task brief
+        // rides the content), so the reference names the path.
+        crate::handlers::gate::ProposalStamp::new(
+            crate::handlers::gate::ProposalOrigin::Watch,
+            "watch-synthesis",
+        ),
     )
     .await?;
 

@@ -2328,6 +2328,12 @@ pub fn run_migration_with_store_dim(
     )?;
 
     // Bumped once per release that changes this function.
+    // v1.32.34 "MemformStamps" (IMPROVE13): proposals.derived_from (the
+    // closed PATH-ASSIGNED provenance vocabulary operator|agent|watch|legacy,
+    // stamped by each producer's INSERT at the kernel side — the wire cannot
+    // set it; pre-marker rows read `legacy`, provenance beats guessing) +
+    // proposals.producer_ref (the nullable producer/gate reference) —
+    // additive guarded ALTERs → 1.32.34.
     // v1.32.33 "HitlTelemetry" (IMPROVE11): the hitl_decision_events table
     // (one append-only row per decided act, written in the decision's own tx)
     // → 1.32.33.
@@ -3404,9 +3410,40 @@ pub fn run_migration_with_store_dim(
         )?;
     }
 
+    // ── v1.32.34 "MemformStamps" (IMPROVE13): the MemForm provenance
+    // stamps. TWO additive guarded ALTERs. The formation interface's
+    // approver gets eyes: `derived_from` is the closed vocabulary
+    // (operator|agent|watch|legacy — the CHECK closes it at the storage
+    // layer, the hitl_decision_events precedent) PATH-ASSIGNED at each
+    // producer's INSERT — the request struct gains NO field, so the wire
+    // cannot set the marker (request-borne provenance is the MemForm
+    // defeat). `producer_ref` carries the kernel-set producer/gate
+    // reference (the run, lane, case, or path label the filing context
+    // held). Pre-marker rows read `legacy` — provenance beats guessing (the
+    // domain-column backfill precedent). The markers INFORM the human
+    // approval; they never gate it (HITL sacred).
+    {
+        let derived_present: bool = db
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('proposals') WHERE name = 'derived_from'",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+            .map(|n| n > 0)
+            .unwrap_or(false);
+        if !derived_present {
+            db.execute(
+                "ALTER TABLE proposals ADD COLUMN derived_from TEXT NOT NULL DEFAULT 'legacy'
+                 CHECK (derived_from IN ('operator','agent','watch','legacy'))",
+                [],
+            )?;
+            db.execute("ALTER TABLE proposals ADD COLUMN producer_ref TEXT", [])?;
+        }
+    }
+
     db.execute(
-        "INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1.32.33')
-         ON CONFLICT(key) DO UPDATE SET value = '1.32.33';",
+        "INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1.32.34')
+         ON CONFLICT(key) DO UPDATE SET value = '1.32.34';",
         [],
     )?;
 

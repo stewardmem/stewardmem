@@ -135,6 +135,20 @@ pub struct ProposalView {
     /// text field; absent for bodies without one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// The PATH-ASSIGNED provenance
+    /// marker — which producer path wrote this proposal, stamped at the
+    /// producer's INSERT from the CALLING CONTEXT (the wire cannot set it;
+    /// `ProposalRequest` carries no such field). Closed vocabulary
+    /// operator|agent|watch|legacy; pre-marker rows read `legacy`. The
+    /// approver SEES "this text was written by the model and passed gate X"
+    /// beside the canonical content — the marker informs the human decision,
+    /// it never gates it (HITL sacred).
+    pub derived_from: String,
+    /// The kernel-set producer/gate reference (the run, lane,
+    /// case, or path label the filing context held). None where the path
+    /// carries no stable subject id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub producer_ref: Option<String>,
 }
 
 /// the review deadline + SLA bands, shared by every
@@ -174,7 +188,8 @@ pub(crate) fn pending_page(
 ) -> Result<Vec<ProposalView>, GateError> {
     const COLS: &str =
         "id, kind, content, source, source_prompt, authority, novelty, conflict_with,
-                        salience, created_at, edited_at, decided_at, owner, qa_note, domain, title";
+                        salience, created_at, edited_at, decided_at, owner, qa_note, domain, title,
+                        derived_from, producer_ref";
     // ?1 = status, ?2 = LIMIT (positions pinned); later predicates bind in
     // insertion order after them.
     let mut predicates: Vec<String> = vec!["status = ?1".to_string()];
@@ -247,6 +262,8 @@ pub(crate) fn pending_page(
                 qa_score,
                 domain: r.get(14)?,
                 title: r.get(15)?,
+                derived_from: r.get(16)?,
+                producer_ref: r.get(17)?,
             })
         })
         .map_err(GateError::from)?
@@ -270,6 +287,18 @@ pub(crate) fn owner_in_filtered(rows: Vec<ProposalView>, manages: &[String]) -> 
         })
         .collect()
 }
+
+/// The PATH-ASSIGNED provenance marker's closed vocabulary (the
+/// provenance-marker schema round). Every producer's INSERT stamps ONE of these
+/// values at the kernel side, derived from the CALLING CONTEXT — the request
+/// struct gains NO field, so the wire cannot set the marker (request-borne
+/// provenance is the MemForm defeat). `legacy` marks pre-marker rows
+/// (provenance beats guessing — the domain-column backfill precedent). The
+/// marker INFORMS the human approval; it never gates it (HITL sacred).
+pub const DERIVED_FROM_VOCABULARY: [&str; 4] = ["operator", "agent", "watch", "legacy"];
+
+/// The marker's reference bound: a kernel-set label, never caller text.
+pub const MAX_PRODUCER_REF: usize = 128;
 
 /// A candidate awaiting review, exactly as the creation insert persists it.
 /// The injection screen + bounds + kind validation stay handler-side (they
@@ -296,18 +325,41 @@ pub(crate) struct NewProposal<'a> {
     /// the caller's optional title (autocapture source title, parcel row
     /// title), stored verbatim; the read seam sanitizes at emission.
     pub title: Option<&'a str>,
+    /// the PATH-ASSIGNED provenance marker — a [`DERIVED_FROM_VOCABULARY`]
+    /// value the CALLING CONTEXT selects (never the request body). The
+    /// vocabulary is re-checked here (fail-closed, the origin_context
+    /// precedent: an unknown value is an error, never a silent store).
+    pub derived_from: &'a str,
+    /// the kernel-set producer/gate reference (the run, lane, case, or path
+    /// label the filing context held), bounded [`MAX_PRODUCER_REF`].
+    pub producer_ref: Option<&'a str>,
 }
 
 /// Queue a scored candidate: the `proposals` insert + its `proposal_pending`
 /// audit row (the evidence lands inside whatever tx context the caller
 /// holds — audit-per-write).
 pub(crate) fn insert_proposal(conn: &Connection, p: &NewProposal<'_>) -> Result<i64, GateError> {
+    // the closed vocabulary, fail-closed (an unknown marker is a producer
+    // bug, never a silent store — the origin_context precedent)
+    if !DERIVED_FROM_VOCABULARY.contains(&p.derived_from) {
+        return Err(GateError::Database(format!(
+            "derived_from vocabulary violation: {:?} (allowed: {DERIVED_FROM_VOCABULARY:?})",
+            p.derived_from
+        )));
+    }
+    if let Some(r) = p.producer_ref
+        && r.len() > MAX_PRODUCER_REF
+    {
+        return Err(GateError::Database(format!(
+            "producer_ref exceeds {MAX_PRODUCER_REF} bytes"
+        )));
+    }
     let id: i64 = conn
         .query_row(
             "INSERT INTO proposals(kind, content, title, source, authority, observed_at,
                                novelty, conflict_with, salience, created_at, source_prompt,
-                               owner, lint_json, domain)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                               owner, lint_json, domain, derived_from, producer_ref)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
          RETURNING id",
             rusqlite::params![
                 p.kind,
@@ -324,6 +376,8 @@ pub(crate) fn insert_proposal(conn: &Connection, p: &NewProposal<'_>) -> Result<
                 p.owner,
                 p.lint_json,
                 p.domain,
+                p.derived_from,
+                p.producer_ref,
             ],
             |r| r.get(0),
         )
@@ -541,11 +595,16 @@ pub(crate) struct PendingEditRow {
     pub qa_note: Option<String>,
     pub domain: String,
     pub title: Option<String>,
+    /// The PATH-ASSIGNED provenance marker + the
+    /// producer/gate reference — the edit response's view renders the same
+    /// marker the list served (an edit never rewrites who filed it).
+    pub derived_from: String,
+    pub producer_ref: Option<String>,
 }
 
 pub(crate) fn pending_edit_row(conn: &Connection, id: i64) -> Option<PendingEditRow> {
     conn.query_row(
-        "SELECT kind, content, source, source_prompt, authority, created_at, owner, qa_note, domain, title
+        "SELECT kind, content, source, source_prompt, authority, created_at, owner, qa_note, domain, title, derived_from, producer_ref
          FROM proposals WHERE id = ?1 AND status = 'pending'",
         params![id],
         |r| {
@@ -560,6 +619,8 @@ pub(crate) fn pending_edit_row(conn: &Connection, id: i64) -> Option<PendingEdit
                 qa_note: r.get(7)?,
                 domain: r.get(8)?,
                 title: r.get(9)?,
+                derived_from: r.get(10)?,
+                producer_ref: r.get(11)?,
             })
         },
     )
@@ -671,8 +732,8 @@ pub(crate) fn insert_decision_run_proposal(
 ) -> Result<i64, GateError> {
     let id: i64 = conn
         .query_row(
-            "INSERT INTO proposals(kind, content, novelty, salience, created_at, owner, domain, decision_run_ref)
-             VALUES (?1, ?2, 0, 0, ?3, ?4, ?5, ?6)
+            "INSERT INTO proposals(kind, content, novelty, salience, created_at, owner, domain, decision_run_ref, derived_from, producer_ref)
+             VALUES (?1, ?2, 0, 0, ?3, ?4, ?5, ?6, 'agent', ?6)
              RETURNING id",
             rusqlite::params![
                 DECISION_REVIEW_PROPOSAL_KIND,
@@ -1157,6 +1218,8 @@ mod tests {
                 lint_json: None,
                 domain: "acme-us",
                 title: Some("ACME outage"),
+                derived_from: "agent",
+                producer_ref: Some("test-fixture"),
             },
         )
         .expect("acme insert");

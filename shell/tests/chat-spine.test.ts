@@ -1066,7 +1066,11 @@ describe('the envelope law', () => {
 		// AND AGAIN (2026-11-06, the dependency-update round): in-range
 		// bumps across the shell tree (no surface change) → 235,144
 		// gzipped (+1,944): named act, midpoint moves, register carries it.
-		const R0_BASELINE = 235_144;
+		// AND AGAIN (2026-11-11, the provenance-marker round): the queue
+		// render's derived_from badge + the producer reference line + 5
+		// message keys × five locales → 236,342 gzipped (+1,198): named act,
+		// midpoint moves, register carries it.
+		const R0_BASELINE = 236_342;
 		const BAND = 512;
 		expect(
 			Math.abs(total - R0_BASELINE),

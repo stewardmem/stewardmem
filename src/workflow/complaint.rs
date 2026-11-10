@@ -315,9 +315,9 @@ pub(crate) fn propose_remedy(
     let salience = if conflicts.is_empty() { 0.5 } else { 0.9 };
     conn.execute(
         "INSERT INTO proposals(kind, content, source, authority, observed_at,
-                              novelty, conflict_with, salience, status, created_at)
-         VALUES (?1, ?2, 'agent', NULL, NULL, 1.0, NULL, ?3, 'pending', ?4)",
-        params![KIND_REMEDY, content.to_string(), salience, now],
+                              novelty, conflict_with, salience, status, created_at, derived_from, producer_ref)
+         VALUES (?1, ?2, 'agent', NULL, NULL, 1.0, NULL, ?3, 'pending', ?4, 'agent', ?5)",
+        params![KIND_REMEDY, content.to_string(), salience, now, format!("complaint-rca:{}", draft.run_id)],
     )?;
     let proposal_id = conn.last_insert_rowid();
     super::audit_write(
@@ -438,9 +438,9 @@ pub(crate) fn apply_remedy_approval(
                 serde_json::json!("over role-tier cap — one level up, packet attached");
             conn.execute(
                 "INSERT INTO proposals(kind, content, source, authority, observed_at,
-                                       novelty, conflict_with, salience, status, created_at)
-                 VALUES (?1, ?2, 'agent', NULL, NULL, 1.0, NULL, 0.9, 'pending', ?3)",
-                params![KIND_REMEDY, packet.to_string(), now],
+                                       novelty, conflict_with, salience, status, created_at, derived_from, producer_ref)
+                 VALUES (?1, ?2, 'agent', NULL, NULL, 1.0, NULL, 0.9, 'pending', ?3, 'agent', ?4)",
+                params![KIND_REMEDY, packet.to_string(), now, format!("complaint-rca:{}", run_id)],
             )?;
             let esc_id = conn.last_insert_rowid();
             super::audit_write(

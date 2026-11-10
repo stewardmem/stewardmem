@@ -526,5 +526,10 @@
   "settings.import.reverted.line": "The import was undone; the memories are marked deleted.",
   "settings.import.refused": "The import was refused: {reason}",
   "settings.import.inert": "Nothing to import from in this edition.",
-  "settings.import.progress": "Importing…"
+  "settings.import.progress": "Importing…",
+  "review.provenance.operator": "Filed by the operator.",
+  "review.provenance.agent": "Written by the model (agent) — gate-checked, awaiting your decision.",
+  "review.provenance.watch": "Written by the research watch.",
+  "review.provenance.legacy": "Provenance unknown — created before provenance markers existed.",
+  "review.provenance.ref": "Producer reference: {ref}"
 }

@@ -1271,8 +1271,8 @@ pub(crate) fn advance(conn: &mut Connection, req: &Advance<'_>) -> Result<Advanc
             .tx()
             .query_row(
                 "INSERT INTO proposals(kind, content, title, source, novelty, salience, \
-                                    created_at, owner, domain, decision_run_ref)
-                 VALUES (?1, ?2, ?3, ?4, 0, 0, ?5, ?6, ?7, ?8)
+                                    created_at, owner, domain, decision_run_ref, derived_from, producer_ref)
+                 VALUES (?1, ?2, ?3, ?4, 0, 0, ?5, ?6, ?7, ?8, 'agent', ?8)
                  RETURNING id",
                 params![
                     ARTIFACT_PROPOSAL_KIND,

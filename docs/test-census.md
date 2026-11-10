@@ -37,12 +37,12 @@ that applies them, not in prose that can drift from it.
 
 | Class | Tests | Share |
 |---|---:|---:|
-| `behavioral_pin` | 3482 | 85.3% |
-| `structural` | 453 | 11.1% |
-| `control` | 72 | 1.8% |
+| `behavioral_pin` | 3486 | 85.0% |
+| `structural` | 462 | 11.3% |
+| `control` | 75 | 1.8% |
 | `residual_documentation` | 65 | 1.6% |
 | `unclassified` | 11 | 0.3% |
-| **total** | **4083** | |
+| **total** | **4099** | |
 
 Scope: `src/` + `tests/`, the two trees the badge's count comes from.
 The census reads HIGHER than the README badge for two reasons, both

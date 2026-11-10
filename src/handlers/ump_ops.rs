@@ -129,7 +129,7 @@ pub async fn remember(
     // proposes instead of inserting; UMP writes are agent-originated by
     // definition, so the proposal carries source `agent`.
     if crate::handlers::effective_write_posture(&principal.0) == "review" {
-        let p = super::gate::create_proposal(
+        let p = super::gate::create_proposal_as(
             state,
             principal.0.clone(),
             super::gate::ProposalRequest {
@@ -143,6 +143,10 @@ pub async fn remember(
                 source_prompt: None,
                 origin_context: None,
             },
+            // the PATH-ASSIGNED stamp: UMP writes are
+            // agent-originated BY DEFINITION (the seatbelt law above) —
+            // the origin class is the code's own, not the caller's claim.
+            super::gate::ProposalStamp::new(super::gate::ProposalOrigin::Agent, "ump-write"),
         )
         .await?;
         return Err(HandlerError::accepted(
@@ -702,7 +706,7 @@ pub async fn revise(
     // of inserting — supersession is deferred to approval time (the approve
     // path already handles it). The old chunk stays current until then.
     if crate::handlers::effective_write_posture(&principal.0) == "review" {
-        let p = super::gate::create_proposal(
+        let p = super::gate::create_proposal_as(
             state,
             principal.0.clone(),
             super::gate::ProposalRequest {
@@ -718,6 +722,7 @@ pub async fn revise(
                 // proposal badge shows the capture the revision came from.
                 origin_context: new_req.origin_context,
             },
+            super::gate::ProposalStamp::new(super::gate::ProposalOrigin::Agent, "ump-revise"),
         )
         .await?;
         return Err(HandlerError::accepted(

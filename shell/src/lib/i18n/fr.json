@@ -526,5 +526,10 @@
   "settings.import.reverted.line": "L'import a été annulé ; les souvenirs sont marqués supprimés.",
   "settings.import.refused": "L'import a été refusé : {reason}",
   "settings.import.inert": "Rien à importer dans cette édition.",
-  "settings.import.progress": "Importation…"
+  "settings.import.progress": "Importation…",
+  "review.provenance.operator": "Déposé par l'opérateur.",
+  "review.provenance.agent": "Rédigé par le modèle (agent) — contrôlé, en attente de votre décision.",
+  "review.provenance.watch": "Rédigé par la veille de recherche.",
+  "review.provenance.legacy": "Provenance inconnue — créé avant l'existence des marqueurs de provenance.",
+  "review.provenance.ref": "Référence du producteur : {ref}"
 }

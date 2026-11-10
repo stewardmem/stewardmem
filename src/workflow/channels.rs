@@ -1797,9 +1797,9 @@ pub(crate) fn file_user_map_proposal(
     now: i64,
 ) -> rusqlite::Result<i64> {
     tx.query_row(
-        "INSERT INTO proposals(kind, content, novelty, salience, created_at, owner)
-         VALUES (?1, ?2, 0.5, 0.5, ?3, ?4) RETURNING id",
-        params![PROP_KIND_USER_MAP, content, now, owner],
+        "INSERT INTO proposals(kind, content, novelty, salience, created_at, owner, derived_from, producer_ref)
+         VALUES (?1, ?2, 0.5, 0.5, ?3, ?4, 'agent', ?5) RETURNING id",
+        params![PROP_KIND_USER_MAP, content, now, owner, format!("channel-user-map:{owner}")],
         |r| r.get(0),
     )
 }
