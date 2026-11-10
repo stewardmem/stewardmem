@@ -97,6 +97,11 @@ fn stamped_application_date() -> String {
 /// moves — tracked in docs, not in code): Annex III high-risk obligations
 /// apply from 2 Dec 2027, Annex I (embedded in regulated products) from
 /// 2 Aug 2028. https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+/// CORRECTED 2026-11-10 (plan 12): those horizons now live IN CODE as
+/// `AI_ACT_HIGH_RISK_ANNEX_III` and `AI_ACT_ANNEX_I_EMBEDDED` (below), so
+/// the "tracked in docs, not in code" half of this sentence no longer
+/// holds; the recital-40 note stays as provenance, and the new consts
+/// carry the Service Desk timeline (the Omnibus timetable) as their source.
 const AI_ACT_ART50_MARKING: (i64, u32, u32) = deadline(2026, 12, 2);
 /// AI Act GENERAL APPLICATION (Art 113): Art 50 transparency duties apply
 /// from 2 Aug 2026 for systems placed on the market from that date — this
@@ -107,6 +112,27 @@ const AI_ACT_ART50_MARKING: (i64, u32, u32) = deadline(2026, 12, 2);
 /// 2026-09-12 (artificialintelligenceact.eu/article/50: "Comes into force
 /// 2 August 2026, according to Article 113").
 const AI_ACT_APPLICATION: (i64, u32, u32) = deadline(2026, 8, 2);
+/// AI Act Annex III high-risk obligations — DEFERRED to 2 Dec 2027 by the
+/// Digital Omnibus on AI (provisional agreement 2026-05-07, Council final
+/// approval 2026-06-29; the amending regulation (EU) 2026/1744 this file's
+/// Art 50 rows already pin). WATCH row by construction: until the date this
+/// const is a calendar record, not a duty claim — the scoping register's
+/// Decision 1 says the component as released is not placed on the market as
+/// high-risk, and this row records the REAL calendar so a future re-scope
+/// inherits the deferral instead of the stale phase-in.
+/// Source: the official EU AI Act Service Desk timeline, probed 200
+/// 2026-11-10 —
+/// https://ai-act-service-desk.ec.europa.eu/en/ai-act/timeline/timeline-implementation-eu-ai-act
+/// — recorded with the decision in docs/AI_ACT_SCOPING_REGISTER_2026-11-10.md.
+const AI_ACT_HIGH_RISK_ANNEX_III: (i64, u32, u32) = deadline(2027, 12, 2);
+/// AI Act Annex I high-risk obligations (high-risk systems EMBEDDED in
+/// regulated products) — 2 Aug 2028 per the same Omnibus timetable.
+/// WATCH row, same posture as [`AI_ACT_HIGH_RISK_ANNEX_III`]: a calendar
+/// record, never a duty claim.
+/// Source: the Service Desk timeline, probed 200 2026-11-10 (URL on the
+/// const above); docs/AI_ACT_SCOPING_REGISTER_2026-11-10.md (the calendar
+/// table).
+const AI_ACT_ANNEX_I_EMBEDDED: (i64, u32, u32) = deadline(2028, 8, 2);
 /// NIST IR 8547 / OMB M-26-15 / CNSA 2.0: PQC key-establishment across
 /// national security systems by 31 Dec 2030 (signatures 2031) — our seam is
 /// the crypto inventory + algorithm-agility doc (the Enterprise Line's
@@ -304,6 +330,42 @@ fn ai_act_application_clock_recorded() {
         "docs/compliance.md must state BOTH AI Act dates: general application \
          (2026-08-02) and the legacy-grace horizon (2026-12-02) — December alone \
          misreads as the start"
+    );
+}
+
+fn stamped_ai_act_deferral_dates() -> (String, String) {
+    let (y, m, d) = AI_ACT_HIGH_RISK_ANNEX_III;
+    let annex_iii = format!("{y:04}-{m:02}-{d:02}");
+    let (y, m, d) = AI_ACT_ANNEX_I_EMBEDDED;
+    (annex_iii, format!("{y:04}-{m:02}-{d:02}"))
+}
+
+/// The Omnibus DEFERRAL rows stay named, ordered, and stamped (the
+/// integration pins in tests/ai_act_pins.rs parse these consts from the
+/// source; this in-module pin names them from Rust so a rename or re-shape
+/// reds HERE too and the consts are never dead code): the four-date
+/// calendar stays ordered — general application, the transitional end, the
+/// Annex III deferral, Annex I — and the register the consts name carries
+/// the same dates (the in-module half of the lockstep).
+#[test]
+fn ai_act_deferral_rows_stay_ordered_and_stamped() {
+    assert!(
+        AI_ACT_APPLICATION < AI_ACT_ART50_MARKING
+            && AI_ACT_ART50_MARKING < AI_ACT_HIGH_RISK_ANNEX_III
+            && AI_ACT_HIGH_RISK_ANNEX_III < AI_ACT_ANNEX_I_EMBEDDED,
+        "the four-date calendar must stay ordered — an inversion is a \
+         transcription error"
+    );
+    let (annex_iii, annex_i) = stamped_ai_act_deferral_dates();
+    assert_eq!(annex_iii, "2027-12-02");
+    assert_eq!(annex_i, "2028-08-02");
+    let scoping = doc("docs/AI_ACT_SCOPING_REGISTER_2026-11-10.md");
+    assert!(
+        scoping.contains(&annex_iii) && scoping.contains(&annex_i),
+        "the scoping register must carry the deferral dates the consts pin \
+         ({annex_iii} / {annex_i}) — the calendar-as-code and the record are \
+         one calendar; either side moving alone is the drift the lockstep \
+         kills"
     );
 }
 
