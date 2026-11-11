@@ -367,17 +367,15 @@ pub(crate) fn pending_page(
 /// The GRAD cohort count for ONE row's producer/gate reference (the edit
 /// response's view). The core owns the SQL; the handler stays an adapter.
 pub(crate) fn shared_pending_count(conn: &Connection, producer_ref: Option<&str>) -> u32 {
-    match producer_ref {
-        Some(r) => conn
-            .query_row(
-                "SELECT COUNT(*) FROM proposals WHERE status = 'pending' AND producer_ref = ?1",
-                params![r],
-                |row| row.get::<_, i64>(0),
-            )
-            .unwrap_or(1)
-            .clamp(0, u32::MAX as i64) as u32,
-        None => 1,
-    }
+    let Some(r) = producer_ref else { return 1 };
+    conn.query_row(
+        "SELECT COUNT(*) FROM proposals WHERE status = 'pending' AND producer_ref = ?1",
+        params![r],
+        |row| row.get::<_, i64>(0),
+    )
+    .unwrap_or(1)
+    .clamp(0, u32::MAX as i64) as u32
+}
 }
 
 /// narrow a proposal page to the owners a supervisor
