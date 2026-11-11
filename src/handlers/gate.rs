@@ -183,10 +183,36 @@ impl ProposalStamp {
 /// the HITL ledger), never an auto-reversal of the appealed bytes.
 pub const PROP_KIND_APPEAL: &str = "appeal";
 
+/// The customer's OTHER propose-door kind (IMPROVE15): a DSAR/erase REQUEST
+/// filed through the portal lands as a proposal the operator disposes — the
+/// propose/dispose law extends to the customer, and the disposal (running
+/// the real DSAR/erasure machinery) is the operator's separate, digest-bound
+/// act. PROPOSAL-ONLY like the appeal: a customer request can never be
+/// promoted into knowledge; approving one is the DECISION that the operator
+/// will run the requested machinery (the operator's own Admin surfaces do
+/// the running — nothing auto-runs, nothing auto-reverses).
+pub const PROP_KIND_CUSTOMER_REQUEST: &str = "customer_request";
+
+/// The customer request's action vocabulary (closed): what the customer
+/// asks the operator to run.
+pub const CUSTOMER_REQUEST_ACTIONS: &[&str] = &["dsar", "erase"];
+
 /// The appeal's source grammar: `appeal:{review_digest}` — the DIGEST LAW:
 /// you appeal the bytes that were shown (the digest the journey rendered
 /// beside the decision), optionally `@case:{id}` when the appeal names one
 /// case. Anything else refuses BY NAME (`appeal_digest_required`).
+/// The customer request's source grammar: `customer-request:{action}` —
+/// the closed action vocabulary (`dsar` | `erase`). Anything else refuses
+/// BY NAME (`customer_request_action_invalid`).
+pub fn parse_customer_request_source(source: &str) -> Option<&str> {
+    let action = source.strip_prefix("customer-request:")?;
+    if CUSTOMER_REQUEST_ACTIONS.contains(&action) {
+        Some(action)
+    } else {
+        None
+    }
+}
+
 pub fn parse_appeal_source(source: &str) -> Option<(String, Option<i64>)> {
     let rest = source.strip_prefix("appeal:")?;
     let (digest, case) = match rest.split_once("@case:") {
@@ -474,9 +500,11 @@ pub(crate) fn create_proposal_core(
             "input contains suspicious patterns",
         ));
     }
-    // THE APPEAL'S KIND, resolved once at the top of the core: the source
-    // bound, the digest law and the kind validation all branch on it.
+    // THE CUSTOMER DOOR KINDS, resolved once at the top of the core: the
+    // source bound, the digest/action laws and the kind validation all
+    // branch on them.
     let is_appeal = req.kind == PROP_KIND_APPEAL;
+    let is_customer_request = req.kind == PROP_KIND_CUSTOMER_REQUEST;
     // run the injection screen on the proposal
     // content + title. `Reject` → 400, never persisted (the review queue only ever
     // sees `clean`/`quarantine`); `Quarantine` → stored + badged so the
@@ -495,6 +523,15 @@ pub(crate) fn create_proposal_core(
     // this domain answers refuses too — you appeal bytes that were shown and
     // disposed, not bytes you name into existence. The reason (the content)
     // is already screened + bounded above like every untrusted text.
+    if is_customer_request {
+        let source = req.source.as_deref().unwrap_or("");
+        if parse_customer_request_source(source).is_none() {
+            return Err(HandlerError::bad_request(
+                "customer_request_action_invalid",
+                "a customer request must carry its action (source = `customer-request:dsar` or `customer-request:erase`)",
+            ));
+        }
+    }
     if is_appeal {
         let source = req.source.as_deref().unwrap_or("");
         let Some((digest, _case)) = parse_appeal_source(source) else {
@@ -583,6 +620,7 @@ pub(crate) fn create_proposal_core(
         && !is_channel_template
         && !is_registry_lifecycle
         && !is_appeal
+        && !is_customer_request
         && !crate::procedural::MemoryKind::is_strict_valid(&req.kind)
     {
         return Err(HandlerError::bad_request(
@@ -1105,7 +1143,7 @@ pub async fn approve_proposal(
         // (ALERT_KIND_APPEAL — the operator's own webhook, never a new
         // channel): an appeal without a clock is a suggestion; this makes it
         // a commitment the chain can prove was kept or missed.
-        if kind == PROP_KIND_APPEAL {
+        if kind == PROP_KIND_APPEAL || kind == PROP_KIND_CUSTOMER_REQUEST {
             let now_ts = chrono::Utc::now().timestamp();
             let appeal_created_at: i64 = tx
                 .query_row(
@@ -1128,37 +1166,45 @@ pub async fn approve_proposal(
                     "proposal already decided by a concurrent action",
                 ));
             }
-            let clock = crate::workflow::journey::AppealClock::kept_or_missed(
-                appeal_created_at,
-                Some(now_ts),
-                now_ts,
-            );
-            let clock_word = match clock {
-                crate::workflow::journey::AppealClock::Kept
-                | crate::workflow::journey::AppealClock::Pending => "kept",
-                crate::workflow::journey::AppealClock::Missed
-                | crate::workflow::journey::AppealClock::MissedOpen => "missed",
-            };
-            if clock_word == "missed" {
-                crate::alert::publish(
-                    &alert_state,
-                    crate::alert::ALERT_KIND_APPEAL,
-                    serde_json::json!({
-                        "proposal_id": id,
-                        "appeal_clock": "missed",
-                        "deadline": crate::workflow::journey::appeal_clock_deadline(appeal_created_at),
-                        "decided_at": now_ts,
-                        "domain": row_domain,
-                    }),
+            // THE CLOCK IS THE APPEAL'S OWN LAW (plan §8.3): a customer
+            // request carries no declared review clock — the dispose is the
+            // operator's ordinary review act.
+            let clock_word = if kind == PROP_KIND_APPEAL {
+                let clock = crate::workflow::journey::AppealClock::kept_or_missed(
+                    appeal_created_at,
+                    Some(now_ts),
+                    now_ts,
                 );
-            }
+                let word = match clock {
+                    crate::workflow::journey::AppealClock::Kept
+                    | crate::workflow::journey::AppealClock::Pending => "kept",
+                    crate::workflow::journey::AppealClock::Missed
+                    | crate::workflow::journey::AppealClock::MissedOpen => "missed",
+                };
+                if word == "missed" {
+                    crate::alert::publish(
+                        &alert_state,
+                        crate::alert::ALERT_KIND_APPEAL,
+                        serde_json::json!({
+                            "proposal_id": id,
+                            "appeal_clock": "missed",
+                            "deadline": crate::workflow::journey::appeal_clock_deadline(appeal_created_at),
+                            "decided_at": now_ts,
+                            "domain": row_domain,
+                        }),
+                    );
+                }
+                word
+            } else {
+                "no_clock"
+            };
             crate::audit::record(
                 &tx,
                 crate::audit::AuditKind::Reconcile,
                 principal_to_owner(&principal.0).as_deref().unwrap_or("api"),
                 &format!("proposal:{id}"),
                 crate::audit::AuditStatus::Ok,
-                &format!("appeal_disposed:clock_{clock_word}"),
+                &format!("customer_disposal:{kind}:clock_{clock_word}"),
             );
             tx.commit()
                 .map_err(|e| HandlerError::internal(format!("commit failed: {e}")))?;

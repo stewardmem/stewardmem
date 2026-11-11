@@ -1735,6 +1735,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clients/{name}/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The customer's DSAR/erase request door (IMPROVE15)
+         * @description A DSAR/erase REQUEST filed through the portal lands as a proposal the operator disposes (the propose/dispose law extends to the customer) — stamped `customer` PATH-SIDE (the wire cannot set the marker; producer_ref = portal:{client}). The journey's OWN authz law: the client's OWN principal + the operator only; everyone else answers the existence-blind 404. The action vocabulary is closed (dsar | erase); anything else refuses BY NAME. Nothing auto-runs: the disposal is the operator's separate, digest-bound act on their own Admin surfaces.
+         */
+        post: operations["clientRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/retention/report": {
         parameters: {
             query?: never;
@@ -9729,6 +9749,61 @@ export interface operations {
                 content?: never;
             };
             /** @description Existence-blind refusal (unknown client, non-owned client) · `appeal_target_unknown` (no decided decision in the domain carries the digest) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client is not active (archived) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    clientRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description The requested act.
+                     * @enum {string}
+                     */
+                    action: "dsar" | "erase";
+                    /** @description The customer's free-text detail (bounded, screened). */
+                    detail?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The request filed as a pending proposal */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description `customer_request_action_invalid` (outside dsar/erase) · the screen refused the detail */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Existence-blind refusal (unknown client, non-owned client) */
             404: {
                 headers: {
                     [name: string]: unknown;

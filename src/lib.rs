@@ -66,6 +66,12 @@ pub mod ump_integrity;
 // binaries never duplicate an `unsafe` block (the pre-hardening state).
 pub mod register_sqlite_vec;
 
+// The thin customer portal's logic (IMPROVE15): the state, the in-process
+// sessions, the metadata-only offline cache and the templates — exposed so
+// the portal pins test the law, not the wiring. The binary
+// (`src/bin/portal.rs`) is the axum routing over this module.
+pub mod portal;
+
 // The one invisible-Unicode strip boundary: shared by the
 // MCP binary + `brain` CLI so every agent-facing surface closes the same
 // bidi/zero-width smuggling class as the server screen. The server binary's

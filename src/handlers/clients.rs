@@ -503,6 +503,96 @@ pub async fn client_appeal(
 /// appeal.
 pub const MAX_APPEAL_REASON: usize = 2_000;
 
+/// `POST /clients/{name}/requests` — the customer's OTHER propose door
+/// (IMPROVE15): a DSAR/erase REQUEST filed through the portal lands as a
+/// proposal the operator disposes (the propose/dispose law extends to the
+/// customer; the disposal — running the real machinery — is the operator's
+/// separate act on their own Admin surfaces; nothing auto-runs, nothing
+/// auto-reverses). The route stamps the proposal `customer` PATH-SIDE with
+/// `producer_ref` = `portal:{client}` (the wire cannot set the marker), and
+/// carries the journey's OWN authz law: the client's OWN principal + the
+/// operator only; everyone else the existence-blind 404. The action
+/// vocabulary is closed (dsar | erase); anything else refuses BY NAME.
+#[derive(Debug, Deserialize)]
+pub struct ClientRequest {
+    /// the requested act: `dsar` (run my data request) | `erase` (erase my
+    /// data) — the closed vocabulary.
+    pub action: String,
+    /// the customer's free-text detail, bounded + screened like every
+    /// untrusted text.
+    #[serde(default)]
+    pub detail: String,
+}
+
+pub async fn client_request(
+    State(state): State<Arc<AppState>>,
+    principal: OptPrincipal,
+    Path(name): Path<String>,
+    Json(req): Json<ClientRequest>,
+) -> Result<Json<serde_json::Value>, HandlerError> {
+    let operator = super::authorize(&principal.0, crate::auth::Action::Admin, "", "global").is_ok();
+    let pool = super::resolve_domain_pool(&state.registry, None)?;
+    let pool_for = pool.clone();
+    let key = name.trim().to_ascii_lowercase();
+    let key_for = key.clone();
+    let principal_for = principal.0.clone();
+    let resolve = tokio::task::spawn_blocking(
+        move || -> Result<crate::service::register::Client, HandlerError> {
+            let conn = pool_for.get().map_err(HandlerError::db_down)?;
+            Ok(crate::service::register::by_name(&conn, &key_for)?
+                .ok_or(RegisterError::UnknownClient)?)
+        },
+    )
+    .await
+    .map_err(|e| HandlerError::internal(format!("task join error: {e}")))??;
+    let client = resolve;
+    if !operator {
+        let own = principal_for.as_ref().is_some_and(|p| {
+            let mut domains: Vec<String> = p.scopes.iter().map(|s| s.domain.clone()).collect();
+            domains.sort();
+            domains.dedup();
+            domains.len() == 1 && domains[0] == client.domain
+        });
+        if !own {
+            return Err(HandlerError::not_found("client not found"));
+        }
+    }
+    if client.status != "active" {
+        return Err(RegisterError::ClientArchived.into());
+    }
+    let action = req.action.trim().to_ascii_lowercase();
+    if !crate::handlers::gate::CUSTOMER_REQUEST_ACTIONS.contains(&action.as_str()) {
+        return Err(HandlerError::bad_request(
+            "customer_request_action_invalid",
+            "action must be one of: dsar, erase",
+        ));
+    }
+    let stamp = crate::handlers::gate::ProposalStamp::new(
+        crate::handlers::gate::ProposalOrigin::Customer,
+        format!("portal:{key}"),
+    );
+    let preq = crate::handlers::gate::ProposalRequest {
+        content: req.detail.clone(),
+        kind: crate::handlers::gate::PROP_KIND_CUSTOMER_REQUEST.to_string(),
+        source: Some(format!("customer-request:{action}")),
+        origin_context: None,
+        authority: None,
+        observed_at: None,
+        domain: Some(client.domain.clone()),
+        title: None,
+        source_prompt: None,
+    };
+    let resp =
+        crate::handlers::gate::file_appeal_proposal(state, principal_for, preq, stamp).await?;
+    Ok(Json(serde_json::json!({
+        "proposal_id": resp.id,
+        "client": key,
+        "action": action,
+        "status": "pending",
+        "received": true,
+    })))
+}
+
 /// `GET /clients/{name}/journey?case=` — the customer journey (IMPROVE15):
 /// the client's cases projected from the chain through the PURE
 /// [`crate::workflow::journey`] projection (the projection law: same chain

@@ -298,6 +298,12 @@ base64 = "0.23.1"
 # one feature on the EXISTING pinned dep, not a new dependency.
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json", "blocking", "stream"] }
 
+# The thin customer portal's templates (IMPROVE15): askama 0.13 compiles the
+# templates at build time; `render()` returns a String the handler wraps in
+# `axum::response::Html` (v0.13+ removed the integration crates — the
+# Context7-decided stack, 2026-11-12).
+askama = "0.13"
+
 # UMP 1.0 integrity + identity (v1.17.3 "UMP Rollout", spec §2.8/§6.1/§6.2):
 # blake3 is the spec-MANDATED content hash; bs58 is did:key base58btc
 # (multicodec 0xed prefix, §5.1); tokio-stream adapts the broadcast receiver

@@ -368,6 +368,7 @@ fn rows() -> Vec<(&'static str, String, &'static str, &'static str)> {
                 "POST",
                 r#"{"review_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","reason":"matrix"}"#,
             ),
+            "/clients/{name}/requests" => ("POST", r#"{"action":"dsar","detail":"matrix"}"#),
             "/clients/{name}/end" => ("POST", r#"{"dataset":"matrix"}"#),
             "/sources/reconcile" => (
                 "POST",
@@ -725,6 +726,7 @@ const PRE_GATE_404: &[&str] = &[
     // clients exist.
     "/clients/{name}/journey",
     "/clients/{name}/appeals",
+    "/clients/{name}/requests",
 ];
 /// The legacy soft-deny surface: these routes predate the 403 vocabulary and
 /// deliberately answer their deny with a 200 body so old clients keep

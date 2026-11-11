@@ -74,6 +74,12 @@ pub(crate) fn router() -> Router<Arc<AppState>> {
             "/clients/{name}/appeals",
             post(handlers::clients::client_appeal),
         )
+        // the customer's OTHER propose door (IMPROVE15): DSAR/erase REQUESTS
+        // file as proposals — the operator disposes, nothing auto-runs.
+        .route(
+            "/clients/{name}/requests",
+            post(handlers::clients::client_request),
+        )
         // source lifecycle. `reconcile` retires active sources
         // of a kind whose URI is no longer in the live set (a vault delete or
         // rename); `delete /sources/{id}` retires a single source explicitly.

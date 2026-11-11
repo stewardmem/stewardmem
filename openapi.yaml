@@ -3574,6 +3574,48 @@ paths:
           description: 'Existence-blind refusal (unknown client, non-owned client) · `appeal_target_unknown` (no decided decision in the domain carries the digest)'
         "409":
           description: Client is not active (archived)
+  /clients/{name}/requests:
+    post:
+      summary: The customer's DSAR/erase request door (IMPROVE15)
+      operationId: clientRequest
+      description: >
+        A DSAR/erase REQUEST filed through the portal lands as a proposal the
+        operator disposes (the propose/dispose law extends to the customer) —
+        stamped `customer` PATH-SIDE (the wire cannot set the marker;
+        producer_ref = portal:{client}). The journey's OWN authz law: the
+        client's OWN principal + the operator only; everyone else answers the
+        existence-blind 404. The action vocabulary is closed (dsar | erase);
+        anything else refuses BY NAME. Nothing auto-runs: the disposal is the
+        operator's separate, digest-bound act on their own Admin surfaces.
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [dsar, erase], description: "The requested act." }
+                detail: { type: string, description: "The customer's free-text detail (bounded, screened)." }
+      responses:
+        "200":
+          description: The request filed as a pending proposal
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {"proposal_id": 91, "client": "acme-us", "action": "dsar", "status": "pending", "received": true}
+        "400":
+          description: '`customer_request_action_invalid` (outside dsar/erase) · the screen refused the detail'
+        "404":
+          description: Existence-blind refusal (unknown client, non-owned client)
+        "409":
+          description: Client is not active (archived)
   /retention/report:
     get:
       summary: Per-domain × per-kind retention schedule (v1.22.0 M2)
