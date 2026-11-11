@@ -121,6 +121,12 @@ let package = Package(
                 .product(name: "MLXLLM", package: "mlx-swift-lm"),
                 .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
                 .product(name: "MLXHuggingFace", package: "mlx-swift-lm"),
+                // Arm D (round 14): the grammar-constrained decoding engine
+                // — the pinned 3.32.3 target that introduced it. Standalone
+                // (CXGrammar + MLXLMCommon + MLX, macOS 14 floor); the
+                // FoundationModelsIntegration trait gates only
+                // MLXFoundationModels' dependency on it, not ours.
+                .product(name: "MLXGuidedGeneration", package: "mlx-swift-lm"),
                 .product(name: "HuggingFace", package: "swift-huggingface"),
                 // `Tokenizers` is not a standalone product at the resolved 0.1.24 —
                 // `Transformers` vends the same target, and SwiftPM makes every

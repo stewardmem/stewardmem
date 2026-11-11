@@ -3506,6 +3506,13 @@ pub(crate) struct GdlDriver {
     /// instruction is byte-identical to the pre-field behavior until the
     /// arm is the active measurement's.
     intake_scaffold: bool,
+    /// Arm D (round 14): the triage exchange's LOCAL tier (the M-4
+    /// qualification's one row). Default NONE — every exchange stays AFM
+    /// exactly as the pre-round wire did. The tier is HASHED into the
+    /// policy identity (the bind below annotates the model arg), so a
+    /// tier flip MOVES the hash: the re-baseline is loud, never silent
+    /// (LL-05's own warning, pinned by KT-6).
+    triage_tier: Option<String>,
     /// The adversarial re-check posture (the loop config's default is ON;
     /// the eval ablation constructors turn it off together with the
     /// gates): before the second verification may pass, ONE scoped child
@@ -3628,6 +3635,7 @@ impl GdlDriver {
             ablated: false,
             corroboration_ablated: false,
             intake_scaffold: false,
+            triage_tier: None,
             adversarial_recheck,
             recheck: Some(recheck),
             case_budget,
@@ -3675,6 +3683,7 @@ impl GdlDriver {
             ablated: true,
             corroboration_ablated: false,
             intake_scaffold: false,
+            triage_tier: None,
             adversarial_recheck: false,
             recheck: None,
             case_budget,
@@ -3722,6 +3731,19 @@ impl GdlDriver {
     /// the pre-field byte-identical behavior).
     pub(crate) fn with_intake_scaffold(mut self) -> Self {
         self.intake_scaffold = true;
+        self
+    }
+
+    /// Arm D's wiring: the triage exchange rides the named LOCAL tier —
+    /// and the tier is HASHED, HERE: the rebind annotates the policy
+    /// snapshot's model arg (`gdl+triage=<tier>`), so policy_identity()
+    /// differs from the untiered construction and every gate verdict
+    /// re-baselines LOUDLY (LL-05's per-phase law; KT-6's pin drives the
+    /// identity difference directly).
+    pub(crate) fn with_triage_tier(mut self, tier: &str) -> Self {
+        self.triage_tier = Some(tier.to_owned());
+        self.loop_driver
+            .bind_policy(&format!("gdl+triage={tier}"), GDL_METHOD_PROMPT, vec![], vec![]);
         self
     }
 
@@ -9377,6 +9399,30 @@ all VDs not; fw 2.10 flashed last week; tsr://node-042 sel://events";
                 .iter()
                 .any(|e| e.contains("KT") && e.contains("not traceable")),
             "an invented edit refuses: {errors:?}"
+        );
+    }
+
+    /// KT-6 (Arm D, behavioral): the tier MOVES the policy identity —
+    /// the tiered construction's policy_identity differs from the plain
+    /// one, and the identity is STABLE per construction (the hash cannot
+    /// drift without the tier).
+    #[test]
+    fn kt6_the_triage_tier_moves_the_policy_identity_loudly() {
+        let (plain, _t1, _c1) = provider_failure_fixture();
+        let (tiered, _t2, _c2) = provider_failure_fixture();
+        let tiered = tiered.with_triage_tier("qwen3.5-2b-4bit");
+        assert_ne!(
+            plain.policy_identity(),
+            tiered.policy_identity(),
+            "the tier flip MOVES the hash — the re-baseline is loud"
+        );
+        // And the identity is stable: the same tier binds the same hash.
+        let (tiered2, _t3, _c3) = provider_failure_fixture();
+        let tiered2 = tiered2.with_triage_tier("qwen3.5-2b-4bit");
+        assert_eq!(
+            tiered.policy_identity(),
+            tiered2.policy_identity(),
+            "the same tier binds the same identity"
         );
     }
 

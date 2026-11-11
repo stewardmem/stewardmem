@@ -76,6 +76,12 @@ pub(crate) const AFM_EXCHANGE_DEADLINE: Duration = Duration::from_secs(120);
 pub(crate) struct AfmBridgeProvider {
     bridge: Arc<AfmBridge>,
     phase_schemas: BTreeMap<&'static str, String>,
+    /// Arm D (round 14): the per-phase TIER table — the qualification the
+    /// M-4 pin guarded is now SURGICAL: only the triage row may name a
+    /// model id, and only the gate below decides that. EMPTY by
+    /// construction: every exchange rides the AFM tier exactly as the
+    /// pre-round wire did.
+    phase_tiers: BTreeMap<&'static str, String>,
 }
 
 impl AfmBridgeProvider {
@@ -87,7 +93,26 @@ impl AfmBridgeProvider {
         Ok(Self {
             bridge,
             phase_schemas: BTreeMap::new(),
+            phase_tiers: BTreeMap::new(),
         })
+    }
+
+    /// Arm D's wiring: install the per-phase TIER table (the live arm
+    /// run's constructor; the table is the measurement's, never a silent
+    /// default — and the GATE below still decides which row is honored).
+    pub(crate) fn with_phase_tiers(mut self, tiers: BTreeMap<&'static str, String>) -> Self {
+        self.phase_tiers = tiers;
+        self
+    }
+
+    /// THE M-4 QUALIFICATION (round 14, Arm D — surgical): the model
+    /// field arms are qualified for TRIAGE exchanges ONLY. A non-triage
+    /// phase returns NONE even when the table carries an entry — the
+    /// gate, not the table, enforces the axis (the rewritten red-proof:
+    /// an intake entry + an intake exchange still sends no model field).
+    /// The fresh-`gdl-`-session and no-transcript arms are untouched.
+    fn qualified_model(&self, phase: Option<&'static str>) -> Option<String> {
+        qualified_model_for(&self.phase_tiers, phase)
     }
 
     /// Arm A's wiring: install the per-phase artifact-schema table (the
@@ -96,6 +121,19 @@ impl AfmBridgeProvider {
     pub(crate) fn with_phase_schemas(mut self, schemas: BTreeMap<&'static str, String>) -> Self {
         self.phase_schemas = schemas;
         self
+    }
+}
+
+/// The gate itself, free over the table so the behavioral witness drives
+/// it without a child: `Some` ONLY for a triage exchange WITH a triage
+/// row; every non-triage phase (and every missing row) is `None`.
+fn qualified_model_for(
+    table: &BTreeMap<&'static str, String>,
+    phase: Option<&'static str>,
+) -> Option<String> {
+    match phase {
+        Some("triage") => table.get("triage").cloned(),
+        _ => None,
     }
 }
 
@@ -220,6 +258,10 @@ impl LlmProvider for AfmBridgeProvider {
         let request_schema = req.artifact_schema_json.clone().or_else(|| {
             phase_header_of(&req.messages).and_then(|phase| self.phase_schemas.get(phase).cloned())
         });
+        // THE M-4 QUALIFICATION (round 14, Arm D): the model field is
+        // decided by the gate OUTSIDE the task — None for every non-triage
+        // exchange, whatever the table carries.
+        let qualified_model = self.qualified_model(phase_header_of(&req.messages));
         let bridge = Arc::clone(&self.bridge);
         let (tx, rx) = mpsc::channel::<Result<StreamEvent, ProviderError>>(STREAM_CHANNEL_CAP);
         tokio::spawn(async move {
@@ -235,11 +277,11 @@ impl LlmProvider for AfmBridgeProvider {
                 // seeding — a seeded case session would carry one case's
                 // memory into the next exchange.
                 history: None,
-                // And no model field: absent = the AFM tier, so the case
-                // machine's verdicts stay on the tier they were measured
-                // on regardless of the chat tier's configuration (CG-10
-                // the zero-gate-verdict law; pinned by the isolation scan).
-                model: None,
+                // THE M-4 QUALIFICATION (round 14, Arm D — surgical):
+                // the model field is None for EVERY phase except triage,
+                // where the qualified table may name the local tier; the
+                // fresh-session and no-transcript arms stand unchanged.
+                model: qualified_model,
                 // The artifact schema for the phase that owns one (Arm A).
                 schema: request_schema,
             };
@@ -532,9 +574,46 @@ mod tests {
             "GDL carries no transcript seeding — the law is in the construction, not a comment"
         );
         assert!(
-            body.contains("model: None"),
-            "GDL never sends the model field — absent is the AFM tier, by construction"
+            body.contains("model: qualified_model"),
+            "the model field routes through the M-4 qualification gate — the \
+             triage-exchanges-only arm (round 14, Arm D; the non-triage \
+             red-proof lives in qualified_model's behavioral witness)"
         );
+    }
+
+    /// ROUND 14 ARM D (behavioral, the rewritten M-4 red-proof): the
+    /// qualification is SURGICAL — a triage entry rides ONLY a triage
+    /// exchange; a NON-triage entry (or a non-triage exchange with any
+    /// table) sends NONE. An intake row in the table is INERT.
+    #[test]
+    fn the_m4_qualification_is_triage_only_and_a_non_triage_entry_is_inert() {
+        let tiers: BTreeMap<&'static str, String> = [
+            ("triage", "qwen3.5-2b-4bit".to_string()),
+            // The planted non-triage row: MUST be inert.
+            ("intake", "qwen3-8b-4bit".to_string()),
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(
+            qualified_model_for(&tiers, Some("triage")).as_deref(),
+            Some("qwen3.5-2b-4bit"),
+            "the triage arm rides the table's triage row"
+        );
+        assert_eq!(
+            qualified_model_for(&tiers, Some("intake")),
+            None,
+            "a NON-triage entry is INERT — the gate, not the table, enforces \
+             the axis (the rewritten red-proof)"
+        );
+        assert_eq!(
+            qualified_model_for(&tiers, Some("hypothesize")),
+            None,
+            "every other phase stays AFM"
+        );
+        assert_eq!(qualified_model_for(&tiers, None), None, "no header, no tier");
+        // And an empty table (the default construction) sends none even
+        // for triage — the tier is the measurement's, never a default.
+        assert_eq!(qualified_model_for(&BTreeMap::new(), Some("triage")), None);
     }
 
     /// ROUND 14 ARM A (behavioral): the phase router reads the kernel's

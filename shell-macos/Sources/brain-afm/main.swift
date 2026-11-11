@@ -676,7 +676,7 @@ struct BrainAfmBridge {
                 // that shipped before the field existed. The two never
                 // blend. Refusals are PARSE-TIME — before any Task or
                 // model work, exactly like the model field's law.
-                var schemaJSON: String?
+                let schemaJSON: String?
                 if let raw = object["schema"] {
                     guard let doc = raw as? String else {
                         out.send([
@@ -693,6 +693,8 @@ struct BrainAfmBridge {
                         continue
                     }
                     schemaJSON = doc
+                } else {
+                    schemaJSON = nil
                 }
                 let guidedSchema: GenerationSchema?
                 if let doc = schemaJSON {
@@ -799,22 +801,24 @@ struct BrainAfmBridge {
                                     "the MLX chat tier requires macOS 27 (the adapter surface is 27-gated)"
                                 )
                             }
-                            // THE WIRE SCHEMA vs THE MLX TIER (round-14 Arm
-                            // A's boundary): the runtime-schema path is the
-                            // AFM tier's, and an MLX turn that carries a
-                            // schema refuses BY NAME rather than silently
-                            // degrading to free-form generation the kernel's
-                            // gates would then judge blind. (Arm D revisits
-                            // this surface with its own measured mechanism.)
-                            if guidedSchema != nil {
+                            // THE WIRE SCHEMA ON THE MLX TIER (round-14
+                            // Arm D): the schema compiles into the pinned
+                            // engine's grammar constraint and rides the
+                            // session's logit processor — guided decoding
+                            // on the local tier. The constraint binds at
+                            // session materialization; a schema on an
+                            // ALREADY-LIVE session refuses BY NAME rather
+                            // than being silently ignored.
+                            if schemaJSON != nil, slot.mlx != nil {
                                 throw BridgeError.badRequest(
-                                    "the wire schema is not served on the mlx tier"
+                                    "the wire schema binds at mlx session materialization — a live session cannot adopt it"
                                 )
                             }
                             try await slot.gate.run {
                                 let live = try await Self.seededMLXSession(
                                     sessions: sessions, slot: slot,
-                                    conversation: conversation
+                                    conversation: conversation,
+                                    guidedSchemaJSON: schemaJSON
                                 )
                                 let turnNo = live.nextTurn()
                                 try await Self.runMLXTurn(
@@ -1144,7 +1148,8 @@ struct BrainAfmBridge {
     /// authoritative), exactly the law the AFM arm states.
     @available(macOS 27.0, *)
     static func seededMLXSession(
-        sessions: Sessions, slot: Sessions.Slot, conversation: [ConversationMessage]
+        sessions: Sessions, slot: Sessions.Slot, conversation: [ConversationMessage],
+        guidedSchemaJSON: String? = nil
     ) async throws -> MLXLive {
         if let live = slot.mlx { return live }
         let tier = try Self.mlxTier(for: slot.model)
@@ -1172,6 +1177,15 @@ struct BrainAfmBridge {
             maxTokens: 1024,
             speculative: speculative
         )
+        // THE GUIDED PATH (round-14 Arm D): the constraint compiles HERE —
+        // the materialization is already the bridge's async cold path, off
+        // the main actor (the cold-compile warning) — and the processor
+        // factory rides every generation of this session.
+        if let wire = guidedSchemaJSON {
+            try await MLXBridge.applyGuidedDecoding(
+                session: built.session, container: container, wire: wire
+            )
+        }
         let live = MLXLive(session: built.session, store: built.store)
         return sessions.materializeMLX(slot, live: live)
     }

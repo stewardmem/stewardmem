@@ -1,5 +1,6 @@
 import Foundation
 import HuggingFace
+import MLXGuidedGeneration
 import MLXHuggingFace
 import MLXLLM
 import MLXLMCommon
@@ -152,6 +153,35 @@ public enum MLXBridge {
                 kvScheme: resolvedKVScheme(for: tier),
                 temperature: 0))
         return (session, store)
+    }
+
+    /// THE GUIDED PATH (round 14, Arm D — the pinned engine's own
+    /// mechanism): a wire schema compiles into a GrammarConstraint and
+    /// rides the session's `components.logitProcessorFactory` — the
+    /// parameters-driven ChatSession API the pinned 3.32.3 release added
+    /// for exactly this. The compile is the COLD cost (xgrammar compiles
+    /// the JSON schema; hundreds of ms) and happens HERE, inside the
+    /// bridge's async path — OFF the main actor — once per session, and
+    /// the factory hands each generation a FRESH processor so matcher
+    /// state never leaks across turns. GUIDED GENERATION GUARANTEES
+    /// SHAPE, NEVER TRUTH: the kernel's gates still judge the artifact's
+    /// content; the honesty law is unchanged by transport.
+    public static func applyGuidedDecoding(
+        session: ChatSession,
+        container: ModelContainer,
+        wire: String
+    ) async throws {
+        let tokenizer = await container.tokenizer
+        let vocab = TokenizerVocabExtractor.extractForGrammar(from: tokenizer)
+        let eos = Int32(tokenizer.unknownTokenId ?? 0)
+        let grammarTokenizer = try GrammarTokenizer(
+            vocab: vocab.vocab, vocabType: vocab.vocabType, eosTokenId: eos)
+        let constraint = try GrammarConstraint(
+            tokenizer: grammarTokenizer, jsonSchema: wire)
+        let vocabSize = Int(grammarTokenizer.vocabSize)
+        session.components.logitProcessorFactory = {
+            GuidedMaskProcessor(constraint: constraint, vocabSize: vocabSize)
+        }
     }
 
     /// The seed measurement — the MLX counterpart of the AFM arm's

@@ -364,3 +364,65 @@ fn kt4_scan_control_planted_signature_is_seen() {
     let planted = "pub(crate) fn intake_scaffold(case: &GdlCase) -> IsNotTable {";
     needs(planted, "pub(crate) fn intake_scaffold(", "KT-4 control");
 }
+
+// ── KT-5 + KT-6 (Arm D): the surgical M-4 qualification ────────────────
+
+#[test]
+fn kt5_the_model_arm_is_qualified_triage_only_by_a_gate_in_code() {
+    let provider = common::code_only(&doc("src/agentloop/provider_afm.rs"));
+    // The construction's model arm routes through the qualified gate fn.
+    needs(
+        &provider,
+        "model: self.qualified_model(",
+        "KT-5 the qualified construction",
+    );
+    // The gate fn: a NON-triage phase returns NONE even with a table entry
+    // — the axis is enforced by the gate, not by the table's contents.
+    let at = provider
+        .find("fn qualified_model(")
+        .unwrap_or_else(|| panic!("the qualified fn exists"));
+    let body = &provider[at..(at + 1400).min(provider.len())];
+    needs(body, "Some(\"triage\")", "KT-5 the triage-only arm");
+    needs(body, "_ => None", "KT-5 the non-triage fail-closed arm");
+}
+
+/// KT-5's behavioral witness lives beside the gate fn (provider_afm's
+/// tests module drives `qualified_model` directly — the red-proof: give
+/// the table an `intake` entry and drive an intake exchange → None).
+#[test]
+fn kt5_scan_control_planted_gate_is_seen() {
+    let planted = "fn qualified_model( — Some(\"triage\") — _ => None";
+    needs(planted, "Some(\"triage\")", "KT-5 control");
+}
+
+#[test]
+fn kt6_the_triage_tier_lands_in_the_hashed_policy_identity() {
+    let gdl = common::code_only(&doc("src/workflow/gdl.rs"));
+    // The driver carries the tier and the BIND hashes it: the policy
+    // snapshot's model arg annotates the tier, so a tier flip MOVES the
+    // hash — the re-baseline is loud, never silent (LL-05's law).
+    needs(
+        &gdl,
+        "triage_tier: Option<String>",
+        "KT-6 the tier field",
+    );
+    needs(
+        &gdl,
+        "with_triage_tier(",
+        "KT-6 the arm wiring",
+    );
+    needs(
+        &gdl,
+        "gdl+triage=",
+        "KT-6 the tier in the hashed model arg",
+    );
+}
+
+#[test]
+fn kt6_scan_control_planted_annotation_is_seen() {
+    needs(
+        "gdl+triage=qwen3.5-2b-4bit",
+        "gdl+triage=",
+        "KT-6 control",
+    );
+}
