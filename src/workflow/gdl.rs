@@ -1343,6 +1343,33 @@ fn err(law: &str, detail: &str) -> String {
     format!("{law}: {detail}")
 }
 
+/// THE DETERMINISTIC SCAFFOLD (round 14, Arm B): the kernel pre-derives a
+/// candidate KT frame from the case's OWN inputs — pure, deterministic,
+/// containment-only. The ticket's verbatim text IS the candidate WHAT (a
+/// bound the traceability gate provably admits: the ticket is in the
+/// ticket); every comparison/where/when/extent cell records `unknown`,
+/// the honesty vocabulary the amended axis grants — the machine proposes
+/// NOTHING it cannot prove. The phase instruction presents the frame as
+/// CONFIRM/EDIT (the fill-then-reviewed posture): the model's EDITs are
+/// held to the same traceability gate; a CONFIRMED scaffold passes it by
+/// construction. No child changes, no wire changes — the scaffold rides
+/// the instruction.
+pub(crate) fn intake_scaffold(case: &GdlCase) -> IsNotTable {
+    let unknown = || IsNotRow {
+        is: "unknown".into(),
+        is_not: "unknown".into(),
+    };
+    IsNotTable {
+        what: IsNotRow {
+            is: case.ticket.trim().to_owned(),
+            is_not: "unknown".into(),
+        },
+        place: unknown(),
+        time: unknown(),
+        extent: unknown(),
+    }
+}
+
 /// KT intake completeness (the plan's gate-every-case item): all four
 /// IS/IS-NOT rows present with both columns non-empty; telemetry captured
 /// (L1); what-changed recorded, "unknown" allowed (L4); known-good
@@ -3474,6 +3501,11 @@ pub(crate) struct GdlDriver {
     /// are untouched; the only consumption of the confirmation status is
     /// the plan-strip label. Production constructors never set it.
     corroboration_ablated: bool,
+    /// Arm B (round 14): the intake exchange's instruction carries the
+    /// kernel-derived KT scaffold as CONFIRM/EDIT. Default OFF — the
+    /// instruction is byte-identical to the pre-field behavior until the
+    /// arm is the active measurement's.
+    intake_scaffold: bool,
     /// The adversarial re-check posture (the loop config's default is ON;
     /// the eval ablation constructors turn it off together with the
     /// gates): before the second verification may pass, ONE scoped child
@@ -3595,6 +3627,7 @@ impl GdlDriver {
             proficiency,
             ablated: false,
             corroboration_ablated: false,
+            intake_scaffold: false,
             adversarial_recheck,
             recheck: Some(recheck),
             case_budget,
@@ -3641,6 +3674,7 @@ impl GdlDriver {
             proficiency: super::proficiency::Proficiency::L3,
             ablated: true,
             corroboration_ablated: false,
+            intake_scaffold: false,
             adversarial_recheck: false,
             recheck: None,
             case_budget,
@@ -3680,6 +3714,14 @@ impl GdlDriver {
     #[cfg(test)]
     fn with_corroboration_ablated(mut self) -> Self {
         self.corroboration_ablated = true;
+        self
+    }
+
+    /// Arm B's wiring: the intake instruction carries the kernel-derived
+    /// KT scaffold as CONFIRM/EDIT (the live arm run's constructor; OFF is
+    /// the pre-field byte-identical behavior).
+    pub(crate) fn with_intake_scaffold(mut self) -> Self {
+        self.intake_scaffold = true;
         self
     }
 
@@ -4051,12 +4093,25 @@ impl GdlDriver {
                     .await
                     .map_err(persist_error)??;
                 }
-                let instruction = phase_instruction_with_law(
+                let mut instruction = phase_instruction_with_law(
                     phase,
                     &case,
                     &cp.errors,
                     self.corroboration_ablated,
                 );
+                // ARM B (round 14): the kernel's own deterministic frame
+                // rides the instruction as CONFIRM/EDIT — the model edits
+                // under the same traceability gate, never authors blind.
+                if let Some(rendered) = (phase == GdlPhase::Intake && self.intake_scaffold)
+                    .then(|| serde_json::to_string(&intake_scaffold(&case)).ok())
+                    .flatten()
+                {
+                    instruction.push_str(&format!(
+                        "\n\nThe machine pre-derived this KT frame from the ticket's \
+                         own text — CONFIRM or EDIT it, do not author from \
+                         scratch: {rendered}"
+                    ));
+                }
                 let receipt = self
                     .loop_driver
                     .run_turns_owned(
@@ -9262,6 +9317,66 @@ all VDs not; fw 2.10 flashed last week; tsr://node-042 sel://events";
                 .iter()
                 .any(|e| e.contains("KT") && e.contains("not traceable")),
             "a sub-floor stated bound refuses: {errors:?}"
+        );
+    }
+
+    /// KT-4 (Arm B, behavioral): the scaffold is DETERMINISTIC — same
+    /// case, same frame, byte-identical twice — and it FOLLOWS the input:
+    /// a different ticket yields a different WHAT (the mutation
+    /// red-proof's positive arm).
+    #[test]
+    fn kt4_scaffold_is_deterministic_and_follows_the_ticket() {
+        let a = intake_scaffold(&gate_case(GATE_TICKET));
+        let b = intake_scaffold(&gate_case(GATE_TICKET));
+        let sa = serde_json::to_string(&a).unwrap();
+        let sb = serde_json::to_string(&b).unwrap();
+        assert_eq!(sa, sb, "same case -> the same frame, byte-identical");
+        let other = intake_scaffold(&gate_case("a different ticket entirely"));
+        assert_ne!(
+            serde_json::to_string(&other).unwrap(),
+            sa,
+            "a mutated input moves the frame"
+        );
+        // The WHAT IS the ticket, verbatim — nothing the kernel cannot prove.
+        assert_eq!(a.what.is, GATE_TICKET);
+        // Every other cell records the honesty vocabulary, never invention.
+        for row in [&a.what, &a.place, &a.time, &a.extent] {
+            assert_eq!(row.is_not, "unknown");
+        }
+        for row in [&a.place, &a.time, &a.extent] {
+            assert_eq!(row.is, "unknown");
+        }
+    }
+
+    /// KT-4 (the honesty control): a CONFIRMED scaffold passes the KT
+    /// arms BY CONSTRUCTION — the frame's stated bound is the ticket
+    /// itself and the rest is recorded-unknown — while an EDIT that
+    /// invents still refuses (the gate the edits answer to).
+    #[test]
+    fn kt4_confirmed_scaffold_passes_and_an_invented_edit_refuses() {
+        let scaffold = intake_scaffold(&gate_case(GATE_TICKET));
+        let confirmed = IntakeArtifact {
+            is_not: scaffold,
+            telemetry_refs: vec!["tsr://probe-014".into()],
+            what_changed: "unknown".into(),
+            known_good: "none available".into(),
+            diagnostic_seams: vec![],
+            decomposition: None,
+        };
+        let errors = intake_gate(&confirmed, &gate_case(GATE_TICKET));
+        assert!(
+            errors.iter().all(|e| !e.contains("KT")),
+            "the confirmed frame carries no KT error: {errors:?}"
+        );
+        // The invented edit: still held to the traceability gate.
+        let mut invented = confirmed;
+        invented.is_not.extent.is = "everything everywhere".into();
+        let errors = intake_gate(&invented, &gate_case(GATE_TICKET));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("KT") && e.contains("not traceable")),
+            "an invented edit refuses: {errors:?}"
         );
     }
 

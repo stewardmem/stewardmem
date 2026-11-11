@@ -333,3 +333,34 @@ fn the_pins_scanner_itself_is_not_vacuous() {
     let caught = std::panic::catch_unwind(|| forbids(planted, "schema: Some", "meta")).is_err();
     assert!(caught, "forbids() must red on a planted occurrence");
 }
+
+// ── KT-4 (Arm B): the deterministic scaffold ───────────────────────────
+
+#[test]
+fn kt4_the_scaffold_is_pure_deterministic_and_ticket_derived() {
+    let gdl = common::code_only(&doc("src/workflow/gdl.rs"));
+    // The pure fn exists and takes the CASE (not the model's words).
+    needs(
+        &gdl,
+        "pub(crate) fn intake_scaffold(case: &GdlCase) -> IsNotTable",
+        "KT-4 the scaffold fn",
+    );
+    // The instruction presents it as CONFIRM/EDIT — the fill-then-reviewed
+    // posture, not free authoring.
+    needs(&gdl, "CONFIRM or EDIT", "KT-4 the confirm-edit posture");
+    // The scaffold's own bounds trace BY CONSTRUCTION: the frame the
+    // instruction carries is built from the ticket text, so the traceability
+    // gate's law holds for a CONFIRMED scaffold without a special arm.
+    needs(
+        &gdl,
+        "fn intake_scaffold(",
+        "KT-4 the derivation lives in the gate's file",
+    );
+}
+
+/// KT-4's planted-miss control: the scanner sees a planted fn signature.
+#[test]
+fn kt4_scan_control_planted_signature_is_seen() {
+    let planted = "pub(crate) fn intake_scaffold(case: &GdlCase) -> IsNotTable {";
+    needs(planted, "pub(crate) fn intake_scaffold(", "KT-4 control");
+}
