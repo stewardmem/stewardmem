@@ -376,7 +376,6 @@ pub(crate) fn shared_pending_count(conn: &Connection, producer_ref: Option<&str>
     .unwrap_or(1)
     .clamp(0, u32::MAX as i64) as u32
 }
-}
 
 /// narrow a proposal page to the owners a supervisor
 /// manages (role `owner IN manages`). Empty `manages` → the whole page
