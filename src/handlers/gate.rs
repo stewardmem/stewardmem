@@ -2544,19 +2544,11 @@ pub async fn edit_proposal(
             let qa_score = crate::qa::score_for(owner.is_some(), false, false, false);
             let content_digest = review_digest(&content);
             // the GRAD grouping rides the response too: one deterministic
-            // COUNT over the pending cohort this row's reference shares,
-            // inside the same tx (a read, never a gate).
-            let shared_pending_count: u32 = match producer_ref.as_deref() {
-                Some(r) => conn
-                    .query_row(
-                        "SELECT COUNT(*) FROM proposals WHERE status = 'pending' AND producer_ref = ?1",
-                        rusqlite::params![r],
-                        |row| row.get::<_, i64>(0),
-                    )
-                    .unwrap_or(1)
-                    .clamp(0, u32::MAX as i64) as u32,
-                None => 1,
-            };
+            // COUNT over the pending cohort this row's reference shares —
+            // the core owns the SQL (the handler stays an adapter); a read,
+            // never a gate.
+            let shared_pending_count =
+                crate::service::review::shared_pending_count(&conn, producer_ref.as_deref());
             Ok(ProposalView {
                 id,
                 kind,

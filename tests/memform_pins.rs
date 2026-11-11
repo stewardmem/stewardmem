@@ -1403,6 +1403,7 @@ fn mf4_the_suite_is_the_cis_home_of_the_matrix_gaps() {
     let matrix = read_repo("docs/MEMFORM_MATRIX_2026-11-11.md");
     // G1 → S2's marker pins; G2 → S3's grouping pins; G3 → S4's roll-up
     // pins; G4 → S5's fixtures (this family). The ledger must name them.
+    let pins = read_repo("tests/memform_pins.rs");
     for (gap, family) in [
         ("G1", "mf1_"),
         ("G2", "mf2_"),
@@ -1414,17 +1415,14 @@ fn mf4_the_suite_is_the_cis_home_of_the_matrix_gaps() {
             "the matrix's gap ledger must name {gap}"
         );
         assert!(
-            matrix.contains("IMPROVE13 S2") && matrix.contains("IMPROVE13 S3"),
-            "the ledger names the round's own closers"
-        );
-        let pins = read_repo("tests/memform_pins.rs");
-        assert!(
             pins.contains(family),
             "the suite must carry the {gap} fixture family ({family}*)"
         );
-        break; // the family presence is per-gap below
     }
-    let pins = read_repo("tests/memform_pins.rs");
+    assert!(
+        matrix.contains("IMPROVE13 S2") && matrix.contains("IMPROVE13 S3"),
+        "the ledger names the round's own closers"
+    );
     for family in ["mf1_", "mf2_", "mf3_", "mf5_"] {
         assert!(
             pins.contains(family),
