@@ -559,5 +559,6 @@
   "journey.scope": "Klant {client} · domein {domain} — de projectie leest alleen de eigen pool van deze klant.",
   "journey.case.title": "Zaak {id}",
   "journey.age.now": "zojuist",
-  "journey.age.minutes": "{count} minuten geleden"
+  "journey.age.minutes": "{count} minuten geleden",
+  "journey.domain.title": "Uw gegevens en bezwaren"
 }

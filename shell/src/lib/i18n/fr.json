@@ -559,5 +559,6 @@
   "journey.scope": "Client {client} · domaine {domain} — la projection ne lit que le bassin propre de ce client.",
   "journey.case.title": "Dossier {id}",
   "journey.age.now": "à l'instant",
-  "journey.age.minutes": "il y a {count} minutes"
+  "journey.age.minutes": "il y a {count} minutes",
+  "journey.domain.title": "Vos donnees et recours"
 }

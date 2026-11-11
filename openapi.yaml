@@ -3513,12 +3513,65 @@ paths:
             application/json:
               schema:
                 type: object
-                example: {"client": "acme-us", "domain": "acme", "cases": [{"case_id": 7, "status": "running", "opened_at": 1753000000, "events": [{"kind": "case_opened", "case_id": 7, "at": 1753000000, "seq": 7, "text": "Your case was opened.", "actor": "the operator", "digest": null, "count": null, "phase": null}, {"kind": "resolution_approved", "case_id": 7, "at": 1753100000, "seq": 42, "text": "A supervisor approved the resolution. Receipt: a1b2…", "actor": "a supervisor", "digest": "a1b2…", "count": null, "phase": null}]}]}
-                description: 'the projection law''s output: closed kinds, closed sentences, role actors, receipt digests — zero scores, zero names, zero infra'
+                example: {"client": "acme-us", "domain": "acme", "cases": [{"case_id": 7, "status": "running", "opened_at": 1753000000, "events": [{"kind": "case_opened", "case_id": 7, "at": 1753000000, "seq": 7, "text": "Your case was opened.", "actor": "the operator", "digest": null, "count": null, "phase": null}, {"kind": "resolution_approved", "case_id": 7, "at": 1753100000, "seq": 42, "text": "A supervisor approved the resolution. Receipt: a1b2…", "actor": "a supervisor", "digest": "a1b2…", "count": null, "phase": null}]}], "domain_events": [{"kind": "appeal_received", "case_id": 0, "at": 1753200000, "seq": 88, "text": "Your appeal was received.", "actor": "the system", "digest": null, "count": null, "phase": null}]}
+                description: 'the projection law''s output: closed kinds, closed sentences, role actors, receipt digests — zero scores, zero names, zero infra; domain_events carries the client''s own acts (holds, DSARs, appeals) even when the client has no cases'
         "401":
           description: No bearer (the middleware)
         "404":
           description: 'Existence-blind refusal — unknown client, non-owned client, foreign or absent one: ONE body for all'
+        "409":
+          description: Client is not active (archived)
+  /clients/{name}/appeals:
+    post:
+      summary: The appeal's filing door (IMPROVE15)
+      operationId: clientAppeal
+      description: >
+        The customer's appeal enters the system as a PROPOSAL, never as a
+        direct act (the propose/dispose law extends to the customer). The
+        body carries the appealed item's `review_digest` (the DIGEST LAW: you
+        appeal the bytes that were shown), the bounded reason (2000 chars),
+        and an optional case id. The route stamps the proposal `customer`
+        PATH-SIDE (the CustomerProvenance schema act 1.32.35 — the wire
+        cannot set derived_from; producer_ref = portal:{client}). THE
+        JOURNEY'S OWN AUTHZ LAW: the client's OWN principal + the operator
+        only; everyone else answers the existence-blind 404. An appeal
+        without the shown digest refuses BY NAME (`appeal_digest_required`);
+        a digest no decided decision in the domain answers refuses
+        (`appeal_target_unknown`). The appeal lands in the EXISTING review
+        queue with a DECLARED review clock (seven days); the dispose rides
+        the existing verbs + the HITL ledger; nothing auto-reverses.
+      parameters:
+        - in: path
+          name: name
+          required: true
+          description: Client name (lowercase, domain-safe).
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [review_digest, reason]
+              properties:
+                review_digest: { type: string, description: "The appealed item's review_digest (the bytes that were shown)." }
+                reason: { type: string, description: "The customer's stated reason (bounded at 2000 chars, screened)." }
+                case: { type: integer, format: int64, nullable: true, description: "An optional case link (a workflow_runs id in this client's domain)." }
+      responses:
+        "200":
+          description: The appeal filed as a pending proposal
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {"proposal_id": 88, "client": "acme-us", "status": "pending", "received": true}
+                description: 'the appeal is a pending proposal in the EXISTING review queue — human dispose, no auto-reversal'
+        "400":
+          description: '`appeal_digest_required` (no shown digest) · `appeal_reason_too_long` · the screen refused the reason'
+        "401":
+          description: No bearer (the middleware)
+        "404":
+          description: 'Existence-blind refusal (unknown client, non-owned client) · `appeal_target_unknown` (no decided decision in the domain carries the digest)'
         "409":
           description: Client is not active (archived)
   /retention/report:
@@ -10945,21 +10998,24 @@ components:
             parcel row title); absent for bodies without one.
         derived_from:
           type: string
-          enum: [operator, agent, watch, legacy]
+          enum: [operator, agent, watch, customer, legacy]
           description: >-
-            v1.32.34 "MemformStamps": the PATH-ASSIGNED provenance marker —
-            which producer path wrote this proposal, stamped at the
-            producer's INSERT from the CALLING CONTEXT (the request schema
-            carries NO such field, so the wire cannot set it; a caller
-            POSTing `derived_from` is ignored). Closed vocabulary:
+            v1.32.34 "MemformStamps", widened by the v1.32.35
+            "CustomerProvenance" schema act (IMPROVE15): the PATH-ASSIGNED
+            provenance marker — which producer path wrote this proposal,
+            stamped at the producer's INSERT from the CALLING CONTEXT (the
+            request schema carries NO such field, so the wire cannot set it;
+            a caller POSTing `derived_from` is ignored). Closed vocabulary:
             operator = the operator ingest surfaces (incl. the chat
             abstention capture — the user's own words); agent =
             agent/machinery-authored rows (the review-posture agent writes,
             the GDL workflow artifacts, CRM/delivery/crew/channel
             machinery); watch = the research watch's lane tick and its
-            synthesis (RW-2); legacy = pre-marker rows (provenance beats
-            guessing). The marker informs the human approval, it never
-            gates it.
+            synthesis (RW-2); customer = the CUSTOMER's own act through the
+            portal (the appeal's filing door — the chain proves WHOSE act the
+            proposal was; producer_ref carries portal:{client}); legacy =
+            pre-marker rows (provenance beats guessing). The marker informs
+            the human approval, it never gates it.
         producer_ref:
           type: string
           nullable: true

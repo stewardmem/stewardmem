@@ -3441,9 +3441,103 @@ pub fn run_migration_with_store_dim(
         }
     }
 
+    // ── v1.32.35 "CustomerProvenance" (IMPROVE15): the appeal's provenance —
+    // the customer value joins the derived_from CHECK. THE NAMED SCHEMA ACT:
+    // the appeal files as a PROPOSAL through the customer's portal, and a
+    // customer-sourced proposal stamped `operator` would be exactly the
+    // provenance blur round 13 closed — the chain must prove WHOSE act the
+    // proposal was. The stamp law is unchanged (PATH-ASSIGNED: the appeal
+    // route stamps `customer` from the CALLING CONTEXT; `producer_ref`
+    // carries `portal:{client}`; the wire cannot set the marker). The
+    // alternative reading — stamp `Operator` ("the user's own words") — was
+    // RECORDED and LOST: the disposal's hitl_decision_events row carries the
+    // operator side, and the pair (customer-authored proposal →
+    // operator digest-bound dispose) is exactly the provenance the tagline
+    // claims.
+    //
+    // SQLite cannot ALTER a CHECK: the widening is the 12-step table
+    // rebuild (the vec_knowledge cosine-rebuild precedent — a one-time,
+    // marker-guarded rebuild when the schema law itself moves), GUARDED ON
+    // THE STORED SQL: a database whose sqlite_master row already carries the
+    // widened CHECK skips the rebuild, so the act runs exactly once per
+    // database, on fresh databases (whose v1.32.34 block above just added
+    // the 4-value column) and on 1.32.34-stamped databases alike.
+    {
+        let stored_sql: Option<String> = db
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'proposals'",
+                [],
+                |r| r.get::<_, Option<String>>(0),
+            )
+            .map(Some)
+            .unwrap_or(None)
+            .flatten();
+        let old_check = stored_sql
+            .as_deref()
+            .is_some_and(|s| s.contains("IN ('operator','agent','watch','legacy')"));
+        if old_check {
+            // 1. the column list, in the stored order (pragma preserves it):
+            let mut columns: Vec<String> = Vec::new();
+            {
+                let mut stmt =
+                    db.prepare("SELECT name FROM pragma_table_info('proposals') ORDER BY cid")?;
+                let it = stmt.query_map([], |r| r.get::<_, String>(0))?;
+                for name in it.flatten() {
+                    columns.push(name);
+                }
+            }
+            // 2. the new table: the SAME column law, the AMENDED CHECK.
+            db.execute_batch("ALTER TABLE proposals RENAME TO proposals_v1_32_34;")?;
+            db.execute_batch(
+                "CREATE TABLE proposals (
+                    id           INTEGER PRIMARY KEY,
+                    kind         TEXT NOT NULL DEFAULT 'fact',
+                    content      TEXT NOT NULL,
+                    source       TEXT,
+                    authority    REAL,
+                    observed_at  INTEGER,
+                    novelty      REAL NOT NULL,
+                    conflict_with INTEGER,
+                    salience     REAL NOT NULL DEFAULT 0.5,
+                    status       TEXT NOT NULL DEFAULT 'pending',
+                    created_at   INTEGER NOT NULL,
+                    decided_at   INTEGER,
+                    source_prompt TEXT,
+                    edited_at    INTEGER,
+                    owner        TEXT,
+                    qa_note      TEXT,
+                    lint_json    TEXT,
+                    domain       TEXT NOT NULL DEFAULT 'global',
+                    title        TEXT,
+                    promoted_chunk_id INTEGER,
+                    decision_run_ref TEXT,
+                    derived_from TEXT NOT NULL DEFAULT 'legacy'
+                     CHECK (derived_from IN ('operator','agent','watch','customer','legacy')),
+                    producer_ref TEXT
+                );",
+            )?;
+            // 3. the copy, column-named (order-proof, drift-proof):
+            let col_list = columns.join(", ");
+            db.execute(
+                &format!(
+                    "INSERT INTO proposals ({cols}) SELECT {cols} FROM proposals_v1_32_34",
+                    cols = col_list
+                ),
+                [],
+            )?;
+            // 4. drop the old table, restore the indexes (their names are
+            // unchanged; the rebuilt table carries them again).
+            db.execute_batch("DROP TABLE proposals_v1_32_34;")?;
+            db.execute_batch(
+                "CREATE INDEX IF NOT EXISTS idx_proposals_status ON proposals(status);
+                 CREATE INDEX IF NOT EXISTS idx_proposals_status_domain ON proposals(status, domain);",
+            )?;
+        }
+    }
+
     db.execute(
-        "INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1.32.34')
-         ON CONFLICT(key) DO UPDATE SET value = '1.32.34';",
+        "INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1.32.35')
+         ON CONFLICT(key) DO UPDATE SET value = '1.32.35';",
         [],
     )?;
 

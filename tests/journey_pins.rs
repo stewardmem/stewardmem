@@ -49,6 +49,7 @@ fn journey_two_renders_are_byte_identical() {
         digest: "aa".repeat(32),
         actor: "m-supervisor".to_string(),
     }];
+    let appeals: Vec<brain_server::workflow::journey::AppealFact> = vec![];
     let holds = vec![brain_server::workflow::journey::HoldFact {
         id: 5,
         held_at: 1_500,
@@ -66,6 +67,7 @@ fn journey_two_renders_are_byte_identical() {
         2_500,
         r#"{"kind":"handoff_transition","decision_ref":"h-1","subject":"stage","outcome":"delivered","at":2500}"#.to_string(),
     )];
+    let appeals: Vec<brain_server::workflow::journey::AppealFact> = vec![];
 
     let mk = || {
         let run = base_run();
@@ -76,6 +78,7 @@ fn journey_two_renders_are_byte_identical() {
             approvals: &approvals,
             holds: &holds,
             dsars: &dsars,
+            appeals: &appeals,
         };
         brain_server::workflow::journey::project(&chain)
     };
@@ -100,6 +103,7 @@ fn journey_two_renders_are_byte_identical() {
         approvals: &approvals,
         holds: &holds,
         dsars: &dsars,
+        appeals: &appeals,
     };
     let c = brain_server::workflow::journey::project(&chain);
     assert_eq!(
@@ -181,6 +185,7 @@ fn journey_planted_roster_name_never_reaches_the_render() {
         actor: "olivia-roster-name".to_string(),
     }];
     let run = base_run();
+    let appeals: Vec<brain_server::workflow::journey::AppealFact> = vec![];
     let chain = brain_server::workflow::journey::JourneyChain {
         run,
         checkpoints: &[],
@@ -188,6 +193,7 @@ fn journey_planted_roster_name_never_reaches_the_render() {
         approvals: &approvals,
         holds: &[],
         dsars: &[],
+        appeals: &appeals,
     };
     let events = brain_server::workflow::journey::project(&chain);
     let hits = scan_for_names(&events, "olivia-roster-name");

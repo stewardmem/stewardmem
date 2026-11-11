@@ -32,7 +32,8 @@
 		fetchClientJourney,
 		toJourneyMetadata,
 		type JourneyCache,
-		type JourneyCase
+		type JourneyCase,
+		type JourneyEvent
 	} from '#lib/api/journey.js';
 	import { Alert } from '#lib/components/ui/alert/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -41,7 +42,13 @@
 	type View =
 		| { kind: 'idle' }
 		| { kind: 'loading' }
-		| { kind: 'live'; journey: readonly JourneyCase[]; client: string; domain: string }
+		| {
+			kind: 'live';
+			journey: readonly JourneyCase[];
+			domainEvents: readonly JourneyEvent[];
+			client: string;
+			domain: string;
+		}
 		| { kind: 'empty' }
 		| { kind: 'offline'; cached: JourneyCache | null; client: string }
 		| { kind: 'refused'; status: number | null; fault: WireFault }
@@ -115,7 +122,10 @@
 		const read = await fetchClientJourney(name, parsedCase);
 		if (current !== generation) return;
 		if (read.kind === 'ok') {
-			if (read.journey.cases.length === 0) {
+			// EMPTY is the kernel's whole answer: no cases AND no domain acts.
+			// A client with appeals and no cases still renders LIVE (the
+			// "received." the customer must see).
+			if (read.journey.cases.length === 0 && read.journey.domain_events.length === 0) {
 				view = { kind: 'empty' };
 				return;
 			}
@@ -123,6 +133,7 @@
 			view = {
 				kind: 'live',
 				journey: read.journey.cases,
+				domainEvents: read.journey.domain_events,
 				client: read.journey.client,
 				domain: read.journey.domain
 			};
@@ -220,6 +231,32 @@
 		<p class="text-xs text-muted-foreground" data-testid="journey-scope">
 			{m['journey.scope']({ client: view.client, domain: view.domain })}
 		</p>
+		{#if view.domainEvents.length > 0}
+			<section class="grid gap-2 rounded-lg border p-4" data-testid="journey-domain-events">
+				<h2 class="text-sm font-semibold" data-testid="journey-domain-title">
+					{m['journey.domain.title']()}
+				</h2>
+				<ol class="grid gap-2" data-testid="journey-events">
+					{#each view.domainEvents as event (event.seq)}
+						<li
+							class="grid gap-1 rounded-md border p-3"
+							data-testid="journey-event"
+							data-kind={event.kind}
+						>
+							<p class="text-sm" data-testid="journey-event-text">{event.text}</p>
+							<p class="text-xs text-muted-foreground" data-testid="journey-event-actor">
+								{event.actor}
+							</p>
+							{#if event.digest !== null}
+								<p class="break-all font-mono text-xs" data-testid="journey-event-digest">
+									{event.digest}
+								</p>
+							{/if}
+						</li>
+					{/each}
+				</ol>
+			</section>
+		{/if}
 		{#each view.journey as journeyCase (journeyCase.case_id)}
 			<section
 				class="grid gap-3 rounded-lg border p-4"

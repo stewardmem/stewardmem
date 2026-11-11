@@ -19897,12 +19897,12 @@ mod r38_delivery {
         let db = test_db();
         assert_eq!(
             brain_server::storage_layout::schema_version(&db).as_deref(),
-            Some(brain_server::storage_layout::SCHEMA_VERSION_V1_32_34),
+            Some(brain_server::storage_layout::SCHEMA_VERSION_V1_32_35),
             "the migration literal and the ceiling const must agree on the current stamp"
         );
         assert_eq!(
             brain_server::storage_layout::LATEST_KNOWN_SCHEMA,
-            "1.32.34",
+            "1.32.35",
             "LATEST_KNOWN_SCHEMA must move with the stamp — refuse_newer must not bless a DB \
              this binary cannot migrate"
         );
@@ -20639,12 +20639,12 @@ mod r40_attestations {
         // round; what moves is the ceiling, and it moves for both.
         assert_eq!(
             brain_server::storage_layout::schema_version(&db).as_deref(),
-            Some(brain_server::storage_layout::SCHEMA_VERSION_V1_32_34),
+            Some(brain_server::storage_layout::SCHEMA_VERSION_V1_32_35),
             "the ceiling const and the migration literal must move together"
         );
         assert_eq!(
             brain_server::storage_layout::LATEST_KNOWN_SCHEMA,
-            "1.32.34",
+            "1.32.35",
             "LATEST_KNOWN_SCHEMA must move with the stamp — refuse_newer must not bless a DB \
              this binary cannot migrate"
         );
@@ -21440,18 +21440,19 @@ mod r41_replay {
         // The stamp moved, and moved with the table.
         assert_eq!(
             brain_server::storage_layout::LATEST_KNOWN_SCHEMA,
-            "1.32.34",
+            "1.32.35",
             "the release round is a schema round: the stamp moves with the table that earns it. \
              Later schema rounds re-pin the CURRENT stamp — the model-citation-key round moved \
              it to 1.32.25, the proposal-edge round moved it to 1.32.26, the approve-action \
              round moved it to 1.32.27 for the roster's manages column, the uninstall \
              round moved it to 1.32.28 for the register's removed_at column, and the LL-04 \
              round moved it to 1.32.29 for the chat turn's support_decision column, and \
-             IMPROVE13 moved it to 1.32.34 for the MemForm provenance stamps"
+             IMPROVE13 moved it to 1.32.34 for the MemForm provenance stamps, and \
+             IMPROVE15 moved it to 1.32.35 for the CustomerProvenance schema act"
         );
         assert_eq!(
             brain_server::storage_layout::schema_version(&db).as_deref(),
-            Some(brain_server::storage_layout::SCHEMA_VERSION_V1_32_34),
+            Some(brain_server::storage_layout::SCHEMA_VERSION_V1_32_35),
         );
         // ...and the parity table the migration rehearsal walks carries the new
         // table: a rehearsal that came back with zero bindings would produce a
@@ -21945,14 +21946,14 @@ mod r42_authority_bindings {
         let db = test_db();
         assert_eq!(
             brain_server::storage_layout::LATEST_KNOWN_SCHEMA,
-            "1.32.34",
-            "the bindings stamp pin moves with each schema round's stamp (last: IMPROVE13, \
-             the MemformStamps columns): each schema round re-pins the \
+            "1.32.35",
+            "the bindings stamp pin moves with each schema round's stamp (last: IMPROVE15, \
+             the CustomerProvenance schema act): each schema round re-pins the \
              CURRENT stamp, so a stale ceiling fails loudly here"
         );
         assert_eq!(
             brain_server::storage_layout::schema_version(&db).as_deref(),
-            Some("1.32.34"),
+            Some("1.32.35"),
             "what the migration stamps must be what the ceiling declares"
         );
     }
@@ -22861,7 +22862,7 @@ mod r42_authority_bindings {
             .find("CREATE TABLE IF NOT EXISTS delivery_bindings")
             .expect("the table DDL must exist in the migration's production region");
         let stamp_at = migration
-            .find("'schema_version', '1.32.34'")
+            .find("'schema_version', '1.32.35'")
             .expect("the stamp must move to the current schema round's stamp");
         assert!(
             ddl_at < stamp_at,
@@ -22870,7 +22871,7 @@ mod r42_authority_bindings {
         // The stamp's two arms stay in lockstep — the lockstep pin derives both
         // sides, and a half-edited stamp makes `refuse-newer` lie.
         assert!(
-            migration.contains("DO UPDATE SET value = '1.32.34'"),
+            migration.contains("DO UPDATE SET value = '1.32.35'"),
             "both arms of the schema_version upsert must move together"
         );
         // Rehearsal parity: the new table is walked by the migration rehearsal,
@@ -23091,7 +23092,7 @@ mod r43_releases {
         let db = test_db();
         assert_eq!(
             brain_server::storage_layout::LATEST_KNOWN_SCHEMA,
-            "1.32.34",
+            "1.32.35",
             "the release round is a schema round: the stamp moves with the table that earns it. \
              Each schema round re-pins the CURRENT stamp — the per-domain axis round left it at \
              1.32.24, the model-citation-key round moved it to 1.32.25 for the two registry-key \
@@ -23104,20 +23105,21 @@ mod r43_releases {
              1.32.31 for the knowledge row's scholarly provenance column, IMPROVE08 \
              moved it to 1.32.32 for the research watch's three tables, and IMPROVE11 \
              moved it to 1.32.33 for the HITL decision-event ledger, and IMPROVE13 \
-             moved it to 1.32.34 for the MemForm provenance stamps"
+             moved it to 1.32.34 for the MemForm provenance stamps, and IMPROVE15 \
+             moved it to 1.32.35 for the CustomerProvenance schema act"
         );
         assert_eq!(
             brain_server::storage_layout::schema_version(&db).as_deref(),
-            Some("1.32.34"),
+            Some("1.32.35"),
         );
         let migration = src("src/migration.rs");
         assert!(
-            migration.contains("DO UPDATE SET value = '1.32.34'"),
+            migration.contains("DO UPDATE SET value = '1.32.35'"),
             "both arms of the schema_version upsert must move together"
         );
         let layout = src("src/storage_layout.rs");
         assert!(
-            layout.contains("is_newer_than_known(Some(\"1.32.34\"))"),
+            layout.contains("is_newer_than_known(Some(\"1.32.36\"))"),
             "the probe must move one ABOVE the new ceiling, or it silently tests Equal"
         );
     }
@@ -24214,7 +24216,7 @@ mod r44_outcomes {
         // approve-action round moved it again for the roster's manages column, and the
         // uninstall round moved it again for the register's removed_at column.
         assert!(
-            layout.contains("pub const LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_34;")
+            layout.contains("pub const LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_35;")
                 && layout.contains("\"1.32.31\""),
             "the schema stamp is the lockstep triple: LATEST_KNOWN_SCHEMA must name the \
              newest SCHEMA_VERSION_* const and that const must carry the same literal. R44 \

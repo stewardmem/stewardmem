@@ -131,6 +131,11 @@ pub const ALERT_KIND_WORKFLOW: &str = "workflow";
 /// personal assistant's reminder/digest pings. Same additive,
 /// opt-in subscription posture as `workflow`.
 pub const ALERT_KIND_VALET: &str = "valet/due";
+/// The appeal's review-clock alert (IMPROVE15): a missed review clock rides
+/// the EXISTING webhook alerting path (publish → the operator's own
+/// webhook), never a new channel. The payload names the appeal, its declared
+/// deadline, and the verdict — the commitment the chain can prove.
+pub const ALERT_KIND_APPEAL: &str = "appeal";
 
 /// `GET /events` SSE broadcast buffer. Bounded — a slow
 /// consumer drops missed events (broadcast lag semantics), never blocks the

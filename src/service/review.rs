@@ -239,10 +239,24 @@ pub(crate) fn pending_page(
             ),
             |r| {
                 let row_content: String = r.get(2)?;
+                let row_kind: String = r.get(1)?;
                 let row_title: Option<String> = r.get(15)?;
                 let created_at: i64 = r.get(9)?;
                 let owner: Option<String> = r.get(12)?;
-                let (expires_at, warn_secs, critical_secs) = proposal_deadline(created_at);
+                // THE APPEAL'S BANDS ARE THE CLOCK (IMPROVE15): the queue's
+                // countdown for an appeal row renders the DECLARED review
+                // clock's deadline, never the TTL deadline — the commitment
+                // the chain can prove, visible on the very row the operator
+                // decides.
+                let (expires_at, warn_secs, critical_secs) = if row_kind == "appeal" {
+                    (
+                        crate::workflow::journey::appeal_clock_deadline(created_at),
+                        crate::config::ALERT_WARN_SECS,
+                        crate::config::ALERT_CRITICAL_SECS,
+                    )
+                } else {
+                    proposal_deadline(created_at)
+                };
                 // compose the QA scorecard. Proposals are not
                 // recall-trace-linked in schema, so `has_trace` stays false — the
                 // absent-trace neutral corner (never NaN). `in_scope` = the candidate
@@ -394,13 +408,17 @@ pub(crate) fn owner_in_filtered(rows: Vec<ProposalView>, manages: &[String]) -> 
 }
 
 /// The PATH-ASSIGNED provenance marker's closed vocabulary (the
-/// provenance-marker schema round). Every producer's INSERT stamps ONE of these
-/// values at the kernel side, derived from the CALLING CONTEXT — the request
-/// struct gains NO field, so the wire cannot set the marker (request-borne
-/// provenance is the MemForm defeat). `legacy` marks pre-marker rows
-/// (provenance beats guessing — the domain-column backfill precedent). The
-/// marker INFORMS the human approval; it never gates it (HITL sacred).
-pub const DERIVED_FROM_VOCABULARY: [&str; 4] = ["operator", "agent", "watch", "legacy"];
+/// provenance-marker schema round; `customer` joined when the customer's
+/// appeal gained its own provenance value — a customer-sourced proposal
+/// stamped `operator` would be exactly the provenance blur that round
+/// closed). Every producer's INSERT stamps ONE of
+/// these values at the kernel side, derived from the CALLING CONTEXT — the
+/// request struct gains NO field, so the wire cannot set the marker
+/// (request-borne provenance is the MemForm defeat). `legacy` marks
+/// pre-marker rows (provenance beats guessing — the domain-column backfill
+/// precedent). The marker INFORMS the human approval; it never gates it
+/// (HITL sacred).
+pub const DERIVED_FROM_VOCABULARY: [&str; 5] = ["operator", "agent", "watch", "customer", "legacy"];
 
 /// The marker's reference bound: a kernel-set label, never caller text.
 pub const MAX_PRODUCER_REF: usize = 128;
@@ -631,6 +649,24 @@ pub fn expire_if_stale(
     now: i64,
 ) -> Result<bool, GateError> {
     if now - created_at <= crate::config::proposal_ttl_secs() {
+        return Ok(true);
+    }
+    // THE APPEAL'S CLOCK GOVERNS, NEVER THE TTL (IMPROVE15): the machine
+    // never expires a customer's appeal — the DECLARED review clock (the
+    // const table in workflow::journey) is the commitment, kept-or-missed is
+    // chain-provable, and a missed clock alerts through the EXISTING webhook
+    // path. A machine-expired appeal would be the customer's act dying
+    // unreviewed — exactly the silent loss the clock exists to prevent. The
+    // kind read rides the row the caller already resolved; an absent row
+    // (a concurrent decide) falls through to the ordinary path.
+    let kind: Option<String> = conn
+        .query_row(
+            "SELECT kind FROM proposals WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        )
+        .ok();
+    if kind.as_deref() == Some(crate::handlers::gate::PROP_KIND_APPEAL) {
         return Ok(true);
     }
     conn.execute(

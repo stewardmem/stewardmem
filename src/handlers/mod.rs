@@ -105,6 +105,11 @@ pub const MAX_SOURCE_PROMPT: usize = 2_048;
 /// (`channel-capture`) with room for a scoped name (2026-09-11 bounds-law
 /// fix: the field was unbounded up to the 1 MiB body cap).
 pub const MAX_SOURCE: usize = 64;
+/// The appeal source's bound (IMPROVE15): the appeal's structured ref
+/// (`appeal:{64-hex digest}` = 71 bytes, plus `@case:{id}` up to 25 more) is
+/// the kernel's OWN grammar — the digest law's carrier — and its ceiling is
+/// the grammar's, not the trust-label's 64.
+pub const MAX_APPEAL_SOURCE: usize = 96;
 pub const MAX_LIMIT: u32 = 100;
 pub const MIN_LIMIT: u32 = 1;
 pub const MAX_ENTITIES: usize = 200;

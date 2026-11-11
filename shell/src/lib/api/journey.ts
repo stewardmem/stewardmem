@@ -56,11 +56,15 @@ export interface JourneyCase {
 	readonly events: readonly JourneyEvent[];
 }
 
-/** The journey response: the client's identity block + one entry per case. */
+/** The journey response: the client's identity block + one entry per case +
+ * the client's OWN acts (holds, DSARs, the appeals — rendered even when the
+ * client has no cases: an appeal filed before any case exists is exactly the
+ * "received." the customer must see). */
 export interface JourneyResponse {
 	readonly client: string;
 	readonly domain: string;
 	readonly cases: readonly JourneyCase[];
+	readonly domain_events: readonly JourneyEvent[];
 }
 
 export type JourneyRead =
@@ -104,7 +108,9 @@ const isJourney = (value: unknown): value is JourneyResponse => {
 		typeof value['client'] === 'string' &&
 		typeof value['domain'] === 'string' &&
 		Array.isArray(value['cases']) &&
-		value['cases'].every(isCase)
+		value['cases'].every(isCase) &&
+		Array.isArray(value['domain_events']) &&
+		value['domain_events'].every(isEvent)
 	);
 };
 

@@ -559,5 +559,6 @@
   "journey.scope": "Cliente {client} · dominio {domain} — la proyección lee solo el repositorio propio de este cliente.",
   "journey.case.title": "Caso {id}",
   "journey.age.now": "hace un momento",
-  "journey.age.minutes": "hace {count} minutos"
+  "journey.age.minutes": "hace {count} minutos",
+  "journey.domain.title": "Sus datos y recursos"
 }

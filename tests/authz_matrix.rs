@@ -361,6 +361,13 @@ fn rows() -> Vec<(&'static str, String, &'static str, &'static str)> {
                 r#"{"subject":"matrix","action":"export","dry_run":true,"subject_exact":true}"#,
             ),
             "/clients/{name}/hold" => ("POST", r#"{"ids":[1],"reason":"matrix"}"#),
+            // the appeal's filing door: complete-shaped so the Json
+            // extractor clears and the gate decides (the fixture's client is
+            // absent — the pass cells 404 pre-gate, PRE_GATE_404).
+            "/clients/{name}/appeals" => (
+                "POST",
+                r#"{"review_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","reason":"matrix"}"#,
+            ),
             "/clients/{name}/end" => ("POST", r#"{"dataset":"matrix"}"#),
             "/sources/reconcile" => (
                 "POST",
@@ -717,6 +724,7 @@ const PRE_GATE_404: &[&str] = &[
     // client. A leak here would be a 403-for-one-class oracle naming which
     // clients exist.
     "/clients/{name}/journey",
+    "/clients/{name}/appeals",
 ];
 /// The legacy soft-deny surface: these routes predate the 403 vocabulary and
 /// deliberately answer their deny with a 200 body so old clients keep

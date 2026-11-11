@@ -559,5 +559,6 @@
   "journey.scope": "Client {client} · domain {domain} — the projection reads this client's own pool only.",
   "journey.case.title": "Case {id}",
   "journey.age.now": "moments ago",
-  "journey.age.minutes": "{count} minutes ago"
+  "journey.age.minutes": "{count} minutes ago",
+  "journey.domain.title": "Your data and appeals"
 }

@@ -344,6 +344,15 @@ pub const SCHEMA_VERSION_V1_32_32: &str = "1.32.32";
 /// nullable producer/gate reference). The wire cannot set the marker; the
 /// approver SEES it beside the canonical content. Reads, never gates.
 pub const SCHEMA_VERSION_V1_32_34: &str = "1.32.34";
+/// v1.32.35 (IMPROVE15, the CustomerProvenance schema act): the customer
+/// value joins the derived_from CHECK — the appeal's provenance (the chain
+/// must prove WHOSE act the proposal was; a customer-sourced appeal stamped
+/// `operator` would be the provenance blur round 13 closed). The stamp law
+/// is unchanged (PATH-ASSIGNED; the wire cannot set the marker). SQLite
+/// cannot ALTER a CHECK, so the widening is the ONE-TIME marker-guarded
+/// table rebuild (the vec_knowledge cosine-rebuild precedent), guarded on
+/// the stored sqlite_master SQL.
+pub const SCHEMA_VERSION_V1_32_35: &str = "1.32.35";
 
 /// v1.32.33 (IMPROVE11): the HITL decision-event ledger — ONE additive
 /// guarded CREATE (`hitl_decision_events`, append-only, one row per decided
@@ -370,7 +379,7 @@ pub const SCHEMA_VERSION_V0_9_9: &str = "0.9.9";
 /// Security posture: a source DB stamped NEWER than this is refused loudly
 /// ([`refuse_newer_schema`]) — migrating *down* would silently drop columns
 /// the newer release added, i.e. data loss dressed as a migration.
-pub const LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_34;
+pub const LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_35;
 
 /// Numeric dotted-version compare (std-only, no semver dependency).
 /// Non-numeric components are skipped (the `schema_ge` precedent in the
@@ -844,13 +853,15 @@ mod tests {
         // IMPROVE11 round (the HITL decision-event ledger) moved
         // the ceiling to 1.32.33, so the probe moved to 1.32.34, and the
         // IMPROVE13 round (the MemForm provenance stamps) moved
-        // the ceiling to 1.32.34, so the probe moved to 1.32.35.
+        // the ceiling to 1.32.34, so the probe moved to 1.32.35, and the
+        // IMPROVE15 round (the CustomerProvenance schema act) moved
+        // the ceiling to 1.32.35, so the probe moved to 1.32.36.
         // A probe
         // pinned AT the ceiling silently tests `Equal`, not `Greater` — the assertion
         // would keep passing while a NEWER-schema database was blessed instead of
         // refused, which is the one failure this function exists to prevent.
-        assert!(is_newer_than_known(Some("1.32.35")));
-        assert!(!is_newer_than_known(Some("1.32.34")));
+        assert!(is_newer_than_known(Some("1.32.36")));
+        assert!(!is_newer_than_known(Some("1.32.35")));
         assert!(!is_newer_than_known(Some("1.32.9")));
         assert!(!is_newer_than_known(Some("1.28.9")));
     }

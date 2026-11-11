@@ -223,6 +223,7 @@ pub const OPENAPI_ROUTES: &[&str] = &[
     // lives in the handler; the path gate here stays Read (the middleware
     // tier), never the QA queue's Admin.
     "/clients/{name}/journey",
+    "/clients/{name}/appeals",
     "/retention/report",
     // the curated legal-rules DB (Admin + DPO role; read-only diff).
     "/legal/rules",
@@ -547,6 +548,10 @@ pub const AUTHZ_GATES: &[(&str, &str)] = &[
     // plain-Admin gate is deliberately NOT the journey's law: a plain Admin
     // row would let the supervisor QA class read every client's journey).
     ("/clients/{name}/journey", "Admin"),
+    // the appeal's filing door: the OPERATOR leg the handler carries (the
+    // journey's own law — the client's own principal + the operator — lives
+    // in the handler beside it, exactly as the journey read does).
+    ("/clients/{name}/appeals", "Admin"),
     ("/retention/report", "Admin"),
     // the curated legal-rules DB: Admin gate; the handler then demands the
     // DPO role (the scoreboard posture — DPO evidence, not a public read).

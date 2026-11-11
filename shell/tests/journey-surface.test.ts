@@ -68,6 +68,19 @@ function journeyBody(): Record<string, unknown> {
 	return {
 		client: 'acme-us',
 		domain: 'acme',
+		domain_events: [
+			{
+				kind: 'appeal_received',
+				case_id: 0,
+				at: 1_753_200_000,
+				seq: 88,
+				text: 'Your appeal was received.',
+				actor: 'the system',
+				digest: null,
+				count: null,
+				phase: null
+			}
+		],
 		cases: [
 			{
 				case_id: 7,
@@ -232,7 +245,8 @@ test('journey_refusal_renders_the_existence_blind_refusal_not_an_empty_journey',
 test('journey_empty_is_a_fact_never_an_offline_collapse', async () => {
 	responder = async (url) => {
 		if (url.includes('/clients/acme-us/journey')) {
-			return jsonResponse({ client: 'acme-us', domain: 'acme', cases: [] });
+			// the kernel's WHOLE answer: no cases AND no domain acts.
+			return jsonResponse({ client: 'acme-us', domain: 'acme', cases: [], domain_events: [] });
 		}
 		return jsonResponse({ error: 'unexpected' }, 404);
 	};
@@ -283,4 +297,42 @@ test('journey_census_parity_sweep_and_catalogs_carry_the_route', async () => {
 			).toBe(true);
 		}
 	}
+});
+
+test('journey_appeal_events_render_even_when_the_client_has_no_cases', async () => {
+	// THE ROUND'S OWN DRILL, now a pin: an appeal filed before any case exists
+	// must still render — the domain half of the projection is independent of
+	// the case list.
+	responder = async (url) => {
+		if (url.includes('/clients/acme-us/journey')) {
+			return jsonResponse({
+				client: 'acme-us',
+				domain: 'acme',
+				cases: [],
+				domain_events: [
+					{
+						kind: 'appeal_received',
+						case_id: 0,
+						at: 1_753_200_000,
+						seq: 88,
+						text: 'Your appeal was received.',
+						actor: 'the system',
+						digest: null,
+						count: null,
+						phase: null
+					}
+				]
+			});
+		}
+		return jsonResponse({ error: 'unexpected' }, 404);
+	};
+	vi.stubGlobal('fetch', fetchMock);
+	await renderRoute();
+	await loadClient('acme-us');
+	await waitForTestId('journey-domain-events');
+	const texts = [...screen.getAllByTestId('journey-event-text')].map((el) => el.textContent);
+	expect(texts).toContain('Your appeal was received.');
+	// and the kernel's empty-cases FACT stays a fact (the domain half is not
+	// an excuse to hide it):
+	expect(screen.queryByTestId('journey-domain-title')).not.toBeNull();
 });

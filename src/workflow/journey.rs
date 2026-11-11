@@ -54,6 +54,8 @@ pub const JOURNEY_KINDS: &[&str] = &[
     "hold_added",
     "hold_released",
     "dsar_completed",
+    "appeal_received",
+    "appeal_decided",
 ];
 
 /// One journey event kind. `wire_kind` is the string that crosses the wire
@@ -70,6 +72,8 @@ pub enum JourneyKind {
     HoldAdded,
     HoldReleased,
     DsarCompleted,
+    AppealReceived,
+    AppealDecided,
 }
 
 impl JourneyKind {
@@ -85,6 +89,8 @@ impl JourneyKind {
             Self::HoldAdded => "hold_added",
             Self::HoldReleased => "hold_released",
             Self::DsarCompleted => "dsar_completed",
+            Self::AppealReceived => "appeal_received",
+            Self::AppealDecided => "appeal_decided",
         }
     }
 }
@@ -179,10 +185,58 @@ pub fn sentence_for(
         JourneyKind::HanddownExecuted => "The verified procedure was applied.".to_string(),
         JourneyKind::HoldAdded => "A legal hold affects your data.".to_string(),
         JourneyKind::HoldReleased => "A legal hold on your data was released.".to_string(),
-        JourneyKind::DsarCompleted => format!(
-            "Your data request completed. Certificate: {}.",
-            digest.unwrap_or("")
-        ),
+        JourneyKind::DsarCompleted => match digest {
+            Some(d) => format!("Your data request completed. Certificate: {d}."),
+            None => "Your data request completed.".to_string(),
+        },
+        JourneyKind::AppealReceived => "Your appeal was received.".to_string(),
+        JourneyKind::AppealDecided => "Your appeal was decided.".to_string(),
+    }
+}
+
+// ── the appeal's declared review clock (the sla_seconds pattern) ──────────
+//
+// THE CONST TABLE (the tier-table pattern): one appeal class today — the
+// customer appeal through the portal. Widening is a dated act, never a
+// tweak. An appeal without a clock is a suggestion; this makes it a
+// commitment the chain can prove was kept or missed.
+
+/// The customer appeal's declared review clock, in seconds (seven days).
+pub const APPEAL_REVIEW_CLOCK_SECS: i64 = 7 * 24 * 3600;
+
+/// The clock's deadline: a pure fn over the row's own `created_at` — the
+/// commitment the chain can prove.
+pub fn appeal_clock_deadline(created_at: i64) -> i64 {
+    created_at + APPEAL_REVIEW_CLOCK_SECS
+}
+
+/// The clock's verdict, pure over chain-provable facts: the proposal row's
+/// `created_at`, the HITL ledger's decision `ts` (None = still open), and
+/// the caller's now (only used to name an OPEN breach — a pending appeal
+/// past its deadline is already a missed commitment the moment the deadline
+/// passes, decided or not).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppealClock {
+    /// disposed before the deadline — the commitment kept.
+    Kept,
+    /// disposed after the deadline — the commitment missed (the alert fires
+    /// through the EXISTING webhook path; the audit row carries the verdict).
+    Missed,
+    /// still open past the deadline — missed and un-decided.
+    MissedOpen,
+    /// inside the window, undecided — the commitment still keepable.
+    Pending,
+}
+
+impl AppealClock {
+    pub fn kept_or_missed(created_at: i64, decided_at: Option<i64>, now: i64) -> Self {
+        let deadline = appeal_clock_deadline(created_at);
+        match decided_at {
+            Some(ts) if ts <= deadline => Self::Kept,
+            Some(_) => Self::Missed,
+            None if now > deadline => Self::MissedOpen,
+            None => Self::Pending,
+        }
     }
 }
 
@@ -286,6 +340,16 @@ pub struct DsarFact {
     pub actor: String,
 }
 
+/// One appeal: the proposal row ⋈ (optionally) its HITL disposal row. The
+/// received event rides `created_at`; the decided event rides the ledger's
+/// `ts` + its decision word (approve|reject — both are disposals the
+/// customer sees as "decided", never a reversal).
+pub struct AppealFact {
+    pub proposal_id: i64,
+    pub created_at: i64,
+    pub decided_at: Option<i64>,
+}
+
 /// The projection's whole input: one case run + the chain rows and the
 /// domain-level acts that belong to the same client. Rows in, events out —
 /// the fn owns no state.
@@ -300,6 +364,8 @@ pub struct JourneyChain<'a> {
     pub approvals: &'a [ApprovalFact],
     pub holds: &'a [HoldFact],
     pub dsars: &'a [DsarFact],
+    /// the domain's appeals (kind='appeal' proposals ⋈ their disposals).
+    pub appeals: &'a [AppealFact],
 }
 
 /// One customer event. Every field is a chain-provable fact or a fixed
@@ -557,9 +623,37 @@ pub fn project(chain: &JourneyChain) -> Vec<JourneyEvent> {
         });
     }
 
-    // The client's data acts (domain-level: case_id 0). The hold/DSAR rows
-    // carry their own actor label; the mapping renders the role.
-    let mut holds: Vec<&HoldFact> = chain.holds.iter().collect();
+    // The client's data acts + the appeals ride the DOMAIN half (one fn, so
+    // the case timeline and the response's domain_events can never disagree):
+    events.extend(project_domain(chain.appeals, chain.holds, chain.dsars));
+
+    // The total sort key: (at, kind, case_id, seq, text). Deterministic over
+    // any input row order; ties fall to the rendered text, which is a pure
+    // fn of the closed table.
+    events.sort_by(|a, b| {
+        (a.at, a.kind, a.case_id, a.seq, a.text.as_str()).cmp(&(
+            b.at,
+            b.kind,
+            b.case_id,
+            b.seq,
+            b.text.as_str(),
+        ))
+    });
+    events
+}
+
+/// The DOMAIN half of the projection: the client's own acts (legal holds,
+/// completed DSARs, the appeals) — the events that belong to the CLIENT, not
+/// to one case. ONE fn so a case timeline's copy and the response's
+/// domain_events copy can never disagree (the projection law: one
+/// projection). Sorted by the same total key as the case half.
+pub fn project_domain(
+    appeals: &[AppealFact],
+    holds: &[HoldFact],
+    dsars: &[DsarFact],
+) -> Vec<JourneyEvent> {
+    let mut events: Vec<JourneyEvent> = Vec::new();
+    let mut holds: Vec<&HoldFact> = holds.iter().collect();
     holds.sort_by_key(|h| (h.held_at, h.id));
     for hold in holds {
         events.push(JourneyEvent {
@@ -587,7 +681,7 @@ pub fn project(chain: &JourneyChain) -> Vec<JourneyEvent> {
             });
         }
     }
-    let mut dsars: Vec<&DsarFact> = chain.dsars.iter().collect();
+    let mut dsars: Vec<&DsarFact> = dsars.iter().collect();
     dsars.sort_by_key(|d| (d.completed_at, d.id));
     for dsar in dsars {
         events.push(JourneyEvent {
@@ -607,10 +701,38 @@ pub fn project(chain: &JourneyChain) -> Vec<JourneyEvent> {
             phase: None,
         });
     }
-
-    // The total sort key: (at, kind, case_id, seq, text). Deterministic over
-    // any input row order; ties fall to the rendered text, which is a pure
-    // fn of the closed table.
+    // The appeals (the round's centerpiece): received at the filing, decided
+    // at the HITL disposal — "received." / "decided.", roles not names, no
+    // reversal rendered (the decision is the fact; what it decided is the
+    // operator's side of the provenance pair).
+    let mut appeals: Vec<&AppealFact> = appeals.iter().collect();
+    appeals.sort_by_key(|a| (a.created_at, a.proposal_id));
+    for appeal in appeals {
+        events.push(JourneyEvent {
+            kind: JourneyKind::AppealReceived.wire_kind(),
+            case_id: 0,
+            at: appeal.created_at,
+            seq: appeal.proposal_id,
+            text: sentence_for(JourneyKind::AppealReceived, None, None, None),
+            actor: "the system",
+            digest: None,
+            count: None,
+            phase: None,
+        });
+        if let Some(decided_at) = appeal.decided_at {
+            events.push(JourneyEvent {
+                kind: JourneyKind::AppealDecided.wire_kind(),
+                case_id: 0,
+                at: decided_at,
+                seq: appeal.proposal_id,
+                text: sentence_for(JourneyKind::AppealDecided, None, None, None),
+                actor: "the privacy office",
+                digest: None,
+                count: None,
+                phase: None,
+            });
+        }
+    }
     events.sort_by(|a, b| {
         (a.at, a.kind, a.case_id, a.seq, a.text.as_str()).cmp(&(
             b.at,

@@ -67,6 +67,13 @@ pub(crate) fn router() -> Router<Arc<AppState>> {
             "/clients/{name}/journey",
             get(handlers::clients::client_journey),
         )
+        // the appeal's filing door (IMPROVE15): the customer's appeal enters
+        // as a PROPOSAL (propose/dispose extends to the customer), stamped
+        // `customer` path-side; the journey's own authz law guards it.
+        .route(
+            "/clients/{name}/appeals",
+            post(handlers::clients::client_appeal),
+        )
         // source lifecycle. `reconcile` retires active sources
         // of a kind whose URI is no longer in the live set (a vault delete or
         // rename); `delete /sources/{id}` retires a single source explicitly.

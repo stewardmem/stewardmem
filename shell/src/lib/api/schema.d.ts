@@ -1715,6 +1715,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clients/{name}/appeals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The appeal's filing door (IMPROVE15)
+         * @description The customer's appeal enters the system as a PROPOSAL, never as a direct act (the propose/dispose law extends to the customer). The body carries the appealed item's `review_digest` (the DIGEST LAW: you appeal the bytes that were shown), the bounded reason (2000 chars), and an optional case id. The route stamps the proposal `customer` PATH-SIDE (the CustomerProvenance schema act 1.32.35 — the wire cannot set derived_from; producer_ref = portal:{client}). THE JOURNEY'S OWN AUTHZ LAW: the client's OWN principal + the operator only; everyone else answers the existence-blind 404. An appeal without the shown digest refuses BY NAME (`appeal_digest_required`); a digest no decided decision in the domain answers refuses (`appeal_target_unknown`). The appeal lands in the EXISTING review queue with a DECLARED review clock (seven days); the dispose rides the existing verbs + the HITL ledger; nothing auto-reverses.
+         */
+        post: operations["clientAppeal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/retention/report": {
         parameters: {
             query?: never;
@@ -5059,10 +5079,10 @@ export interface components {
             /** @description v1.28.53: the optional caller title (autocapture source title, parcel row title); absent for bodies without one. */
             title?: string | null;
             /**
-             * @description v1.32.34 "MemformStamps": the PATH-ASSIGNED provenance marker — which producer path wrote this proposal, stamped at the producer's INSERT from the CALLING CONTEXT (the request schema carries NO such field, so the wire cannot set it; a caller POSTing `derived_from` is ignored). Closed vocabulary: operator = the operator ingest surfaces (incl. the chat abstention capture — the user's own words); agent = agent/machinery-authored rows (the review-posture agent writes, the GDL workflow artifacts, CRM/delivery/crew/channel machinery); watch = the research watch's lane tick and its synthesis (RW-2); legacy = pre-marker rows (provenance beats guessing). The marker informs the human approval, it never gates it.
+             * @description v1.32.34 "MemformStamps", widened by the v1.32.35 "CustomerProvenance" schema act (IMPROVE15): the PATH-ASSIGNED provenance marker — which producer path wrote this proposal, stamped at the producer's INSERT from the CALLING CONTEXT (the request schema carries NO such field, so the wire cannot set it; a caller POSTing `derived_from` is ignored). Closed vocabulary: operator = the operator ingest surfaces (incl. the chat abstention capture — the user's own words); agent = agent/machinery-authored rows (the review-posture agent writes, the GDL workflow artifacts, CRM/delivery/crew/channel machinery); watch = the research watch's lane tick and its synthesis (RW-2); customer = the CUSTOMER's own act through the portal (the appeal's filing door — the chain proves WHOSE act the proposal was; producer_ref carries portal:{client}); legacy = pre-marker rows (provenance beats guessing). The marker informs the human approval, it never gates it.
              * @enum {string}
              */
-            derived_from?: "operator" | "agent" | "watch" | "legacy";
+            derived_from?: "operator" | "agent" | "watch" | "customer" | "legacy";
             /** @description v1.32.34: the kernel-set producer/gate reference (the run, lane, case, or path label the filing context held, e.g. `watch-lane:3`, `gdl-run:42`, `ingest-proposal`); absent where the path carries no stable subject id. */
             producer_ref?: string | null;
             /** @description The GRAD arm: the size of the pending cohort this row's producer/gate reference shares (self included), computed by one deterministic GROUP BY over the same filtered set the page serves. A unique reference reads 1; the page renders a batch badge at >= 2. Informs the human, never gates. */
@@ -9644,6 +9664,71 @@ export interface operations {
                 content?: never;
             };
             /** @description Existence-blind refusal — unknown client, non-owned client, foreign or absent one: ONE body for all */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client is not active (archived) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    clientAppeal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Client name (lowercase, domain-safe). */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The appealed item's review_digest (the bytes that were shown). */
+                    review_digest: string;
+                    /** @description The customer's stated reason (bounded at 2000 chars, screened). */
+                    reason: string;
+                    /**
+                     * Format: int64
+                     * @description An optional case link (a workflow_runs id in this client's domain).
+                     */
+                    case?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description The appeal filed as a pending proposal */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description `appeal_digest_required` (no shown digest) · `appeal_reason_too_long` · the screen refused the reason */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No bearer (the middleware) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Existence-blind refusal (unknown client, non-owned client) · `appeal_target_unknown` (no decided decision in the domain carries the digest) */
             404: {
                 headers: {
                     [name: string]: unknown;

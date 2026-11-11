@@ -21,10 +21,11 @@ use serde_json::{Value, json};
 
 use crate::AppState;
 
-/// The four fixed alert kinds (mirrors `config::ALERT_KIND_*`).
+/// The fixed alert kinds (mirrors `config::ALERT_KIND_*`; the appeal kind
+/// joined in IMPROVE15 — a missed review clock rides the existing path).
 pub use crate::config::{
-    ALERT_KIND_CHAIN, ALERT_KIND_EXPIRY, ALERT_KIND_PENDING, ALERT_KIND_PROPOSAL,
-    ALERT_KIND_SCREEN, ALERT_KIND_VALET, ALERT_KIND_WORKFLOW,
+    ALERT_KIND_APPEAL, ALERT_KIND_CHAIN, ALERT_KIND_EXPIRY, ALERT_KIND_PENDING,
+    ALERT_KIND_PROPOSAL, ALERT_KIND_SCREEN, ALERT_KIND_VALET, ALERT_KIND_WORKFLOW,
 };
 
 /// The ops-clock SLA tier (mirrors the client clock). `Ok` → `Warn` →

@@ -433,6 +433,16 @@ fn unstamped_production_inserts(files: &[(String, String)]) -> Vec<String> {
             // the SQL literal window: the column list + VALUES ride the next
             // few lines in this tree's house style
             let window: String = lines[i..(i + 6).min(lines.len())].join("\n");
+            // THE v1.32.35 REBUILD'S COPY is not a producer: the schema act's
+            // one-time table rebuild copies every row through a DYNAMIC
+            // column list (`INSERT INTO proposals ({cols}) SELECT ...`) — the
+            // copy carries derived_from BY CONSTRUCTION (the pragma column
+            // list IS the row's own columns). The site is named, not
+            // pattern-matched: a second dynamic INSERT joins this list only
+            // by its own dated act.
+            if name == "src/migration.rs" && window.contains("{cols}") {
+                continue;
+            }
             if !window.contains("derived_from") {
                 misses.push(format!("{name}:{lineno}"));
             }
@@ -521,9 +531,12 @@ fn mf1_openapi_declares_the_marker_on_the_view_only() {
          approval without its path-assigned marker"
     );
     assert!(
-        view.contains("operator") && view.contains("agent") && view.contains("watch"),
-        "the marker's closed vocabulary (operator|agent|watch|legacy) must be \
-         declared on the view schema"
+        view.contains("operator")
+            && view.contains("agent")
+            && view.contains("watch")
+            && view.contains("customer"),
+        "the marker's closed vocabulary (operator|agent|watch|customer|legacy — \
+         the IMPROVE15 schema act widened it) must be declared on the view schema"
     );
     assert!(
         view.contains("producer_ref"),
@@ -618,9 +631,10 @@ fn mf1_migration_stamps_1_32_34() {
         )
         .expect("stamp");
     assert_eq!(
-        stamp, "1.32.34",
-        "run_migration must stamp the CURRENT ceiling — 1.32.34 is the \
-         MemformStamps round (IMPROVE13); the stamp and the column moved together"
+        stamp, "1.32.35",
+        "run_migration must stamp the CURRENT ceiling — 1.32.35 is the \
+         CustomerProvenance schema act (IMPROVE15; the MemformStamps ceiling \
+         moved with it); the stamp and the vocabulary moved together"
     );
 }
 
@@ -671,25 +685,25 @@ fn mf1_migration_adds_the_closed_column_with_its_check() {
     );
     assert!(
         refused.is_err(),
-        "the CHECK must refuse a value outside operator|agent|watch|legacy"
+        "the CHECK must refuse a value outside operator|agent|watch|customer|legacy"
     );
 }
 
 /// MF-1, the structural half: the known-version bound and the migration's
 /// stamp string agree — either side moving alone reds here. (The const-name
 /// agreement is held by storage_layout's own probe test, which moves to
-/// 1.32.35 in the same commit.)
+/// 1.32.36 in the same commit — the IMPROVE15 schema act moved the ceiling.)
 #[test]
 fn mf1_lockstep_ceiling_moves_with_the_stamp() {
     assert_eq!(
         brain_server::storage_layout::LATEST_KNOWN_SCHEMA,
-        "1.32.34",
-        "the ceiling is the MemformStamps round (IMPROVE13)"
+        "1.32.35",
+        "the ceiling is the CustomerProvenance schema act (IMPROVE15)"
     );
     let migration = read_repo("src/migration.rs");
     assert!(
-        migration.contains("'schema_version', '1.32.34'"),
-        "run_migration must stamp 1.32.34 — the stamp and the ceiling move together"
+        migration.contains("'schema_version', '1.32.35'"),
+        "run_migration must stamp 1.32.35 — the stamp and the ceiling move together"
     );
 }
 

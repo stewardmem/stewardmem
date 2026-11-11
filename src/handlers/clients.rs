@@ -377,6 +377,132 @@ pub async fn coach_proposal(
     })))
 }
 
+/// `POST /clients/{name}/appeals` — the appeal's filing door (IMPROVE15):
+/// the customer's appeal enters the system as a PROPOSAL, never as a direct
+/// act (the propose/dispose law extends to the customer). The body carries
+/// the appealed item's `review_digest` (the DIGEST LAW: you appeal the bytes
+/// that were shown), the bounded reason, and an optional case id. The route
+/// stamps the proposal `customer` PATH-SIDE (the CustomerProvenance schema
+/// act 1.32.35 — the wire cannot set derived_from; the route IS the path)
+/// with `producer_ref` = `portal:{client}`. THE JOURNEY'S OWN AUTHZ LAW (the
+/// same law the journey read carries): the client's OWN principal + the
+/// operator only; everyone else answers the existence-blind 404. An appeal
+/// without the shown digest refuses BY NAME (`appeal_digest_required`); a
+/// digest no decided decision in the domain answers refuses too
+/// (`appeal_target_unknown`). The appeal lands in the EXISTING review
+/// queue; the dispose rides the existing verbs + `hitl_decision_events`;
+/// NOTHING auto-reverses.
+#[derive(Debug, Deserialize)]
+pub struct ClientAppealRequest {
+    /// the appealed item's `review_digest` — the bytes the customer was
+    /// shown and is challenging. DEFAULTED so a missing field reaches the
+    /// HANDLER, where the DIGEST LAW refuses BY NAME
+    /// (`appeal_digest_required`) — a typed-extractor 422 would refuse
+    /// without saying why (an appeal without the digest must hear the law's
+    /// own words, never a shape error).
+    #[serde(default)]
+    pub review_digest: String,
+    /// the customer's stated reason, bounded + screened like every
+    /// untrusted text.
+    #[serde(default)]
+    pub reason: String,
+    /// an optional case link (a `workflow_runs` id in this client's domain).
+    #[serde(default)]
+    pub case: Option<i64>,
+}
+
+pub async fn client_appeal(
+    State(state): State<Arc<AppState>>,
+    principal: OptPrincipal,
+    Path(name): Path<String>,
+    Json(req): Json<ClientAppealRequest>,
+) -> Result<Json<serde_json::Value>, HandlerError> {
+    // THE OWN LAW, step 1: the operator leg (the class every client op
+    // speaks).
+    let operator = super::authorize(&principal.0, crate::auth::Action::Admin, "", "global").is_ok();
+    let pool = super::resolve_domain_pool(&state.registry, None)?;
+    let pool_for = pool.clone();
+    let key = name.trim().to_ascii_lowercase();
+    let key_for = key.clone();
+    let principal_for = principal.0.clone();
+    let resolve = tokio::task::spawn_blocking(
+        move || -> Result<crate::service::register::Client, HandlerError> {
+            let conn = pool_for.get().map_err(HandlerError::db_down)?;
+            Ok(crate::service::register::by_name(&conn, &key_for)?
+                .ok_or(RegisterError::UnknownClient)?)
+        },
+    )
+    .await
+    .map_err(|e| HandlerError::internal(format!("task join error: {e}")))??;
+    let client = resolve;
+    if !operator {
+        let own = principal_for.as_ref().is_some_and(|p| {
+            let mut domains: Vec<String> = p.scopes.iter().map(|s| s.domain.clone()).collect();
+            domains.sort();
+            domains.dedup();
+            domains.len() == 1 && domains[0] == client.domain
+        });
+        if !own {
+            return Err(HandlerError::not_found("client not found"));
+        }
+    }
+    if client.status != "active" {
+        return Err(RegisterError::ClientArchived.into());
+    }
+    // THE DIGEST LAW, stated at the door: an appeal without the shown
+    // digest refuses BY NAME before any filing work.
+    let digest = req.review_digest.trim().to_ascii_lowercase();
+    if digest.len() != 64 || !digest.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(HandlerError::bad_request(
+            "appeal_digest_required",
+            "an appeal must carry the review_digest it was shown with — you appeal the bytes that were shown",
+        ));
+    }
+    // THE REASON IS BOUNDED (the plan's own bound for the stated reason):
+    if req.reason.chars().count() > MAX_APPEAL_REASON {
+        return Err(HandlerError::bad_request(
+            "appeal_reason_too_long",
+            format!("reason exceeds {MAX_APPEAL_REASON} chars"),
+        ));
+    }
+    // THE PATH-ASSIGNED STAMP: the route stamps `customer` from the CALLING
+    // CONTEXT; the request struct cannot carry the marker (round-13's law,
+    // widened by the CustomerProvenance schema act 1.32.35).
+    let stamp = crate::handlers::gate::ProposalStamp::new(
+        crate::handlers::gate::ProposalOrigin::Customer,
+        format!("portal:{key}"),
+    );
+    // THE SOURCE CARRIES THE APPEAL GRAMMAR the core validates against the
+    // domain's decided rows: `appeal:{digest}` (+ `@case:{id}` when named).
+    let source = match req.case {
+        Some(case) => format!("appeal:{digest}@case:{case}"),
+        None => format!("appeal:{digest}"),
+    };
+    let preq = crate::handlers::gate::ProposalRequest {
+        content: req.reason.clone(),
+        kind: crate::handlers::gate::PROP_KIND_APPEAL.to_string(),
+        source: Some(source),
+        origin_context: None,
+        authority: None,
+        observed_at: None,
+        domain: Some(client.domain.clone()),
+        title: None,
+        source_prompt: None,
+    };
+    let resp =
+        crate::handlers::gate::file_appeal_proposal(state, principal_for, preq, stamp).await?;
+    Ok(Json(serde_json::json!({
+        "proposal_id": resp.id,
+        "client": key,
+        "status": "pending",
+        "received": true,
+    })))
+}
+
+/// The customer's stated reason's bound: the plan's own "bounded" for the
+/// appeal.
+pub const MAX_APPEAL_REASON: usize = 2_000;
+
 /// `GET /clients/{name}/journey?case=` — the customer journey (IMPROVE15):
 /// the client's cases projected from the chain through the PURE
 /// [`crate::workflow::journey`] projection (the projection law: same chain
@@ -391,8 +517,8 @@ pub async fn coach_proposal(
 /// operator is the Admin-action class every client op already speaks.
 /// Anyone else — a plain domain reader, a write-class token, a
 /// cross-tenant token — is refused EXISTENCE-BLIND: the same `404 client
-/// not found` body an unknown client renders (the M3-g machine: the
-/// refusal leaks nothing, not even that the client exists). The curation
+/// not found` body an unknown client renders — the refusal leaks nothing,
+/// not even that the client exists. The curation
 /// battery witnesses the leak arm and the byte-identity in the authz
 /// matrix + `tests/journey_curation_pins.rs`.
 ///
@@ -424,6 +550,11 @@ pub struct JourneyResponse {
     pub client: String,
     pub domain: String,
     pub cases: Vec<JourneyCase>,
+    /// the client's OWN acts (holds, DSARs, the appeals) — the events that
+    /// belong to the client, not to one case, rendered EVEN WHEN the client
+    /// has no cases (an appeal filed before any case exists is exactly the
+    /// "received." the customer must see).
+    pub domain_events: Vec<crate::workflow::journey::JourneyEvent>,
 }
 
 pub async fn client_journey(
@@ -483,16 +614,20 @@ pub async fn client_journey(
     let domain_pool = super::resolve_domain_pool(&state.registry, Some(&domain))?;
     let case_filter = q.case;
     let domain_for = domain.clone();
-    let rows = tokio::task::spawn_blocking(move || -> Result<Vec<JourneyCase>, HandlerError> {
-        let conn = domain_pool.get().map_err(HandlerError::db_down)?;
-        journey_cases(&conn, &domain_for, case_filter)
-    })
-    .await
-    .map_err(|e| HandlerError::internal(format!("task join error: {e}")))??;
+    let (rows, domain_events) =
+        tokio::task::spawn_blocking(
+            move || -> Result<(Vec<JourneyCase>, Vec<crate::workflow::journey::JourneyEvent>), HandlerError> {
+                let conn = domain_pool.get().map_err(HandlerError::db_down)?;
+                journey_cases(&conn, &domain_for, case_filter)
+            },
+        )
+        .await
+        .map_err(|e| HandlerError::internal(format!("task join error: {e}")))??;
     Ok(Json(JourneyResponse {
         client: key,
         domain,
         cases: rows,
+        domain_events,
     }))
 }
 
@@ -504,7 +639,13 @@ fn journey_cases(
     conn: &rusqlite::Connection,
     domain: &str,
     case_filter: Option<i64>,
-) -> Result<Vec<JourneyCase>, HandlerError> {
+) -> Result<
+    (
+        Vec<JourneyCase>,
+        Vec<crate::workflow::journey::JourneyEvent>,
+    ),
+    HandlerError,
+> {
     use crate::workflow::journey::{ApprovalFact, DsarFact, HoldFact, JourneyChain, JourneyRun};
     // The client's cases: kind='troubleshoot' runs in THIS domain (the GDL
     // case kind), oldest first. `?case=` narrows to one id — a run outside
@@ -641,6 +782,39 @@ fn journey_cases(
         }
     }
 
+    // the domain's appeals: kind='appeal' proposals ⋈ their HITL disposals
+    // (received at the filing; decided at the ledger's ts — the customer's
+    // "received." / "decided." events, no reversal rendered).
+    let mut appeals: Vec<crate::workflow::journey::AppealFact> = Vec::new();
+    {
+        let mut stmt = conn
+            .prepare(
+                "SELECT p.id, p.created_at, h.ts FROM proposals p
+                  LEFT JOIN hitl_decision_events h
+                    ON h.proposal_id = p.id AND h.decision IN ('approve','reject')
+                  WHERE p.kind = 'appeal' AND p.domain = ?1
+                  ORDER BY p.id ASC",
+            )
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
+        let it = stmt
+            .query_map(rusqlite::params![domain], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, Option<i64>>(2)?,
+                ))
+            })
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
+        for row in it.filter_map(Result::ok) {
+            let (proposal_id, created_at, decided_at) = row;
+            appeals.push(crate::workflow::journey::AppealFact {
+                proposal_id,
+                created_at,
+                decided_at,
+            });
+        }
+    }
+
     let mut out: Vec<JourneyCase> = Vec::new();
     for (run_id, created_at, updated_at, status, state_json) in runs {
         // the run's journal checkpoints + case/decision rows (chain rows).
@@ -693,6 +867,7 @@ fn journey_cases(
             approvals: &approvals,
             holds: &holds,
             dsars: &dsars,
+            appeals: &appeals,
         };
         out.push(JourneyCase {
             case_id: run_id,
@@ -701,7 +876,11 @@ fn journey_cases(
             events: crate::workflow::journey::project(&chain),
         });
     }
-    Ok(out)
+    // the DOMAIN half: one projection, the client's own acts — rendered
+    // independent of the case list (an appeal filed before any case exists
+    // is exactly the "received." the customer must see).
+    let domain_events = crate::workflow::journey::project_domain(&appeals, &holds, &dsars);
+    Ok((out, domain_events))
 }
 
 /// `GET /clients/{name}/proposals` — the supervisor QA queue for a client:

@@ -532,6 +532,7 @@ fn project_poisoned() -> Vec<brain_server::workflow::journey::JourneyEvent> {
     }];
     let holds = vec![];
     let dsars = vec![];
+    let appeals = vec![];
     let chain = brain_server::workflow::journey::JourneyChain {
         run,
         checkpoints: &checkpoints,
@@ -539,6 +540,7 @@ fn project_poisoned() -> Vec<brain_server::workflow::journey::JourneyEvent> {
         approvals: &approvals,
         holds: &holds,
         dsars: &dsars,
+        appeals: &appeals,
     };
     brain_server::workflow::journey::project(&chain)
 }

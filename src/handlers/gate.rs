@@ -125,6 +125,14 @@ pub(crate) enum ProposalOrigin {
     Agent,
     /// the research watch's lane tick + its one-shot synthesis (RW-2).
     Watch,
+    /// the CUSTOMER's own act through the portal (IMPROVE15, the
+    /// CustomerProvenance schema act 1.32.35): the appeal files as a proposal
+    /// through the client's portal route, and the chain must prove WHOSE act
+    /// it was — a customer-sourced proposal stamped `operator` would be
+    /// exactly the provenance blur the stamps round closed. PATH-ASSIGNED
+    /// like every origin: the route stamps it from the CALLING CONTEXT; the
+    /// wire cannot set it. `producer_ref` carries `portal:{client}`.
+    Customer,
 }
 
 impl ProposalOrigin {
@@ -133,6 +141,7 @@ impl ProposalOrigin {
             Self::Operator => "operator",
             Self::Agent => "agent",
             Self::Watch => "watch",
+            Self::Customer => "customer",
         }
     }
 }
@@ -165,6 +174,30 @@ impl ProposalStamp {
             producer_ref: Some(path.to_string()),
         }
     }
+}
+
+/// The appeal's PROPOSAL-only kind (IMPROVE15): a customer's appeal files
+/// through the portal route as a proposal, never as a memory write. An
+/// appeal can never be promoted into knowledge — approving one is the
+/// operator's DECISION on the appeal (the dispose rides the existing CAS +
+/// the HITL ledger), never an auto-reversal of the appealed bytes.
+pub const PROP_KIND_APPEAL: &str = "appeal";
+
+/// The appeal's source grammar: `appeal:{review_digest}` — the DIGEST LAW:
+/// you appeal the bytes that were shown (the digest the journey rendered
+/// beside the decision), optionally `@case:{id}` when the appeal names one
+/// case. Anything else refuses BY NAME (`appeal_digest_required`).
+pub fn parse_appeal_source(source: &str) -> Option<(String, Option<i64>)> {
+    let rest = source.strip_prefix("appeal:")?;
+    let (digest, case) = match rest.split_once("@case:") {
+        Some((d, c)) => (d, c.parse::<i64>().ok()),
+        None => (rest, None),
+    };
+    let digest = digest.trim().to_ascii_lowercase();
+    if digest.len() != 64 || !digest.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    Some((digest, case))
 }
 
 /// `BRAIN_WRITE_POSTURE=review` — agents propose, operators dispose.
@@ -279,6 +312,69 @@ pub(crate) async fn create_proposal_as(
     Ok(resp)
 }
 
+/// The appeal's filing helper (IMPROVE15, the propose law's customer door):
+/// files the appeal proposal WITHOUT the generic wrapper's Write gate — the
+/// customer's own principal is READ-ONLY by day-zero law (the client-auditor
+/// class), and the propose/dispose law's whole point is that the customer's
+/// act lands as a PROPOSAL for human dispose, never as a direct write. The
+/// gate here is the FILING ROUTE'S OWN LAW (the client's own principal + the
+/// operator, enforced before this call); the validating law rides the CORE:
+/// the injection screen + the bounds + the appeal's digest law
+/// (`appeal_digest_required` / `appeal_target_unknown`, BY NAME). The alert
+/// publishes ride exactly as the generic wrapper's (the pending console
+/// alert + the proposal/open event), so the queue watchers see the appeal.
+pub(crate) async fn file_appeal_proposal(
+    state: Arc<AppState>,
+    principal: Option<crate::auth::Principal>,
+    req: ProposalRequest,
+    stamp: ProposalStamp,
+) -> Result<ProposalResponse, HandlerError> {
+    let domain = req.domain.clone().unwrap_or_else(|| "global".to_string());
+    let pool = super::resolve_domain_pool(&state.registry, Some(&domain))?;
+    let model = Arc::clone(&state.model);
+    let owner = principal_to_owner(&principal);
+    // the receipt's digest, computed BEFORE the request moves into the
+    // blocking closure — the same review_digest the digest law bound.
+    let content_digest = review_digest(req.content.trim());
+    let filed = tokio::task::spawn_blocking(
+        move || -> Result<(ProposalResponse, crate::screen::ScreenResult), HandlerError> {
+            let conn = pool.get().map_err(HandlerError::db_down)?;
+            create_proposal_core(&conn, model.as_ref(), req, owner.as_deref(), stamp)
+        },
+    )
+    .await
+    .map_err(|e| HandlerError::internal(format!("task join error: {e}")))??;
+    let (resp, screen_res) = filed;
+    let now = chrono::Utc::now().timestamp();
+    crate::alert::publish(
+        &state,
+        crate::alert::ALERT_KIND_PENDING,
+        json!({
+            "proposal_id": resp.id,
+            "screen_verdict": crate::screen::screen_verdict_label(screen_res),
+            "created_at": now,
+            "expires_at": now + crate::config::proposal_ttl_secs(),
+        }),
+    );
+    crate::alert::publish(
+        &state,
+        crate::alert::ALERT_KIND_PROPOSAL,
+        crate::proposal_events::open(
+            crate::proposal_events::ProposalId(resp.id),
+            now + crate::config::proposal_ttl_secs(),
+            &content_digest,
+        ),
+    );
+    if screen_res != crate::screen::ScreenResult::Clean {
+        crate::alert::publish(
+            &state,
+            crate::alert::ALERT_KIND_SCREEN,
+            json!({ "verdict": crate::screen::screen_verdict_label(screen_res) }),
+        );
+    }
+    Ok(resp)
+}
+
 /// The proposal-creation CORE — the ONE filing seam, callable on a
 /// CALLER-SUPPLIED connection (IMPROVE08: the research watch's tick files
 /// through this exact path inside its own `BEGIN IMMEDIATE` transaction;
@@ -378,6 +474,9 @@ pub(crate) fn create_proposal_core(
             "input contains suspicious patterns",
         ));
     }
+    // THE APPEAL'S KIND, resolved once at the top of the core: the source
+    // bound, the digest law and the kind validation all branch on it.
+    let is_appeal = req.kind == PROP_KIND_APPEAL;
     // run the injection screen on the proposal
     // content + title. `Reject` → 400, never persisted (the review queue only ever
     // sees `clean`/`quarantine`); `Quarantine` → stored + badged so the
@@ -390,6 +489,47 @@ pub(crate) fn create_proposal_core(
             "input_rejected",
             "input contains suspicious patterns",
         ));
+    }
+    // THE APPEAL'S DIGEST LAW (IMPROVE15): an appeal without the shown
+    // review_digest refuses BY NAME, and a digest no DECIDED decision in
+    // this domain answers refuses too — you appeal bytes that were shown and
+    // disposed, not bytes you name into existence. The reason (the content)
+    // is already screened + bounded above like every untrusted text.
+    if is_appeal {
+        let source = req.source.as_deref().unwrap_or("");
+        let Some((digest, _case)) = parse_appeal_source(source) else {
+            return Err(HandlerError::bad_request(
+                "appeal_digest_required",
+                "an appeal must carry the review_digest it was shown with (source = `appeal:{review_digest}`) — you appeal the bytes that were shown",
+            ));
+        };
+        // the digest must answer to an APPROVED proposal in THIS domain (the
+        // row-domain is the appeal's residency — the same fence the decision
+        // bound itself to). A streaming scan with early exit: one pass over
+        // the domain's decided rows, a rare customer act.
+        let mut stmt = conn
+            .prepare("SELECT content FROM proposals WHERE status = 'approved' AND domain = ?1")
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
+        let it = stmt
+            .query_map(rusqlite::params![domain], |r| r.get::<_, String>(0))
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
+        let mut answered = false;
+        for row in it {
+            let row_content: String = row.map_err(|e| HandlerError::internal(e.to_string()))?;
+            if review_digest(&row_content) == digest {
+                answered = true;
+                break;
+            }
+        }
+        if !answered {
+            return Err(HandlerError {
+                status: axum::http::StatusCode::NOT_FOUND,
+                inner: crate::handlers::ApiError::new(
+                    "appeal_target_unknown",
+                    "no decided decision in this domain carries the digest you named — you appeal bytes that were shown and decided".to_string(),
+                ),
+            });
+        }
     }
     // bound + injection-screen `source_prompt`. The plugin caps at
     // 2000 client-side; the server enforces its own bound so a malicious caller
@@ -407,13 +547,20 @@ pub(crate) fn create_proposal_core(
     }
     // Bounds law, the `/add` sibling: `source` is a trust LABEL (max 64 —
     // see MAX_SOURCE); the proposal write seam enforces the same ceiling
-    // the legacy path does (2026-09-11 fix: this seam was unbounded).
+    // the legacy path does (2026-09-11 fix: this seam was unbounded). THE
+    // APPEAL'S SOURCE IS THE KERNEL'S OWN GRAMMAR (the digest law's
+    // carrier) and rides its own named ceiling (MAX_APPEAL_SOURCE).
+    let source_cap = if is_appeal {
+        crate::handlers::MAX_APPEAL_SOURCE
+    } else {
+        crate::handlers::MAX_SOURCE
+    };
     if let Some(s) = req.source.as_deref()
-        && s.len() > crate::handlers::MAX_SOURCE
+        && s.len() > source_cap
     {
         return Err(HandlerError::bad_request(
             "source_too_long",
-            format!("source exceeds {} bytes", crate::handlers::MAX_SOURCE),
+            format!("source exceeds {source_cap} bytes"),
         ));
     }
     // strict kind validation — the raw-string
@@ -435,11 +582,12 @@ pub(crate) fn create_proposal_core(
     if !is_draft
         && !is_channel_template
         && !is_registry_lifecycle
+        && !is_appeal
         && !crate::procedural::MemoryKind::is_strict_valid(&req.kind)
     {
         return Err(HandlerError::bad_request(
             "invalid_kind",
-            "unknown memory_kind; must be one of: fact, procedure, step, decision, episodic, entitlement, draft (channel/template is a governed channel act, proposal-only)",
+            "unknown memory_kind; must be one of: fact, procedure, step, decision, episodic, entitlement, draft (channel/template is a governed channel act, proposal-only; appeal is the customer appeal, proposal-only)",
         ));
     }
     let content_for_task = content.clone();
@@ -944,6 +1092,81 @@ pub async fn approve_proposal(
                  exploratory output is promotion-incapable; re-run the \
                  pipeline in deterministic mode to promote",
             ));
+        }
+
+        // THE APPEAL'S DISPOSAL (IMPROVE15) — the branch that makes the
+        // appeal a DECISION, never an auto-reversal. An appeal proposal's
+        // approve: the EXISTING CAS (which writes the HITL ledger row in its
+        // own tx) + the review-clock verdict (kept-or-missed, chain-provable
+        // from the row's created_at and the ledger's ts) + the audit row —
+        // and NO memory write, NO promotion, NO reversal of the appealed
+        // bytes. The existing reject verb disposes the other way, unchanged.
+        // A MISSED clock fires the EXISTING webhook alerting path
+        // (ALERT_KIND_APPEAL — the operator's own webhook, never a new
+        // channel): an appeal without a clock is a suggestion; this makes it
+        // a commitment the chain can prove was kept or missed.
+        if kind == PROP_KIND_APPEAL {
+            let now_ts = chrono::Utc::now().timestamp();
+            let appeal_created_at: i64 = tx
+                .query_row(
+                    "SELECT created_at FROM proposals WHERE id = ?1",
+                    rusqlite::params![id],
+                    |r| r.get(0),
+                )
+                .map_err(|e| HandlerError::internal(e.to_string()))?;
+            let moved = crate::service::review::cas_proposal_approved(
+                &tx,
+                id,
+                now_ts,
+                &super::recall::principal_label(&principal.0),
+            )
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
+            if moved == 0 {
+                tx.rollback()
+                    .map_err(|e| HandlerError::internal(e.to_string()))?;
+                return Err(HandlerError::conflict(
+                    "proposal already decided by a concurrent action",
+                ));
+            }
+            let clock = crate::workflow::journey::AppealClock::kept_or_missed(
+                appeal_created_at,
+                Some(now_ts),
+                now_ts,
+            );
+            let clock_word = match clock {
+                crate::workflow::journey::AppealClock::Kept
+                | crate::workflow::journey::AppealClock::Pending => "kept",
+                crate::workflow::journey::AppealClock::Missed
+                | crate::workflow::journey::AppealClock::MissedOpen => "missed",
+            };
+            if clock_word == "missed" {
+                crate::alert::publish(
+                    &alert_state,
+                    crate::alert::ALERT_KIND_APPEAL,
+                    serde_json::json!({
+                        "proposal_id": id,
+                        "appeal_clock": "missed",
+                        "deadline": crate::workflow::journey::appeal_clock_deadline(appeal_created_at),
+                        "decided_at": now_ts,
+                        "domain": row_domain,
+                    }),
+                );
+            }
+            crate::audit::record(
+                &tx,
+                crate::audit::AuditKind::Reconcile,
+                principal_to_owner(&principal.0).as_deref().unwrap_or("api"),
+                &format!("proposal:{id}"),
+                crate::audit::AuditStatus::Ok,
+                &format!("appeal_disposed:clock_{clock_word}"),
+            );
+            tx.commit()
+                .map_err(|e| HandlerError::internal(format!("commit failed: {e}")))?;
+            return Ok(serde_json::json!({
+                "proposal_id": id,
+                "status": "approved",
+                "appeal_clock": clock_word,
+            }));
         }
 
         // Second eyes: under BRAIN_APPROVAL_QUORUM=2 the generic promote
