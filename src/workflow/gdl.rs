@@ -3742,8 +3742,12 @@ impl GdlDriver {
     /// identity difference directly).
     pub(crate) fn with_triage_tier(mut self, tier: &str) -> Self {
         self.triage_tier = Some(tier.to_owned());
-        self.loop_driver
-            .bind_policy(&format!("gdl+triage={tier}"), GDL_METHOD_PROMPT, vec![], vec![]);
+        self.loop_driver.bind_policy(
+            &format!("gdl+triage={tier}"),
+            GDL_METHOD_PROMPT,
+            vec![],
+            vec![],
+        );
         self
     }
 
@@ -9424,6 +9428,36 @@ all VDs not; fw 2.10 flashed last week; tsr://node-042 sel://events";
             tiered2.policy_identity(),
             "the same tier binds the same identity"
         );
+    }
+
+    /// KT-8 (behavioral, the escalation-alive proof): an honest empty
+    /// table ROUTES — the machine's honest route survives every cure this
+    /// round adds. The red-proof: the route fires on the all-empty intake
+    /// artifact exactly as it did pre-round (the route is the exhaustion
+    /// law's, not a special arm's).
+    #[test]
+    fn kt8_escalation_fires_on_an_honest_empty_table() {
+        let runtime = rt();
+        let script = eval_fixtures::intake_invalid_script(3);
+        let f = fixture(script);
+        seed_kb_for_ticket(&f, GATE_TICKET);
+        let outcome = runtime
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
+            .unwrap();
+        match &outcome {
+            GdlOutcome::Routed { at, reason } => {
+                assert_eq!(
+                    *at,
+                    GdlPhase::Intake,
+                    "the honest empty table routes AT intake"
+                );
+                assert!(
+                    reason.contains("gate exhausted"),
+                    "the route is the exhaustion law's: {reason}"
+                );
+            }
+            other => panic!("the honest empty table must still route: {other:?}"),
+        }
     }
 
     /// KT-3's struct walk: every serde field name the artifact can

@@ -373,8 +373,13 @@ fn kt5_the_model_arm_is_qualified_triage_only_by_a_gate_in_code() {
     // The construction's model arm routes through the qualified gate fn.
     needs(
         &provider,
-        "model: self.qualified_model(",
+        "model: qualified_model,",
         "KT-5 the qualified construction",
+    );
+    needs(
+        &provider,
+        "let qualified_model = self.qualified_model(",
+        "KT-5 the gate decides outside the task",
     );
     // The gate fn: a NON-triage phase returns NONE even with a table entry
     // — the axis is enforced by the gate, not by the table's contents.
@@ -401,28 +406,54 @@ fn kt6_the_triage_tier_lands_in_the_hashed_policy_identity() {
     // The driver carries the tier and the BIND hashes it: the policy
     // snapshot's model arg annotates the tier, so a tier flip MOVES the
     // hash — the re-baseline is loud, never silent (LL-05's law).
-    needs(
-        &gdl,
-        "triage_tier: Option<String>",
-        "KT-6 the tier field",
-    );
-    needs(
-        &gdl,
-        "with_triage_tier(",
-        "KT-6 the arm wiring",
-    );
-    needs(
-        &gdl,
-        "gdl+triage=",
-        "KT-6 the tier in the hashed model arg",
-    );
+    needs(&gdl, "triage_tier: Option<String>", "KT-6 the tier field");
+    needs(&gdl, "with_triage_tier(", "KT-6 the arm wiring");
+    needs(&gdl, "gdl+triage=", "KT-6 the tier in the hashed model arg");
 }
 
 #[test]
 fn kt6_scan_control_planted_annotation_is_seen() {
+    needs("gdl+triage=qwen3.5-2b-4bit", "gdl+triage=", "KT-6 control");
+}
+
+// ── KT-8 (Arm C): the escalation path is SACRED — it stays alive ───────
+
+/// The ceiling-declaration posture (Arm C) rests on ONE invariant: the
+/// machine's honest ROUTE — the escalation-until-entitled default — is
+/// reachable on an honest empty table. If the arms A/B/D cannot clear the
+/// wall, THIS is the posture that remains, and it must be impossible to
+/// have closed it while adding the cures. The BEHAVIORAL witness lives in
+/// `gdl.rs`'s tests module (an integration binary cannot drive the
+/// machine); this structural pin holds the refusal-law shape: the intake
+/// gate's empty-cell refusals (the wall itself) and the machine's
+/// route-at-intake law (the existing eval fixtures' names) are both still
+/// in the tree, un-amputated.
+#[test]
+fn kt8_the_escalation_route_survives_the_round() {
+    let gdl = common::code_only(&doc("src/workflow/gdl.rs"));
+    // The wall (the empty-cell refusals) — the SAME bytes the pre-round
+    // tree refused with; the cures never softened it.
     needs(
-        "gdl+triage=qwen3.5-2b-4bit",
-        "gdl+triage=",
-        "KT-6 control",
+        &gdl,
+        "is_not.{name}.is is empty — an unbounded problem statement",
+        "KT-8 the wall stands",
+    );
+    // The machine's honest route: gate exhaustion ROUTES (the escalation
+    // the arms make rarer, never impossible).
+    needs(
+        &gdl,
+        "gate exhausted after",
+        "KT-8 the route-at-exhaustion law",
+    );
+}
+
+/// KT-8's control: a scanner that cannot see the wall would pass on its
+/// removal — the planted control proves the scan discriminates.
+#[test]
+fn kt8_scan_control_planted_wall_is_seen() {
+    needs(
+        "is_not.{name}.is is empty — an unbounded problem statement",
+        "unbounded problem statement",
+        "KT-8 control",
     );
 }

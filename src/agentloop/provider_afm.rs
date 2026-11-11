@@ -610,7 +610,11 @@ mod tests {
             None,
             "every other phase stays AFM"
         );
-        assert_eq!(qualified_model_for(&tiers, None), None, "no header, no tier");
+        assert_eq!(
+            qualified_model_for(&tiers, None),
+            None,
+            "no header, no tier"
+        );
         // And an empty table (the default construction) sends none even
         // for triage — the tier is the measurement's, never a default.
         assert_eq!(qualified_model_for(&BTreeMap::new(), Some("triage")), None);
