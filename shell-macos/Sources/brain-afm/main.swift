@@ -1348,8 +1348,19 @@ struct BrainAfmBridge {
         // honesty law is unchanged).
         if let guidedSchema {
             do {
+                // includeSchemaInPrompt FALSE: the schema drives the
+                // GRAMMAR, not the prose — the instruction's own contract
+                // teaches the shape, and rendering the full document into
+                // the prompt overflowed the 4,096-token window (the
+                // measured first-run failure: garbled fills, the
+                // instruction text echoed into cells). The guides' law
+                // (quote the ticket, unknown where it does not say) rides
+                // the contract text; the schema guarantees the shape.
                 let response = try await session.respond(
-                    to: prompt, schema: guidedSchema, options: options
+                    to: prompt,
+                    schema: guidedSchema,
+                    includeSchemaInPrompt: false,
+                    options: options
                 )
                 if Task.isCancelled {
                     // Cancel kills the TURN, not the conversation.

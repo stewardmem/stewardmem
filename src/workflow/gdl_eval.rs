@@ -1572,6 +1572,20 @@ mod pilot_live {
         ticket: &str,
         domain: &str,
     ) -> serde_json::Value {
+        run_live_case_arms(provider, ticket, domain, false, None).await
+    }
+
+    /// The arm-aware twin (round 14): `scaffold` arms the driver's
+    /// CONFIRM/EDIT frame (Arm B/D's pairing); `triage_tier` arms the M-4
+    /// qualification's tier (Arm D) — and the policy hash re-baselines
+    /// loudly with it (the driver's own setter).
+    async fn run_live_case_arms(
+        provider: Arc<dyn LlmProvider>,
+        ticket: &str,
+        domain: &str,
+        scaffold: bool,
+        triage_tier: Option<&str>,
+    ) -> serde_json::Value {
         register_sqlite_vec();
         let tmp = tempfile::NamedTempFile::new().unwrap();
         let mgr = SqliteConnectionManager::file(tmp.path());
@@ -1612,7 +1626,9 @@ mod pilot_live {
                 allowed_commands: vec![],
             },
             LoopConfig::default(),
-        );
+        )
+        .with_scaffold_if(scaffold)
+        .with_tier_if(triage_tier);
         let started = Instant::now();
         let outcome = match driver
             .run_case(run_id, ticket, &CancellationToken::new())
@@ -1626,6 +1642,11 @@ mod pilot_live {
         let mut tokens = (0u64, 0u64);
         let mut exchanges = 0usize;
         let mut gate_errors: Vec<serde_json::Value> = Vec::new();
+        // THE KT-TIER INSTRUMENT (round 14): the ORDERED gate verdicts —
+        // (phase, verdict) pairs in seq order — so the preregistered
+        // M1 (first-attempt KT pass) and M3 (the traceability refusals)
+        // read the machine's actual verdict sequence, not a deduped tail.
+        let mut gate_sequence: Vec<serde_json::Value> = Vec::new();
         {
             let mut stmt = conn
                 .prepare(
@@ -1647,6 +1668,11 @@ mod pilot_live {
                 }
                 // The disagreement shape: the named errors the gate returned
                 // (deduplicated by phase) — the κ story's raw material.
+                gate_sequence.push(serde_json::json!({
+                    "phase": v["phase"],
+                    "verdict": v["verdict"],
+                    "attempt": v["attempt"],
+                }));
                 if v["verdict"] == "fail" {
                     let phase = v["phase"].as_str().unwrap_or("?").to_string();
                     let errors = v["errors"].as_array().cloned().unwrap_or_default();
@@ -1678,6 +1704,7 @@ mod pilot_live {
             "wall_ms": wall_ms,
             "disagreement_tuples": tuples,
             "gate_errors": gate_errors,
+            "gate_sequence": gate_sequence,
         })
     }
 
@@ -1836,5 +1863,128 @@ mod pilot_live {
                 .count(),
             records.len() - resolved
         );
+    }
+    /// THE KT-TIER ARM RUNS (round 14, T-f): the four arms of the frozen
+    /// rule on the frozen corpus, through THE SAME population harness —
+    /// no new measurement road. Env-gated like the pilot
+    /// (`BRAIN_PILOT_LIVE=1` + the real bridge binary); `BRAIN_PILOT_ONLY`
+    /// batches per case. Arm C is NOT run live: the control posture is
+    /// recorded-not-wired (docs/KT_TIER_ARM_C_CONTROL_2026-11-11.md) — it
+    /// is the ceiling-declaration path, not a measurement arm.
+    ///
+    /// Per case the record carries the preregistered M1–M5 inputs:
+    /// outcome (M2's escalations, M4's resolves), gate_sequence (M1's
+    /// first-attempt KT verdict, M3's traceability refusals), wall_ms (M5:
+    /// the 120 s rail is structural — a deadline hit lands as
+    /// provider_failed, which the outcome records), disagreement_tuples
+    /// (M4's tuple flow).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_kt_tier_arms_run_live() {
+        let Some(binary) = live_lane_ready() else {
+            eprintln!(
+                "SKIP the_kt_tier_arms_run_live: BRAIN_PILOT_LIVE != 1 or no brain-afm binary \
+                 (the live lane belongs to the operator machine with the bridge)"
+            );
+            return;
+        };
+        let bridge = AfmBridge::spawn(&binary).expect("spawn the real bridge");
+        let only: Option<Vec<String>> = std::env::var("BRAIN_PILOT_ONLY")
+            .ok()
+            .map(|v| v.split(',').map(|s| s.trim().to_string()).collect());
+        let wants = |id: &str| {
+            only.as_ref()
+                .map(|v| v.iter().any(|x| x == id))
+                .unwrap_or(true)
+        };
+
+        // The frozen corpus, exactly as the pilot drives it.
+        let mut population: Vec<(String, String)> = Vec::new();
+        for seed in structural_seeds() {
+            population.push((seed.id.to_string(), seed.ticket.to_string()));
+        }
+        let dir = match std::env::var("GDL_R10_PACK_DIR") {
+            Ok(d) if !d.trim().is_empty() => Some(PathBuf::from(d)),
+            _ => {
+                let sibling = PathBuf::from("../brain-steward-ip/conformance");
+                if sibling.join("gdl_gold_pack_v1.jsonl").is_file() {
+                    Some(sibling)
+                } else {
+                    eprintln!("KT_ARM_PACK_SKIP: no gold pack sibling and no GDL_R10_PACK_DIR");
+                    None
+                }
+            }
+        };
+        if let Some(dir) = dir {
+            let pack_raw = std::fs::read_to_string(dir.join("gdl_gold_pack_v1.jsonl")).unwrap();
+            for line in pack_raw.lines().filter(|l| !l.trim().is_empty()) {
+                let case: serde_json::Value = serde_json::from_str(line).expect("pack line");
+                population.push((
+                    case["case_id"].as_str().unwrap().to_string(),
+                    case["ticket"].as_str().unwrap().to_string(),
+                ));
+            }
+        }
+
+        // Arm D's tier: the measured table's pick (CG-11's standing
+        // numbers — the 2B leads prefill (669 tok/s) AND decode (43.6
+        // tok/s), and the Qwen3.5 re-prefill fact makes prefill dominate
+        // the triage wall). Never re-probed this round.
+        const TRIAGE_TIER: &str = "qwen3.5-2b-4bit";
+
+        // KT_ARMS: an optional comma-separated arm selector (A/B/D) — the
+        // re-run seam (a measured in-kind fix re-runs THE ARM, not the
+        // whole population).
+        let arm_filter: Option<Vec<String>> = std::env::var("KT_ARMS")
+            .ok()
+            .map(|v| v.split(',').map(|s| s.trim().to_string()).collect());
+        for (arm, scaffold, schema, tier) in [
+            ("A", false, true, false),
+            ("B", true, false, false),
+            ("D", true, false, true),
+        ] {
+            if let Some(f) = &arm_filter {
+                if !f.iter().any(|x| x == arm) {
+                    continue;
+                }
+            }
+            eprintln!("KT_ARM_BEGIN {arm}");
+            let adapter =
+                crate::agentloop::provider_afm::AfmBridgeProvider::for_bridge(Arc::clone(&bridge))
+                    .await
+                    .expect("the real child answers capabilities");
+            let adapter = if schema {
+                let mut table = std::collections::BTreeMap::new();
+                table.insert(
+                    "intake",
+                    crate::workflow::gdl::eval_fixtures::intake_schema_for_arms(),
+                );
+                adapter.with_phase_schemas(table)
+            } else {
+                adapter
+            };
+            let adapter: Arc<dyn LlmProvider> = if tier {
+                let mut tiers = std::collections::BTreeMap::new();
+                tiers.insert("triage", TRIAGE_TIER.to_string());
+                Arc::new(adapter.with_phase_tiers(tiers))
+            } else {
+                Arc::new(adapter)
+            };
+            for (id, ticket) in &population {
+                if !wants(id) {
+                    continue;
+                }
+                let mut r = run_live_case_arms(
+                    Arc::clone(&adapter),
+                    ticket,
+                    "acme",
+                    scaffold,
+                    tier.then_some(TRIAGE_TIER),
+                )
+                .await;
+                r["arm"] = arm.into();
+                eprintln!("KT_ARM_CASE {}", serde_json::json!({"id": id, "record": r}));
+            }
+            eprintln!("KT_ARM_END {arm}");
+        }
     }
 }

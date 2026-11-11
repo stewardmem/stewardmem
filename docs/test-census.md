@@ -40,9 +40,9 @@ that applies them, not in prose that can drift from it.
 | `behavioral_pin` | 3502 | 84.5% |
 | `structural` | 477 | 11.5% |
 | `control` | 87 | 2.1% |
-| `residual_documentation` | 66 | 1.6% |
+| `residual_documentation` | 67 | 1.6% |
 | `unclassified` | 11 | 0.3% |
-| **total** | **4143** | |
+| **total** | **4144** | |
 
 Scope: `src/` + `tests/`, the two trees the badge's count comes from.
 The census reads HIGHER than the README badge for two reasons, both
@@ -85,8 +85,8 @@ have no call in it.
 | `src/trace.rs:47` `trace_traversal_caps_are_bounded` |
 | `src/workflow/decide/router.rs:351` `alias_checkpoints_table_is_the_three_names` |
 | `src/workflow/decide/router.rs:361` `alias_bundle_repo_is_the_english_root` |
-| `src/workflow/gdl.rs:7129` `adversarial_task_bound_is_pinned_by_value` |
-| `src/workflow/gdl.rs:7140` `artifact_bounds_are_pinned_by_value` |
+| `src/workflow/gdl.rs:7154` `adversarial_task_bound_is_pinned_by_value` |
+| `src/workflow/gdl.rs:7165` `artifact_bounds_are_pinned_by_value` |
 | `src/workflow/reflection.rs:1173` `the_adversarial_fallback_value_is_frozen` |
 | `src/workflow/session_log.rs:1161` `scope_caps_are_pinned_by_value` |
 | `tests/watch_pins.rs:184` `rw8_the_etiquette_constants_are_pinned` |

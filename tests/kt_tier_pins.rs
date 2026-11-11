@@ -195,7 +195,14 @@ fn kt3b_the_child_decodes_the_schema_at_parse_time_and_refuses_by_name() {
         "WireSchemaConverter.generationSchema(from:",
         "KT-3 the converter call",
     );
-    needs(&child, "to: prompt, schema:", "KT-3 the guided respond");
+    needs(&child, "schema: guidedSchema,", "KT-3 the guided respond");
+    // The schema drives the GRAMMAR, not the prose (the measured first-run
+    // failure: the rendered document overflowed the 4,096 window).
+    needs(
+        &child,
+        "includeSchemaInPrompt: false,",
+        "KT-3 the grammar-only render",
+    );
     needs(&child, "\"guided\": true", "KT-3 the additive label");
     // THE CONTROL: the GroundedAnswer contract is untouched — the
     // compiled typed answer still streams for every schema-absent turn.
@@ -403,17 +410,31 @@ fn kt5_scan_control_planted_gate_is_seen() {
 #[test]
 fn kt6_the_triage_tier_lands_in_the_hashed_policy_identity() {
     let gdl = common::code_only(&doc("src/workflow/gdl.rs"));
-    // The driver carries the tier and the BIND hashes it: the policy
-    // snapshot's model arg annotates the tier, so a tier flip MOVES the
-    // hash — the re-baseline is loud, never silent (LL-05's law).
+    // The driver carries the tier and the tier is HASHED into the policy
+    // identity — the re-baseline is loud, never silent (LL-05's law).
+    // FRESH-WALK CORRECTION (T-f, named): the tier rides the
+    // INVOCATION-SPEC seam (`set_retry_spec` — hashed into
+    // policy_identity), NOT bind_policy's model arg: annotating the model
+    // arg fails every admission with `bound harness policy drift` (the
+    // admission MATCH compares the bound model against the harness
+    // snapshot the loop runs). The live run itself surfaced this; the law
+    // (a tier flip moves the hash) is unchanged, the seam is corrected.
     needs(&gdl, "triage_tier: Option<String>", "KT-6 the tier field");
     needs(&gdl, "with_triage_tier(", "KT-6 the arm wiring");
-    needs(&gdl, "gdl+triage=", "KT-6 the tier in the hashed model arg");
+    needs(
+        &gdl,
+        "set_retry_spec(format!(\"triage-tier={tier}\"))",
+        "KT-6 the tier in the hashed invocation spec",
+    );
 }
 
 #[test]
 fn kt6_scan_control_planted_annotation_is_seen() {
-    needs("gdl+triage=qwen3.5-2b-4bit", "gdl+triage=", "KT-6 control");
+    needs(
+        "set_retry_spec(format!(\"triage-tier={tier}\"))",
+        "triage-tier=",
+        "KT-6 control",
+    );
 }
 
 // ── KT-8 (Arm C): the escalation path is SACRED — it stays alive ───────

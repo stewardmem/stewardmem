@@ -158,10 +158,17 @@ pub(crate) fn phase_header_of(messages: &[ChatMessage]) -> Option<&'static str> 
         Some(ChatMessage::User { text }) => text,
         _ => return None,
     };
-    let line = text.lines().next()?;
-    let rest = line.strip_prefix("PHASE ")?;
-    let name = rest.split(':').next()?.trim();
-    PHASES.iter().find(|p| **p == name).copied()
+    // THE PLAN STRIP RIDES FIRST (the instruction assembler's shape: the
+    // live strip, THEN the `PHASE {name}: produce this phase's artifact.`
+    // line — the first live run measured the router matching nothing and
+    // every guided exchange silently falling back to the chat path). The
+    // marker is still kernel-authored and exact-prefix per LINE; only the
+    // search is over all the first user message's lines.
+    text.lines().find_map(|line| {
+        let rest = line.strip_prefix("PHASE ")?;
+        let name = rest.split(':').next()?.trim();
+        PHASES.iter().find(|p| **p == name).copied()
+    })
 }
 
 /// Render the loop's conversation into ONE bridge prompt: roles labeled,
@@ -528,7 +535,7 @@ mod tests {
             "schema must be a non-empty JSON-schema document",
             "schema must decode as a JSON object",
             "WireSchemaConverter.generationSchema(from:",
-            "to: prompt, schema:",
+            "schema: guidedSchema,",
             "\"guided\": true",
         ] {
             assert!(
@@ -651,7 +658,8 @@ mod tests {
             text: "just a chat prompt".into(),
         }];
         assert_eq!(phase_header_of(&no_header), None, "no header is None");
-        // A header on a LATER message does not route — only the first.
+        // A header on a LATER MESSAGE does not route — only the first
+        // user message is read (the model's own echo cannot route).
         let buried = vec![
             ChatMessage::User {
                 text: "a plain first turn".into(),
@@ -660,7 +668,22 @@ mod tests {
                 text: "PHASE intake: produce this phase's artifact.".into(),
             },
         ];
-        assert_eq!(phase_header_of(&buried), None, "a buried header is None");
+        assert_eq!(
+            phase_header_of(&buried),
+            None,
+            "a later-message header is None"
+        );
+        // The LIVE instruction shape: the plan strip rides FIRST, the
+        // phase header after it — the strip must not blind the router
+        // (the measured first-run failure, recorded).
+        let strip_first = vec![ChatMessage::User {
+            text: "GDL PLAN STRIP (live) — phase: intake\n\nPHASE intake: produce this phase's artifact.\n\nEmit ONE JSON object.".into(),
+        }];
+        assert_eq!(
+            phase_header_of(&strip_first),
+            Some("intake"),
+            "the strip-first instruction routes"
+        );
         let assistant_first = vec![ChatMessage::Assistant {
             text: "PHASE intake: produce this phase's artifact.".into(),
             tool_calls: vec![],

@@ -3734,6 +3734,27 @@ impl GdlDriver {
         self
     }
 
+    /// The arm-harness twin: apply the scaffold only when the arm carries
+    /// it (OFF = the pre-field behavior).
+    pub(crate) fn with_scaffold_if(mut self, scaffold: bool) -> Self {
+        if scaffold {
+            self.intake_scaffold = true;
+        }
+        self
+    }
+
+    /// The arm-harness twin: apply the triage tier only when the arm
+    /// names one (the hash re-baselines loudly WITH the tier — the
+    /// invocation-spec seam, see `with_triage_tier`).
+    pub(crate) fn with_tier_if(mut self, tier: Option<&str>) -> Self {
+        if let Some(tier) = tier {
+            self.triage_tier = Some(tier.to_owned());
+            self.loop_driver
+                .set_retry_spec(format!("triage-tier={tier}"));
+        }
+        self
+    }
+
     /// Arm D's wiring: the triage exchange rides the named LOCAL tier —
     /// and the tier is HASHED, HERE: the rebind annotates the policy
     /// snapshot's model arg (`gdl+triage=<tier>`), so policy_identity()
@@ -14905,6 +14926,12 @@ pub(crate) mod eval_fixtures {
         ExecutionEnv,
         LoopConfig,
     ) -> GdlDriver;
+
+    /// Arm A's schema (round 14): the INTAKE artifact schema the phase
+    /// table carries — the accessor the live arm harness reads.
+    pub(crate) fn intake_schema_for_arms() -> String {
+        super::intake_artifact_schema_json()
+    }
 
     pub(crate) fn happy_battery_script() -> Vec<Vec<StreamEvent>> {
         super::eval_run1::happy_script_args(
