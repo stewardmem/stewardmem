@@ -1351,6 +1351,28 @@ fn err(law: &str, detail: &str) -> String {
 /// the gate disposes, the model proposes (series law 3). The `case` arg
 /// (C-12) carries the one-level law: a split child does not decompose
 /// further (C-8).
+/// THE ARTIFACT SCHEMA (round 14, Arm A — guided slot-filling): the REAL
+/// IntakeArtifact schema as a wire JSON-schema document, in the small
+/// dialect the child's runtime converter accepts (`WireSchemaConverter`):
+/// object / string / integer / number / boolean / array(items,min,max) /
+/// anyOf, with `description` guides and a `required` list. The guides
+/// POINT AT THE TICKET — the honesty law moved into the generation
+/// contract: quote the ticket for every stated bound, record the literal
+/// `unknown` where the ticket does not say (refused for `what.is`, the
+/// preregistered axis), never invent. The document is PURE — a const
+/// shape built from string pieces, no clock, no DB, no provider.
+///
+/// The struct-pin (`assert_schema_covers_struct`, in the tests module)
+/// walks a serialized representative artifact and reds if any serde field
+/// name is missing here — a field change without a schema change is the
+/// drift this builder exists to never have.
+pub(crate) fn intake_artifact_schema_json() -> String {
+    // ONE literal: no interpolation, no format! brace-escaping hazards —
+    // the guides are static text and the document is const-shaped.
+    r#"{"name":"IntakeArtifact","type":"object","description":"The KT problem statement (WHAT/WHERE/WHEN/EXTENT). Every stated bound must QUOTE the ticket text verbatim — the gate refuses bounds that do not trace to the ticket, the telemetry, or the what-changed window. Where the ticket does not say, write the literal string unknown (refused only for what.is — an unbounded WHAT is no problem statement).","properties":{"is_not":{"type":"object","description":"The KT table: bounds the ticket supports, quote the ticket where it does say","properties":{"what":{"type":"object","description":"The WHO/WHAT from the ticket text that IS affected — quote the ticket; unknown is refused here | What the ticket shows is NOT affected, or the literal string unknown","properties":{"is":{"type":"string","description":"The WHO/WHAT from the ticket text that IS affected — quote the ticket; the literal unknown is refused here"},"is_not":{"type":"string","description":"What the ticket shows is NOT affected, or the literal string unknown"}},"required":["is","is_not"]},"where":{"type":"object","description":"The WHERE from the ticket text — quote the ticket, or the literal string unknown | An unaffected location, or the literal string unknown","properties":{"is":{"type":"string","description":"The WHERE from the ticket text — quote the ticket, or the literal string unknown"},"is_not":{"type":"string","description":"An unaffected location, or the literal string unknown"}},"required":["is","is_not"]},"when":{"type":"object","description":"The WHEN from the ticket text — quote the ticket, or the literal string unknown | A time the problem does NOT affect, or the literal string unknown","properties":{"is":{"type":"string","description":"The WHEN from the ticket text — quote the ticket, or the literal string unknown"},"is_not":{"type":"string","description":"A time the problem does NOT affect, or the literal string unknown"}},"required":["is","is_not"]},"extent":{"type":"object","description":"The EXTENT from the ticket text — quote the ticket, or the literal string unknown | A scope the problem does NOT affect, or the literal string unknown","properties":{"is":{"type":"string","description":"The EXTENT from the ticket text — quote the ticket, or the literal string unknown"},"is_not":{"type":"string","description":"A scope the problem does NOT affect, or the literal string unknown"}},"required":["is","is_not"]}},"required":["what","where","when","extent"]},"telemetry_refs":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":16,"description":"Evidence captured BEFORE anything is touched — scheme locators (tsr://, sel://); prose is not evidence"},"what_changed":{"type":"string","description":"Changes in the last 7 days from the ticket, or the literal string unknown"},"known_good":{"type":"string","description":"A known-good comparison from the ticket, or the literal string none available"},"diagnostic_seams":{"type":"array","items":{"type":"string"},"maxItems":16,"description":"Diagnostic channels this case can observe; omit when none"},"decomposition":{"type":"object","description":"ONLY when the ticket holds several separable problems; omit otherwise","properties":{"issues":{"type":"array","minItems":2,"items":{"type":"object","properties":{"title":{"type":"string"},"question":{"type":"string"},"severity_hint":{"type":"string"}},"required":["title","question"]}},"rationale":{"type":"string"}},"required":["issues","rationale"]}},"required":["is_not","telemetry_refs","what_changed","known_good"]}"#
+        .to_string()
+}
+
 fn intake_gate(a: &IntakeArtifact, case: &GdlCase) -> Vec<String> {
     let mut errors = Vec::new();
     if a.telemetry_refs.len() > MAX_TELEMETRY_REFS {
@@ -1380,6 +1402,53 @@ fn intake_gate(a: &IntakeArtifact, case: &GdlCase) -> Vec<String> {
                 "KT",
                 &format!("is_not.{name}.is_not is empty — the comparison must be recorded"),
             ));
+        }
+        // THE KT AMENDMENT (round 14, preregistered — plan §2 Arm A / KT-2,
+        // AS WRITTEN): the honesty axis distinguishes EMPTY from `unknown`.
+        // `unknown` is refused ONLY for what.is — an unbounded WHAT is no
+        // problem statement at all. The other seven cells keep it recorded
+        // (the struct's own doc: "unknown" is a VALID recorded value).
+        if name == "what" && kt_cell_is_unknown(&row.is) {
+            errors.push(err(
+                "KT",
+                "is_not.what.is is 'unknown' — an unbounded WHAT is no \
+                 problem statement; state the WHAT the ticket text carries",
+            ));
+        }
+    }
+    // THE TRACEABILITY GATE (round 14, KT-1 — the honesty law's teeth): a
+    // stated (non-unknown) KT cell must containment-match the case's OWN
+    // inputs — the ticket text, the telemetry refs, the what-changed
+    // window — by the `locator_resolves` discipline (the :1594 floor and
+    // direction, reused verbatim). A bound that cites nothing refuses BY
+    // NAME, exactly like a fabricated citation. `unknown` is exempt: it
+    // IS the honesty vocabulary, recorded wherever the inputs lack data.
+    let trace_universe = [case.ticket.clone(), a.what_changed.trim().to_owned()]
+        .into_iter()
+        .chain(a.telemetry_refs.iter().cloned())
+        .collect::<Vec<_>>();
+    for (name, row) in [
+        ("what", &a.is_not.what),
+        ("where", &a.is_not.place),
+        ("when", &a.is_not.time),
+        ("extent", &a.is_not.extent),
+    ] {
+        for (col, cell) in [("is", &row.is), ("is_not", &row.is_not)] {
+            let value = cell.trim();
+            if value.is_empty() || kt_cell_is_unknown(value) {
+                continue;
+            }
+            if !locator_resolves(value, &trace_universe) {
+                errors.push(err(
+                    "KT",
+                    &format!(
+                        "is_not.{name}.{col} states {value:?} — the bound is \
+                         not traceable to the case's own inputs (ticket, \
+                         telemetry, what-changed); quote the ticket or \
+                         record 'unknown'"
+                    ),
+                ));
+            }
         }
     }
     if a.telemetry_refs.is_empty() {
@@ -1857,6 +1926,14 @@ pub(crate) fn triage_knowledge_hits(conn: &Connection, domain: &str, ticket: &st
             title: title.unwrap_or_default(),
         })
         .collect()
+}
+
+/// The KT honesty vocabulary (round 14): the literal `unknown`,
+/// case-insensitive, trimmed — the cell value the preregistered axis
+/// distinguishes from EMPTY (the wall) and from a STATED bound (which the
+/// traceability gate holds to the case's own inputs).
+fn kt_cell_is_unknown(cell: &str) -> bool {
+    cell.trim().eq_ignore_ascii_case("unknown")
 }
 
 // ── Resolved locators (citations into held evidence) ─────────────────
@@ -3083,8 +3160,11 @@ pub(crate) fn phase_instruction_with_law(
     let contract = match phase {
         GdlPhase::Intake => {
             "Emit ONE JSON object: \
-{\"is_not\":{\"what\":{\"is\":\"..\",\"is_not\":\"..\"},\"where\":{..},\"when\":{..},\"extent\":{..}},\
+{\"is_not\":{\"what\":{\"is\":\"quote the ticket\",\"is_not\":\".. or unknown\"},\"where\":{..},\"when\":{..},\"extent\":{..}},\
 \"telemetry_refs\":[\"tsr://..\"],\"what_changed\":\".. or unknown\",\"known_good\":\".. or none available\"} — \
+the KT table bounds the problem from the ticket's OWN text: every stated bound must quote the ticket \
+(a bound that traces to nothing refuses), and where the ticket does not say, record the literal \
+string unknown — valid for every cell EXCEPT what.is (an unbounded WHAT is no problem statement). \
 telemetry_refs are scheme://locators (tsr://, sel://); prose is not a reference. \
 you MAY carry decomposition — {issues:[{title,question,severity_hint}],rationale} — \
 only when the ticket holds several separable problems (different teams or skills); \
@@ -6012,9 +6092,9 @@ mod tests {
     #[test]
     fn gdl_confirmation_provider_failure_uses_confirm_receipt() {
         let (driver, tmp, calls) = confirmation_failure_fixture();
-        seed_kb_path(tmp.path(), "confirmation failure");
+        seed_kb_path(tmp.path(), GATE_TICKET);
         let outcome = rt()
-            .block_on(driver.run_case(1, "confirmation failure", &CancellationToken::new()))
+            .block_on(driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .expect("confirmation provider failure terminalizes the GDL checkpoint");
         assert!(matches!(outcome, GdlOutcome::ProviderFailed { .. }));
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 8);
@@ -6046,7 +6126,7 @@ mod tests {
     #[test]
     fn gdl_provider_failure_releases_outer_claim() {
         let (driver, tmp, _calls) = provider_failure_fixture();
-        let _ = rt().block_on(driver.run_case(1, "provider failure", &CancellationToken::new()));
+        let _ = rt().block_on(driver.run_case(1, GATE_TICKET, &CancellationToken::new()));
         let conn = provider_failure_db_state(tmp.path());
         assert!(
             session_log::quiescent(&conn, 1).expect("quiescence query"),
@@ -6072,7 +6152,7 @@ mod tests {
     #[test]
     fn gdl_provider_failure_finishes_invocation_and_exchange() {
         let (driver, tmp, _calls) = provider_failure_fixture();
-        let _ = rt().block_on(driver.run_case(1, "provider failure", &CancellationToken::new()));
+        let _ = rt().block_on(driver.run_case(1, GATE_TICKET, &CancellationToken::new()));
         let conn = provider_failure_db_state(tmp.path());
         let (invocations, exchanges): (i64, i64) = conn
             .query_row(
@@ -6090,7 +6170,7 @@ mod tests {
     #[test]
     fn gdl_provider_failure_is_terminal_and_not_retryable() {
         let (driver, tmp, _calls) = provider_failure_fixture();
-        let _ = rt().block_on(driver.run_case(1, "provider failure", &CancellationToken::new()));
+        let _ = rt().block_on(driver.run_case(1, GATE_TICKET, &CancellationToken::new()));
         let conn = provider_failure_db_state(tmp.path());
         let payload: String = conn
             .query_row(
@@ -6108,8 +6188,7 @@ mod tests {
         drop(conn);
         let (retry_driver, retry_provider) =
             reload(tmp.path(), happy_script(), LoopConfig::default());
-        let _ =
-            rt().block_on(retry_driver.run_case(1, "provider failure", &CancellationToken::new()));
+        let _ = rt().block_on(retry_driver.run_case(1, GATE_TICKET, &CancellationToken::new()));
         assert!(
             retry_provider.requests().is_empty(),
             "a provider-failed episode must never replay provider work"
@@ -6224,7 +6303,7 @@ mod tests {
     #[test]
     fn r1_reload_every_phase_never_duplicates_act() {
         let f = fixture(vec![]);
-        seed_kb_for_ticket(&f, "reload");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let runtime = rt();
         let mut script = happy_script().into_iter();
         // One reload per phase settlement. Verify settles over THREE
@@ -6245,7 +6324,7 @@ mod tests {
             let result = runtime
                 .block_on(driver.run_case_until(
                     1,
-                    "reload",
+                    GATE_TICKET,
                     &CancellationToken::new(),
                     Some(1),
                     &EscapeFlag::new(),
@@ -6281,7 +6360,7 @@ mod tests {
             terminal = runtime
                 .block_on(driver.run_case_until(
                     1,
-                    "retry",
+                    GATE_TICKET,
                     &CancellationToken::new(),
                     Some(1),
                     &EscapeFlag::new(),
@@ -6296,9 +6375,9 @@ mod tests {
             assert_eq!(terminal.is_some(), attempt == 3);
         }
         let (driver, provider) = reload(f.tmp.path(), happy_script(), LoopConfig::default());
-        seed_kb_path(f.tmp.path(), "retry");
+        seed_kb_path(f.tmp.path(), GATE_TICKET);
         let retry = runtime
-            .block_on(driver.run_case(1, "retry", &CancellationToken::new()))
+            .block_on(driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert_eq!(Some(retry), terminal);
         assert!(provider.requests().is_empty());
@@ -6328,10 +6407,10 @@ mod tests {
                 _ => {}
             }
             let f = fixture(vec![]);
-            seed_kb_for_ticket(&f, "terminal");
+            seed_kb_for_ticket(&f, GATE_TICKET);
             let (driver, _) = reload(f.tmp.path(), script, config.clone());
             let first = runtime
-                .block_on(driver.run_case(1, "terminal", &cancel))
+                .block_on(driver.run_case(1, GATE_TICKET, &cancel))
                 .unwrap();
             assert!(
                 match (&first, branch) {
@@ -6349,14 +6428,19 @@ mod tests {
             drop(driver);
             let (driver, provider) = reload(f.tmp.path(), happy_script(), config);
             let second = runtime
-                .block_on(driver.run_case(1, "terminal", &CancellationToken::new()))
+                .block_on(driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
                 .unwrap();
             assert_eq!(first, second);
             assert!(provider.requests().is_empty());
+            // THE INVOCATION BINDING law (what this assert has always
+            // pinned): a rerun naming a DIFFERENT ticket refuses — the
+            // binding is the ticket, not a replay request. The replay-
+            // exact law above is run 2; THIS is the refusal arm.
+            let third =
+                runtime.block_on(driver.run_case(1, "changed ticket", &CancellationToken::new()));
             assert!(
-                runtime
-                    .block_on(driver.run_case(1, "changed ticket", &CancellationToken::new()))
-                    .is_err()
+                third.is_err(),
+                "branch {branch}: a rerun naming a different ticket must err, got {third:?}"
             );
         }
     }
@@ -6375,9 +6459,9 @@ mod tests {
         let runtime = rt();
         // (1) The evidence-gated closure: resolved carries both conditions.
         let f = fixture(happy_script());
-        seed_kb_for_ticket(&f, "close");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = runtime
-            .block_on(f.driver.run_case(1, "close", &CancellationToken::new()))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         match outcome {
             GdlOutcome::Resolved {
@@ -6449,9 +6533,11 @@ mod tests {
                 script.insert(index + 2, scripted_text(artifact));
             }
             let f = fixture(script);
-            seed_kb_for_ticket(&f, name);
+            // The case ticket carries the KT data the scripted intake
+            // states (the traceability gate); `name` stays the row label.
+            seed_kb_for_ticket(&f, GATE_TICKET);
             let outcome = runtime
-                .block_on(f.driver.run_case(1, name, &CancellationToken::new()))
+                .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
                 .unwrap();
             assert!(
                 !matches!(outcome, GdlOutcome::Resolved { .. }),
@@ -6489,7 +6575,7 @@ mod tests {
         };
         let (driver, provider) = reload(f.tmp.path(), vec![], config);
         let outcome = runtime
-            .block_on(driver.run_case(1, "admission", &CancellationToken::new()))
+            .block_on(driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         match outcome {
             GdlOutcome::Capped { reason, .. } => assert_eq!(reason, "budget"),
@@ -6537,9 +6623,9 @@ mod tests {
         }
         script.push(scripted_text(HANDOFF_JSON)); // never reached
         let f = fixture(script);
-        seed_kb_for_ticket(&f, "disagree");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = runtime
-            .block_on(f.driver.run_case(1, "disagree", &CancellationToken::new()))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         match outcome {
             GdlOutcome::Routed { at, reason } => {
@@ -6640,9 +6726,9 @@ mod tests {
         script.truncate(5); // through Act — the prefix every arm shares
         script.extend(strategy);
         let f = fixture(script);
-        seed_kb_for_ticket(&f, "cost");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = runtime
-            .block_on(f.driver.run_case(1, "cost", &CancellationToken::new()))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         let terminal = match &outcome {
             GdlOutcome::Resolved { .. } => "resolved",
@@ -6736,12 +6822,12 @@ mod tests {
             scripted_text(INTAKE_UNBOUNDED),
             scripted_text(INTAKE_UNBOUNDED),
         ]);
-        seed_kb_for_ticket(&unbounded, "cost");
+        seed_kb_for_ticket(&unbounded, GATE_TICKET);
         let exhausted = runtime
             .block_on(
                 unbounded
                     .driver
-                    .run_case(1, "cost", &CancellationToken::new()),
+                    .run_case(1, GATE_TICKET, &CancellationToken::new()),
             )
             .unwrap();
         assert!(
@@ -7020,9 +7106,9 @@ mod tests {
         }
         script.push(scripted_text(HANDOFF_JSON)); // never reached
         let f = fixture(script);
-        seed_kb_for_ticket(&f, "falsified");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = runtime
-            .block_on(f.driver.run_case(1, "falsified", &CancellationToken::new()))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         match outcome {
             GdlOutcome::Routed { at, reason } => {
@@ -7055,12 +7141,9 @@ mod tests {
         // The child answered in prose, not the agreed JSON shape.
         script[6] = scripted_text("no contradiction found after reviewing the evidence");
         let f = fixture(script);
-        seed_kb_for_ticket(&f, "no recheck child");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = runtime
-            .block_on(
-                f.driver
-                    .run_case(1, "no recheck child", &CancellationToken::new()),
-            )
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert!(
             matches!(outcome, GdlOutcome::Resolved { .. }),
@@ -7101,9 +7184,9 @@ mod tests {
             ..LoopConfig::default()
         };
         let (driver, _) = reload(f.tmp.path(), script, config);
-        seed_kb_path(f.tmp.path(), "no recheck");
+        seed_kb_path(f.tmp.path(), GATE_TICKET);
         let outcome = runtime
-            .block_on(driver.run_case(1, "no recheck", &CancellationToken::new()))
+            .block_on(driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert!(
             matches!(outcome, GdlOutcome::Resolved { .. }),
@@ -7174,18 +7257,16 @@ mod tests {
             // LIKE retrieval returns hit kb:1, the id every script cites.
             conn.execute(
                 "INSERT INTO knowledge(domain, title, content, flagged) VALUES ('acme', 'Test playbook', ?1, 0)",
-                rusqlite::params!["Test playbook covering the tickets: burst 1, burst 2, burst 3, burst 4"],
+                rusqlite::params![format!(
+                    "Test playbook covering the ticket: {GATE_TICKET}"
+                )],
             )
             .unwrap();
         }
         for run_id in 1..=4 {
             let (driver, provider) = reload(f.tmp.path(), happy_script(), LoopConfig::default());
             let outcome = runtime
-                .block_on(driver.run_case(
-                    run_id,
-                    &format!("burst {run_id}"),
-                    &CancellationToken::new(),
-                ))
+                .block_on(driver.run_case(run_id, GATE_TICKET, &CancellationToken::new()))
                 .unwrap();
             assert!(
                 matches!(outcome, GdlOutcome::Resolved { .. }),
@@ -7220,9 +7301,9 @@ mod tests {
         let f = fixture(happy_script());
         seed_repeater_priors(f.tmp.path(), 2);
         let runtime = rt();
-        seed_kb_for_ticket(&f, "dsar");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = runtime
-            .block_on(f.driver.run_case(1, "dsar", &CancellationToken::new()))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert!(matches!(outcome, GdlOutcome::Resolved { .. }));
         let conn = Connection::open(f.tmp.path()).unwrap();
@@ -7258,9 +7339,9 @@ mod tests {
             r#"{"priority":"P3","stabilized":false,"search_hits":[],"verdict":"defer"}"#,
         );
         let f = fixture(script);
-        seed_kb_for_ticket(&f, "defer");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = runtime
-            .block_on(f.driver.run_case(1, "defer", &CancellationToken::new()))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert!(
             matches!(outcome, GdlOutcome::Escalated { .. }),
@@ -7287,9 +7368,9 @@ mod tests {
             r#"{"priority":"P3","stabilized":false,"search_hits":[],"verdict":"defer"}"#,
         );
         let f = fixture(script);
-        seed_kb_for_ticket(&f, "defer");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = runtime
-            .block_on(f.driver.run_case(1, "defer", &CancellationToken::new()))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert!(
             matches!(outcome, GdlOutcome::Escalated { .. }),
@@ -7364,7 +7445,7 @@ mod tests {
         let outcome = rt()
             .block_on(f.driver.run_case_with_escape(
                 1,
-                "escape",
+                GATE_TICKET,
                 &CancellationToken::new(),
                 &escape,
             ))
@@ -7404,7 +7485,7 @@ mod tests {
         let replayed = rt()
             .block_on(driver.run_case_with_escape(
                 1,
-                "escape",
+                GATE_TICKET,
                 &CancellationToken::new(),
                 &EscapeFlag::new(),
             ))
@@ -7415,7 +7496,7 @@ mod tests {
     #[test]
     fn escape_mid_act_routes_at_the_next_boundary_with_no_further_exchanges() {
         let f = fixture(vec![]);
-        seed_kb_for_ticket(&f, "mid-act");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let runtime = rt();
         let mut script = happy_script().into_iter();
         // Intake..Act settle on the first driver; the escape is raised
@@ -7427,7 +7508,7 @@ mod tests {
         let paused = runtime
             .block_on(driver.run_case_until(
                 1,
-                "mid-act",
+                GATE_TICKET,
                 &CancellationToken::new(),
                 Some(5),
                 &EscapeFlag::new(),
@@ -7445,7 +7526,7 @@ mod tests {
         let outcome = runtime
             .block_on(driver2.run_case_with_escape(
                 1,
-                "mid-act",
+                GATE_TICKET,
                 &CancellationToken::new(),
                 &escape,
             ))
@@ -7608,7 +7689,7 @@ mod tests {
         let phases = GdlPhase::ALL;
         for (p, expected_at) in phases.iter().enumerate() {
             let f = fixture(happy_script());
-            seed_kb_for_ticket(&f, "sweep");
+            seed_kb_for_ticket(&f, GATE_TICKET);
             let escape = EscapeFlag::new();
             let runtime = rt();
             if p == 0 {
@@ -7618,7 +7699,7 @@ mod tests {
                 let paused = runtime
                     .block_on(f.driver.run_case_until(
                         1,
-                        "sweep",
+                        GATE_TICKET,
                         &CancellationToken::new(),
                         Some(p as u32),
                         &EscapeFlag::new(),
@@ -7630,7 +7711,7 @@ mod tests {
             let outcome = runtime
                 .block_on(f.driver.run_case_with_escape(
                     1,
-                    "sweep",
+                    GATE_TICKET,
                     &CancellationToken::new(),
                     &escape,
                 ))
@@ -7645,7 +7726,7 @@ mod tests {
             let replayed = runtime
                 .block_on(driver.run_case_with_escape(
                     1,
-                    "sweep",
+                    GATE_TICKET,
                     &CancellationToken::new(),
                     &EscapeFlag::new(),
                 ))
@@ -7657,13 +7738,13 @@ mod tests {
     #[test]
     fn offer_boundary_resume_continues_at_the_recorded_phase_with_zero_reexecution() {
         let f = fixture(happy_script());
-        seed_kb_for_ticket(&f, "handoff");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let runtime = rt();
         // Settle Intake..Act, then pause.
         let paused = runtime
             .block_on(f.driver.run_case_until(
                 1,
-                "handoff",
+                GATE_TICKET,
                 &CancellationToken::new(),
                 Some(5),
                 &EscapeFlag::new(),
@@ -7697,9 +7778,9 @@ mod tests {
         };
         // Resume: the case continues at Verify (the recorded phase) and
         // resolves; the step rows prove zero re-execution.
-        seed_kb_for_ticket(&f, "handoff");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = runtime
-            .block_on(f.driver.run_case(1, "handoff", &CancellationToken::new()))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert!(
             matches!(outcome, GdlOutcome::Resolved { phases: 7, .. }),
@@ -7780,9 +7861,9 @@ mod tests {
             r#"{"priority":"P1","stabilized":true,"search_hits":["kb:1"],"verdict":"accept","acuity_band":"ORANGE","esi_level":2,"care_setting":"in_person_primary","red_flag":{"worst_case":"battery-induced data corruption during rebuild","ruled_out":true,"rule_out_basis":["test:sel://events"],"first_would_miss_impact":"write-cache loss corrupts VD 5"}}"#,
         );
         let f = fixture(script);
-        seed_kb_for_ticket(&f, "P1 clock");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = runtime
-            .block_on(f.driver.run_case(1, "P1 clock", &CancellationToken::new()))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert!(
             matches!(outcome, GdlOutcome::Resolved { .. }),
@@ -7832,7 +7913,7 @@ mod tests {
     #[test]
     fn the_sla_clock_arms_inside_the_phase_pass_it_makes_actionable() {
         let f = fixture(happy_script());
-        seed_kb_for_ticket(&f, "atomic clock");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         {
             let conn = Connection::open(f.tmp.path()).unwrap();
             conn.execute_batch(
@@ -7843,10 +7924,7 @@ mod tests {
             .unwrap();
         }
         let err = rt()
-            .block_on(
-                f.driver
-                    .run_case(1, "atomic clock", &CancellationToken::new()),
-            )
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .expect_err("a refused clock must fail the pass that arms it");
         // Anti-vacuity: the pass died BECAUSE the clock row was refused. A pin
         // that went green because the case failed for some unrelated reason
@@ -7933,10 +8011,7 @@ mod tests {
             .unwrap();
         }
         let err = rt()
-            .block_on(
-                f.driver
-                    .run_case(1, "atomic satellites", &CancellationToken::new()),
-            )
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .expect_err("a refused checkpoint gate must fail the pass");
         assert!(
             err.to_string().contains("checkpoint_gate_refused"),
@@ -8075,9 +8150,9 @@ mod tests {
     fn r1_terminal_retry_refuses_changed_loop_policy() {
         let f = fixture(happy_script());
         let runtime = rt();
-        seed_kb_for_ticket(&f, "policy");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         runtime
-            .block_on(f.driver.run_case(1, "policy", &CancellationToken::new()))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         let changed = LoopConfig {
             max_turns: 1,
@@ -8086,7 +8161,7 @@ mod tests {
         let (driver, provider) = reload(f.tmp.path(), happy_script(), changed);
         assert!(
             runtime
-                .block_on(driver.run_case(1, "policy", &CancellationToken::new()))
+                .block_on(driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
                 .is_err()
         );
         assert!(provider.requests().is_empty());
@@ -8096,7 +8171,7 @@ mod tests {
             .set_retry_spec("changed provider implementation".into());
         assert!(
             runtime
-                .block_on(driver.run_case(1, "policy", &CancellationToken::new()))
+                .block_on(driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
                 .is_err()
         );
         assert!(provider.requests().is_empty());
@@ -8119,9 +8194,9 @@ mod tests {
             if corruption == "outcome" {
                 cancel.cancel();
             }
-            seed_kb_for_ticket(&f, "receipt");
+            seed_kb_for_ticket(&f, GATE_TICKET);
             runtime
-                .block_on(f.driver.run_case(1, "receipt", &cancel))
+                .block_on(f.driver.run_case(1, GATE_TICKET, &cancel))
                 .unwrap();
             let conn = Connection::open(f.tmp.path()).unwrap();
             let (key, payload): (String, String) = conn.query_row("SELECT idempotency_key, payload_json FROM agent_session_events WHERE kind='control:gdl' ORDER BY seq DESC LIMIT 1", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
@@ -8181,7 +8256,7 @@ mod tests {
             let (driver, provider) = reload(f.tmp.path(), happy_script(), LoopConfig::default());
             assert!(
                 runtime
-                    .block_on(driver.run_case(1, "receipt", &CancellationToken::new()))
+                    .block_on(driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
                     .is_err(),
                 "must refuse {corruption}"
             );
@@ -8193,11 +8268,11 @@ mod tests {
     fn r1_checked_seal_audit_failure_rolls_back_checkpoint() {
         let f = fixture(happy_script());
         let runtime = rt();
-        seed_kb_for_ticket(&f, "audit");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         runtime
             .block_on(f.driver.run_case_until(
                 1,
-                "audit",
+                GATE_TICKET,
                 &CancellationToken::new(),
                 Some(2),
                 &EscapeFlag::new(),
@@ -8214,7 +8289,7 @@ mod tests {
         );
         assert!(
             runtime
-                .block_on(driver.run_case(1, "audit", &CancellationToken::new()))
+                .block_on(driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
                 .is_err()
         );
         assert_eq!(provider.requests().len(), 1);
@@ -8283,9 +8358,9 @@ mod tests {
             "kind='interview'",
         ] {
             let f = fixture(happy_script());
-            seed_kb_for_ticket(&f, "t");
+            seed_kb_for_ticket(&f, GATE_TICKET);
             runtime
-                .block_on(f.driver.run_case(1, "t", &CancellationToken::new()))
+                .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
                 .unwrap();
             let conn = Connection::open(f.tmp.path()).unwrap();
             conn.execute(&format!("UPDATE workflow_runs SET {update} WHERE id=1"), [])
@@ -8293,7 +8368,7 @@ mod tests {
             let (driver, provider) = reload(f.tmp.path(), happy_script(), LoopConfig::default());
             assert!(
                 runtime
-                    .block_on(driver.run_case(1, "t", &CancellationToken::new()))
+                    .block_on(driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
                     .is_err()
             );
             assert!(provider.requests().is_empty());
@@ -8305,9 +8380,9 @@ mod tests {
         let runtime = rt();
         for corrupt in ["null", "{}", "[]", "{", "version", "terminal"] {
             let f = fixture(happy_script());
-            seed_kb_for_ticket(&f, "t");
+            seed_kb_for_ticket(&f, GATE_TICKET);
             runtime
-                .block_on(f.driver.run_case(1, "t", &CancellationToken::new()))
+                .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
                 .unwrap();
             let conn = Connection::open(f.tmp.path()).unwrap();
             let payload: String = conn.query_row("SELECT payload_json FROM agent_session_events WHERE kind='control:gdl' ORDER BY seq DESC LIMIT 1", [], |r| r.get(0)).unwrap();
@@ -8326,7 +8401,7 @@ mod tests {
             let (driver, provider) = reload(f.tmp.path(), happy_script(), LoopConfig::default());
             assert!(
                 runtime
-                    .block_on(driver.run_case(1, "t", &CancellationToken::new()))
+                    .block_on(driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
                     .is_err()
             );
             assert!(provider.requests().is_empty());
@@ -8337,11 +8412,11 @@ mod tests {
     fn r1_checkpoint_trigger_failure_rolls_back_and_retains_claim() {
         let f = fixture(happy_script());
         let runtime = rt();
-        seed_kb_for_ticket(&f, "t");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         runtime
             .block_on(f.driver.run_case_until(
                 1,
-                "t",
+                GATE_TICKET,
                 &CancellationToken::new(),
                 Some(2),
                 &EscapeFlag::new(),
@@ -8365,7 +8440,7 @@ mod tests {
         );
         assert!(
             runtime
-                .block_on(driver.run_case(1, "t", &CancellationToken::new()))
+                .block_on(driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
                 .is_err()
         );
         assert_eq!(provider.requests().len(), 1);
@@ -8380,7 +8455,7 @@ mod tests {
         let (retry, provider) = reload(f.tmp.path(), happy_script(), LoopConfig::default());
         assert!(
             runtime
-                .block_on(retry.run_case(1, "t", &CancellationToken::new()))
+                .block_on(retry.run_case(1, GATE_TICKET, &CancellationToken::new()))
                 .is_err()
         );
         assert!(provider.requests().is_empty());
@@ -8395,7 +8470,7 @@ mod tests {
             checkpoint::admit(&mut conn, 1, "t", "gdl-v1:L3:ablated=false", "old-owner").unwrap();
         let (driver, provider) = reload(f.tmp.path(), happy_script(), LoopConfig::default());
         assert!(
-            rt().block_on(driver.run_case(1, "t", &CancellationToken::new()))
+            rt().block_on(driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
                 .is_err()
         );
         assert!(provider.requests().is_empty());
@@ -8407,14 +8482,14 @@ mod tests {
     fn r1_terminal_retry_is_exact_without_provider_work() {
         let f = fixture(happy_script());
         let runtime = rt();
-        seed_kb_for_ticket(&f, "retry");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let first = runtime
-            .block_on(f.driver.run_case(1, "retry", &CancellationToken::new()))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         let calls = f.provider.requests().len();
-        seed_kb_for_ticket(&f, "retry");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let second = runtime
-            .block_on(f.driver.run_case(1, "retry", &CancellationToken::new()))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert_eq!(first, second);
         assert_eq!(f.provider.requests().len(), calls);
@@ -8430,9 +8505,9 @@ mod tests {
             } else {
                 session_log::append(&conn, 1, "user", "{}", "old", 1).unwrap();
             }
-            seed_kb_for_ticket(&f, "retry");
+            seed_kb_for_ticket(&f, GATE_TICKET);
             assert!(
-                rt().block_on(f.driver.run_case(1, "retry", &CancellationToken::new()))
+                rt().block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
                     .is_err()
             );
             assert!(f.provider.requests().is_empty());
@@ -8458,7 +8533,7 @@ mod tests {
             runtime
                 .block_on(f.driver.run_case_until(
                     1,
-                    "t",
+                    GATE_TICKET,
                     &CancellationToken::new(),
                     Some(1),
                     &EscapeFlag::new(),
@@ -8484,7 +8559,7 @@ mod tests {
             let (driver, provider) = reload(f.tmp.path(), happy_script(), LoopConfig::default());
             assert!(
                 runtime
-                    .block_on(driver.run_case(1, "t", &CancellationToken::new()))
+                    .block_on(driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
                     .is_err()
             );
             assert!(provider.requests().is_empty());
@@ -8608,9 +8683,9 @@ mod tests {
             let conn = Connection::open(f.tmp.path()).unwrap();
             super::super::state::cas_update(&conn, 1, 0, corrupt, "active", 1).unwrap();
             let before = super::super::state::read_state_and_revision(&conn, 1).unwrap();
-            seed_kb_for_ticket(&f, "original");
+            seed_kb_for_ticket(&f, GATE_TICKET);
             let err = runtime
-                .block_on(f.driver.run_case(1, "original", &CancellationToken::new()))
+                .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
                 .unwrap_err();
             assert!(
                 matches!(err, LoopError::Persist(ref m) if m.contains("corrupt state")),
@@ -8651,9 +8726,10 @@ mod tests {
                 rusqlite::params![kind, status, serde_json::to_string(&case).unwrap()],
             )
             .unwrap();
-            seed_kb_for_ticket(&f, "retry");
+            seed_kb_for_ticket(&f, GATE_TICKET);
             let before = super::super::state::read_state_and_revision(&conn, 1).unwrap();
-            let result = runtime.block_on(f.driver.run_case(1, "retry", &CancellationToken::new()));
+            let result =
+                runtime.block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()));
             assert!(
                 result.is_err(),
                 "ineligible run must refuse: {kind}/{status}"
@@ -8679,9 +8755,9 @@ mod tests {
     fn gdl_case_runs_all_seven_phases_end_to_end() {
         let f = fixture(happy_script());
         let cancel = CancellationToken::new();
-        seed_kb_for_ticket(&f, "node-042 rebuild is slow");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = rt()
-            .block_on(f.driver.run_case(1, "node-042 rebuild is slow", &cancel))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &cancel))
             .unwrap();
         // Resolved ONLY through a passed verify; 7 phases completed.
         assert!(
@@ -8805,9 +8881,9 @@ mod tests {
         // denied unless it carries a recorded justification.
         let f = fixture(happy_script());
         let cancel = CancellationToken::new();
-        seed_kb_for_ticket(&f, "node-042 rebuild is slow");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = rt()
-            .block_on(f.driver.run_case(1, "node-042 rebuild is slow", &cancel))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &cancel))
             .unwrap();
         assert!(matches!(outcome, GdlOutcome::Resolved { .. }));
         let mut conn = Connection::open(f.tmp.path()).unwrap();
@@ -8859,9 +8935,9 @@ mod tests {
             scripted_text(bad),
         ]);
         let cancel = CancellationToken::new();
-        seed_kb_for_ticket(&f, "server is slow");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = rt()
-            .block_on(f.driver.run_case(1, "server is slow", &cancel))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &cancel))
             .unwrap();
         match &outcome {
             GdlOutcome::Routed { at, reason } => {
@@ -8902,7 +8978,7 @@ mod tests {
             diagnostic_seams: vec![],
             decomposition: None,
         };
-        let errors = intake_gate(&a, &gate_case("t"));
+        let errors = intake_gate(&a, &gate_case(GATE_TICKET));
         let joined = errors.join(" | ");
         for law in ["KT", "L1", "L4", "L3"] {
             assert!(joined.contains(law), "{law} must be cited: {joined}");
@@ -8910,8 +8986,10 @@ mod tests {
         // Recorded-unknown is VALID (L4's "record 'unknown', never assume").
         let honest = IntakeArtifact {
             is_not: IsNotTable {
+                // The stated bounds quote the case's own ticket (the
+                // traceability gate); the comparisons stay recorded-unknown.
                 what: IsNotRow {
-                    is: "slow".into(),
+                    is: "write-cache write-through".into(),
                     is_not: "unknown".into(),
                 },
                 place: IsNotRow {
@@ -8934,9 +9012,9 @@ mod tests {
             decomposition: None,
         };
         assert!(
-            intake_gate(&honest, &gate_case("t")).is_empty(),
+            intake_gate(&honest, &gate_case(GATE_TICKET)).is_empty(),
             "recorded-unknown is valid KT honesty: {:?}",
-            intake_gate(&honest, &gate_case("t"))
+            intake_gate(&honest, &gate_case(GATE_TICKET))
         );
     }
 
@@ -8954,7 +9032,7 @@ mod tests {
                     value["is_not"][dimension]["is_not"] = serde_json::json!("   ");
                 }
                 let artifact: IntakeArtifact = serde_json::from_value(value).unwrap();
-                let errors = intake_gate(&artifact, &gate_case("t"));
+                let errors = intake_gate(&artifact, &gate_case(GATE_TICKET));
                 assert!(
                     errors
                         .iter()
@@ -8995,9 +9073,9 @@ mod tests {
         let a: IntakeArtifact = serde_json::from_str(INTAKE_JSON).unwrap();
         assert!(a.decomposition.is_none(), "absent parses to None");
         assert!(
-            intake_gate(&a, &gate_case("t")).is_empty(),
+            intake_gate(&a, &gate_case(GATE_TICKET)).is_empty(),
             "no decomposition, no gate firing: {:?}",
-            intake_gate(&a, &gate_case("t"))
+            intake_gate(&a, &gate_case(GATE_TICKET))
         );
         let normalized = serde_json::to_string(&a).unwrap();
         assert!(
@@ -9006,7 +9084,8 @@ mod tests {
         );
         // The full arbiter path: a single-issue intake passes exactly
         // as today, and the normalized artifact carries no key.
-        let (gate, artifact) = parse_and_gate(GdlPhase::Intake, &gate_case("t"), INTAKE_JSON);
+        let (gate, artifact) =
+            parse_and_gate(GdlPhase::Intake, &gate_case(GATE_TICKET), INTAKE_JSON);
         assert!(matches!(gate, Gate::Pass), "single-issue passes: {gate:?}");
         assert!(
             !artifact.unwrap().contains("decomposition"),
@@ -9015,9 +9094,9 @@ mod tests {
         // And the honest two-issue decomposition passes the same gate.
         let d = honest_decomposition();
         assert!(
-            intake_gate(&d, &gate_case("t")).is_empty(),
+            intake_gate(&d, &gate_case(GATE_TICKET)).is_empty(),
             "a well-formed decomposition passes: {:?}",
-            intake_gate(&d, &gate_case("t"))
+            intake_gate(&d, &gate_case(GATE_TICKET))
         );
     }
 
@@ -9029,7 +9108,7 @@ mod tests {
         let mut a = honest_decomposition();
         a.decomposition.as_mut().unwrap().issues[1].title =
             "gradebook workbook errors at night".into();
-        let errors = intake_gate(&a, &gate_case("t"));
+        let errors = intake_gate(&a, &gate_case(GATE_TICKET));
         assert!(
             errors
                 .iter()
@@ -9040,7 +9119,7 @@ mod tests {
         let mut a = honest_decomposition();
         a.decomposition.as_mut().unwrap().issues[0].title =
             "IDRAC cache batteries and the backup set".into();
-        let errors = intake_gate(&a, &gate_case("t"));
+        let errors = intake_gate(&a, &gate_case(GATE_TICKET));
         assert!(
             errors
                 .iter()
@@ -9051,7 +9130,7 @@ mod tests {
         let mut a = honest_decomposition();
         a.decomposition.as_mut().unwrap().issues[1].title =
             a.decomposition.as_ref().unwrap().issues[0].title.clone();
-        let errors = intake_gate(&a, &gate_case("t"));
+        let errors = intake_gate(&a, &gate_case(GATE_TICKET));
         assert!(
             errors
                 .iter()
@@ -9061,10 +9140,198 @@ mod tests {
         // Separable titles (neither contains the other) pass.
         let a = honest_decomposition();
         assert!(
-            !intake_gate(&a, &gate_case("t"))
+            !intake_gate(&a, &gate_case(GATE_TICKET))
                 .iter()
                 .any(|e| e.contains("overlap")),
             "separable titles pass"
+        );
+    }
+
+    // ── round 14 — the KT amendment + the traceability gate ────────────
+    // The preregistered axis (plan §2 Arm A / KT-2, AS WRITTEN): empty is
+    // refused everywhere (the wall, unchanged); the literal `unknown` is
+    // refused ONLY for `what.is` (an unbounded WHAT is no problem
+    // statement); every STATED (non-unknown) cell must containment-match
+    // the case's OWN inputs — ticket, telemetry, what-changed (KT-1, the
+    // `gdl.rs:1594` locator discipline). The fixture ticket these pins
+    // run against carries the KT data the fixture artifact states — the
+    // traceability law gives that sentence teeth.
+
+    /// The KT-traceable ticket: every bound the shared INTAKE_JSON fixture
+    /// states appears in it verbatim (case-insensitive containment), so
+    /// the fixture artifact is honest under the traceability gate.
+    const GATE_TICKET: &str = "PERC H740P write-cache write-through on \
+node-042 RAID-10 VDs (not read cache; node-041 unaffected) since 03:12 \
+during rebuild — before 03:12 the array was healthy; VD 5 only affected, \
+all VDs not; fw 2.10 flashed last week; tsr://node-042 sel://events";
+
+    /// KT-2 (behavioral, the red-first arm): `what.is` refuses the
+    /// literal `unknown` BY NAME. (Born against the pre-amendment tree,
+    /// where the cell passes — the transcript is the red proof.)
+    #[test]
+    fn kt_amendment_what_is_refuses_unknown_by_name() {
+        let mut a: IntakeArtifact = serde_json::from_str(INTAKE_JSON).unwrap();
+        a.is_not.what.is = "unknown".into();
+        let errors = intake_gate(&a, &gate_case(GATE_TICKET));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("KT") && e.contains("what.is") && e.contains("unknown")),
+            "what.is = unknown must refuse BY NAME, got {errors:?}"
+        );
+    }
+
+    /// KT-1 (behavioral, the red-first arm): a stated bound that does not
+    /// containment-match the case's own inputs refuses BY NAME — the
+    /// fabrication path closes. (Born against the pre-step tree, where
+    /// the planted bound passes.)
+    #[test]
+    fn kt_traceability_gate_refuses_an_uncited_bound_by_name() {
+        let mut a: IntakeArtifact = serde_json::from_str(INTAKE_JSON).unwrap();
+        a.is_not.extent.is = "the fabric of reality".into(); // planted — in no input
+        let errors = intake_gate(&a, &gate_case(GATE_TICKET));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("KT") && e.contains("not traceable")),
+            "the planted bound must refuse BY NAME, got {errors:?}"
+        );
+    }
+
+    /// KT-1 (the honesty control, born green): bounds quoted from the
+    /// case's own inputs pass — the fixture artifact against its own
+    /// traceable ticket.
+    #[test]
+    fn kt_traceability_accepts_bounds_quoted_from_the_ticket() {
+        let a: IntakeArtifact = serde_json::from_str(INTAKE_JSON).unwrap();
+        assert!(
+            intake_gate(&a, &gate_case(GATE_TICKET)).is_empty(),
+            "quoted bounds trace and pass: {:?}",
+            intake_gate(&a, &gate_case(GATE_TICKET))
+        );
+    }
+
+    /// KT-2 (the axis control, born green): `unknown` stays a valid
+    /// recorded value for the when/extent rows and the is_not columns —
+    /// the amendment never closes the honesty vocabulary it grants.
+    #[test]
+    fn kt_amendment_unknown_stays_valid_off_the_what_is_cell() {
+        let a = IntakeArtifact {
+            is_not: IsNotTable {
+                what: IsNotRow {
+                    is: "rebuild".into(),
+                    is_not: "unknown".into(),
+                },
+                place: IsNotRow {
+                    is: "unknown".into(),
+                    is_not: "unknown".into(),
+                },
+                time: IsNotRow {
+                    is: "unknown".into(),
+                    is_not: "unknown".into(),
+                },
+                extent: IsNotRow {
+                    is: "unknown".into(),
+                    is_not: "unknown".into(),
+                },
+            },
+            telemetry_refs: vec!["tsr://probe-014".into()],
+            what_changed: "unknown".into(),
+            known_good: "none available".into(),
+            diagnostic_seams: vec![],
+            decomposition: None,
+        };
+        assert!(
+            intake_gate(&a, &gate_case("rebuild")).is_empty(),
+            "the granted unknown axis stays valid: {:?}",
+            intake_gate(&a, &gate_case("rebuild"))
+        );
+    }
+
+    /// KT-1 (the floor control): a 1–2 char stated bound refuses — the
+    /// containment floor keeps the traceability check a real constraint,
+    /// not a vowel check (MIN_CITATION_LOCATOR_CHARS's own law, now on
+    /// the KT cells).
+    #[test]
+    fn kt_traceability_floor_refuses_a_vowel_check_bound() {
+        let mut a: IntakeArtifact = serde_json::from_str(INTAKE_JSON).unwrap();
+        a.is_not.extent.is = "vd".into(); // 2 chars — below the floor, though "VD" is in the ticket
+        let errors = intake_gate(&a, &gate_case(GATE_TICKET));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("KT") && e.contains("not traceable")),
+            "a sub-floor stated bound refuses: {errors:?}"
+        );
+    }
+
+    /// KT-3's struct walk: every serde field name the artifact can
+    /// serialize must appear in the builder's schema document — a field
+    /// change without a schema change reds HERE, in THIS lane. The walk
+    /// is recursive over objects and arrays so nested rows (the KT
+    /// table's is/is_not) count too.
+    fn collect_field_names(value: &serde_json::Value, out: &mut Vec<String>) {
+        match value {
+            serde_json::Value::Object(map) => {
+                for (k, v) in map {
+                    out.push(k.clone());
+                    collect_field_names(v, out);
+                }
+            }
+            serde_json::Value::Array(items) => {
+                for item in items {
+                    collect_field_names(item, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// The representative artifact the walk serializes: the full fixture
+    /// (KT table + telemetry + windows) WITH the optional decomposition
+    /// carried, so the optional field's schema presence is pinned too.
+    #[test]
+    fn kt_schema_builder_covers_every_struct_field() {
+        let mut a: IntakeArtifact = serde_json::from_str(INTAKE_JSON).unwrap();
+        a.decomposition = Some(Decomposition {
+            issues: vec![
+                ProposedIssue {
+                    title: "t1".into(),
+                    question: "q1".into(),
+                    severity_hint: "s".into(),
+                },
+                ProposedIssue {
+                    title: "t2".into(),
+                    question: "q2".into(),
+                    severity_hint: "s".into(),
+                },
+            ],
+            rationale: "r".into(),
+        });
+        let serialized = serde_json::to_value(&a).expect("the artifact serializes");
+        let mut names = Vec::new();
+        collect_field_names(&serialized, &mut names);
+        let schema = intake_artifact_schema_json();
+        for name in &names {
+            assert!(
+                schema.contains(&format!("\"{name}\"")),
+                "the schema drifted from the struct: field `{name}` has no schema property"
+            );
+        }
+        // The document parses — the wire dialect the child converts.
+        let parsed: serde_json::Value =
+            serde_json::from_str(&schema).expect("the builder emits valid JSON");
+        assert_eq!(parsed["type"], "object");
+        assert!(parsed["properties"]["is_not"].is_object());
+        // And the non-vacuity twin: a planted name the struct does not
+        // carry would red — the walk actually discriminates.
+        let mut planted = names.clone();
+        planted.push("definitely_not_a_field".to_string());
+        assert!(
+            planted
+                .iter()
+                .any(|n| !schema.contains(&format!("\"{n}\""))),
+            "the walk's negative arm works"
         );
     }
 
@@ -9074,7 +9341,7 @@ mod tests {
     fn malformed_decomposition_fields_refuse_by_name() {
         let mut a = honest_decomposition();
         a.decomposition.as_mut().unwrap().issues[0].title = "   ".into();
-        let errors = intake_gate(&a, &gate_case("t"));
+        let errors = intake_gate(&a, &gate_case(GATE_TICKET));
         assert!(
             errors
                 .iter()
@@ -9083,7 +9350,7 @@ mod tests {
         );
         let mut a = honest_decomposition();
         a.decomposition.as_mut().unwrap().issues[1].question = String::new();
-        let errors = intake_gate(&a, &gate_case("t"));
+        let errors = intake_gate(&a, &gate_case(GATE_TICKET));
         assert!(
             errors
                 .iter()
@@ -9092,7 +9359,7 @@ mod tests {
         );
         let mut a = honest_decomposition();
         a.decomposition.as_mut().unwrap().issues[0].question = "q".repeat(8193);
-        let errors = intake_gate(&a, &gate_case("t"));
+        let errors = intake_gate(&a, &gate_case(GATE_TICKET));
         assert!(
             errors
                 .iter()
@@ -9103,9 +9370,9 @@ mod tests {
         let mut a = honest_decomposition();
         a.decomposition.as_mut().unwrap().issues[0].question = "q".repeat(8192);
         assert!(
-            intake_gate(&a, &gate_case("t")).is_empty(),
+            intake_gate(&a, &gate_case(GATE_TICKET)).is_empty(),
             "8192 bytes is the launch bound, inclusive: {:?}",
-            intake_gate(&a, &gate_case("t"))
+            intake_gate(&a, &gate_case(GATE_TICKET))
         );
     }
 
@@ -9128,7 +9395,7 @@ mod tests {
             })
             .collect::<Vec<_>>(),
         );
-        let errors = intake_gate(&a, &gate_case("t"));
+        let errors = intake_gate(&a, &gate_case(GATE_TICKET));
         assert!(
             errors
                 .iter()
@@ -9137,7 +9404,7 @@ mod tests {
         );
         let mut a = honest_decomposition();
         a.decomposition.as_mut().unwrap().issues.truncate(1);
-        let errors = intake_gate(&a, &gate_case("t"));
+        let errors = intake_gate(&a, &gate_case(GATE_TICKET));
         assert!(
             errors
                 .iter()
@@ -9146,7 +9413,7 @@ mod tests {
         );
         let mut a = honest_decomposition();
         a.decomposition.as_mut().unwrap().rationale = "  ".into();
-        let errors = intake_gate(&a, &gate_case("t"));
+        let errors = intake_gate(&a, &gate_case(GATE_TICKET));
         assert!(
             errors
                 .iter()
@@ -9172,9 +9439,9 @@ mod tests {
         let defer = r#"{"priority":"P2","stabilized":true,"search_hits":[],"verdict":"defer"}"#;
         let f = fixture(vec![scripted_text(INTAKE_JSON), scripted_text(defer)]);
         let cancel = CancellationToken::new();
-        seed_kb_for_ticket(&f, "odd case");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = rt()
-            .block_on(f.driver.run_case(1, "odd case", &cancel))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &cancel))
             .unwrap();
         match &outcome {
             GdlOutcome::Escalated { at, bundle } => {
@@ -9592,9 +9859,9 @@ mod tests {
             scripted_text(HANDOFF_JSON),
         ]);
         let cancel = CancellationToken::new();
-        seed_kb_for_ticket(&f, "seamless case");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = rt()
-            .block_on(f.driver.run_case(1, "seamless case", &cancel))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &cancel))
             .unwrap();
         match &outcome {
             GdlOutcome::Escalated { at, bundle } => {
@@ -9629,7 +9896,7 @@ mod tests {
     fn oversized_or_malformed_seam_declaration_is_named_intake_failure() {
         let oversized = r#"{"is_not":{"what":{"is":"s","is_not":"n"},"where":{"is":"s","is_not":"n"},"when":{"is":"s","is_not":"n"},"extent":{"is":"s","is_not":"n"}},"telemetry_refs":["tsr://x"],"what_changed":"unknown","known_good":"none available","diagnostic_seams":["0123456789012345678901234567890123456789012345678901234567890123456789"]}"#;
         let a: IntakeArtifact = serde_json::from_str(oversized).unwrap();
-        let errors = intake_gate(&a, &gate_case("t"));
+        let errors = intake_gate(&a, &gate_case(GATE_TICKET));
         assert!(
             errors
                 .iter()
@@ -9639,7 +9906,7 @@ mod tests {
         let malformed = r#"{"is_not":{"what":{"is":"s","is_not":"n"},"where":{"is":"s","is_not":"n"},"when":{"is":"s","is_not":"n"},"extent":{"is":"s","is_not":"n"}},"telemetry_refs":["tsr://x"],"what_changed":"unknown","known_good":"none available","diagnostic_seams":["IDRAC"]}"#;
         let a: IntakeArtifact = serde_json::from_str(malformed).unwrap();
         assert!(
-            intake_gate(&a, &gate_case("t"))
+            intake_gate(&a, &gate_case(GATE_TICKET))
                 .iter()
                 .any(|e| e.starts_with("L1") && e.contains("diagnostic_seams")),
             "a non-lowercase seam is malformed"
@@ -9647,7 +9914,7 @@ mod tests {
         let crowded = r#"{"is_not":{"what":{"is":"s","is_not":"n"},"where":{"is":"s","is_not":"n"},"when":{"is":"s","is_not":"n"},"extent":{"is":"s","is_not":"n"}},"telemetry_refs":["tsr://x"],"what_changed":"unknown","known_good":"none available","diagnostic_seams":["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q"]}"#;
         let a: IntakeArtifact = serde_json::from_str(crowded).unwrap();
         assert!(
-            intake_gate(&a, &gate_case("t"))
+            intake_gate(&a, &gate_case(GATE_TICKET))
                 .iter()
                 .any(|e| e.starts_with("L1") && e.contains("diagnostic_seams")),
             "more than 16 declared seams is a named intake failure"
@@ -9946,9 +10213,9 @@ mod tests {
             let mut script = happy_script();
             script[5] = scripted_text(&verify_json);
             let f = fixture(script);
-            seed_kb_for_ticket(&f, "n1");
+            seed_kb_for_ticket(&f, GATE_TICKET);
             let outcome = runtime
-                .block_on(f.driver.run_case(1, "n1", &CancellationToken::new()))
+                .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
                 .unwrap();
             match &outcome {
                 GdlOutcome::VerifyFailed { at, .. } => {
@@ -10177,10 +10444,10 @@ mod tests {
             scripted_text(VERIFY_JSON),
             scripted_text(HANDOFF_JSON),
         ]);
-        seed_kb_for_ticket(&f, "odd case");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let cancel = CancellationToken::new();
         let outcome = rt()
-            .block_on(f.driver.run_case(1, "odd case", &cancel))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &cancel))
             .unwrap();
         assert!(
             matches!(outcome, GdlOutcome::Resolved { phases: 7, .. }),
@@ -10275,10 +10542,10 @@ mod tests {
             scripted_text(VERIFY_JSON),
             scripted_text(HANDOFF_JSON),
         ]);
-        seed_kb_for_ticket(&f, "odd case");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let cancel = CancellationToken::new();
         let outcome = rt()
-            .block_on(f.driver.run_case(1, "odd case", &cancel))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &cancel))
             .unwrap();
         assert!(
             matches!(outcome, GdlOutcome::Resolved { .. }),
@@ -10311,14 +10578,18 @@ mod tests {
     #[test]
     fn red_flagged_child_escalates_independently_of_parent() {
         let intake = intake_with_decomposition();
+        // The CHILD's scripted intake quotes the child's OWN ticket (the
+        // split issue's question) — the traceability gate holds the child
+        // to its case's inputs exactly as it holds the parent.
+        let child_intake = r#"{"is_not":{"what":{"is":"the state of the idrac cache batteries","is_not":"unknown"},"where":{"is":"unknown","is_not":"unknown"},"when":{"is":"unknown","is_not":"unknown"},"extent":{"is":"unknown","is_not":"unknown"}},"telemetry_refs":["tsr://idrac"],"what_changed":"unknown","known_good":"none available"}"#;
         let f = fixture(vec![
-            scripted_text(INTAKE_JSON),
+            scripted_text(child_intake),
             scripted_text(
                 r#"{"priority":"P2","stabilized":true,"search_hits":[],"verdict":"defer"}"#,
             ),
         ]);
         let mut conn = Connection::open(f.tmp.path()).unwrap();
-        let mut cp = checkpoint::admit(&mut conn, 1, "odd case", "test", "owner").unwrap();
+        let mut cp = checkpoint::admit(&mut conn, 1, GATE_TICKET, "test", "owner").unwrap();
         let normalize = |artifact: &str| -> String {
             let value: serde_json::Value = serde_json::from_str(artifact).unwrap();
             typed_json::<IntakeArtifact>(value).unwrap()
@@ -10390,7 +10661,7 @@ mod tests {
         let outcome = rt()
             .block_on(f.driver.run_case_until(
                 1,
-                "odd case",
+                GATE_TICKET,
                 &CancellationToken::new(),
                 Some(1),
                 &EscapeFlag::new(),
@@ -10436,10 +10707,10 @@ mod tests {
             scripted_text(VERIFY_JSON),
             scripted_text(HANDOFF_JSON),
         ]);
-        seed_kb_for_ticket(&f, "odd case");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let cancel = CancellationToken::new();
         let outcome = rt()
-            .block_on(f.driver.run_case(1, "odd case", &cancel))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &cancel))
             .unwrap();
         assert!(
             matches!(outcome, GdlOutcome::Resolved { .. }),
@@ -10462,7 +10733,7 @@ mod tests {
         // Positive control: the honest terminal chain re-admits
         // byte-exactly (the split did not fork or corrupt the
         // parent's revisions).
-        let readmit = checkpoint::admit(&mut conn, 1, "odd case", &policy, "owner").unwrap();
+        let readmit = checkpoint::admit(&mut conn, 1, GATE_TICKET, &policy, "owner").unwrap();
         assert_eq!(readmit.case.children, vec![2]);
         // Free the claim, then tamper the split revision's gate row
         // (control:gdl:2:gate — the Intake successor that fired the
@@ -10475,7 +10746,7 @@ mod tests {
         )
         .unwrap();
         assert!(
-            checkpoint::admit(&mut conn, 1, "odd case", &policy, "owner").is_err(),
+            checkpoint::admit(&mut conn, 1, GATE_TICKET, &policy, "owner").is_err(),
             "tampering a parent gate across the split must fail the chain"
         );
     }
@@ -10637,7 +10908,11 @@ mod tests {
     }
 
     fn hand_down_source_case() -> GdlCase {
-        let mut case = GdlCase::fresh("gradebook workbook fails to open");
+        // The sealed plan binds the case ticket: the running case is
+        // GATE_TICKET (the KT-traceable fixture ticket), so the source
+        // case carries the SAME ticket — and the fixture intake's bounds
+        // trace to it.
+        let mut case = GdlCase::fresh(GATE_TICKET);
         case.phase = GdlPhase::Handoff;
         case.intake = Some(serde_json::from_str(INTAKE_JSON).unwrap());
         case.triage = Some(crate::workflow::gdl::TriageArtifact {
@@ -10807,13 +11082,13 @@ mod tests {
     #[test]
     fn hand_down_matched_case_runs_sealed_plan_with_no_hypotheses() {
         let f = fixture_l1(vec![scripted_text(INTAKE_JSON), scripted_text(TRIAGE_JSON)]);
-        seed_kb_for_ticket(&f, "RE: gradebook workbook fails to open today");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let source_id = seed_hand_down_source(f.tmp.path(), "conf-1");
         let runtime = rt();
         runtime
             .block_on(f.driver.run_case_until(
                 1,
-                "RE: gradebook workbook fails to open today",
+                GATE_TICKET,
                 &CancellationToken::new(),
                 Some(2),
                 &EscapeFlag::new(),
@@ -10864,15 +11139,11 @@ mod tests {
             scripted_text(TRIAGE_JSON),
             scripted_text(&hand_down_act_json("opens")),
         ]);
-        seed_kb_for_ticket(&f, "RE: gradebook workbook fails to open today");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         seed_hand_down_source(f.tmp.path(), "conf-1");
         let runtime = rt();
         let outcome = runtime
-            .block_on(f.driver.run_case(
-                1,
-                "RE: gradebook workbook fails to open today",
-                &CancellationToken::new(),
-            ))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert!(
             matches!(
@@ -10902,15 +11173,11 @@ mod tests {
             scripted_text(TRIAGE_JSON),
             scripted_text(&hand_down_act_json("does not open")),
         ]);
-        seed_kb_for_ticket(&f, "RE: gradebook workbook fails to open today");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         seed_hand_down_source(f.tmp.path(), "conf-1");
         let runtime = rt();
         let outcome = runtime
-            .block_on(f.driver.run_case(
-                1,
-                "RE: gradebook workbook fails to open today",
-                &CancellationToken::new(),
-            ))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert!(
             matches!(
@@ -10927,7 +11194,7 @@ mod tests {
     #[test]
     fn hand_down_match_is_deterministic_lowest_procedure_wins() {
         let f = fixture_l1(vec![scripted_text(INTAKE_JSON), scripted_text(TRIAGE_JSON)]);
-        seed_kb_for_ticket(&f, "RE: gradebook workbook fails to open today");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let first = seed_hand_down_source(f.tmp.path(), "conf-1");
         let second = seed_hand_down_source(f.tmp.path(), "conf-2");
         assert!(first < second);
@@ -10935,7 +11202,7 @@ mod tests {
         runtime
             .block_on(f.driver.run_case_until(
                 1,
-                "RE: gradebook workbook fails to open today",
+                GATE_TICKET,
                 &CancellationToken::new(),
                 Some(1),
                 &EscapeFlag::new(),
@@ -11230,22 +11497,22 @@ mod tests {
         let mut intake: IntakeArtifact = serde_json::from_str(INTAKE_JSON).unwrap();
         intake.telemetry_refs = many("tsr://node-");
         assert!(
-            intake_gate(&intake, &gate_case("t"))
+            intake_gate(&intake, &gate_case(GATE_TICKET))
                 .iter()
                 .any(|e| e.contains("telemetry_refs")),
             "an unbounded telemetry_refs list is unbounded consumption from an \
              agent-authored artifact; errors: {:?}",
-            intake_gate(&intake, &gate_case("t"))
+            intake_gate(&intake, &gate_case(GATE_TICKET))
         );
         // TriageArtifact.search_hits
         let mut triage: TriageArtifact = serde_json::from_str(TRIAGE_JSON).unwrap();
         triage.search_hits = many("P-STORAGE-");
         assert!(
-            triage_gate(&triage, &gate_case("t"))
+            triage_gate(&triage, &gate_case(GATE_TICKET))
                 .iter()
                 .any(|e| e.contains("search_hits")),
             "errors: {:?}",
-            triage_gate(&triage, &gate_case("t"))
+            triage_gate(&triage, &gate_case(GATE_TICKET))
         );
         // RedFlagArtifact.rule_out_basis
         let mut flags = serde_json::from_str::<TriageArtifact>(TRIAGE_JSON)
@@ -11253,11 +11520,11 @@ mod tests {
             .red_flag;
         flags.rule_out_basis = many("test:racadm-");
         assert!(
-            red_flag_gate(&flags, &citation_universe(&gate_case("t")))
+            red_flag_gate(&flags, &citation_universe(&gate_case(GATE_TICKET)))
                 .iter()
                 .any(|e| e.contains("rule_out_basis")),
             "errors: {:?}",
-            red_flag_gate(&flags, &citation_universe(&gate_case("t")))
+            red_flag_gate(&flags, &citation_universe(&gate_case(GATE_TICKET)))
         );
         // HypothesizeArtifact.hypotheses
         let one: Hypothesis = serde_json::from_str::<HypothesizeArtifact>(HYPOTHESIZE_JSON)
@@ -11268,11 +11535,11 @@ mod tests {
             hypotheses: (0..n).map(|_| one.clone()).collect(),
         };
         assert!(
-            hypothesize_gate(&hypotheses, &gate_case("t"))
+            hypothesize_gate(&hypotheses, &gate_case(GATE_TICKET))
                 .iter()
                 .any(|e| e.contains("hypotheses")),
             "errors: {:?}",
-            hypothesize_gate(&hypotheses, &gate_case("t"))
+            hypothesize_gate(&hypotheses, &gate_case(GATE_TICKET))
         );
         // PlanArtifact.steps
         let mut plan: PlanArtifact = serde_json::from_str(PLAN_JSON).unwrap();
@@ -11408,12 +11675,9 @@ mod tests {
         // re-check, confirm, Handoff — so the hypothesize ask is index 2.
         script[2] = scripted_text(&low);
         let f = fixture(script);
-        seed_kb_for_ticket(&f, "low-confidence");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = runtime
-            .block_on(
-                f.driver
-                    .run_case(1, "low-confidence", &CancellationToken::new()),
-            )
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert!(
             matches!(outcome, GdlOutcome::Resolved { .. }),
@@ -11447,7 +11711,7 @@ mod tests {
     fn unknown_cited_knowledge_id_fails() {
         let mut a = serde_json::from_str::<TriageArtifact>(TRIAGE_JSON).unwrap();
         a.search_hits = vec!["kb:2".into()];
-        let errors = triage_gate(&a, &gate_case("t"));
+        let errors = triage_gate(&a, &gate_case(GATE_TICKET));
         assert!(
             errors
                 .iter()
@@ -11462,7 +11726,7 @@ mod tests {
     fn model_supplied_confirmed_matches_is_rejected() {
         let mut a = serde_json::from_str::<TriageArtifact>(TRIAGE_JSON).unwrap();
         a.confirmed_matches = Some(vec!["kb:1".into()]);
-        let errors = triage_gate(&a, &gate_case("t"));
+        let errors = triage_gate(&a, &gate_case(GATE_TICKET));
         assert!(
             errors
                 .iter()
@@ -11477,12 +11741,9 @@ mod tests {
     #[test]
     fn triage_pass_stamps_the_server_confirmed_set() {
         let f = fixture(happy_script());
-        seed_kb_for_ticket(&f, "confirmed stamp");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = rt()
-            .block_on(
-                f.driver
-                    .run_case(1, "confirmed stamp", &CancellationToken::new()),
-            )
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert!(
             matches!(outcome, GdlOutcome::Resolved { .. }),
@@ -11543,7 +11804,7 @@ mod tests {
     /// per citation site, each naming its law.
     #[test]
     fn citations_resolve_against_held_evidence_or_fail_by_name() {
-        let case = gate_case("t");
+        let case = gate_case(GATE_TICKET);
         // Hypothesize sources (L7): an unheld locator is invention.
         let h = HypothesizeArtifact {
             hypotheses: vec![Hypothesis {
@@ -11606,7 +11867,7 @@ mod tests {
     /// must never count as evidence.
     #[test]
     fn citation_locator_floor_rejects_substring_fragments() {
-        let case = gate_case("t");
+        let case = gate_case(GATE_TICKET);
         let universe = citation_universe(&case);
         assert!(
             universe.iter().any(|e| e.contains("tsr://")),
@@ -11630,7 +11891,7 @@ mod tests {
         let mut a: IntakeArtifact = serde_json::from_str(INTAKE_JSON).unwrap();
         a.telemetry_refs = vec!["a TSR export someone mentioned".into()];
         assert!(
-            intake_gate(&a, &gate_case("t"))
+            intake_gate(&a, &gate_case(GATE_TICKET))
                 .iter()
                 .any(|e| e.starts_with("L1") && e.contains("not a locator")),
             "prose telemetry must fail"
@@ -11648,12 +11909,9 @@ mod tests {
     #[test]
     fn adversarial_recheck_spend_lands_in_the_case_budget() {
         let f = fixture(happy_script());
-        seed_kb_for_ticket(&f, "recheck spend");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = rt()
-            .block_on(
-                f.driver
-                    .run_case(1, "recheck spend", &CancellationToken::new()),
-            )
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert!(
             matches!(outcome, GdlOutcome::Resolved { .. }),
@@ -11669,7 +11927,7 @@ mod tests {
         // delta is the recheck's own spend, which is the property this pin
         // has always guarded.
         let g = fixture(happy_script());
-        seed_kb_for_ticket(&g, "recheck spend");
+        seed_kb_for_ticket(&g, GATE_TICKET);
         let off = LoopConfig {
             adversarial_recheck: false,
             ..LoopConfig::default()
@@ -11679,7 +11937,7 @@ mod tests {
         off_script.remove(6);
         let (driver, _) = reload(g.tmp.path(), off_script, off);
         let outcome = rt()
-            .block_on(driver.run_case(1, "recheck spend", &CancellationToken::new()))
+            .block_on(driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert!(
             matches!(outcome, GdlOutcome::Resolved { .. }),
@@ -11715,14 +11973,14 @@ mod tests {
     fn a_case_over_its_cumulative_budget_caps() {
         let runtime = rt();
         let f = fixture(happy_script());
-        seed_kb_for_ticket(&f, "cumulative");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let config = LoopConfig {
             token_budget: Some(60),
             ..LoopConfig::default()
         };
         let (driver, provider) = reload(f.tmp.path(), happy_script(), config);
         let outcome = runtime
-            .block_on(driver.run_case(1, "cumulative", &CancellationToken::new()))
+            .block_on(driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         match &outcome {
             GdlOutcome::Capped { reason, .. } => assert_eq!(reason, "budget"),
@@ -11761,7 +12019,7 @@ mod tests {
     fn a_budget_only_the_combined_spend_exceeds_still_caps() {
         let runtime = rt();
         let f = fixture(happy_script());
-        seed_kb_for_ticket(&f, "combined");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         // 110: the phase spend through Verify's main exchange (~96) stays
         // under it; the recheck's own spend (ask clamped to the case
         // ceiling, reservation headroom-capped to the remainder) plus the
@@ -11772,7 +12030,7 @@ mod tests {
         };
         let (driver, _) = reload(f.tmp.path(), happy_script(), config);
         let outcome = runtime
-            .block_on(driver.run_case(1, "combined", &CancellationToken::new()))
+            .block_on(driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         match &outcome {
             GdlOutcome::Capped { reason, .. } => assert_eq!(reason, "budget"),
@@ -11804,9 +12062,11 @@ mod tests {
             scripted_text(ACT_JSON),
             scripted_text(fail),
         ]);
-        seed_kb_for_ticket(&f, "t");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let cancel = CancellationToken::new();
-        let outcome = rt().block_on(f.driver.run_case(1, "t", &cancel)).unwrap();
+        let outcome = rt()
+            .block_on(f.driver.run_case(1, GATE_TICKET, &cancel))
+            .unwrap();
         match &outcome {
             GdlOutcome::VerifyFailed { at, bundle } => {
                 assert_eq!(*at, GdlPhase::Verify);
@@ -11954,13 +12214,13 @@ mod tests {
             scripted_text(RECHECK_JSON),
             scripted_text(VERIFY_JSON),
         ]);
-        seed_kb_for_ticket(&f, "t");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let runtime = rt();
         // Intake..Verify committed, then a clean pause.
         runtime
             .block_on(f.driver.run_case_until(
                 1,
-                "t",
+                GATE_TICKET,
                 &CancellationToken::new(),
                 Some(6),
                 &EscapeFlag::new(),
@@ -12006,7 +12266,7 @@ mod tests {
         runtime
             .block_on(driver.run_case_until(
                 1,
-                "t",
+                GATE_TICKET,
                 &CancellationToken::new(),
                 Some(1),
                 &EscapeFlag::new(),
@@ -12046,7 +12306,7 @@ mod tests {
             LoopConfig::default(),
         );
         let outcome = runtime
-            .block_on(driver.run_case(1, "t", &CancellationToken::new()))
+            .block_on(driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert!(
             matches!(&outcome, GdlOutcome::Resolved { phases: 7, .. }),
@@ -12167,9 +12427,11 @@ mod tests {
     fn canceled_case_settles_clean() {
         let f = fixture(vec![scripted_text(INTAKE_JSON)]);
         let cancel = CancellationToken::new();
-        seed_kb_for_ticket(&f, "t");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         cancel.cancel();
-        let outcome = rt().block_on(f.driver.run_case(1, "t", &cancel)).unwrap();
+        let outcome = rt()
+            .block_on(f.driver.run_case(1, GATE_TICKET, &cancel))
+            .unwrap();
         assert_eq!(outcome, GdlOutcome::Canceled);
         let conn = Connection::open(f.tmp.path()).unwrap();
         assert!(
@@ -12184,7 +12446,7 @@ mod tests {
         // Hypothesize (owned by L3) escalates WITH the bundle — the
         // escalation path is the one capability never narrowed away.
         let f = fixture(happy_script());
-        seed_kb_for_ticket(&f, "node-042 rebuild is slow");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let cancel = CancellationToken::new();
         // Rebuild the driver at L1 over the same substrate.
         let pool: Pool = {
@@ -12206,9 +12468,7 @@ mod tests {
             LoopConfig::default(),
             super::super::proficiency::Proficiency::L1,
         );
-        let outcome = rt()
-            .block_on(l1.run_case(1, "node-042 rebuild is slow", &cancel))
-            .unwrap();
+        let outcome = rt().block_on(l1.run_case(1, GATE_TICKET, &cancel)).unwrap();
         match &outcome {
             GdlOutcome::Escalated { at, bundle } => {
                 assert_eq!(*at, GdlPhase::Hypothesize);
@@ -12275,7 +12535,7 @@ mod tests {
         };
         {
             let mut conn = pool.get().unwrap();
-            let mut cp = checkpoint::admit(&mut conn, 1, "t", &policy, "fixture").unwrap();
+            let mut cp = checkpoint::admit(&mut conn, 1, GATE_TICKET, &policy, "fixture").unwrap();
             let mut plan: PlanArtifact = serde_json::from_str(PLAN_JSON).unwrap();
             plan.steps[1].skill_gate = "L3".into();
             let plan = serde_json::to_string(&plan).unwrap();
@@ -12337,7 +12597,7 @@ mod tests {
             LoopConfig::default(),
             super::super::proficiency::Proficiency::L1,
         );
-        let outcome = rt().block_on(l1.run_case(1, "t", &cancel)).unwrap();
+        let outcome = rt().block_on(l1.run_case(1, GATE_TICKET, &cancel)).unwrap();
         match &outcome {
             GdlOutcome::Routed { at, reason } => {
                 assert_eq!(*at, GdlPhase::Act);
@@ -12397,9 +12657,9 @@ mod tests {
         let f = fixture(happy_script());
         seed_repeater_priors(f.tmp.path(), 2);
         let cancel = CancellationToken::new();
-        seed_kb_for_ticket(&f, "capture");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = rt()
-            .block_on(f.driver.run_case(1, "capture", &cancel))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &cancel))
             .unwrap();
         assert!(
             matches!(&outcome, GdlOutcome::Resolved { .. }),
@@ -12430,7 +12690,7 @@ mod tests {
         // Exactly-once under terminal replay: the second run_case replays
         // the stored checkpoint — no provider work, no second row.
         let replay = rt()
-            .block_on(f.driver.run_case(1, "capture", &cancel))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &cancel))
             .unwrap();
         assert!(matches!(replay, GdlOutcome::Resolved { .. }));
         assert_eq!(
@@ -12512,9 +12772,9 @@ mod tests {
         let run = |path: &std::path::Path| {
             let f = fixture(happy_script());
             let cancel = CancellationToken::new();
-            seed_kb_for_ticket(&f, "capture");
+            seed_kb_for_ticket(&f, GATE_TICKET);
             let outcome = rt()
-                .block_on(f.driver.run_case(1, "capture", &cancel))
+                .block_on(f.driver.run_case(1, GATE_TICKET, &cancel))
                 .unwrap();
             std::fs::copy(f.tmp.path(), path).unwrap();
             outcome
@@ -12619,9 +12879,9 @@ mod tests {
     #[test]
     fn reflection_only_after_final_closure() {
         let f = fixture(happy_script());
-        seed_kb_for_ticket(&f, "capture");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = rt()
-            .block_on(f.driver.run_case(1, "capture", &CancellationToken::new()))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert!(matches!(outcome, GdlOutcome::Resolved { .. }));
         let conn = Connection::open(f.tmp.path()).unwrap();
@@ -12679,9 +12939,9 @@ mod tests {
     #[test]
     fn clean_resolve_writes_no_disagreement_row() {
         let f = fixture(happy_script());
-        seed_kb_for_ticket(&f, "capture");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = rt()
-            .block_on(f.driver.run_case(1, "capture", &CancellationToken::new()))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert!(matches!(outcome, GdlOutcome::Resolved { .. }));
         let conn = Connection::open(f.tmp.path()).unwrap();
@@ -12746,9 +13006,9 @@ mod tests {
         script.push(scripted_text(HANDOFF_JSON));
         script.push(scripted_text(HANDOFF_JSON));
         let f = fixture(script);
-        seed_kb_for_ticket(&f, "disagree");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = rt()
-            .block_on(f.driver.run_case(1, "disagree", &CancellationToken::new()))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert!(
             matches!(outcome, GdlOutcome::Resolved { .. }),
@@ -12790,7 +13050,7 @@ mod tests {
         for v in &parsed {
             assert_eq!(
                 v["input_digest"].as_str().unwrap(),
-                crate::audit::hash("disagree"),
+                crate::audit::hash(GATE_TICKET),
                 "the input is a content digest, never the raw ticket"
             );
         }
@@ -12837,8 +13097,8 @@ mod tests {
             )
             .unwrap();
         }
-        seed_kb_for_ticket(&f, "capture");
-        let result = rt().block_on(f.driver.run_case(1, "capture", &CancellationToken::new()));
+        seed_kb_for_ticket(&f, GATE_TICKET);
+        let result = rt().block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()));
         match result {
             Err(LoopError::Persist(message)) => {
                 assert!(message.contains("capture refused"), "{message}");
@@ -12888,9 +13148,9 @@ mod tests {
         // fixed-text no-warrant outcome is recorded exactly once.
         let f = fixture(happy_script());
         seed_repeater_priors(f.tmp.path(), 0);
-        seed_kb_for_ticket(&f, "capture");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = rt()
-            .block_on(f.driver.run_case(1, "capture", &CancellationToken::new()))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert!(
             matches!(&outcome, GdlOutcome::Resolved { .. }),
@@ -12933,9 +13193,9 @@ mod tests {
         let defer = r#"{"priority":"P2","stabilized":true,"search_hits":[],"verdict":"defer"}"#;
         let f = fixture(vec![scripted_text(INTAKE_JSON), scripted_text(defer)]);
         seed_repeater_priors(f.tmp.path(), 2);
-        seed_kb_for_ticket(&f, "defer");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = rt()
-            .block_on(f.driver.run_case(1, "defer", &CancellationToken::new()))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert!(
             matches!(&outcome, GdlOutcome::Escalated { .. }),
@@ -12973,7 +13233,7 @@ mod tests {
     /// against. Tests of OTHER laws use this so their errors are exactly
     /// the law under test.
     fn triage_errors(json: serde_json::Value) -> Vec<String> {
-        triage_gate(&triage_from(json), &gate_case("t"))
+        triage_gate(&triage_from(json), &gate_case(GATE_TICKET))
     }
 
     fn rf_from(json: serde_json::Value) -> RedFlagArtifact {
@@ -13784,12 +14044,9 @@ mod tests {
         script.truncate(8);
         script.extend(std::iter::repeat_n(scripted_text(bare), 3));
         let f = fixture(script);
-        seed_kb_for_ticket(&f, "no closure");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = runtime
-            .block_on(
-                f.driver
-                    .run_case(1, "no closure", &CancellationToken::new()),
-            )
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         match outcome {
             GdlOutcome::Routed { reason, .. } => {
@@ -13816,9 +14073,9 @@ mod tests {
         script.truncate(8);
         script.extend(std::iter::repeat_n(scripted_text(bare_handoff), 3));
         let f = fixture(script);
-        seed_kb_for_ticket(&f, "refer");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = runtime
-            .block_on(f.driver.run_case(1, "refer", &CancellationToken::new()))
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         match outcome {
             GdlOutcome::Routed { reason, .. } => {
@@ -13843,12 +14100,9 @@ mod tests {
         script[1] = scripted_text(&urgent_refer);
         script[8] = scripted_text(bare_handoff);
         let f = fixture(script);
-        seed_kb_for_ticket(&f, "urgent refer");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = runtime
-            .block_on(
-                f.driver
-                    .run_case(1, "urgent refer", &CancellationToken::new()),
-            )
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert!(
             matches!(outcome, GdlOutcome::Resolved { .. }),
@@ -13864,12 +14118,9 @@ mod tests {
         script.truncate(8);
         script.extend(std::iter::repeat_n(scripted_text(bare_handoff), 3));
         let f = fixture(script);
-        seed_kb_for_ticket(&f, "open flag refer");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = runtime
-            .block_on(
-                f.driver
-                    .run_case(1, "open flag refer", &CancellationToken::new()),
-            )
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         match outcome {
             GdlOutcome::Routed { reason, .. } => {
@@ -13890,12 +14141,9 @@ mod tests {
         script[1] = scripted_text(TRIAGE_REFER_CLOSED_JSON);
         script[8] = scripted_text(HANDOFF_REFER_CONTRACT_JSON);
         let f = fixture(script);
-        seed_kb_for_ticket(&f, "refer with contract");
+        seed_kb_for_ticket(&f, GATE_TICKET);
         let outcome = runtime
-            .block_on(
-                f.driver
-                    .run_case(1, "refer with contract", &CancellationToken::new()),
-            )
+            .block_on(f.driver.run_case(1, GATE_TICKET, &CancellationToken::new()))
             .unwrap();
         assert!(
             matches!(outcome, GdlOutcome::Resolved { .. }),
@@ -14464,7 +14712,10 @@ pub(crate) mod eval_fixtures {
     ) -> GdlDriver;
 
     pub(crate) fn happy_battery_script() -> Vec<Vec<StreamEvent>> {
-        super::eval_run1::happy_script_args(super::eval_run1::battery_topic())
+        super::eval_run1::happy_script_args(
+            super::eval_run1::battery_ticket(),
+            super::eval_run1::battery_topic(),
+        )
     }
 
     pub(crate) fn intake_invalid_script(attempts: usize) -> Vec<Vec<StreamEvent>> {
@@ -14547,7 +14798,7 @@ mod eval_run1 {
         }
 
         pub(crate) fn script(&self, ablated: bool) -> Vec<Vec<StreamEvent>> {
-            let happy = happy_script_args(self.topic);
+            let happy = happy_script_args(self.ticket, self.topic);
             let Some((phase, bad)) = &self.bad else {
                 return happy;
             };
@@ -14564,8 +14815,18 @@ mod eval_run1 {
     /// A parameterized happy script: seven valid artifacts about one
     /// topic. Distinct topics keep the seeds from being six copies of
     /// one case (different claims, different evidence lines).
+    ///
+    /// Round 14: the script takes the case's TICKET because the intake
+    /// artifact's KT bounds are now TRACEABILITY-GATED — a stated bound
+    /// must quote the case's own inputs, so the simulated honest model
+    /// quotes the ticket for what.is and records `unknown` for the cells
+    /// the thin seed tickets do not carry (the exact fill the live AFM
+    /// tier is asked for under the amended contract). The later phases'
+    /// locators ride the declared telemetry (tsr://{where_}, sel://{where_})
+    /// and the topic's entity, never the ticket-absent symptom.
     #[allow(clippy::too_many_arguments)]
     fn happy_script(
+        ticket: &str,
         component: &str,
         symptom: &str,
         where_: &str,
@@ -14574,13 +14835,13 @@ mod eval_run1 {
         playbook: &str,
     ) -> Vec<Vec<StreamEvent>> {
         let intake = format!(
-            r#"{{"is_not":{{"what":{{"is":"{symptom} on {component}","is_not":"read path"}},"where":{{"is":"{where_}","is_not":"sibling nodes"}},"when":{{"is":"since monday","is_not":"before monday"}},"extent":{{"is":"one {component}","is_not":"all units"}}}},"telemetry_refs":["tsr://{where_}","sel://{where_}"],"what_changed":"fw update two weeks ago","known_good":"sibling node same fw"}}"#
+            r#"{{"is_not":{{"what":{{"is":"{ticket}","is_not":"unknown"}},"where":{{"is":"{where_}","is_not":"unknown"}},"when":{{"is":"unknown","is_not":"unknown"}},"extent":{{"is":"unknown","is_not":"unknown"}}}},"telemetry_refs":["tsr://{where_}","sel://{where_}"],"what_changed":"fw update two weeks ago","known_good":"sibling node same fw"}}"#
         );
         let triage = format!(
             r#"{{"priority":"P3","stabilized":false,"search_hits":["{playbook}"],"verdict":"accept","acuity_band":"GREEN","esi_level":4,"care_setting":"in_person_primary","red_flag":{{"worst_case":"{component} fault spreads to siblings","ruled_out":true,"rule_out_basis":["test:sel://{where_}"],"first_would_miss_impact":"repeat incidents across the fleet"}}}}"#
         );
         let hypothesize = format!(
-            r#"{{"hypotheses":[{{"statement":"{hypothesis}","prediction":"{command} reports degraded","sources":["actual:{symptom}","test:sel://{where_}"],"confidence":0.8}}]}}"#
+            r#"{{"hypotheses":[{{"statement":"{hypothesis}","prediction":"{command} reports degraded","sources":["actual:{where_}","test:sel://{where_}"],"confidence":0.8}}]}}"#
         );
         let plan = format!(
             r#"{{"steps":[{{"order":1,"kind":"check","skill_gate":"L1","description":"query {component} state","command":"{command}","expected":"healthy","fail_action":2,"invasiveness":0,"justification":null}},{{"order":2,"kind":"action","skill_gate":"L2","description":"replace {component} part","command":"hw replace","expected":"state healthy","fail_action":null,"invasiveness":2,"justification":null}}],"verify_step":{{"re_run":"the customer workload on {where_}","pass_condition":"latency normal"}},"dead_end":{{"escalate_to":"eng-{component}","required_evidence":["TSR","test log"]}}}}"#
@@ -14717,9 +14978,16 @@ mod eval_run1 {
     }
 
     pub(crate) fn happy_script_args(
+        ticket: &str,
         t: (&str, &str, &str, &str, &str, &str),
     ) -> Vec<Vec<StreamEvent>> {
-        happy_script(t.0, t.1, t.2, t.3, t.4, t.5)
+        happy_script(ticket, t.0, t.1, t.2, t.3, t.4, t.5)
+    }
+
+    /// The battery seed's ticket (the happy_script_args intake bounds
+    /// must quote it — the round-14 traceability gate).
+    pub(crate) fn battery_ticket() -> &'static str {
+        "rebuild is slow"
     }
 
     /// The canonical battery topic (cfg(test) fixture reuse).
@@ -15009,7 +15277,7 @@ mod eval_run1 {
         );
         let cancel = CancellationToken::new();
         let outcome = rt()
-            .block_on(driver.run_case(1, "rebuild is slow", &cancel))
+            .block_on(driver.run_case(1, battery_ticket(), &cancel))
             .unwrap();
         let label = match &outcome {
             GdlOutcome::Resolved { .. } => "Resolved",
@@ -15054,7 +15322,7 @@ mod eval_run1 {
             "battery dead",
             "kb:1",
         );
-        let mut script = happy_script_args(battery);
+        let mut script = happy_script_args(super::eval_run1::battery_ticket(), battery);
         script[2] = scripted_text(
             r#"{"hypotheses":[{"statement":"battery dead","prediction":"racadm get battery reports degraded","sources":["actual:sel://node-042"],"confidence":0.8}]}"#,
         );
@@ -15181,7 +15449,10 @@ mod eval_run1 {
             .unwrap()
             .execute(
                 "INSERT INTO knowledge(domain, title, content, flagged) VALUES ('acme', 'Test playbook', ?1, 0)",
-                rusqlite::params!["Test playbook covering the ticket: diag eval"],
+                rusqlite::params![format!(
+                    "Test playbook covering the ticket: {}",
+                    battery_ticket()
+                )],
             )
             .unwrap();
         let host = Arc::new(SqliteWorkflowHost::new(pool.clone()));
@@ -15219,7 +15490,7 @@ mod eval_run1 {
         };
         let cancel = CancellationToken::new();
         let outcome = rt()
-            .block_on(driver.run_case(1, "diag eval", &cancel))
+            .block_on(driver.run_case(1, battery_ticket(), &cancel))
             .unwrap();
         let (label, resolved) = match &outcome {
             GdlOutcome::Resolved { .. } => ("Resolved", true),
@@ -15248,7 +15519,7 @@ mod eval_run1 {
     /// recheck, the confirmation (the same exchange list the happy path
     /// uses through the second verification).
     fn diag_prefix() -> Vec<Vec<StreamEvent>> {
-        happy_script_args(battery_topic())
+        happy_script_args(super::eval_run1::battery_ticket(), battery_topic())
             .into_iter()
             .take(8)
             .collect()
@@ -15260,7 +15531,7 @@ mod eval_run1 {
         // classic ON/OFF contrast is observable: ON routes the
         // unclassified artifact; OFF accepts it and resolves — the wrong
         // resolution the duty exists to prevent.
-        let mut happy = happy_script_args(battery_topic());
+        let mut happy = happy_script_args(super::eval_run1::battery_ticket(), battery_topic());
         let on_script: Vec<Vec<StreamEvent>> = {
             let mut s: Vec<Vec<StreamEvent>> = happy.clone().into_iter().take(1).collect();
             s.extend(std::iter::repeat_n(scripted_text(DIAG_NO_ACUITY), 3));
@@ -15268,7 +15539,7 @@ mod eval_run1 {
             s
         };
         let (on_label, on_resolved, on_rejects) = run_diag_arm(on_script, false);
-        let mut happy = happy_script_args(battery_topic());
+        let mut happy = happy_script_args(super::eval_run1::battery_ticket(), battery_topic());
         let off_script: Vec<Vec<StreamEvent>> = {
             let mut s: Vec<Vec<StreamEvent>> = happy.clone().into_iter().take(1).collect();
             s.push(scripted_text(DIAG_NO_ACUITY));
@@ -15289,7 +15560,7 @@ mod eval_run1 {
         // BOTH arms — the gate refuses it ON, and OFF the loop's
         // transition-predicate lock backstops it at the resolution seam.
         // The machine never resolves the suppressed case either way.
-        let mut happy = happy_script_args(battery_topic());
+        let mut happy = happy_script_args(super::eval_run1::battery_ticket(), battery_topic());
         let on_script: Vec<Vec<StreamEvent>> = {
             let mut s: Vec<Vec<StreamEvent>> = happy.clone().into_iter().take(1).collect();
             s.extend(std::iter::repeat_n(
@@ -15300,7 +15571,7 @@ mod eval_run1 {
             s
         };
         let (on_label, on_resolved, _) = run_diag_arm(on_script, false);
-        let mut happy = happy_script_args(battery_topic());
+        let mut happy = happy_script_args(super::eval_run1::battery_ticket(), battery_topic());
         let off_script: Vec<Vec<StreamEvent>> = {
             let mut s: Vec<Vec<StreamEvent>> = happy.clone().into_iter().take(1).collect();
             s.push(scripted_text(DIAG_SELF_CARE_UNDER_OPEN_FLAG));
@@ -15361,7 +15632,7 @@ mod eval_run1 {
             )];
             s.push(scripted_text(DIAG_REFER_TRIAGE));
             s.extend(
-                happy_script_args(battery_topic())
+                happy_script_args(super::eval_run1::battery_ticket(), battery_topic())
                     .into_iter()
                     .skip(2)
                     .take(6),

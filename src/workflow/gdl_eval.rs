@@ -881,6 +881,7 @@ mod tests {
             system_prompt: "sys".into(),
             messages: vec![crate::agentloop::provider::ChatMessage::User { text: "hi".into() }],
             tools: vec![],
+            artifact_schema_json: None,
         };
         let h1 = prompt_hash(&req);
         let h2 = prompt_hash(&req);

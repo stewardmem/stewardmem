@@ -704,6 +704,7 @@ mod tests {
             system_prompt: "sys".to_string(),
             messages: vec![],
             tools: vec![],
+            artifact_schema_json: None,
         }
     }
 
@@ -996,6 +997,7 @@ mod tests {
                             text: text.to_string(),
                         }],
                         tools: vec![],
+                        artifact_schema_json: None,
                     })
                     .unwrap(),
             )
@@ -1050,6 +1052,7 @@ mod tests {
                 text: "hi".to_string(),
             }],
             tools: vec![],
+            artifact_schema_json: None,
         };
         let events = drain(provider.stream(req).unwrap()).await;
         assert!(

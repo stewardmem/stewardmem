@@ -150,11 +150,20 @@ impl SamplingContract {
 /// A streamed completion request. Value-typed end to end: the system prompt
 /// is a cache-stable prefix by construction (deterministic assembly lives in
 /// the loop), tools ride at the end, and nothing in here is provider-native.
+///
+/// `artifact_schema_json` (round 14, Arm A): an OPTIONAL JSON-schema
+/// document the AFM transport forwards as the bridge turn's `schema` —
+/// the request-level schema seam. The GDL phase machine's artifact schema
+/// rides the provider's own phase table (the loop driver is generic
+/// machinery and does not know the phase); a caller that knows better
+/// sets this and it WINS. Other providers ignore it — additive-optional,
+/// `None` is byte-identical to the pre-field behavior.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub(crate) struct ProviderRequest {
     pub system_prompt: String,
     pub messages: Vec<ChatMessage>,
     pub tools: Vec<ToolSpec>,
+    pub artifact_schema_json: Option<String>,
 }
 
 /// Token accounting for one assistant message.
@@ -421,6 +430,7 @@ mod tests {
                     system_prompt: "s".into(),
                     messages: vec![],
                     tools: vec![],
+                    artifact_schema_json: None,
                 })
                 .unwrap();
             let first = rx.recv().await.unwrap().unwrap();
@@ -453,12 +463,14 @@ mod tests {
                     system_prompt: "s".into(),
                     messages: vec![],
                     tools: vec![],
+                    artifact_schema_json: None,
                 })
                 .unwrap();
             let second = provider.stream(ProviderRequest {
                 system_prompt: "s".into(),
                 messages: vec![],
                 tools: vec![],
+                artifact_schema_json: None,
             });
             assert!(
                 matches!(second, Err(ProviderError::Unavailable)),
@@ -482,6 +494,7 @@ mod tests {
                     system_prompt: "s".into(),
                     messages: vec![],
                     tools: vec![],
+                    artifact_schema_json: None,
                 })
                 .unwrap();
             // Consume a little, then drop mid-stream.
@@ -517,6 +530,7 @@ mod tests {
                             description: "read a file".into(),
                             schema_json: r#"{"path":"string"}"#.into(),
                         }],
+                        artifact_schema_json: None,
                     })
                     .unwrap();
                 while let Some(ev) = rx.recv().await {

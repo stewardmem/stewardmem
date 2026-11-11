@@ -35,6 +35,7 @@
 //! network is Apple's own framework (PCC), refused on every machine
 //! measured so far.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -64,8 +65,17 @@ pub(crate) const AFM_EXCHANGE_DEADLINE: Duration = Duration::from_secs(120);
 /// requests capabilities (the child refuses any turn that precedes them —
 /// `bad_request` by name), which is also the one honest launch-time check
 /// that the child is alive and answering.
+///
+/// `phase_schemas` (round 14, Arm A): the per-phase ARTIFACT-SCHEMA table —
+/// a phase name → JSON-schema document mapping the exchange router consults
+/// when the request carries no schema of its own. EMPTY by construction
+/// (`for_bridge`): every turn rides the compiled `GroundedAnswer` contract
+/// byte-identical to the pre-field behavior, and NOTHING in production
+/// wiring changes until the round's preregistered rule names the winning
+/// arm (the winner becomes the posture; the losers are recorded).
 pub(crate) struct AfmBridgeProvider {
     bridge: Arc<AfmBridge>,
+    phase_schemas: BTreeMap<&'static str, String>,
 }
 
 impl AfmBridgeProvider {
@@ -74,8 +84,46 @@ impl AfmBridgeProvider {
     /// on this child is legal.
     pub(crate) async fn for_bridge(bridge: Arc<AfmBridge>) -> Result<Self, BridgeError> {
         bridge.capabilities().await?;
-        Ok(Self { bridge })
+        Ok(Self {
+            bridge,
+            phase_schemas: BTreeMap::new(),
+        })
     }
+
+    /// Arm A's wiring: install the per-phase artifact-schema table (the
+    /// live runs' arm; the table is the measurement's, never a silent
+    /// default).
+    pub(crate) fn with_phase_schemas(mut self, schemas: BTreeMap<&'static str, String>) -> Self {
+        self.phase_schemas = schemas;
+        self
+    }
+}
+
+/// The exchange's phase, read from the KERNEL's own deterministic header —
+/// `phase_instruction_with_law` stamps `PHASE {name}: produce this phase's
+/// artifact.` as the FIRST line of every phase instruction, so the routing
+/// key is kernel-authored text, never model output. Fail-closed: a missing
+/// header, a non-user first message, or an unknown phase name returns None
+/// and the caller sends the schema-less, model-less turn of the pre-round
+/// wire.
+pub(crate) fn phase_header_of(messages: &[ChatMessage]) -> Option<&'static str> {
+    const PHASES: [&str; 7] = [
+        "intake",
+        "triage",
+        "hypothesize",
+        "plan",
+        "act",
+        "verify",
+        "handoff",
+    ];
+    let text = match messages.first() {
+        Some(ChatMessage::User { text }) => text,
+        _ => return None,
+    };
+    let line = text.lines().next()?;
+    let rest = line.strip_prefix("PHASE ")?;
+    let name = rest.split(':').next()?.trim();
+    PHASES.iter().find(|p| **p == name).copied()
 }
 
 /// Render the loop's conversation into ONE bridge prompt: roles labeled,
@@ -163,6 +211,15 @@ impl LlmProvider for AfmBridgeProvider {
             return Err(ProviderError::Refused);
         }
         let prompt = render_conversation(&req.messages);
+        // THE WIRE SCHEMA (round 14 Arm A): the request's own schema wins
+        // (a caller that knows the artifact sets it); otherwise the phase
+        // table supplies the schema for the phase that owns one, read off
+        // the kernel's own deterministic header. No header, no table entry
+        // — no schema: the turn serializes byte-identical to the pre-field
+        // wire (KT-3's control lives in the child, and here).
+        let request_schema = req.artifact_schema_json.clone().or_else(|| {
+            phase_header_of(&req.messages).and_then(|phase| self.phase_schemas.get(phase).cloned())
+        });
         let bridge = Arc::clone(&self.bridge);
         let (tx, rx) = mpsc::channel::<Result<StreamEvent, ProviderError>>(STREAM_CHANNEL_CAP);
         tokio::spawn(async move {
@@ -183,6 +240,8 @@ impl LlmProvider for AfmBridgeProvider {
                 // on regardless of the chat tier's configuration (CG-10
                 // the zero-gate-verdict law; pinned by the isolation scan).
                 model: None,
+                // The artifact schema for the phase that owns one (Arm A).
+                schema: request_schema,
             };
             let (bridge_id, mut bridge_rx) = match bridge.turn(turn).await {
                 Ok(pair) => pair,
@@ -419,6 +478,16 @@ mod tests {
             "object[\"model\"]",
             "model_locked",
             "model_excluded",
+            // Round 14 Arm A: the wire schema's vocabulary — the parse-time
+            // decode, the named empty/malformed refusals, the runtime-API
+            // guided respond, the additive guided label. A Swift rename of
+            // any of them reds THIS pin, in THIS lane.
+            "object[\"schema\"]",
+            "schema must be a non-empty JSON-schema document",
+            "schema must decode as a JSON object",
+            "WireSchemaConverter.generationSchema(from:",
+            "to: prompt, schema:",
+            "\"guided\": true",
         ] {
             assert!(
                 child.contains(fact),
@@ -468,6 +537,87 @@ mod tests {
         );
     }
 
+    /// ROUND 14 ARM A (behavioral): the phase router reads the kernel's
+    /// own deterministic header — some(`intake`) for a stamped
+    /// instruction, None for anything else (no header, an unknown phase
+    /// name, a non-user first message). The routing key is
+    /// kernel-authored text, never model output: a model that ECHOES a
+    /// plausible-looking header in a later turn cannot route, because
+    /// only the FIRST user message is read and only the exact prefix
+    /// matches.
+    #[test]
+    fn the_phase_router_reads_only_the_kernel_header_fail_closed() {
+        let stamped = |phase: &str| {
+            vec![ChatMessage::User {
+                text: format!(
+                    "PHASE {phase}: produce this phase's artifact.\n\nEmit ONE JSON object."
+                ),
+            }]
+        };
+        assert_eq!(phase_header_of(&stamped("intake")), Some("intake"));
+        assert_eq!(phase_header_of(&stamped("triage")), Some("triage"));
+        assert_eq!(phase_header_of(&stamped("handoff")), Some("handoff"));
+        // Fail-closed arms.
+        assert_eq!(
+            phase_header_of(&stamped("transcript")),
+            None,
+            "an unknown phase name is None"
+        );
+        assert_eq!(phase_header_of(&[]), None, "an empty exchange is None");
+        let no_header = vec![ChatMessage::User {
+            text: "just a chat prompt".into(),
+        }];
+        assert_eq!(phase_header_of(&no_header), None, "no header is None");
+        // A header on a LATER message does not route — only the first.
+        let buried = vec![
+            ChatMessage::User {
+                text: "a plain first turn".into(),
+            },
+            ChatMessage::User {
+                text: "PHASE intake: produce this phase's artifact.".into(),
+            },
+        ];
+        assert_eq!(phase_header_of(&buried), None, "a buried header is None");
+        let assistant_first = vec![ChatMessage::Assistant {
+            text: "PHASE intake: produce this phase's artifact.".into(),
+            tool_calls: vec![],
+        }];
+        assert_eq!(
+            phase_header_of(&assistant_first),
+            None,
+            "a non-user first message is None"
+        );
+    }
+
+    /// ROUND 14 ARM A (behavioral, the schema mapping): the request's own
+    /// schema WINS over the table; the table supplies the phase's schema;
+    /// an untabled phase (and the empty default table) sends NONE — the
+    /// pre-round wire. The mapping is pure over the request, so the pin
+    /// drives the same expression `stream()` uses without a child.
+    #[test]
+    fn the_schema_mapping_request_wins_then_phase_table_then_none() {
+        let table: BTreeMap<&'static str, String> =
+            [("intake", "{\"name\":\"IntakeArtifact\"}".to_string())]
+                .into_iter()
+                .collect();
+        let resolve = |req_schema: Option<String>, phase: Option<&'static str>| -> Option<String> {
+            req_schema.or_else(|| phase.and_then(|p| table.get(p).cloned()))
+        };
+        // Request wins.
+        assert_eq!(
+            resolve(Some("req".into()), Some("intake")).as_deref(),
+            Some("req")
+        );
+        // Table supplies for the tabled phase.
+        assert_eq!(
+            resolve(None, Some("intake")).as_deref(),
+            Some("{\"name\":\"IntakeArtifact\"}")
+        );
+        // An untabled phase sends none.
+        assert_eq!(resolve(None, Some("triage")), None);
+        assert_eq!(resolve(None, None), None);
+    }
+
     /// THE REAL-CHILD PIN (behavioral, the C2 rules-door posture): the
     /// afm-stdio kind drives the REAL brain-afm binary end to end —
     /// capabilities, one propose turn, the settled answer as StreamEvents
@@ -499,6 +649,7 @@ mod tests {
                     text: "Reply with exactly: ok".into(),
                 }],
                 tools: vec![],
+                artifact_schema_json: None,
             })
             .expect("the stream begins");
         let mut started = false;
@@ -551,6 +702,7 @@ mod tests {
                     description: "read".into(),
                     schema_json: "{}".into(),
                 }],
+                artifact_schema_json: None,
             });
             assert!(
                 matches!(refused, Err(ProviderError::Refused)),

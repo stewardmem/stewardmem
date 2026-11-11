@@ -1151,6 +1151,7 @@ impl LoopDriver {
             )
             .map_err(persist)?,
             tools: Vec::new(),
+            artifact_schema_json: None,
         };
         crate::agentloop::context::check_request(&request).map_err(persist)?;
         let summary = match self.stream_summary(request, cancel, budget).await? {
@@ -1538,6 +1539,7 @@ impl LoopDriver {
                     schema_json: t.schema_json.clone(),
                 })
                 .collect(),
+            artifact_schema_json: None,
         };
         crate::agentloop::context::check_request(&request).map_err(persist)?;
         Ok(request)
@@ -2601,6 +2603,7 @@ mod tests {
                 system_prompt: n,
                 messages: vec![],
                 tools: vec![],
+                artifact_schema_json: None,
             };
             let cancel_first = CancellationToken::new();
             let first = driver.stream_turn(request("first".to_string()), &cancel_first, &budget);
@@ -4554,6 +4557,7 @@ mod tests {
                 system_prompt: "summary".into(),
                 messages: vec![],
                 tools: vec![],
+                artifact_schema_json: None,
             };
             assert!(matches!(
                 f.driver

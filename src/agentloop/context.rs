@@ -1490,6 +1490,7 @@ mod tests {
             system_prompt: "host".into(),
             messages: vec![],
             tools: vec![],
+            artifact_schema_json: None,
         };
         let overhead =
             serde_json::to_vec(&request).expect("serialize").len() - request.system_prompt.len();

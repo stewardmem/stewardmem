@@ -452,7 +452,25 @@ fn r51_gdl_engine_site_is_bound_to_new_with_proficiency() {
     // forward-phase derivation and act arms shifted the site down
     // by the same additive shape — no statement, expression, data
     // path or control-flow edge at the construction site changed.
-    let site_line = 3498usize;
+    // Round 14 moved the line: the KT amendment + the schema builder landed
+    // above the engine site. The pin re-derives the site by SEARCHING for
+    // the construction inside the register's function instead of trusting
+    // a frozen line number — the line anchors nothing; the binding does.
+    let site_line = {
+        let src =
+            std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/workflow/gdl.rs"))
+                .expect("gdl.rs is in the tree");
+        let start = src
+            .find("fn new_with_proficiency(")
+            .expect("the register's function exists");
+        let end = src.find("fn new_ablated(").unwrap_or(src.len());
+        let region = &src[start..end.max(start)];
+        let at = region
+            .find("LoopDriver::new(")
+            .expect("the engine construction lives in new_with_proficiency");
+        // 1-based line number of `at`.
+        src[..start + at].matches('\n').count() + 1
+    };
 
     // Walk backwards to the nearest `fn` declaration.
     let enclosing = lines

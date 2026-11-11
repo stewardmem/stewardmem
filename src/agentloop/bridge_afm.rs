@@ -122,6 +122,14 @@ pub struct BridgeHistoryEntry {
 /// by construction. The CHILD owns the vocabulary (`ChatModelId` + `forChat`);
 /// the kernel transports the configured string verbatim. Additive-optional:
 /// an old bridge ignores unknown fields.
+///
+/// `schema` (round 14, Arm A): an optional JSON-schema DOCUMENT string —
+/// present, the child generates against the RUNTIME schema
+/// (`DynamicGenerationSchema` → `GenerationSchema` → `respond(to:schema:)`)
+/// and the settled artifact JSON crosses as the answer; absent, the
+/// compiled `GroundedAnswer` contract generates EXACTLY as it did before
+/// this field existed — the two never blend (the chat spine sends no
+/// schema; the wire body carries the key only when `Some`).
 #[derive(Debug, Clone)]
 pub struct BridgeTurn {
     pub session: String,
@@ -130,6 +138,7 @@ pub struct BridgeTurn {
     pub max_response_tokens: Option<i64>,
     pub history: Option<Vec<BridgeHistoryEntry>>,
     pub model: Option<String>,
+    pub schema: Option<String>,
 }
 
 /// Client-side failure taxonomy: transport-shaped, never the bridge's named
@@ -293,6 +302,12 @@ impl AfmBridge {
         }
         if let Some(model) = &request.model {
             body["model"] = json!(model);
+        }
+        // THE WIRE SCHEMA (round 14 Arm A): written ONLY when present —
+        // a schema-absent turn serializes byte-identically to the
+        // pre-field wire (the KT-3 control).
+        if let Some(schema) = &request.schema {
+            body["schema"] = json!(schema);
         }
         if self.write_line(&body).is_err() {
             self.pending
@@ -619,6 +634,7 @@ mod tests {
                 max_response_tokens: None,
                 history: None,
                 model: None,
+                schema: None,
             })
             .await
             .expect("turn begins");
@@ -729,6 +745,7 @@ mod tests {
                 max_response_tokens: None,
                 history: None,
                 model: Some("no-such-model".into()),
+                schema: None,
             })
             .await
             .expect("turn begins");
@@ -950,6 +967,7 @@ mod tests {
                 max_response_tokens: Some(64),
                 history: None,
                 model: None,
+                schema: None,
             })
             .await
             .expect("turn begins");

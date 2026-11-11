@@ -668,6 +668,46 @@ struct BrainAfmBridge {
                 let rawHistory = object["history"] as? [[String: Any]]
                 let model: ChatModelId
                 let conversation: [ConversationMessage]
+                // THE WIRE SCHEMA (round-14 Arm A): an OPTIONAL JSON-schema
+                // document STRING. Present → the turn generates against the
+                // RUNTIME schema (DynamicGenerationSchema → GenerationSchema
+                // → respond(to:schema:)); absent → the compiled
+                // GroundedAnswer contract, byte-identical to every turn
+                // that shipped before the field existed. The two never
+                // blend. Refusals are PARSE-TIME — before any Task or
+                // model work, exactly like the model field's law.
+                var schemaJSON: String?
+                if let raw = object["schema"] {
+                    guard let doc = raw as? String else {
+                        out.send([
+                            "id": id, "event": "error", "code": "bad_request",
+                            "message": "schema must be a JSON-schema document string"
+                        ])
+                        continue
+                    }
+                    guard !doc.trimmingCharacters(in: .whitespaces).isEmpty else {
+                        out.send([
+                            "id": id, "event": "error", "code": "bad_request",
+                            "message": "schema must be a non-empty JSON-schema document"
+                        ])
+                        continue
+                    }
+                    schemaJSON = doc
+                }
+                let guidedSchema: GenerationSchema?
+                if let doc = schemaJSON {
+                    do {
+                        guidedSchema = try WireSchemaConverter.generationSchema(from: doc)
+                    } catch {
+                        out.send([
+                            "id": id, "event": "error", "code": "bad_request",
+                            "message": "schema must decode as a JSON object: \(error)"
+                        ])
+                        continue
+                    }
+                } else {
+                    guidedSchema = nil
+                }
                 do {
                     model = try Self.resolveWireModel(object)
                     conversation = try Self.parseWireHistory(rawHistory)
@@ -745,6 +785,7 @@ struct BrainAfmBridge {
                                     id: id, prompt: prompt, turnNo: turnNo,
                                     cap: requestCap,
                                     bridgeSession: bridgeSession,
+                                    guidedSchema: guidedSchema,
                                     out: out
                                 )
                             }
@@ -756,6 +797,18 @@ struct BrainAfmBridge {
                             guard #available(macOS 27.0, *) else {
                                 throw BridgeError.modelUnavailable(
                                     "the MLX chat tier requires macOS 27 (the adapter surface is 27-gated)"
+                                )
+                            }
+                            // THE WIRE SCHEMA vs THE MLX TIER (round-14 Arm
+                            // A's boundary): the runtime-schema path is the
+                            // AFM tier's, and an MLX turn that carries a
+                            // schema refuses BY NAME rather than silently
+                            // degrading to free-form generation the kernel's
+                            // gates would then judge blind. (Arm D revisits
+                            // this surface with its own measured mechanism.)
+                            if guidedSchema != nil {
+                                throw BridgeError.badRequest(
+                                    "the wire schema is not served on the mlx tier"
                                 )
                             }
                             try await slot.gate.run {
@@ -1201,10 +1254,22 @@ struct BrainAfmBridge {
     /// request leaves), stream snapshots as incremental deltas, emit exactly
     /// one terminal event. Runs inside the session's gate — serialized by
     /// construction.
+    ///
+    /// THE GUIDED BRANCH (round-14 Arm A): a turn that carried the wire
+    /// `schema` generates against the RUNTIME schema instead of the
+    /// compiled GroundedAnswer — `respond(to:schema:)` returns the settled
+    /// `GeneratedContent`, whose JSON crosses as `text` in ONE delta (the
+    /// adapter's own contract: the settled answer is the only text this
+    /// seam vouches for) plus the additive defaults and an honest
+    /// `guided:true` label. `tier` is unchanged — this is still the
+    /// on-device AFM tier. A schema-ABSENT turn takes the streaming
+    /// GroundedAnswer path BYTE-IDENTICAL to every turn that shipped
+    /// before the field existed (KT-3's control); the two never blend.
     @available(macOS 26.0, *)
     static func runTurn(
         id: String, prompt: String, turnNo: Int, cap: Int,
-        bridgeSession: BridgeSession, out: LineOut
+        bridgeSession: BridgeSession, guidedSchema: GenerationSchema?,
+        out: LineOut
     ) async throws {
         let model = SystemLanguageModel.default
         let session = bridgeSession.session
@@ -1260,6 +1325,49 @@ struct BrainAfmBridge {
         let options = GenerationOptions(
             samplingMode: .greedy, maximumResponseTokens: cap
         )
+
+        // THE GUIDED BRANCH (round-14 Arm A): the wire schema replaced the
+        // compiled type for THIS turn — the runtime API returns the settled
+        // GeneratedContent; its JSON is the artifact. Greedy sampling (the
+        // AFM tier's pinned posture) makes the run reproducible-ish; the
+        // kernel's gates still judge CONTENT (shape is transport, the
+        // honesty law is unchanged).
+        if let guidedSchema {
+            do {
+                let response = try await session.respond(
+                    to: prompt, schema: guidedSchema, options: options
+                )
+                if Task.isCancelled {
+                    // Cancel kills the TURN, not the conversation.
+                    return
+                }
+                var inputTokens = 0
+                var outputTokens = 0
+                if #available(macOS 27.0, *) {
+                    inputTokens = max(
+                        inputTokens, response.usage.input.totalTokenCount
+                    )
+                    outputTokens = max(
+                        outputTokens, response.usage.output.totalTokenCount
+                    )
+                }
+                let artifactJSON = response.content.jsonString
+                // One delta (the settled answer is the only text this seam
+                // vouches for), then exactly one terminal event.
+                out.send(["id": id, "event": "delta", "text": artifactJSON])
+                out.send([
+                    "id": id, "event": "final", "text": artifactJSON,
+                    "abstain": false,
+                    "claims": [] as [[String: Any]],
+                    "inputTokens": inputTokens, "outputTokens": outputTokens,
+                    "tier": "on_device", "turn": turnNo,
+                    "escalationRefused": false, "guided": true
+                ])
+                return
+            } catch {
+                throw BridgeError.generationFailed(String(describing: error))
+            }
+        }
         // THE TYPED CONTRACT (LL-04 §1.1): guided generation asks the model
         // for a GroundedAnswer, not prose — the cite-or-abstain shape is the
         // measured `guidedGeneration` capability, a SCHEMA rather than a

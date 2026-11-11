@@ -897,6 +897,12 @@ pub async fn chat_turn(
             // the configured chat tier (None = the field is
             // omitted and every bridge parses it as the AFM tier).
             model: crate::config::chat_model_id(),
+            // THE CHAT CONTRACT (round 14 KT-3's control): the chat spine
+            // sends NO schema — the compiled GroundedAnswer cite-or-abstain
+            // contract generates exactly as it did before the wire field
+            // existed; the guided-artifact path and the chat path never
+            // blend.
+            schema: None,
         })
         .await
     {

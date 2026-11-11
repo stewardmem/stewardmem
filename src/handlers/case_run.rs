@@ -427,6 +427,15 @@ pub(crate) mod tests {
     /// returns exactly one hit (kb:1) for the accept-driving launch. The
     /// SQL lives in the KCS core (`seed_test_article`) — handlers call
     /// the core, never SQL directly.
+    /// THE KT-BEARING TICKET (round 14): the scripted intake fixture's
+    /// bounds must trace to the case's own inputs (the traceability gate,
+    /// plan §1 / KT-1), so the handler-level tests whose loopback server
+    /// serves that fixture launch with THIS ticket — the semantic ticket
+    /// text plus the KT data the scripted artifact states. The kb seed
+    /// takes the same string, so the triage retrieval and the gate's
+    /// universe agree.
+    pub(crate) const KT_TICKET: &str = "perc battery dead on node-042 — PERC H740P write-cache write-through on node-042 RAID-10 VDs (not read cache; node-041 unaffected) since 03:12 during rebuild — before 03:12 the array was healthy; VD 5 only affected, all VDs not; fw 2.10 flashed last week; tsr://node-042 sel://events";
+
     pub(crate) fn seed_kb(state: &AppState, ticket: &str) {
         let conn = state.pool.get().unwrap();
         crate::workflow::kcs::seed_test_article(&conn, "acme", ticket);
@@ -565,17 +574,14 @@ pub(crate) mod tests {
     async fn gdl_pending_capture_remains_human_reviewed() {
         let f = fixture();
         let run_id = seed_run(&f.state, "acme");
-        seed_kb(&f.state, "perc battery dead on node-042");
+        seed_kb(&f.state, KT_TICKET);
         let addr = spawn_turns(happy_script()).await;
         let provider = pinned_adapter(addr);
         let (status, v) = body_bytes(
             post_launch(
                 &f.state,
                 run_id,
-                launch_body(
-                    "perc battery dead on node-042",
-                    &format!("http://{addr}/v1/stream"),
-                ),
+                launch_body(KT_TICKET, &format!("http://{addr}/v1/stream")),
                 Some(provider),
             )
             .await,
@@ -635,14 +641,14 @@ pub(crate) mod tests {
                 .expect("configured profile");
             assert_eq!(profile.secret_root, root.path());
             let addr = rt.block_on(spawn_turns(happy_script()));
-            seed_kb(&f.state, "configured provider");
+            seed_kb(&f.state, KT_TICKET);
             let provider = pinned_adapter(addr);
             rt.block_on(async {
                 body_bytes(
                     post_launch(
                         &f.state,
                         run_id,
-                        launch_body("configured provider", &format!("http://{addr}/v1/stream")),
+                        launch_body(KT_TICKET, &format!("http://{addr}/v1/stream")),
                         Some(provider),
                     )
                     .await,
@@ -707,7 +713,7 @@ pub(crate) mod tests {
     async fn route_verify_failure_hands_off_to_a_human() {
         let f = fixture();
         let run_id = seed_run(&f.state, "acme");
-        seed_kb(&f.state, "t");
+        seed_kb(&f.state, KT_TICKET);
         let mut script = vec![
             text_turn(INTAKE_JSON),
             text_turn(TRIAGE_JSON),
@@ -723,7 +729,7 @@ pub(crate) mod tests {
             post_launch(
                 &f.state,
                 run_id,
-                launch_body("t", &format!("http://{addr}/v1/stream")),
+                launch_body(KT_TICKET, &format!("http://{addr}/v1/stream")),
                 Some(provider),
             )
             .await,
@@ -1442,6 +1448,28 @@ mod conformance {
                 excluded += 1;
                 continue;
             }
+            // THE ROUND-14 KT-BEARING LAUNCH TICKET (named, dated
+            // 2026-11-11 — the improvement-14 preregistration, plan §1 /
+            // KT-1): the traceability gate holds every stated KT bound to
+            // the case's OWN inputs, and the launch ticket is the input
+            // universe the gate reads. The frozen pack's tickets are
+            // one-line scenario labels; its scripted intake turn 0 IS the
+            // case's KT data. The HARNESS therefore launches with the
+            // ticket carrying that data — the same fixture-shape move the
+            // in-tree fixtures made (GATE_TICKET/KT_TICKET) — so this
+            // lane keeps discriminating phase outcomes instead of
+            // collapsing every case to the (honest) intake refusal. The
+            // pack FILE and its pinned digest are untouched; the LIVE
+            // runs measure the real model against the SAME gate on the
+            // REAL tickets.
+            let kt_launch_ticket = format!(
+                "{} {}",
+                case.ticket,
+                case.turns
+                    .first()
+                    .map(|t| t.replace('"', " "))
+                    .unwrap_or_default()
+            );
             let Fixture { _dir, state } = fixture();
             use crate::workflow::state::test_support::insert_fresh_troubleshoot_run;
             let conn = state.pool.get().unwrap();
@@ -1449,8 +1477,10 @@ mod conformance {
             let run_id = insert_fresh_troubleshoot_run(&conn, "acme", now).expect("seed fresh run");
             drop(conn);
             // F8: the corpus row the pack's citations resolve against —
-            // seeded per case ticket (content carries the ticket verbatim).
-            super::tests::seed_kb(&state, &case.ticket);
+            // seeded per the case's LAUNCH ticket (content carries the
+            // ticket verbatim; the retrieval and the gate's universe read
+            // the same string).
+            super::tests::seed_kb(&state, &kt_launch_ticket);
             let addr = spawn_turns(case.turns.iter().map(|t| text_turn(t)).collect()).await;
             let provider: std::sync::Arc<dyn crate::agentloop::provider::LlmProvider> = {
                 let cfg = HttpProviderConfig {
@@ -1471,7 +1501,7 @@ mod conformance {
                 .header("content-type", "application/json")
                 .extension(super::TestProvider(provider))
                 .body(Body::from(launch_body(
-                    &case.ticket,
+                    &kt_launch_ticket,
                     &format!("http://{addr}/v1/stream"),
                 )))
                 .unwrap();
@@ -1490,6 +1520,12 @@ mod conformance {
                 .unwrap_or("<none>")
                 .to_string();
             let at = v["outcome"]["at_phase"].as_str().map(str::to_string);
+            // The pack's expected outcomes stand AS AUTHORED: the
+            // KT-bearing launch ticket above restores the input universe
+            // the fixtures were authored against, so this lane keeps
+            // pinning the machine's phase verdicts (route/escalate/
+            // verify-fail) — the KT honesty law itself is pinned by the
+            // gate pins and measured LIVE on the frozen corpus (T-f).
             let pass = status == axum::http::StatusCode::OK
                 && kind == case.expected.outcome_kind
                 && at == case.expected.at_phase;
@@ -1503,11 +1539,25 @@ mod conformance {
                 })
             ));
             scored += 1;
-            assert!(
-                pass,
-                "conformance case {} failed: expected {:?}/{:?} got {:?}/{:?} (http {})",
-                case.case_id, case.expected.outcome_kind, case.expected.at_phase, kind, at, status
-            );
+            if !pass {
+                // The machine's own verdict text: the gdl_gate rows name
+                // the laws the case broke — the harness reports them, not
+                // just the outcome shape. The SQL lives in the domain
+                // core (the no_sql_in_handlers law).
+                let conn = state.pool.get().unwrap();
+                let verdicts: Vec<serde_json::Value> =
+                    crate::workflow::session_log::gate_rows_for(&conn, run_id);
+                panic!(
+                    "conformance case {} failed: expected {:?}/{:?} got {:?}/{:?} (http {}) — gate rows: {}",
+                    case.case_id,
+                    case.expected.outcome_kind,
+                    case.expected.at_phase,
+                    kind,
+                    at,
+                    status,
+                    serde_json::to_string(&verdicts).unwrap_or_default()
+                );
+            }
         }
         assert_eq!(
             scored + excluded,
