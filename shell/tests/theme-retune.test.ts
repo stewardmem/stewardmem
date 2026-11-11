@@ -495,6 +495,8 @@ const TEXT_AUDIT: Readonly<Record<string, AuditRow>> = {
 	'nav.review': 'label',
 	'nav.audit': 'label',
 	'nav.governance': 'label',
+	// the journey surface (2026-11-12): a sidebar label.
+	'nav.journey': 'label',
 	'nav.recall': 'label',
 	'nav.decisions': 'label',
 	'nav.settings': 'label',

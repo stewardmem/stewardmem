@@ -59,6 +59,14 @@ pub(crate) fn router() -> Router<Arc<AppState>> {
             "/clients/{name}/proposals/{id}/coach",
             post(handlers::clients::coach_proposal),
         )
+        // the customer journey (IMPROVE15) — the chain-projected read; the
+        // journey's OWN authz law (the client's own principal + the operator)
+        // lives in the handler, NOT this table (the QA queue's Admin gate is
+        // the wrong law for the customer-facing surface).
+        .route(
+            "/clients/{name}/journey",
+            get(handlers::clients::client_journey),
+        )
         // source lifecycle. `reconcile` retires active sources
         // of a kind whose URI is no longer in the live set (a vault delete or
         // rename); `delete /sources/{id}` retires a single source explicitly.

@@ -377,6 +377,333 @@ pub async fn coach_proposal(
     })))
 }
 
+/// `GET /clients/{name}/journey?case=` — the customer journey (IMPROVE15):
+/// the client's cases projected from the chain through the PURE
+/// [`crate::workflow::journey`] projection (the projection law: same chain
+/// state → byte-identical journey; this endpoint adds zero state — no
+/// journey table, no cache, no parallel log).
+///
+/// THE JOURNEY'S OWN AUTHZ LAW — deliberately NOT the Admin gate the
+/// `/proposals` QA queue rides: the client's OWN principal + the operator
+/// only. The client's own principal is the one whose scope domains are
+/// EXACTLY the client's domain (the roster door's per-client
+/// `client-auditor` credential — the §3(c) thin-portal posture); the
+/// operator is the Admin-action class every client op already speaks.
+/// Anyone else — a plain domain reader, a write-class token, a
+/// cross-tenant token — is refused EXISTENCE-BLIND: the same `404 client
+/// not found` body an unknown client renders (the M3-g machine: the
+/// refusal leaks nothing, not even that the client exists). The curation
+/// battery witnesses the leak arm and the byte-identity in the authz
+/// matrix + `tests/journey_curation_pins.rs`.
+///
+/// Additive wire: nothing existing changes shape; the openapi addition +
+/// the `gen:api` regen land in the same commit (the regen lockstep).
+#[derive(Debug, Deserialize)]
+pub struct JourneyQuery {
+    /// an optional single case (a `workflow_runs` id IN this client's
+    /// domain). A case from ANOTHER client's domain is refused
+    /// existence-blind, byte-identical to an absent one.
+    #[serde(default)]
+    pub case: Option<i64>,
+}
+
+/// One projected case's journey block.
+#[derive(Debug, serde::Serialize)]
+pub struct JourneyCase {
+    pub case_id: i64,
+    pub status: String,
+    pub opened_at: i64,
+    pub events: Vec<crate::workflow::journey::JourneyEvent>,
+}
+
+/// The journey response: the client's identity block + one entry per case.
+/// Every event is the projection's closed-vocabulary output — roles, not
+/// names; receipts, not scores.
+#[derive(Debug, serde::Serialize)]
+pub struct JourneyResponse {
+    pub client: String,
+    pub domain: String,
+    pub cases: Vec<JourneyCase>,
+}
+
+pub async fn client_journey(
+    State(state): State<Arc<AppState>>,
+    principal: OptPrincipal,
+    Path(name): Path<String>,
+    axum::extract::Query(q): axum::extract::Query<JourneyQuery>,
+) -> Result<Json<JourneyResponse>, HandlerError> {
+    // THE OWN LAW, step 1: is the caller the operator? The Admin action on
+    // the global leg — the same class every client op authorizes with. A
+    // `None` principal (the loopback superuser) is the operator.
+    let operator = super::authorize(&principal.0, crate::auth::Action::Admin, "", "global").is_ok();
+    let pool = super::resolve_domain_pool(&state.registry, None)?;
+    let pool_for = pool.clone();
+    let key = name.trim().to_ascii_lowercase();
+    let key_for = key.clone();
+    let principal_for = principal.0.clone();
+    // THE OWN LAW, step 2: resolve the client, then decide. A caller that is
+    // neither the operator nor the client's own principal is refused with
+    // the UNKNOWN-CLIENT body — BEFORE any journey data is touched, and
+    // byte-identical whether the client exists or not (existence-blind).
+    let resolve = tokio::task::spawn_blocking(
+        move || -> Result<crate::service::register::Client, HandlerError> {
+            let conn = pool_for.get().map_err(HandlerError::db_down)?;
+            // the register row alone (archived INCLUDED — an archived
+            // client's own principal still resolves; the 409 refusal the
+            // other per-client paths render comes AFTER the law passes).
+            let c = crate::service::register::by_name(&conn, &key_for)?
+                .ok_or(RegisterError::UnknownClient)?;
+            Ok(c)
+        },
+    )
+    .await
+    .map_err(|e| HandlerError::internal(format!("task join error: {e}")))??;
+    let client = resolve;
+    if !operator {
+        // the client's OWN principal: scope domains == exactly the client's
+        // domain (the roster door mints one client-auditor credential per
+        // client — one domain, read-only). Anything wider or elsewhere is
+        // not the client's own.
+        let own = principal_for.as_ref().is_some_and(|p| {
+            let mut domains: Vec<String> = p.scopes.iter().map(|s| s.domain.clone()).collect();
+            domains.sort();
+            domains.dedup();
+            domains.len() == 1 && domains[0] == client.domain
+        });
+        if !own {
+            return Err(HandlerError::not_found("client not found"));
+        }
+    }
+    // The client's active check rides AFTER the law (the per-client paths'
+    // 409 vocabulary, byte-identical).
+    if client.status != "active" {
+        return Err(RegisterError::ClientArchived.into());
+    }
+    let domain = client.domain.clone();
+    let domain_pool = super::resolve_domain_pool(&state.registry, Some(&domain))?;
+    let case_filter = q.case;
+    let domain_for = domain.clone();
+    let rows = tokio::task::spawn_blocking(move || -> Result<Vec<JourneyCase>, HandlerError> {
+        let conn = domain_pool.get().map_err(HandlerError::db_down)?;
+        journey_cases(&conn, &domain_for, case_filter)
+    })
+    .await
+    .map_err(|e| HandlerError::internal(format!("task join error: {e}")))??;
+    Ok(Json(JourneyResponse {
+        client: key,
+        domain,
+        cases: rows,
+    }))
+}
+
+/// The per-case fetch + project, on ONE domain-pool connection (the day-zero
+/// scoping: the journey reads ONLY the client's own pool — there is no path
+/// by which another client's rows enter this fn). Every input is a
+/// chain-provable row; the projection is the PURE kernel fn.
+fn journey_cases(
+    conn: &rusqlite::Connection,
+    domain: &str,
+    case_filter: Option<i64>,
+) -> Result<Vec<JourneyCase>, HandlerError> {
+    use crate::workflow::journey::{ApprovalFact, DsarFact, HoldFact, JourneyChain, JourneyRun};
+    // The client's cases: kind='troubleshoot' runs in THIS domain (the GDL
+    // case kind), oldest first. `?case=` narrows to one id — a run outside
+    // the domain simply does not match the WHERE, which IS the
+    // existence-blind refusal at the case grain.
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, created_at, updated_at, status, state_json FROM workflow_runs
+              WHERE domain = ?1 AND kind = 'troubleshoot' AND (?2 IS NULL OR id = ?2)
+              ORDER BY id ASC",
+        )
+        .map_err(|e| HandlerError::internal(e.to_string()))?;
+    let runs: Vec<(i64, i64, i64, String, String)> = stmt
+        .query_map(rusqlite::params![domain, case_filter], |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, i64>(1)?,
+                r.get::<_, i64>(2)?,
+                r.get::<_, String>(3)?,
+                r.get::<_, String>(4)?,
+            ))
+        })
+        .map_err(|e| HandlerError::internal(e.to_string()))?
+        .filter_map(Result::ok)
+        .collect();
+    drop(stmt);
+
+    // The domain-level acts, read ONCE (they join every case render as
+    // case_id 0 events):
+    // the digest-bound review acts: approved proposals ⋈ the HITL ledger.
+    let mut approvals: Vec<ApprovalFact> = Vec::new();
+    {
+        let mut stmt = conn
+            .prepare(
+                "SELECT h.proposal_id, h.ts, h.actor FROM hitl_decision_events h
+                  JOIN proposals p ON p.id = h.proposal_id
+                  WHERE h.decision = 'approve' AND p.status = 'approved' AND p.domain = ?1",
+            )
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
+        let it = stmt
+            .query_map(rusqlite::params![domain], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, String>(2)?,
+                ))
+            })
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
+        for row in it.filter_map(Result::ok) {
+            let (proposal_id, ts, actor) = row;
+            // The receipt IS the approve-bound digest: the same
+            // `review_digest` the approve law bound the decision to.
+            let content: Option<String> = conn
+                .query_row(
+                    "SELECT content FROM proposals WHERE id = ?1 AND status = 'approved'",
+                    rusqlite::params![proposal_id],
+                    |r| r.get(0),
+                )
+                .ok();
+            if let Some(content) = content {
+                approvals.push(ApprovalFact {
+                    proposal_id,
+                    decided_at: ts,
+                    digest: crate::handlers::gate::review_digest(&content),
+                    actor,
+                });
+            }
+        }
+    }
+    // the legal holds (the client's data-level acts).
+    let mut holds: Vec<HoldFact> = Vec::new();
+    {
+        let mut stmt = conn
+            .prepare("SELECT id, held_at, released_at, held_by FROM legal_holds ORDER BY id ASC")
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
+        let it = stmt
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, Option<i64>>(2)?,
+                    r.get::<_, Option<String>>(3)?,
+                ))
+            })
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
+        for row in it.filter_map(Result::ok) {
+            let (id, held_at, released_at, held_by) = row;
+            holds.push(HoldFact {
+                id,
+                held_at,
+                released_at,
+                actor: held_by.unwrap_or_default(),
+            });
+        }
+    }
+    // the completed data requests, their receipt = the certificate's
+    // chain_head (the chain-provable digest the certificate itself anchors).
+    let mut dsars: Vec<DsarFact> = Vec::new();
+    {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, completed_at, certificate FROM dsar_requests
+                  WHERE status = 'completed' ORDER BY id ASC",
+            )
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
+        let it = stmt
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, Option<i64>>(1)?,
+                    r.get::<_, Option<String>>(2)?,
+                ))
+            })
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
+        for row in it.filter_map(Result::ok) {
+            let (id, completed_at, certificate) = row;
+            let Some(completed_at) = completed_at else {
+                continue;
+            };
+            let chain_head: Option<String> = certificate
+                .as_deref()
+                .and_then(|c| serde_json::from_str::<serde_json::Value>(c).ok())
+                .and_then(|v| {
+                    v.get("chain_head")
+                        .and_then(|h| h.as_str())
+                        .map(String::from)
+                });
+            dsars.push(DsarFact {
+                id,
+                completed_at,
+                certificate_digest: chain_head,
+                actor: "dsar".to_string(),
+            });
+        }
+    }
+
+    let mut out: Vec<JourneyCase> = Vec::new();
+    for (run_id, created_at, updated_at, status, state_json) in runs {
+        // the run's journal checkpoints + case/decision rows (chain rows).
+        let checkpoints: Vec<(i64, i64, String)> = {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT seq, created_at, payload_json FROM agent_session_events
+                      WHERE run_id = ?1 AND kind = 'control:gdl' ORDER BY seq ASC",
+                )
+                .map_err(|e| HandlerError::internal(e.to_string()))?;
+            let it = stmt
+                .query_map(rusqlite::params![run_id], |r| {
+                    Ok((
+                        r.get::<_, i64>(0)?,
+                        r.get::<_, i64>(1)?,
+                        r.get::<_, String>(2)?,
+                    ))
+                })
+                .map_err(|e| HandlerError::internal(e.to_string()))?;
+            it.filter_map(Result::ok).collect()
+        };
+        let decisions: Vec<(i64, i64, String)> = {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, created_at, payload_json FROM outbox
+                      WHERE run_id = ?1 AND topic = 'case/decision' ORDER BY id ASC",
+                )
+                .map_err(|e| HandlerError::internal(e.to_string()))?;
+            let it = stmt
+                .query_map(rusqlite::params![run_id], |r| {
+                    Ok((
+                        r.get::<_, i64>(0)?,
+                        r.get::<_, i64>(1)?,
+                        r.get::<_, String>(2)?,
+                    ))
+                })
+                .map_err(|e| HandlerError::internal(e.to_string()))?;
+            it.filter_map(Result::ok).collect()
+        };
+        let chain = JourneyChain {
+            run: JourneyRun {
+                run_id,
+                created_at,
+                updated_at,
+                status: &status,
+                state_json: &state_json,
+            },
+            checkpoints: &checkpoints,
+            decisions: &decisions,
+            approvals: &approvals,
+            holds: &holds,
+            dsars: &dsars,
+        };
+        out.push(JourneyCase {
+            case_id: run_id,
+            status: status.clone(),
+            opened_at: created_at,
+            events: crate::workflow::journey::project(&chain),
+        });
+    }
+    Ok(out)
+}
+
 /// `GET /clients/{name}/proposals` — the supervisor QA queue for a client:
 /// the client's pending review items, owner-scoped to the supervisor's
 /// `manages` set (empty manages = the whole queue), each with its

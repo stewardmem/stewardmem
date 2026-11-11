@@ -18,10 +18,17 @@ export interface SurfaceVisibility {
 	readonly review: boolean;
 	readonly audit: boolean;
 	readonly governance: boolean;
+	readonly journey: boolean;
 }
 
 /** The first-run posture: the conversation, nothing else. */
-const DEFAULTS: SurfaceVisibility = { memory: false, review: false, audit: false, governance: false };
+const DEFAULTS: SurfaceVisibility = {
+	memory: false,
+	review: false,
+	audit: false,
+	governance: false,
+	journey: false
+};
 
 function restore(): SurfaceVisibility {
 	if (typeof window === 'undefined') return { ...DEFAULTS };
@@ -33,7 +40,8 @@ function restore(): SurfaceVisibility {
 			memory: parsed.memory === true,
 			review: parsed.review === true,
 			audit: parsed.audit === true,
-			governance: parsed.governance === true
+			governance: parsed.governance === true,
+			journey: parsed.journey === true
 		};
 	} catch {
 		return { ...DEFAULTS };
@@ -45,6 +53,7 @@ class SidebarVisibility {
 	review = $state(DEFAULTS.review);
 	audit = $state(DEFAULTS.audit);
 	governance = $state(DEFAULTS.governance);
+	journey = $state(DEFAULTS.journey);
 
 	constructor() {
 		const restored = restore();
@@ -52,6 +61,7 @@ class SidebarVisibility {
 		this.review = restored.review;
 		this.audit = restored.audit;
 		this.governance = restored.governance;
+		this.journey = restored.journey;
 	}
 
 	toggle(surface: keyof SurfaceVisibility): void {
@@ -63,7 +73,8 @@ class SidebarVisibility {
 					memory: this.memory,
 					review: this.review,
 					audit: this.audit,
-					governance: this.governance
+					governance: this.governance,
+					journey: this.journey
 				})
 			);
 		} catch {

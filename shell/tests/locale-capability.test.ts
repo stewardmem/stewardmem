@@ -92,6 +92,9 @@ const FRENCH_LOANWORDS = new Set([
 	// "relations" are French words of identical spelling; "Steward" is the
 	// product name.
 	'nav.audit',
+	// The journey surface (2026-11-12): "Client" is a French word of
+	// identical spelling — cognate, not a copy.
+	'journey.client.label',
 	'shell.brand',
 	'shell.nav',
 	'memory.badge.score',

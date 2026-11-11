@@ -1695,6 +1695,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clients/{name}/journey": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The customer journey — the chain-projected transparency read (IMPROVE15)
+         * @description The client's cases projected from the chain through the PURE journey projection: same chain state → byte-identical journey; no journey table, no cache, no parallel log (a projection that could drift from the audit chain is the false-coverage defect). Each chain fact renders as ONE closed customer sentence — the plan §2 vocabulary (case_opened / phase_advanced / triage_escalated / case_split / reexamined / resolution_approved / handdown_executed / hold_added / hold_released / dsar_completed); every actor renders as a ROLE (a supervisor, the privacy office, the operator, the system) — never a roster name, never `api`; the only customer-meaning values are the receipts (the digests the approve law bound / the DSAR certificate's chain head) and the counts the vocabulary names. THE JOURNEY'S OWN AUTHZ LAW — deliberately NOT the QA queue's Admin gate: the client's OWN principal (scope domains == exactly the client's domain, the per-client client-auditor credential) + the operator (the Admin class) only. Anyone else is refused EXISTENCE-BLIND: the same `404 client not found` body an unknown client renders. `?case=` narrows to one case id in this client's domain; a foreign or absent case answers the same existence-blind 404. Additive wire: nothing existing changes shape.
+         */
+        get: operations["clientJourney"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/retention/report": {
         parameters: {
             query?: never;
@@ -9577,6 +9597,53 @@ export interface operations {
                 content?: never;
             };
             /** @description No client with this name, or no proposal with this id */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client is not active (archived) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    clientJourney: {
+        parameters: {
+            query?: {
+                /** @description An optional single case id (a workflow_runs id in this client's domain). */
+                case?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Client name (lowercase, domain-safe). */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The projected journey — the client's cases with their closed-vocabulary events */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description No bearer (the middleware) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Existence-blind refusal — unknown client, non-owned client, foreign or absent one: ONE body for all */
             404: {
                 headers: {
                     [name: string]: unknown;

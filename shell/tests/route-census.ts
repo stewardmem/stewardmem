@@ -18,7 +18,7 @@
  * exact-set assertion and the sweep's coverage assertion until both artifacts
  * are given the route — growth is fail-closed on both.
  */
-export const ROUTE_FLOOR = 9;
+export const ROUTE_FLOOR = 10;
 
 /**
  * The measured census. M3-a (2026-10-22, plan `21_CHAT_FIRST_IA`) made the
@@ -43,6 +43,7 @@ export const CENSUS_ROUTES = [
 	'/decisions',
 	'/decisions/[id]',
 	'/governance',
+	'/journey',
 	'/recall',
 	'/recall/[trace_id]/trace',
 	'/review',

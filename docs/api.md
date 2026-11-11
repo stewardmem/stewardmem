@@ -392,6 +392,7 @@ is empty — the paths return 404, they are not auth failures.
 | POST | `/clients/{name}/hold` | Per-client legal hold (resolves the client's domain) |
 | POST | `/clients/{name}/end` | Termination: purge-or-return + archive + certificate |
 | GET | `/clients/{name}/proposals` · POST `/clients/{name}/proposals/{id}/coach` | Supervisor QA queue (same `ProposalView` shape as `/proposals`) + coaching note (v1.27.8, Admin) |
+| GET | `/clients/{name}/journey` (+ `?case=`) | The customer journey — the chain-projected transparency read (IMPROVE15): closed customer sentences, roles not names, receipts not scores; zero new state (a pure projection). OWN authz law: the client's own principal + the operator only; existence-blind 404 for everyone else (unknown client, another client's client, a foreign case — one body) |
 
 ---
 

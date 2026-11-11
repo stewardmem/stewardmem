@@ -48,6 +48,7 @@ export type ExtensionId =
 	| 'coreReview'
 	| 'coreAudit'
 	| 'coreGovernance'
+	| 'coreJourney'
 	| 'coreSettings'
 	/** The support vertical's adopted pack manifest (C2 G-5): the ONE
 	 * translation of a pack's ui/manifest.json into the compiled registry —
@@ -62,7 +63,7 @@ export type ExtensionId =
  * the decision-run listing is an operator surface reached from the palette
  * and from Governance, not a daily destination.
  */
-export type NavRoute = '/' | '/recall' | '/review' | '/audit' | '/governance';
+export type NavRoute = '/' | '/recall' | '/review' | '/audit' | '/governance' | '/journey';
 
 /** One sidebar entry. The sidebar renders `{#each navEntries}` in `order`. */
 export interface NavEntry {

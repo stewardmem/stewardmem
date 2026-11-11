@@ -16,6 +16,7 @@ import { coreMemory } from './core-memory.js';
 import { coreReview } from './core-review.js';
 import { coreAudit } from './core-audit.js';
 import { coreGovernance } from './core-governance.js';
+import { coreJourney } from './core-journey.js';
 import { coreSettings } from './core-settings.js';
 import { supportPack } from './support-pack.js';
 import type {
@@ -34,6 +35,7 @@ export const EXTENSIONS = [
 	coreReview,
 	coreAudit,
 	coreGovernance,
+	coreJourney,
 	coreSettings,
 	supportPack
 ] as const;

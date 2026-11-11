@@ -19,7 +19,8 @@ const SURFACES: ReadonlyArray<{ key: keyof SurfaceVisibility; labelKey: string }
 	{ key: 'memory', labelKey: 'nav.memory' },
 	{ key: 'review', labelKey: 'nav.review' },
 	{ key: 'audit', labelKey: 'nav.audit' },
-	{ key: 'governance', labelKey: 'nav.governance' }
+	{ key: 'governance', labelKey: 'nav.governance' },
+	{ key: 'journey', labelKey: 'nav.journey' }
 ];
 
 /** Whether this runtime carries the native menu API. */

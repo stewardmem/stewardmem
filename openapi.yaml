@@ -3470,6 +3470,57 @@ paths:
           description: No client with this name, or no proposal with this id
         "409":
           description: Client is not active (archived)
+  /clients/{name}/journey:
+    get:
+      summary: The customer journey — the chain-projected transparency read (IMPROVE15)
+      operationId: clientJourney
+      description: >
+        The client's cases projected from the chain through the PURE journey
+        projection: same chain state → byte-identical journey; no journey
+        table, no cache, no parallel log (a projection that could drift from
+        the audit chain is the false-coverage defect). Each chain fact renders
+        as ONE closed customer sentence — the plan §2 vocabulary
+        (case_opened / phase_advanced / triage_escalated / case_split /
+        reexamined / resolution_approved / handdown_executed / hold_added /
+        hold_released / dsar_completed); every actor renders as a ROLE (a
+        supervisor, the privacy office, the operator, the system) — never a
+        roster name, never `api`; the only customer-meaning values are the
+        receipts (the digests the approve law bound / the DSAR certificate's
+        chain head) and the counts the vocabulary names.
+        THE JOURNEY'S OWN AUTHZ LAW — deliberately NOT the QA queue's Admin
+        gate: the client's OWN principal (scope domains == exactly the
+        client's domain, the per-client client-auditor credential) + the
+        operator (the Admin class) only. Anyone else is refused
+        EXISTENCE-BLIND: the same `404 client not found` body an unknown
+        client renders. `?case=` narrows to one case id in this client's
+        domain; a foreign or absent case answers the same existence-blind
+        404. Additive wire: nothing existing changes shape.
+      parameters:
+        - in: path
+          name: name
+          required: true
+          description: Client name (lowercase, domain-safe).
+          schema: { type: string }
+        - in: query
+          name: case
+          required: false
+          description: An optional single case id (a workflow_runs id in this client's domain).
+          schema: { type: integer, format: int64 }
+      responses:
+        "200":
+          description: The projected journey — the client's cases with their closed-vocabulary events
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {"client": "acme-us", "domain": "acme", "cases": [{"case_id": 7, "status": "running", "opened_at": 1753000000, "events": [{"kind": "case_opened", "case_id": 7, "at": 1753000000, "seq": 7, "text": "Your case was opened.", "actor": "the operator", "digest": null, "count": null, "phase": null}, {"kind": "resolution_approved", "case_id": 7, "at": 1753100000, "seq": 42, "text": "A supervisor approved the resolution. Receipt: a1b2…", "actor": "a supervisor", "digest": "a1b2…", "count": null, "phase": null}]}]}
+                description: 'the projection law''s output: closed kinds, closed sentences, role actors, receipt digests — zero scores, zero names, zero infra'
+        "401":
+          description: No bearer (the middleware)
+        "404":
+          description: 'Existence-blind refusal — unknown client, non-owned client, foreign or absent one: ONE body for all'
+        "409":
+          description: Client is not active (archived)
   /retention/report:
     get:
       summary: Per-domain × per-kind retention schedule (v1.22.0 M2)

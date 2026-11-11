@@ -1070,7 +1070,12 @@ describe('the envelope law', () => {
 		// render's derived_from badge + the producer reference line + 5
 		// message keys × five locales → 236,342 gzipped (+1,198): named act,
 		// midpoint moves, register carries it.
-		const R0_BASELINE = 236_342;
+		// AND AGAIN (2026-11-12, the customer-journey round): the /journey
+		// route (the operator's chain-projected transparency read), its api
+		// module, the core-journey extension + the sidebar surface, and 28
+		// message keys × five locales → 243,077 gzipped (+6,735): named act,
+		// midpoint moves, register carries it.
+		const R0_BASELINE = 243_077;
 		const BAND = 512;
 		expect(
 			Math.abs(total - R0_BASELINE),

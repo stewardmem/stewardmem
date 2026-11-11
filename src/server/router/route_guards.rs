@@ -218,6 +218,11 @@ pub const OPENAPI_ROUTES: &[&str] = &[
     // the supervisor QA surface.
     "/clients/{name}/proposals",
     "/clients/{name}/proposals/{id}/coach",
+    // the customer journey (IMPROVE15) — the chain-projected read; the
+    // journey's OWN authz law (the client's own principal + the operator)
+    // lives in the handler; the path gate here stays Read (the middleware
+    // tier), never the QA queue's Admin.
+    "/clients/{name}/journey",
     "/retention/report",
     // the curated legal-rules DB (Admin + DPO role; read-only diff).
     "/legal/rules",
@@ -534,6 +539,14 @@ pub const AUTHZ_GATES: &[(&str, &str)] = &[
     ("/clients/{name}/end", "Admin"),
     ("/clients/{name}/proposals", "Admin"),
     ("/clients/{name}/proposals/{id}/coach", "Admin"),
+    // the customer journey (IMPROVE15): the handler carries the OPERATOR leg
+    // (Action::Admin — the class every client op speaks); the JOURNEY'S OWN
+    // LAW — the client's own principal (scope domains == the client's domain)
+    // + the operator only, existence-blind cross-client refusal — lives in
+    // the handler beside that gate, never in this table (the QA queue's
+    // plain-Admin gate is deliberately NOT the journey's law: a plain Admin
+    // row would let the supervisor QA class read every client's journey).
+    ("/clients/{name}/journey", "Admin"),
     ("/retention/report", "Admin"),
     // the curated legal-rules DB: Admin gate; the handler then demands the
     // DPO role (the scoreboard posture — DPO evidence, not a public read).

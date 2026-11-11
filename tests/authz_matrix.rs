@@ -708,6 +708,15 @@ const PRE_GATE_404: &[&str] = &[
     "/workflow/decision-runs",
     "/workflow/decision-runs/{id}",
     "/workflow/decision-runs/{id}/replay-diff",
+    // The customer journey (IMPROVE15): the handler's OWN law — the client's
+    // own principal + the operator — refuses everyone else EXISTENCE-BLIND
+    // with the unknown-client 404 body (byte-identical whether the client
+    // exists or not, the M3-g machine). So every non-operator class answers
+    // 404 (or the middleware's 403 on a cross-tenant token), and the
+    // operator-class cells pass the gate and 404 on the fixture's absent
+    // client. A leak here would be a 403-for-one-class oracle naming which
+    // clients exist.
+    "/clients/{name}/journey",
 ];
 /// The legacy soft-deny surface: these routes predate the 403 vocabulary and
 /// deliberately answer their deny with a 200 body so old clients keep

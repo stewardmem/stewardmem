@@ -299,6 +299,27 @@ const ROUTE_PARITY: readonly RouteParity[] = [
 		}
 	},
 	{
+		route: '/journey',
+		verdict: 'no_counterpart',
+		nearest: '/audit?:since&:principal',
+		because:
+			'no Dioxus route serves "the chain the customer sees": the journey (IMPROVE15) reads the ' +
+			'kernel\'s chain-projected transparency surface (/clients/{name}/journey — closed customer ' +
+			'sentences, roles not names, receipts not scores, zero new state) through the pure ' +
+			'projection. The nearest Dioxus surface is /audit (the operator\'s hash-chain read), ' +
+			'recorded as a fact about the tree and not promoted to a counterpart: the audit shows the ' +
+			'chain to the OPERATOR; the journey shows the customer-facing projection of it.',
+		authz: {
+			// The journey's OWN authz law lives kernel-side in the handler (the
+			// client's own principal + the operator; everyone else answers the
+			// existence-blind 404). The kernel's table row is the OPERATOR leg
+			// the handler carries (Admin — the class every client op speaks);
+			// the own-principal arm is the handler's law beyond the table.
+			kernel: { '/clients/{name}/journey': 'Admin' },
+			mutates: null
+		}
+	},
+	{
 		route: '/governance',
 		verdict: 'no_counterpart',
 		nearest: '/system',
@@ -617,11 +638,17 @@ test('every_user_reachable_shell_route_carries_a_parity_verdict', () => {
 	// record, and the count is the census's truth, not a debt to burn
 	// down. GATE 1: 2 → 3 (the operator's UX round, recorded here and in
 		// the register).
-	expect(mix).toEqual({ exact: 2, renamed: 4, no_counterpart: 3 });
+	// 2026-11-12: /journey joins as no_counterpart (IMPROVE15, a shell-only
+	// surface — the Dioxus shell predates the customer journey and serves no
+	// chain-projection read; the nearest Dioxus path, the audit panel, is
+	// recorded as a fact about the tree, never promoted to a counterpart)
+	// → 4. GATE 1: 3 → 4, same named-act shape as /settings: nothing to
+	// reconcile against, the row is the record.
+	expect(mix).toEqual({ exact: 2, renamed: 4, no_counterpart: 4 });
 	expect(
 		mix.no_counterpart,
-		'gate 1 cannot go green while a route has a counterpart left unreconciled — /settings has NONE to reconcile against (recorded, the honest shape)'
-	).toBe(3);
+		'gate 1 cannot go green while a route has a counterpart left unreconciled — /settings and /journey have NONE to reconcile against (recorded, the honest shape)'
+	).toBe(4);
 });
 
 test('this_census_reads_the_SHELL_not_the_kernel_route_tables', () => {

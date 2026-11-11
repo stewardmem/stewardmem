@@ -343,6 +343,16 @@ shared_pending_count: 1,
 		},
 		load: () => import('../src/routes/settings/+page.svelte'),
 		proof: { kind: 'testid', value: 'settings-rail' }
+	},
+	// The journey surface (IMPROVE15): the kernel's chain-projected
+	// transparency read. The AT-REST render is the form (the page reads a
+	// client's journey only when asked — no client, no read, no idle fetch);
+	// the events' render is the journey-surface test's own proof. The two
+	// inputs join the label walk's population.
+	'/journey': {
+		prepare: () => {},
+		load: () => import('../src/routes/journey/+page.svelte'),
+		proof: { kind: 'testid', value: 'journey-form' }
 	}
 };
 
