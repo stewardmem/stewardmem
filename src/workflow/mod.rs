@@ -228,6 +228,7 @@ pub(crate) mod harness;
 pub mod host;
 pub(crate) mod hostcalls;
 pub(crate) mod interview;
+pub mod journey;
 pub(crate) mod kappa;
 pub mod kcs;
 pub(crate) mod mesh;
