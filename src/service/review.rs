@@ -149,6 +149,15 @@ pub struct ProposalView {
     /// carries no stable subject id.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub producer_ref: Option<String>,
+    /// The GRAD arm: the size of the pending cohort THIS row's
+    /// producer/gate reference shares (self included), computed by one
+    /// deterministic GROUP BY over the same filtered set the page shows.
+    /// Rows whose reference is unique read 1 — a batch shows when the page
+    /// sees >= 2. Decomposition-across-operations files poison as N
+    /// individually-innocuous rows; the grouping makes the batch VISIBLE at
+    /// decision time. It informs the human; it never gates (HITL sacred).
+    #[serde(default)]
+    pub shared_pending_count: u32,
 }
 
 /// the review deadline + SLA bands, shared by every
@@ -220,55 +229,138 @@ pub(crate) fn pending_page(
         predicates.join(" AND ")
     );
     let mut stmt = conn.prepare(&sql).map_err(GateError::from)?;
-    let rows = stmt
-        .query_map(params_from_iter(bind), |r| {
-            let row_content: String = r.get(2)?;
-            let row_title: Option<String> = r.get(15)?;
-            let created_at: i64 = r.get(9)?;
-            let owner: Option<String> = r.get(12)?;
-            let (expires_at, warn_secs, critical_secs) = proposal_deadline(created_at);
-            // compose the QA scorecard. Proposals are not
-            // recall-trace-linked in schema, so `has_trace` stays false — the
-            // absent-trace neutral corner (never NaN). `in_scope` = the candidate
-            // is agent-owned (the supervisor QA surface) vs an unowned loopback.
-            let qa_score = crate::qa::score_for(owner.is_some(), false, false, false);
-            Ok(ProposalView {
-                id: r.get(0)?,
-                kind: r.get(1)?,
-                screen_verdict: crate::screen::screen_verdict_label(crate::screen::screen(
-                    &row_content,
-                    row_title.as_deref().unwrap_or(""),
-                ))
-                .to_string(),
-                content: row_content,
-                // the digest is reader-dependent only
-                // through None (no PII redaction) — it is banker-settled in the
-                // principal-aware HTTP layer (`list_proposals`), not here.
-                content_digest: String::new(),
-                source: r.get(3)?,
-                source_prompt: r.get(4)?,
-                authority: r.get(5)?,
-                novelty: r.get(6)?,
-                conflict_with: r.get(7)?,
-                salience: r.get(8)?,
-                created_at,
-                edited_at: r.get(10)?,
-                expires_at,
-                warn_secs,
-                critical_secs,
-                decided_at: r.get(11)?,
-                owner,
-                qa_note: r.get(13)?,
-                qa_score,
-                domain: r.get(14)?,
-                title: r.get(15)?,
-                derived_from: r.get(16)?,
-                producer_ref: r.get(17)?,
-            })
-        })
+    // positional binds are passed by reference so the grouping query below
+    // can rebind the SAME positions over the same filtered set.
+    let mut rows = stmt
+        .query_map(
+            params_from_iter(
+                bind.iter()
+                    .map(|b| b.as_ref() as &dyn rusqlite::types::ToSql),
+            ),
+            |r| {
+                let row_content: String = r.get(2)?;
+                let row_title: Option<String> = r.get(15)?;
+                let created_at: i64 = r.get(9)?;
+                let owner: Option<String> = r.get(12)?;
+                let (expires_at, warn_secs, critical_secs) = proposal_deadline(created_at);
+                // compose the QA scorecard. Proposals are not
+                // recall-trace-linked in schema, so `has_trace` stays false — the
+                // absent-trace neutral corner (never NaN). `in_scope` = the candidate
+                // is agent-owned (the supervisor QA surface) vs an unowned loopback.
+                let qa_score = crate::qa::score_for(owner.is_some(), false, false, false);
+                Ok(ProposalView {
+                    id: r.get(0)?,
+                    kind: r.get(1)?,
+                    screen_verdict: crate::screen::screen_verdict_label(crate::screen::screen(
+                        &row_content,
+                        row_title.as_deref().unwrap_or(""),
+                    ))
+                    .to_string(),
+                    content: row_content,
+                    // the digest is reader-dependent only
+                    // through None (no PII redaction) — it is banker-settled in the
+                    // principal-aware HTTP layer (`list_proposals`), not here.
+                    content_digest: String::new(),
+                    source: r.get(3)?,
+                    source_prompt: r.get(4)?,
+                    authority: r.get(5)?,
+                    novelty: r.get(6)?,
+                    conflict_with: r.get(7)?,
+                    salience: r.get(8)?,
+                    created_at,
+                    edited_at: r.get(10)?,
+                    expires_at,
+                    warn_secs,
+                    critical_secs,
+                    decided_at: r.get(11)?,
+                    owner,
+                    qa_note: r.get(13)?,
+                    qa_score,
+                    domain: r.get(14)?,
+                    title: r.get(15)?,
+                    derived_from: r.get(16)?,
+                    producer_ref: r.get(17)?,
+                    // the cohort size is stamped AFTER the collect (the GROUP BY
+                    // below) — the neutral 1 here is replaced for every row.
+                    shared_pending_count: 1,
+                })
+            },
+        )
         .map_err(GateError::from)?
         .filter_map(|r| r.ok())
         .collect::<Vec<_>>();
+    // The GRAD grouping: ONE deterministic GROUP BY over the SAME filtered
+    // set this page serves — rows sharing a producer/gate reference learn
+    // their cohort size, so a batch of individually-innocuous filings
+    // renders as a batch (never gate-worthy by itself; the human decides).
+    // The grouping SQL renumbers the predicates' holes compactly: the page's
+    // ?2 is the LIMIT (never a predicate) and the appended filters sit at
+    // ?3.. — here they become ?2.. so the bind list is exactly the WHERE
+    // binds, no gap filler.
+    let renumber = |pred: &str| -> String {
+        let mut out = String::with_capacity(pred.len());
+        let chars: Vec<char> = pred.chars().collect();
+        let mut i = 0usize;
+        while i < chars.len() {
+            if chars[i] == '?' {
+                let mut j = i + 1;
+                let mut num = String::new();
+                while j < chars.len() && chars[j].is_ascii_digit() {
+                    num.push(chars[j]);
+                    j += 1;
+                }
+                if num.is_empty() {
+                    out.push('?');
+                } else {
+                    let n: usize = num.parse().unwrap_or(0);
+                    let shifted = if n >= 3 { n - 1 } else { n };
+                    out.push('?');
+                    out.push_str(&shifted.to_string());
+                }
+                i = j;
+            } else {
+                out.push(chars[i]);
+                i += 1;
+            }
+        }
+        out
+    };
+    let group_where: Vec<String> = predicates.iter().map(|p| renumber(p)).collect();
+    let group_sql = format!(
+        "SELECT producer_ref, COUNT(*) FROM proposals WHERE {} \
+         AND producer_ref IS NOT NULL GROUP BY producer_ref",
+        group_where.join(" AND ")
+    );
+    let mut cohorts: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    {
+        let mut gstmt = conn.prepare(&group_sql).map_err(GateError::from)?;
+        let bind_refs: Vec<&dyn rusqlite::types::ToSql> = bind
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != 1)
+            .map(|(_, b)| b.as_ref() as &dyn rusqlite::types::ToSql)
+            .collect();
+        let gmap = gstmt
+            .query_map(params_from_iter(bind_refs), |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+            })
+            .map_err(GateError::from)?
+            .filter_map(|r| r.ok());
+        for (r, n) in gmap {
+            cohorts.insert(r, n);
+        }
+    }
+    for row in rows.iter_mut() {
+        if let Some(r) = row.producer_ref.as_deref() {
+            row.shared_pending_count = cohorts
+                .get(r)
+                .copied()
+                .unwrap_or(1)
+                .clamp(0, u32::MAX as i64) as u32;
+        } else {
+            row.shared_pending_count = 1;
+        }
+    }
     Ok(rows)
 }
 

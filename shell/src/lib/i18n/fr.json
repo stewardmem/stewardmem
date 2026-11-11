@@ -531,5 +531,6 @@
   "review.provenance.agent": "Rédigé par le modèle (agent) — contrôlé, en attente de votre décision.",
   "review.provenance.watch": "Rédigé par la veille de recherche.",
   "review.provenance.legacy": "Provenance inconnue — créé avant l'existence des marqueurs de provenance.",
-  "review.provenance.ref": "Référence du producteur : {ref}"
+  "review.provenance.ref": "Référence du producteur : {ref}",
+  "review.provenance.batch": "Lot de {n} dépôts partageant une même référence de producteur — à lire ensemble."
 }

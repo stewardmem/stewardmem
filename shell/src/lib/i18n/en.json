@@ -531,5 +531,6 @@
   "review.provenance.agent": "Written by the model (agent) — gate-checked, awaiting your decision.",
   "review.provenance.watch": "Written by the research watch.",
   "review.provenance.legacy": "Provenance unknown — created before provenance markers existed.",
-  "review.provenance.ref": "Producer reference: {ref}"
+  "review.provenance.ref": "Producer reference: {ref}",
+  "review.provenance.batch": "Batch of {n} filings sharing one producer reference — read them together."
 }

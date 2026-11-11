@@ -220,14 +220,15 @@ fn mf1_control_a_planted_field_reds_the_struct_scan() {
     assert!(!rejects(&clean), "the real struct must pass the same scan");
 }
 
-/// MF-1, the wire law (the behavioral half): serialize-shape honesty — a
-/// caller POSTing a `derived_from` key to `/ingest/proposal` cannot move the
-/// marker (deserialization ignores unknown keys by design; the marker is
-/// stamped from the calling context). Proven end-to-end below through the
-/// REAL route.
-#[tokio::test]
-async fn mf1_the_marker_rides_the_real_wire_end_to_end() {
-    // ── the two-lane token-file server (the agent_write_posture shape) ──
+/// The two-lane token-file server the wire pins drive (the
+/// agent_write_posture harness shape): one operator token, opaque mode.
+struct WireServer {
+    _dir: tempfile::TempDir,
+    state: Arc<brain_server::AppState>,
+    op_token: String,
+}
+
+fn build_wire_server(op_token: &str) -> WireServer {
     brain_server::register_sqlite_vec::register_sqlite_vec();
     let dir = tempfile::TempDir::new().expect("temp dir");
     let db_path = dir.path().join("brain.db");
@@ -241,7 +242,6 @@ async fn mf1_the_marker_rides_the_real_wire_end_to_end() {
     let model: Arc<dyn brain_server::embed::Embedder> = Arc::new(
         brain_server::embed::StaticEmbedder::new(brain_server::config::MODEL_ID).expect("model"),
     );
-    let op_token = "mf13-op-token";
     let tok_file = dir.path().join("tokens");
     std::fs::write(&tok_file, format!("{op_token}\n")).expect("token file");
     let token_store = brain_server::auth::TokenStore::from_file(Some(tok_file));
@@ -280,56 +280,112 @@ async fn mf1_the_marker_rides_the_real_wire_end_to_end() {
         chain_watch: brain_server::alert::ChainWatchState::default(),
         concurrency: &brain_server::concurrency::CONCURRENCY,
     });
-    let app = || brain_server::server::router::app(state.clone());
+    WireServer {
+        _dir: dir,
+        state,
+        op_token: op_token.to_string(),
+    }
+}
+
+async fn wire_post(
+    srv: &WireServer,
+    token: &str,
+    path: &str,
+    body: serde_json::Value,
+) -> (axum::http::StatusCode, serde_json::Value) {
+    let req = axum::http::Request::builder()
+        .method(axum::http::Method::POST)
+        .uri(path)
+        .header("content-type", "application/json")
+        .header("authorization", format!("Bearer {token}"))
+        .body(axum::body::Body::from(body.to_string()))
+        .expect("request");
+    let resp = brain_server::server::router::app(srv.state.clone())
+        .oneshot(req)
+        .await
+        .expect("oneshot");
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
+}
+
+async fn wire_get(
+    srv: &WireServer,
+    token: &str,
+    path: &str,
+) -> (axum::http::StatusCode, serde_json::Value) {
+    let req = axum::http::Request::builder()
+        .method(axum::http::Method::GET)
+        .uri(path)
+        .header("authorization", format!("Bearer {token}"))
+        .body(axum::body::Body::empty())
+        .expect("request");
+    let resp = brain_server::server::router::app(srv.state.clone())
+        .oneshot(req)
+        .await
+        .expect("oneshot");
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
+}
+
+/// Pull the pending rows out of a /proposals list response (array or
+/// envelope — the pin holds across either shape).
+fn list_rows(list: &serde_json::Value) -> Vec<serde_json::Value> {
+    list.get("proposals")
+        .and_then(|v| v.as_array())
+        .or_else(|| list.as_array())
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// MF-1, the wire law (the behavioral half): serialize-shape honesty — a
+/// caller POSTing a `derived_from` key to `/ingest/proposal` cannot move the
+/// marker (deserialization ignores unknown keys by design; the marker is
+/// stamped from the calling context). Proven end-to-end below through the
+/// REAL route.
+#[tokio::test]
+async fn mf1_the_marker_rides_the_real_wire_end_to_end() {
+    let srv = build_wire_server("mf13-op-token");
 
     // THE SPOOF ATTEMPT: the caller claims `derived_from: "watch"` — a value
     // the caller has NO authority to set. The stored marker is PATH-assigned:
     // the operator ingest route stamps `operator`, the caller's claim is
     // ignored (no field consumes it).
-    let body = serde_json::json!({
-        "content": "the memform wire pin's honest body",
-        "kind": "fact",
-        "source": "i-claim-i-am-the-watch",
-        "derived_from": "watch",
-        "producer_ref": "i-claim-a-ref"
-    })
-    .to_string();
-    let req = axum::http::Request::builder()
-        .method(axum::http::Method::POST)
-        .uri("/ingest/proposal")
-        .header("content-type", "application/json")
-        .header("authorization", format!("Bearer {op_token}"))
-        .body(axum::body::Body::from(body))
-        .expect("request");
-    let resp = app().oneshot(req).await.expect("oneshot");
+    let (status, _) = wire_post(
+        &srv,
+        &srv.op_token,
+        "/ingest/proposal",
+        serde_json::json!({
+            "content": "the memform wire pin's honest body",
+            "kind": "fact",
+            "source": "i-claim-i-am-the-watch",
+            "derived_from": "watch",
+            "producer_ref": "i-claim-a-ref"
+        }),
+    )
+    .await;
     assert_eq!(
-        resp.status(),
+        status,
         axum::http::StatusCode::OK,
         "the filing must succeed (the spoofed keys are simply not consumed)"
     );
 
     // THE QUEUE READS THE PATH-ASSIGNED MARKER BESIDE THE CANONICAL CONTENT:
-    let req = axum::http::Request::builder()
-        .method(axum::http::Method::GET)
-        .uri("/proposals?status=pending")
-        .header("authorization", format!("Bearer {op_token}"))
-        .body(axum::body::Body::empty())
-        .expect("request");
-    let resp = app().oneshot(req).await.expect("oneshot");
-    assert_eq!(
-        resp.status(),
-        axum::http::StatusCode::OK,
-        "the list must serve"
-    );
-    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
-        .await
-        .expect("body");
-    let list: serde_json::Value = serde_json::from_slice(&bytes).expect("the list is JSON");
-    let rows = list
-        .get("proposals")
-        .and_then(|v| v.as_array())
-        .or_else(|| list.as_array())
-        .expect("the list shape");
+    let (status, list) = wire_get(&srv, &srv.op_token, "/proposals?status=pending").await;
+    assert_eq!(status, axum::http::StatusCode::OK, "the list must serve");
+    let rows = list_rows(&list);
+    assert!(!rows.is_empty(), "the list shape must expose rows");
     let row = rows
         .iter()
         .find(|r| {
@@ -524,12 +580,13 @@ fn mf1_review_page_renders_the_marker() {
 /// missing non-en key, so the pin checks each file by name.
 #[test]
 fn mf1_marker_keys_land_in_all_five_locales() {
-    const KEYS: [&str; 5] = [
+    const KEYS: [&str; 6] = [
         "review.provenance.operator",
         "review.provenance.agent",
         "review.provenance.watch",
         "review.provenance.legacy",
         "review.provenance.ref",
+        "review.provenance.batch",
     ];
     for loc in ["en", "de", "fr", "es", "nl"] {
         let raw = read_repo(&format!("shell/src/lib/i18n/{loc}.json"));
@@ -653,4 +710,120 @@ fn mf1_the_posture_default_stays_open() {
         config.contains("default stays open"),
         "the back-compat default test must stay (the verify lane the plan names)"
     );
+}
+
+// ── MF-2: the shared-provenance grouping (the GRAD arm) ─────────────────
+
+/// MF-2, the behavioral half: ONE producer files N individually-innocuous
+/// rows — three honest `fact` proposals through the SAME operator ingest
+/// route (they share the path-assigned reference by construction) — and the
+/// queue reports their shared cohort to every one of them. A poisoned batch
+/// can no longer look like unrelated rows.
+#[tokio::test]
+async fn mf2_a_shared_reference_renders_its_batch() {
+    let srv = build_wire_server("mf13-batch-token");
+    for n in 1..=3 {
+        let (status, _) = wire_post(
+            &srv,
+            &srv.op_token,
+            "/ingest/proposal",
+            serde_json::json!({
+                "content": format!("the batch fixture's innocuous row {n}"),
+                "kind": "fact"
+            }),
+        )
+        .await;
+        assert_eq!(status, axum::http::StatusCode::OK, "row {n} must file");
+    }
+    let (status, list) = wire_get(&srv, &srv.op_token, "/proposals?status=pending").await;
+    assert_eq!(status, axum::http::StatusCode::OK, "the list must serve");
+    let rows = list_rows(&list);
+    let batch: Vec<_> = rows
+        .iter()
+        .filter(|r| {
+            r.get("content")
+                .and_then(|c| c.as_str())
+                .is_some_and(|c| c.contains("the batch fixture's innocuous row"))
+        })
+        .collect();
+    assert_eq!(batch.len(), 3, "the three filings must all render");
+    for r in &batch {
+        assert_eq!(
+            r.get("shared_pending_count").and_then(|v| v.as_i64()),
+            Some(3),
+            "each row of the batch reports the SHARED cohort (>= 2 renders the \
+             batch badge in the page)"
+        );
+        assert!(
+            r.get("producer_ref").and_then(|v| v.as_str()).is_some(),
+            "the batch rows carry the shared reference the badge names"
+        );
+    }
+}
+
+/// MF-2, the planted arm: a LONE row — a unique producer/gate reference, no
+/// cohort — reports exactly 1 and so renders NO batch badge (the grouping
+/// discriminates: shared reference ⇒ visible batch, unique reference ⇒
+/// nothing).
+#[tokio::test]
+async fn mf2_a_lone_row_reports_no_batch() {
+    let srv = build_wire_server("mf13-lone-token");
+    // one honest filing through the route, so the queue is not empty —
+    // then one raw row whose reference is unique in the whole queue.
+    let (status, _) = wire_post(
+        &srv,
+        &srv.op_token,
+        "/ingest/proposal",
+        serde_json::json!({ "content": "the lone-row fixture's neighbour", "kind": "fact" }),
+    )
+    .await;
+    assert_eq!(status, axum::http::StatusCode::OK);
+    let conn = srv.state.pool.get().expect("conn");
+    conn.execute(
+        "INSERT INTO proposals(kind, content, status, created_at, novelty, salience, derived_from, producer_ref)
+         VALUES ('fact', 'the lone-row fixture itself', 'pending', 1, 0.5, 0.5, 'agent', 'lone-ref-no-cohort')",
+        [],
+    )
+    .expect("the lone row");
+    let (status, list) = wire_get(&srv, &srv.op_token, "/proposals?status=pending").await;
+    assert_eq!(status, axum::http::StatusCode::OK);
+    let rows = list_rows(&list);
+    let lone = rows
+        .iter()
+        .find(|r| {
+            r.get("content")
+                .and_then(|c| c.as_str())
+                .is_some_and(|c| c.contains("the lone-row fixture itself"))
+        })
+        .expect("the lone row renders");
+    assert_eq!(
+        lone.get("shared_pending_count").and_then(|v| v.as_i64()),
+        Some(1),
+        "a unique reference reads 1 — the page gates the badge at >= 2, so a \
+         lone row never looks like a batch"
+    );
+}
+
+/// MF-2, the structural half: the page renders the batch badge beside the
+/// marker, and the batch key lands in ALL five locales (the fallback trap:
+/// a missing non-en key silently serves English).
+#[test]
+fn mf2_the_render_exposes_the_batch() {
+    let page = read_repo("shell/src/routes/review/+page.svelte");
+    assert!(
+        page.contains("review-row-shared-batch") && page.contains("review.provenance.batch"),
+        "the review page must render the shared-provenance batch badge"
+    );
+    for loc in ["en", "de", "fr", "es", "nl"] {
+        let raw = read_repo(&format!("shell/src/lib/i18n/{loc}.json"));
+        let catalog: serde_json::Value =
+            serde_json::from_str(&raw).expect("the catalog is valid JSON");
+        assert!(
+            catalog
+                .get("review.provenance.batch")
+                .is_some_and(|v| v.is_string()),
+            "locale {loc} is missing the batch key — keys land ×5 or the \
+             fallback silently serves English"
+        );
+    }
 }

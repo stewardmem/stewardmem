@@ -531,5 +531,6 @@
   "review.provenance.agent": "Geschreven door het model (agent) — gecontroleerd, wacht op uw beslissing.",
   "review.provenance.watch": "Geschreven door de research-watch.",
   "review.provenance.legacy": "Herkomst onbekend — ontstaan voordat provenantiemarkers bestonden.",
-  "review.provenance.ref": "Producentreferentie: {ref}"
+  "review.provenance.ref": "Producentreferentie: {ref}",
+  "review.provenance.batch": "Batch van {n} inzendingen met dezelfde producentreferentie — lees ze samen."
 }

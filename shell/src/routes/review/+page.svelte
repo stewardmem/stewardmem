@@ -202,6 +202,11 @@
 					<Badge variant="outline" data-testid="review-row-derived-from">
 						{provenanceLabel[row.derivedFrom]()}
 					</Badge>
+					{#if row.sharedPendingCount >= 2}
+						<Badge variant="outline" data-testid="review-row-shared-batch">
+							{m['review.provenance.batch']({ n: String(row.sharedPendingCount) })}
+						</Badge>
+					{/if}
 					{#if row.producerRef !== null}
 						<span
 							class="text-xs text-muted-foreground"

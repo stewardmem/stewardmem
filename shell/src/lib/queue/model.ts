@@ -90,6 +90,10 @@ export interface QueueRowCore {
 	readonly qaScore: number | null;
 	readonly derivedFrom: DerivedFrom;
 	readonly producerRef: string | null;
+	/** The GRAD arm: the pending cohort this row's producer reference
+	 * shares (self included); a unique reference reads 1, the page renders
+	 * a batch badge at >= 2. Kernel-computed, deterministic, never a gate. */
+	readonly sharedPendingCount: number;
 }
 
 /**
@@ -194,6 +198,7 @@ function parseRow(value: unknown): QueueRow | null {
 	const criticalSecs = optionalInteger(value['critical_secs'], 0, QUEUE_LIMITS.idMax);
 	const verdict = screenVerdict(value['screen_verdict']);
 	const marker = derivedFrom(value['derived_from']);
+	const shared = optionalInteger(value['shared_pending_count'], 1, QUEUE_LIMITS.idMax);
 
 	if (
 		id === null ||
@@ -206,7 +211,8 @@ function parseRow(value: unknown): QueueRow | null {
 		warnSecs === null ||
 		criticalSecs === null ||
 		verdict === null ||
-		marker === null
+		marker === null ||
+		shared === null
 	) {
 		return null;
 	}
@@ -251,6 +257,7 @@ function parseRow(value: unknown): QueueRow | null {
 		qaScore: optionalInteger(value['qa_score'], 0, QUEUE_LIMITS.idMax),
 		derivedFrom: marker,
 		producerRef: optionalString(value['producer_ref'], QUEUE_LIMITS.identifierChars),
+		sharedPendingCount: shared,
 		content,
 		contentDigest: digest
 	};
@@ -298,7 +305,8 @@ export function toQueueMetadata(row: QueueRow): QueueRowMetadata {
 		screenVerdict: row.screenVerdict,
 		qaScore: row.qaScore,
 		derivedFrom: row.derivedFrom,
-		producerRef: row.producerRef
+		producerRef: row.producerRef,
+		sharedPendingCount: row.sharedPendingCount
 	};
 }
 
@@ -343,6 +351,7 @@ export function toDisplayRow(
 		qaScore: row.qaScore,
 		derivedFrom: row.derivedFrom,
 		producerRef: row.producerRef,
+		sharedPendingCount: row.sharedPendingCount,
 		content,
 		contentDigest
 	};
@@ -403,7 +412,8 @@ function readCachedRow(value: unknown): QueueRowMetadata | null {
 		screenVerdict: verdict,
 		qaScore: optionalInteger(value['qaScore'], 0, QUEUE_LIMITS.idMax),
 		derivedFrom: derivedFrom(value['derivedFrom']) ?? 'legacy',
-		producerRef: optionalString(value['producerRef'], QUEUE_LIMITS.identifierChars)
+		producerRef: optionalString(value['producerRef'], QUEUE_LIMITS.identifierChars),
+		sharedPendingCount: optionalInteger(value['sharedPendingCount'], 1, QUEUE_LIMITS.idMax) ?? 1
 	};
 }
 

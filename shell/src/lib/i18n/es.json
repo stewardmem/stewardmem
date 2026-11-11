@@ -531,5 +531,6 @@
   "review.provenance.agent": "Redactado por el modelo (agente): verificado, espera su decisión.",
   "review.provenance.watch": "Redactado por la vigilancia de investigación.",
   "review.provenance.legacy": "Procedencia desconocida: creado antes de que existieran los marcadores.",
-  "review.provenance.ref": "Referencia del productor: {ref}"
+  "review.provenance.ref": "Referencia del productor: {ref}",
+  "review.provenance.batch": "Lote de {n} presentaciones con una misma referencia de productor: léelas en conjunto."
 }

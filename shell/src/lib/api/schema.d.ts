@@ -5045,6 +5045,8 @@ export interface components {
             derived_from?: "operator" | "agent" | "watch" | "legacy";
             /** @description v1.32.34: the kernel-set producer/gate reference (the run, lane, case, or path label the filing context held, e.g. `watch-lane:3`, `gdl-run:42`, `ingest-proposal`); absent where the path carries no stable subject id. */
             producer_ref?: string | null;
+            /** @description The GRAD arm: the size of the pending cohort this row's producer/gate reference shares (self included), computed by one deterministic GROUP BY over the same filtered set the page serves. A unique reference reads 1; the page renders a batch badge at >= 2. Informs the human, never gates. */
+            shared_pending_count?: number;
         };
         /** @description One rendered I-PASS handoff section. */
         IpassSection: {

@@ -531,5 +531,6 @@
   "review.provenance.agent": "Vom Modell (Agent) verfasst — geregelt, wartet auf Ihre Entscheidung.",
   "review.provenance.watch": "Vom Research-Watch verfasst.",
   "review.provenance.legacy": "Herkunft unbekannt — entstand vor den Provenienz-Markern.",
-  "review.provenance.ref": "Produzenten-Referenz: {ref}"
+  "review.provenance.ref": "Produzenten-Referenz: {ref}",
+  "review.provenance.batch": "Stapel von {n} Einreichungen mit gemeinsamer Produzenten-Referenz — gemeinsam lesen."
 }
