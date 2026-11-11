@@ -828,6 +828,93 @@ fn approval_role_rows_are_real_write_rows() {
     }
 }
 
+/// THE CLIENT-AUDITOR JOURNEY ROWS (IMPROVE15, PJ-4's matrix witness): the
+/// per-client principal — the §3(c) thin-portal posture, the `client-auditor`
+/// class with ONE domain and read only — reads its OWN client's journey
+/// through the journey's OWN authz law, and its WRITE attempts 403 on the
+/// kernel's gates. The battery (`tests/journey_curation_pins.rs`) runs the
+/// same postures on its own fixture; this witness pins them IN the matrix
+/// where the class table lives.
+#[tokio::test]
+async fn client_auditor_journey_rows() {
+    let srv = build_server();
+    let admin_tok = mint(
+        &srv,
+        "ca-admin",
+        "ca-admin",
+        "global",
+        &["admin:*/*"],
+        &["admin"],
+    );
+    // register the fixture client (the register POST is Admin-gated):
+    let st = send(
+        &srv,
+        Some(&admin_tok),
+        "/clients",
+        "POST",
+        r#"{"name":"acme-us","domain":"acme","jurisdiction":"de"}"#,
+    )
+    .await;
+    assert!(
+        st != StatusCode::UNAUTHORIZED && st != StatusCode::FORBIDDEN,
+        "seed: register acme-us must pass the Admin gate, got {st}"
+    );
+    // THE CLIENT'S OWN PRINCIPAL: one domain, read-only, the client-auditor
+    // class (the roster door's C-e mint carries the same shape).
+    let own = mint(
+        &srv,
+        "ca-own",
+        "acme-portal",
+        "global",
+        &["read:*/acme"],
+        &["client-auditor"],
+    );
+    // the OWN read passes the journey's law (the fixture's client is empty —
+    // the handler's 200 with zero cases IS the pass cell):
+    let st = send(&srv, Some(&own), "/clients/acme-us/journey", "GET", "").await;
+    assert_eq!(
+        st,
+        StatusCode::OK,
+        "the client's own principal reads their own journey"
+    );
+    // the cross-client read is the existence-blind 404 (not a 403 — the
+    // refusal leaks nothing about the other client):
+    let st = send(&srv, Some(&own), "/clients/other-co/journey", "GET", "").await;
+    assert_eq!(
+        st,
+        StatusCode::NOT_FOUND,
+        "the cross-client read answers the existence-blind 404"
+    );
+    // THE WRITE ARMS: the read-only class 403s on the kernel's gates —
+    // witnessed, per PJ-4, in the matrix itself.
+    // (/ingest/memory's denial is the legacy soft-200 — the SOFT_DENY_LEGACY
+    // shape; the witness uses the HARD-403 client surfaces instead.)
+    for (path, body, label) in [
+        (
+            "/clients/acme-us/hold",
+            r#"{"ids":[1],"reason":"matrix"}"#,
+            "a legal-hold write",
+        ),
+        (
+            "/clients/acme-us/dsar",
+            r#"{"subject":"m","action":"export","dry_run":true}"#,
+            "a DSAR write",
+        ),
+        (
+            "/clients/acme-us/end",
+            r#"{"dataset":"matrix"}"#,
+            "a termination write",
+        ),
+    ] {
+        let st = send(&srv, Some(&own), path, "POST", body).await;
+        assert_eq!(
+            st,
+            StatusCode::FORBIDDEN,
+            "the client-auditor-class principal's {label} must 403"
+        );
+    }
+}
+
 #[tokio::test]
 async fn authz_matrix_rows_x_classes_through_composed_app() {
     let srv = build_server();
