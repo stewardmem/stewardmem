@@ -101,6 +101,12 @@ pub(crate) struct InventoryCounts {
     pub(crate) oversight: i64,
     pub(crate) dsar: i64,
     pub(crate) incidents: i64,
+    /// The promoted-content health findings: knowledge rows whose
+    /// `scholar_meta` carries the machine retraction flag with no HITL lift,
+    /// and kcs-tracked rows whose freshness review came due. Absent-honest
+    /// on an empty cohort (0 = nothing to find, never a fake count).
+    pub(crate) promoted_retracted: i64,
+    pub(crate) promoted_freshness_overdue: i64,
     pub(crate) transfers: i64,
     pub(crate) ropa: i64,
 }
@@ -121,6 +127,33 @@ pub(crate) fn evidence_counts(conn: &Connection) -> InventoryCounts {
     counts.incidents = counts.incidents.max(n("SELECT COUNT(*) FROM breaches"));
     counts.transfers = counts.transfers.max(n("SELECT COUNT(*) FROM transfers"));
     counts.ropa = counts.ropa.max(n("SELECT COUNT(*) FROM ropa_registry"));
+    // The promoted-content health roll-up: the queue promotes once and the
+    // world keeps moving — a promoted row whose source was since retracted,
+    // or whose freshness review came due, is a DETERMINISTIC finding on this
+    // inventory. The retraction read goes through the SAME machine floor the
+    // demotion path uses (`scholar::scholar_meta_floor` — one definition;
+    // the HITL `retraction_override` lift counts as the resolution, so a
+    // lifted row is not a finding). No ML, no model: metadata arithmetic.
+    let now = chrono::Utc::now().timestamp();
+    {
+        let mut stmt = conn
+            .prepare("SELECT scholar_meta, freshness_review_due FROM knowledge")
+            .expect("knowledge scan prepares");
+        let rows = stmt
+            .query_map([], |r| {
+                Ok((r.get::<_, Option<String>>(0)?, r.get::<_, Option<i64>>(1)?))
+            })
+            .expect("knowledge scan queries");
+        for row in rows.flatten() {
+            let (retracted, lifted) = crate::scholar::scholar_meta_floor(row.0.as_deref());
+            if retracted && !lifted {
+                counts.promoted_retracted += 1;
+            }
+            if row.1.is_some_and(|due| due < now) {
+                counts.promoted_freshness_overdue += 1;
+            }
+        }
+    }
     counts
 }
 

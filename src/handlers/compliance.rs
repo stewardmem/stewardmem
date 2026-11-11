@@ -268,6 +268,10 @@ pub async fn inventory(
             counts.incidents = counts.incidents.max(c.incidents);
             counts.transfers = counts.transfers.max(c.transfers);
             counts.ropa = counts.ropa.max(c.ropa);
+            counts.promoted_retracted = counts.promoted_retracted.max(c.promoted_retracted);
+            counts.promoted_freshness_overdue = counts
+                .promoted_freshness_overdue
+                .max(c.promoted_freshness_overdue);
         }
         vec![
             art(
@@ -297,6 +301,23 @@ pub async fn inventory(
             ),
             art("gdpr_ropa", counts.ropa > 0, counts.ropa, None),
             art("retention_window_months", true, 12, Some(now)),
+            // The promoted-content health findings: `present` = the finding
+            // EXISTS (a non-zero cohort) — a present finding holds the
+            // inventory's `complete` false until it is resolved (the HITL
+            // retraction lift, or the freshness review). Absent-honest: an
+            // empty cohort reads present=false and never fakes a count.
+            art(
+                "promoted_retracted_finding",
+                counts.promoted_retracted > 0,
+                counts.promoted_retracted,
+                None,
+            ),
+            art(
+                "promoted_freshness_overdue_finding",
+                counts.promoted_freshness_overdue > 0,
+                counts.promoted_freshness_overdue,
+                None,
+            ),
         ]
     })
     .await
@@ -317,6 +338,8 @@ struct InventoryCounts {
     incidents: i64,
     transfers: i64,
     ropa: i64,
+    promoted_retracted: i64,
+    promoted_freshness_overdue: i64,
 }
 
 /// strict SHA-256 hex-digest predicate (pure, pinned).

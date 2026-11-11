@@ -827,3 +827,189 @@ fn mf2_the_render_exposes_the_batch() {
         );
     }
 }
+
+// ── MF-3: the promoted-content health roll-up ────────────────────────────
+//
+// The inventory is the compliance-pack surface — the routes do not exist on
+// the wire without the feature, so the three MF-3 arms are feature-gated and
+// run in the lane that carries it (the verify-after lane runs
+// `cargo test --features bench,migrate,compliance-pack --test memform_pins`
+// beside the plain battery; the finding LOGIC itself — the counts in
+// service::compliance::evidence_counts — compiles and is exercised in every
+// lane through the shared counts fn).
+
+/// Pull an item out of the compliance inventory's items array by artifact name.
+fn inventory_item(inv: &serde_json::Value, name: &str) -> serde_json::Value {
+    inv.get("items")
+        .and_then(|v| v.as_array())
+        .expect("the inventory carries an items array")
+        .iter()
+        .find(|i| i.get("artifact").and_then(|a| a.as_str()) == Some(name))
+        .cloned()
+        .unwrap_or_else(|| panic!("the inventory must carry the {name} row"))
+}
+
+/// MF-3, the retraction arm — the fixture runs the REAL adapter path, no
+/// synthetic backdoor: the real Crossref works payload (the Wakefield
+/// retraction, the exact record whose `updated-by` carries BOTH the 2004
+/// `correction` and the 2010 `retraction` — the trap case, live-verified
+/// 2026-11-08) → the real parser → the real deterministic renderer → the
+/// REAL markdown door route → the knowledge row's scholar_meta carries the
+/// machine flag the floor reads → the inventory reports the finding.
+#[cfg(feature = "compliance-pack")]
+#[tokio::test]
+async fn mf3_a_retracted_and_promoted_row_is_a_finding() {
+    let srv = build_wire_server("mf13-retract-token");
+    // THE REAL PARSER over the REAL wire payload (the fixture file the
+    // scholar suite itself drives):
+    let raw = include_str!("fixtures/scholar/cr-wakefield.json");
+    let record = brain_server::scholar::parse_crossref_works(raw, "2026-11-11T00:00:00Z")
+        .expect("the real crossref payload parses");
+    assert!(
+        record.retraction.is_some(),
+        "the payload's exact-vocabulary retraction must stand (the trap: the \\
+         correction entry rides the same record)"
+    );
+    // THE REAL RENDERER, then the REAL DOOR ROUTE:
+    let markdown = brain_server::scholar::render_record_markdown(&record);
+    assert!(
+        markdown.contains("retracted:"),
+        "the rendered frontmatter carries the retraction the door persists"
+    );
+    let (status, body) = wire_post(
+        &srv,
+        &srv.op_token,
+        "/ingest/markdown",
+        serde_json::json!({ "content": markdown }),
+    )
+    .await;
+    assert_eq!(
+        status,
+        axum::http::StatusCode::OK,
+        "the door must accept the rendered record: {body}"
+    );
+
+    // THE INVENTORY REPORTS THE FINDING, DETERMINISTICALLY:
+    let (status, inv) = wire_get(&srv, &srv.op_token, "/compliance/inventory").await;
+    assert_eq!(
+        status,
+        axum::http::StatusCode::OK,
+        "the inventory must serve"
+    );
+    let item = inventory_item(&inv, "promoted_retracted_finding");
+    assert_eq!(
+        item.get("count").and_then(|c| c.as_i64()),
+        Some(1),
+        "the promoted-and-retracted row is THE finding: {item}"
+    );
+    assert_eq!(
+        item.get("present").and_then(|p| p.as_bool()),
+        Some(true),
+        "the finding is present — it holds the inventory's complete false \\
+         until the HITL lift resolves it"
+    );
+    assert_eq!(
+        inv.get("complete").and_then(|c| c.as_bool()),
+        Some(false),
+        "an inventory carrying an unresolved finding is not complete"
+    );
+}
+
+/// MF-3, the freshness arm — every REAL surface the HTTP boundary exposes,
+/// with one documented seed: the queue, the kcs worklist, the REAL kcs
+/// approve route (which sets the freshness review due), and the REAL
+/// inventory read. The SEED is the draft-state knowledge row the kcs
+/// capture workflow writes — the capture fn is workflow-internal (no HTTP
+/// route files a `kcs_new_article` proposal; the strict kind list refuses
+/// it at the wire), so the fixture plants the row the capture would have
+/// produced and drives everything downstream through the real routes. The
+/// AGING is the other simulated step (the due column moves into the past
+/// exactly as a clock would — the finding's read is untouched).
+#[tokio::test]
+async fn mf3_the_freshness_overdue_is_a_finding() {
+    let srv = build_wire_server("mf13-fresh-token");
+    // THE SEED (the capture workflow's stand-in — see the doc above):
+    {
+        let conn = srv.state.pool.get().expect("conn");
+        conn.execute(
+            "INSERT INTO knowledge(content, title, content_hash, domain, kcs_state, created_at)
+             VALUES (?1, ?2, ?3, 'global', 'draft', 1)",
+            rusqlite::params![
+                "the freshness fixture article body",
+                "the freshness fixture article",
+                "mf13-fresh-hash"
+            ],
+        )
+        .expect("the draft seed");
+    }
+    // the REAL kcs approve route sets the freshness review:
+    let (status, articles) = wire_get(&srv, &srv.op_token, "/kcs/articles?state=draft").await;
+    assert_eq!(status, axum::http::StatusCode::OK, "{articles}");
+    let article_id = articles
+        .get("articles")
+        .and_then(|v| v.as_array())
+        .and_then(|a| a.first())
+        .and_then(|a| a.get("id"))
+        .and_then(|v| v.as_i64())
+        .unwrap_or_else(|| panic!("the draft article rides the real worklist: {articles}"));
+    let (status, approved) = wire_post(
+        &srv,
+        &srv.op_token,
+        &format!("/kcs/articles/{article_id}/approve"),
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(
+        status,
+        axum::http::StatusCode::OK,
+        "the real kcs approve must pass: {approved}"
+    );
+
+    // AGING (the honest simulation): the review window elapses — the fixture
+    // moves the kernel-owned due column into the past exactly as a clock
+    // would. The finding's read is untouched.
+    {
+        let conn = srv.state.pool.get().expect("conn");
+        conn.execute(
+            "UPDATE knowledge SET freshness_review_due = 1 WHERE id = ?1",
+            rusqlite::params![article_id],
+        )
+        .expect("the aging write");
+    }
+    let (status, inv) = wire_get(&srv, &srv.op_token, "/compliance/inventory").await;
+    assert_eq!(status, axum::http::StatusCode::OK);
+    let item = inventory_item(&inv, "promoted_freshness_overdue_finding");
+    assert!(
+        item.get("count")
+            .and_then(|c| c.as_i64())
+            .is_some_and(|c| c >= 1),
+        "the overdue review is the finding: {item}"
+    );
+}
+
+/// MF-3, the planted arm: an EMPTY promoted cohort reads absent-honest —
+/// both finding rows present=false, count=0, never a faked count (and the
+/// other rows' own absence is the inventory's honest empty state).
+#[cfg(feature = "compliance-pack")]
+#[tokio::test]
+async fn mf3_an_empty_cohort_reads_absent() {
+    let srv = build_wire_server("mf13-empty-token");
+    let (status, inv) = wire_get(&srv, &srv.op_token, "/compliance/inventory").await;
+    assert_eq!(status, axum::http::StatusCode::OK);
+    for name in [
+        "promoted_retracted_finding",
+        "promoted_freshness_overdue_finding",
+    ] {
+        let item = inventory_item(&inv, name);
+        assert_eq!(
+            item.get("present").and_then(|p| p.as_bool()),
+            Some(false),
+            "{name} must read absent on an empty cohort"
+        );
+        assert_eq!(
+            item.get("count").and_then(|c| c.as_i64()),
+            Some(0),
+            "{name} must read 0 — absent-honest, never a fake count"
+        );
+    }
+}
