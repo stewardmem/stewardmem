@@ -726,6 +726,225 @@ mod research_profile_tests {
     }
 }
 
+// ── the doc-corrector profile (IMPROVE16 S1) — the GDL all-or-nothing pattern ──
+
+/// The operator-configured document-correction profile. `None` means the
+/// operator has not configured the lane: every `correct: true` request
+/// refuses NAMED (`corrector_unconfigured`) and the DEFAULT document
+/// pipeline is byte-identical to the pre-lane shape (CA-1). A PARTIAL
+/// profile is a named configuration error (the GDL law) — fatal at boot via
+/// [`validate_doc_corrector_config`]. Fixed error strings; no configured
+/// value or path ever rides one. The request never selects any of these
+/// values — they are server-owned.
+pub(crate) struct DocCorrectorProfile {
+    pub(crate) base_url: String,
+    pub(crate) model: String,
+    pub(crate) secret_file: std::path::PathBuf,
+    pub(crate) secret_root: std::path::PathBuf,
+}
+
+impl DocCorrectorProfile {
+    /// Resolve the profile without copying paths, credentials, or other
+    /// configuration values into an error string (the GDL law). Detailed
+    /// diagnostics belong at the operator's config boundary; the route
+    /// receives a stable code.
+    pub(crate) fn from_env() -> Result<Option<Self>, String> {
+        let decode = |value: Option<std::ffi::OsString>| -> Result<Option<String>, String> {
+            value
+                .map(|value| {
+                    value
+                        .into_string()
+                        .map_err(|_| "document corrector profile is invalid".to_string())
+                })
+                .transpose()
+        };
+        let values = [
+            decode(std::env::var_os("BRAIN_DOC_CORRECTOR_BASE_URL"))?,
+            decode(std::env::var_os("BRAIN_DOC_CORRECTOR_MODEL"))?,
+            decode(std::env::var_os("BRAIN_DOC_CORRECTOR_SECRET_FILE"))?,
+            decode(std::env::var_os("BRAIN_DOC_CORRECTOR_SECRET_ROOT"))?,
+        ];
+        let present = values.iter().filter(|value| value.is_some()).count();
+        if present == 0 {
+            return Ok(None);
+        }
+        if present != values.len() {
+            return Err("document corrector profile is incomplete".to_string());
+        }
+        let [
+            Some(base_url_value),
+            Some(model_value),
+            Some(secret_file_value),
+            Some(secret_root_value),
+        ] = values
+        else {
+            return Err("document corrector profile is incomplete".to_string());
+        };
+        if base_url_value.chars().any(char::is_control)
+            || model_value.chars().any(char::is_control)
+            || secret_file_value.chars().any(char::is_control)
+            || secret_root_value.chars().any(char::is_control)
+        {
+            return Err("document corrector profile is invalid".to_string());
+        }
+        let base_url = base_url_value.trim();
+        let model = model_value.trim();
+        let secret_file_value = secret_file_value.trim();
+        let secret_root_value = secret_root_value.trim();
+        if base_url.is_empty()
+            || base_url.len() > 2048
+            || model.is_empty()
+            || model.len() > 256
+            || secret_file_value.is_empty()
+            || secret_root_value.is_empty()
+        {
+            return Err("document corrector profile is invalid".to_string());
+        }
+        // URL shape: bounded, parseable, with a host. The scheme law is the
+        // ResearchProviderProfile's: https anywhere; http ONLY so the
+        // lane's LOCAL-ENDPOINT posture survives (an ollama/MLX/LM Studio
+        // endpoint on the operator's own machine — the no-data-leaves law's
+        // preferred shape; a hosted endpoint is the operator's explicit
+        // choice, recorded in the audit row per call).
+        let parsed = reqwest::Url::parse(base_url)
+            .map_err(|_| "document corrector profile is invalid".to_string())?;
+        if !matches!(parsed.scheme(), "https" | "http") || parsed.host_str().is_none() {
+            return Err("document corrector profile is invalid".to_string());
+        }
+        let secret_root = std::path::PathBuf::from(secret_root_value);
+        if !secret_root.is_absolute() {
+            return Err("document corrector secret root must be absolute".to_string());
+        }
+        let secret_file = std::path::PathBuf::from(secret_file_value);
+        Ok(Some(Self {
+            base_url: base_url.to_string(),
+            model: model.to_string(),
+            secret_file,
+            secret_root,
+        }))
+    }
+}
+
+/// The boot-time fail-closed validator (the GDL/Scholar posture): a partial
+/// or invalid doc-corrector profile is FATAL, before any socket or DB work.
+/// Unconfigured is fine — the lane is OFF.
+pub(crate) fn validate_doc_corrector_config() -> Result<(), String> {
+    DocCorrectorProfile::from_env().map(|_| ())
+}
+
+#[cfg(test)]
+mod doc_corrector_profile_tests {
+    // The all-or-nothing law, pinned in-crate (the surface is pub(crate) —
+    // the external pins file cannot see it; the law travels with the type).
+    use super::*;
+
+    /// The env-discipline lock: both tests below mutate the same four
+    /// variables and run in PARALLEL (cargo's default) — without the lock
+    /// the all-or-nothing test sees the other test's partial sets. The
+    /// `with_envs` helper's discipline, local to this module.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn clear() {
+        for name in [
+            "BRAIN_DOC_CORRECTOR_BASE_URL",
+            "BRAIN_DOC_CORRECTOR_MODEL",
+            "BRAIN_DOC_CORRECTOR_SECRET_FILE",
+            "BRAIN_DOC_CORRECTOR_SECRET_ROOT",
+        ] {
+            // SAFETY: the config test module's env discipline (set + restore
+            // within the test; no other thread reads these concurrently).
+            unsafe {
+                std::env::remove_var(name);
+            }
+        }
+    }
+
+    #[test]
+    fn doc_corrector_profile_is_all_or_nothing() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clear();
+        // None = unconfigured, the OFF posture (CA-1).
+        assert!(matches!(DocCorrectorProfile::from_env(), Ok(None)));
+        let full = [
+            ("BRAIN_DOC_CORRECTOR_BASE_URL", "http://127.0.0.1:11434/v1"),
+            ("BRAIN_DOC_CORRECTOR_MODEL", "qwen2.5:7b"),
+            ("BRAIN_DOC_CORRECTOR_SECRET_FILE", "corrector.key"),
+            ("BRAIN_DOC_CORRECTOR_SECRET_ROOT", "/tmp/doc-corrector-root"),
+        ];
+        // Any PARTIAL set = the named fatal (every strict subset refuses).
+        for skip in 0..4 {
+            for (i, (name, value)) in full.iter().enumerate() {
+                if i == skip {
+                    continue;
+                }
+                // SAFETY: as above.
+                unsafe {
+                    std::env::set_var(name, value);
+                }
+            }
+            let err = DocCorrectorProfile::from_env()
+                .err()
+                .expect("a three-of-four profile must refuse");
+            assert!(
+                err.contains("incomplete") || err.contains("invalid"),
+                "the named refusal: {err}"
+            );
+            clear();
+        }
+        // The complete set resolves.
+        for (name, value) in full.iter() {
+            // SAFETY: as above.
+            unsafe {
+                std::env::set_var(name, value);
+            }
+        }
+        let profile = DocCorrectorProfile::from_env()
+            .expect("the complete profile is valid")
+            .expect("the complete profile is Some");
+        assert_eq!(profile.model, "qwen2.5:7b");
+        assert_eq!(
+            profile.secret_root,
+            std::path::PathBuf::from("/tmp/doc-corrector-root")
+        );
+        clear();
+    }
+
+    #[test]
+    fn doc_corrector_profile_refuses_a_relative_secret_root_and_bad_scheme() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clear();
+        let mut full = [
+            ("BRAIN_DOC_CORRECTOR_BASE_URL", "http://127.0.0.1:11434/v1"),
+            ("BRAIN_DOC_CORRECTOR_MODEL", "qwen2.5:7b"),
+            ("BRAIN_DOC_CORRECTOR_SECRET_FILE", "corrector.key"),
+            ("BRAIN_DOC_CORRECTOR_SECRET_ROOT", "relative-root"),
+        ];
+        for (name, value) in full.iter() {
+            // SAFETY: as above.
+            unsafe {
+                std::env::set_var(name, value);
+            }
+        }
+        let err = DocCorrectorProfile::from_env()
+            .err()
+            .expect("a relative secret root must refuse");
+        assert!(err.contains("absolute"), "the named refusal: {err}");
+        // A non-http(s) scheme is not an endpoint shape the lane admits.
+        full[0].1 = "ftp://127.0.0.1:11434/v1";
+        for (name, value) in full.iter() {
+            // SAFETY: as above.
+            unsafe {
+                std::env::set_var(name, value);
+            }
+        }
+        let err = DocCorrectorProfile::from_env()
+            .err()
+            .expect("a non-http(s) scheme must refuse");
+        assert!(err.contains("invalid"), "the named refusal: {err}");
+        clear();
+    }
+}
+
 /// The GDL provider transport kind (`BRAIN_GDL_PROVIDER_KIND`) — the pilot
 /// round's D-P1 decision. `http` (the default) is today's OpenAI-compatible
 /// seam, byte-unchanged; `afm-stdio` routes the loop's propose calls through

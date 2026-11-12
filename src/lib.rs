@@ -172,6 +172,12 @@ pub mod consolidate;
 /// (model selection is not a function of content) held before this module and
 /// is now machine-checked. Transport-free, `AppState`-free, std-only.
 pub mod decision_class;
+/// The doc-correction provider lane (IMPROVE16 S1): the operator-configured
+/// LLM corrector client — the GDL all-or-nothing profile, the secret-file
+/// law, the local-endpoint posture, the bounded call, the pinned prompt,
+/// and the audit row per call. The GOVERNANCE (two artifacts, the cage, the
+/// stamps) lives at the route seam; this module is the provider posture.
+pub mod doc_corrector;
 pub mod domain_registry;
 pub mod domain_router;
 pub mod gate;

@@ -185,6 +185,14 @@ pub enum AuditKind {
     /// carries the closed-vocabulary accounting line
     /// (seen/deduped/filed/failed/skipped_fresh) — no feed content.
     Watch,
+    /// the doc-correction lane's per-call accounting (IMPROVE16 S1): one
+    /// row per corrector provider call — the model asked and served, bytes
+    /// in/out, duration, attempts, and the request/response sha256s (the
+    /// reproducible-by-record seam). A dedicated kind (the
+    /// `Forget`/`Procedure` precedent) so kind-filtered consumers can find
+    /// correction calls without detail-hash mining; the chain stores
+    /// hashes, so no URL and no secret ever ride a row.
+    DocCorrection,
 }
 
 impl AuditKind {
@@ -219,6 +227,7 @@ impl AuditKind {
             // loop's health is derivable from the chain, never from a
             // best-effort write.
             AuditKind::Watch => "watch",
+            AuditKind::DocCorrection => "doc-correction",
         }
     }
 }
