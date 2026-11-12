@@ -74,6 +74,7 @@ pub mod dsar;
 pub mod forget;
 pub mod gate;
 pub mod ingest;
+pub mod journey;
 pub mod lifecycle;
 pub mod procedure;
 pub mod purge;

@@ -1058,6 +1058,27 @@ fn route_registrations_live_only_under_router() {
             mcp_sites = Some(count_route_sites(&src));
             continue;
         }
+        // THE PORTAL'S FENCE (IMPROVE15): `bin/portal.rs` is a SEPARATE
+        // PROCESS — the thin customer portal, whose HTTP surface is the
+        // PORTAL's, not the kernel's (the kernel's route tables + the
+        // openapi coverage + the authz scans govern THIS crate's router;
+        // the portal's routes live in its own binary by design, per the
+        // auth decision §3(c): customer auth lives in the portal). The
+        // fence pins the file at EXACTLY its named route count so the
+        // carve-out cannot grow silently: a new portal surface is a dated
+        // act that moves this pin, which is the moment its author states
+        // the new surface.
+        if rel_str == "bin/portal.rs" {
+            let n = count_route_sites(&src);
+            assert_eq!(
+                n, 6,
+                "gate: src/bin/portal.rs must keep EXACTLY 6 route registrations \
+                 (/health, /login get+post share one site, /logout, /, /appeal, \
+                 /requests) — a seventh means the portal's surface grew; move \
+                 this pin as the dated act that states the new surface"
+            );
+            continue;
+        }
         let n = count_route_sites(&src);
         if n > 0 {
             violations.push(format!(

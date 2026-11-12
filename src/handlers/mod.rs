@@ -504,6 +504,15 @@ impl IntoResponse for HandlerError {
     }
 }
 
+/// The journey fetch core's transport map (IMPROVE15): a SQL failure is
+/// internal at the transport — the core stays transport-blind, this impl is
+/// the ONLY place the two types meet.
+impl From<crate::service::journey::JourneyError> for HandlerError {
+    fn from(e: crate::service::journey::JourneyError) -> Self {
+        HandlerError::internal(e.0)
+    }
+}
+
 /// The handler-boundary map for the shared knowledge-purge core
 /// (`crate::service::purge`, the Quarry move): storage failures render the
 /// internal-error body with the rusqlite message VERBATIM; the in-function

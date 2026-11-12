@@ -34,7 +34,7 @@ use std::sync::Arc;
 
 use brain_server::portal::{
     CaseRow, EventRow, FiledPage, JourneyPage, LoginPage, MetadataCache, OfflinePage, PortalConfig,
-    RefusedPage, SessionStore, parse_journey, to_metadata,
+    RefusedPage, SessionStore, now_secs, parse_journey, to_metadata,
 };
 
 struct PortalState {
@@ -42,13 +42,6 @@ struct PortalState {
     http: reqwest::Client,
     sessions: SessionStore,
     cache: MetadataCache,
-}
-
-fn now_secs() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
 }
 
 #[tokio::main]
@@ -192,10 +185,10 @@ async fn kernel_post(
 }
 
 fn html(page: impl askama::Template) -> Response {
-    match page.render() {
-        Ok(body) => Html(body).into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "template").into_response(),
-    }
+    page.render().map_or(
+        (StatusCode::INTERNAL_SERVER_ERROR, "template").into_response(),
+        |body| Html(body).into_response(),
+    )
 }
 
 // ── the journey (the offline law's home) ──────────────────────────────────
@@ -207,7 +200,7 @@ async fn journey(State(st): State<Arc<PortalState>>, headers: axum::http::Header
     let path = format!("/clients/{}/journey", st.cfg.client);
     match kernel_get(&st, &path).await {
         Ok(resp) if resp.status() == StatusCode::OK => {
-            let value: serde_json::Value = match resp.json().await {
+            let value = match resp.json::<serde_json::Value>().await {
                 Ok(v) => v,
                 Err(_) => {
                     return html(RefusedPage {
@@ -220,16 +213,18 @@ async fn journey(State(st): State<Arc<PortalState>>, headers: axum::http::Header
             if let Some(meta) = to_metadata(&value, now_secs()) {
                 st.cache.store(meta);
             }
-            match parse_journey(&value) {
-                Some((client, cases, domain_events)) => html(JourneyPage {
-                    client,
-                    domain_events,
-                    cases,
-                }),
-                None => html(RefusedPage {
+            parse_journey(&value).map_or(
+                html(RefusedPage {
                     detail: "The service answered, but the answer could not be proven to be your journey.".to_string(),
                 }),
-            }
+                |(client, cases, domain_events)| {
+                    html(JourneyPage {
+                        client,
+                        domain_events,
+                        cases,
+                    })
+                },
+            )
         }
         Ok(resp) => {
             // A refusal is NAMED (the kernel's own law answers everyone but
@@ -254,20 +249,20 @@ async fn journey(State(st): State<Arc<PortalState>>, headers: axum::http::Header
             // THE OFFLINE STATE: the named render, METADATA ONLY. The cache
             // holds counts and an age; there is nothing here that could
             // pretend to be your journey.
-            match st.cache.take() {
-                Some(meta) => html(OfflinePage {
-                    age: now_secs() - meta.cached_at,
-                    case_count: meta.cases.len(),
-                    event_count: meta.cases.iter().map(|(_, n)| *n).sum(),
-                    domain_count: meta.domain_event_count,
-                }),
-                None => html(OfflinePage {
+            html(st.cache.take().map_or(
+                OfflinePage {
                     age: -1,
                     case_count: 0,
                     event_count: 0,
                     domain_count: 0,
-                }),
-            }
+                },
+                |meta| OfflinePage {
+                    age: now_secs() - meta.cached_at,
+                    case_count: meta.cases.len(),
+                    event_count: meta.cases.iter().map(|(_, n)| *n).sum(),
+                    domain_count: meta.domain_event_count,
+                },
+            ))
         }
     }
 }

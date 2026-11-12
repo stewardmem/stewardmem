@@ -215,10 +215,9 @@ pub fn parse_customer_request_source(source: &str) -> Option<&str> {
 
 pub fn parse_appeal_source(source: &str) -> Option<(String, Option<i64>)> {
     let rest = source.strip_prefix("appeal:")?;
-    let (digest, case) = match rest.split_once("@case:") {
-        Some((d, c)) => (d, c.parse::<i64>().ok()),
-        None => (rest, None),
-    };
+    let (digest, case) = rest
+        .split_once("@case:")
+        .map_or((rest, None), |(d, c)| (d, c.parse::<i64>().ok()));
     let digest = digest.trim().to_ascii_lowercase();
     if digest.len() != 64 || !digest.chars().all(|c| c.is_ascii_hexdigit()) {
         return None;
@@ -542,23 +541,12 @@ pub(crate) fn create_proposal_core(
         };
         // the digest must answer to an APPROVED proposal in THIS domain (the
         // row-domain is the appeal's residency — the same fence the decision
-        // bound itself to). A streaming scan with early exit: one pass over
-        // the domain's decided rows, a rare customer act.
-        let mut stmt = conn
-            .prepare("SELECT content FROM proposals WHERE status = 'approved' AND domain = ?1")
-            .map_err(|e| HandlerError::internal(e.to_string()))?;
-        let it = stmt
-            .query_map(rusqlite::params![domain], |r| r.get::<_, String>(0))
-            .map_err(|e| HandlerError::internal(e.to_string()))?;
-        let mut answered = false;
-        for row in it {
-            let row_content: String = row.map_err(|e| HandlerError::internal(e.to_string()))?;
-            if review_digest(&row_content) == digest {
-                answered = true;
-                break;
-            }
-        }
-        if !answered {
+        // bound itself to). The scan lives in the SERVICE core
+        // (`service::journey::appeal_target_answers`): handlers are protocol
+        // adapters, all SQL lives in a core (the no-SQL-in-handlers gate).
+        if !crate::service::journey::appeal_target_answers(conn, &domain, &digest)
+            .map_err(|e| HandlerError::internal(e.0))?
+        {
             return Err(HandlerError {
                 status: axum::http::StatusCode::NOT_FOUND,
                 inner: crate::handlers::ApiError::new(
@@ -1145,13 +1133,12 @@ pub async fn approve_proposal(
         // a commitment the chain can prove was kept or missed.
         if kind == PROP_KIND_APPEAL || kind == PROP_KIND_CUSTOMER_REQUEST {
             let now_ts = chrono::Utc::now().timestamp();
-            let appeal_created_at: i64 = tx
-                .query_row(
-                    "SELECT created_at FROM proposals WHERE id = ?1",
-                    rusqlite::params![id],
-                    |r| r.get(0),
-                )
-                .map_err(|e| HandlerError::internal(e.to_string()))?;
+            // the core owns the SQL (the no-SQL-in-handlers gate): the
+            // created_at read rides the review core's own fn.
+            let appeal_created_at = crate::service::review::pending_created_at(&tx, id)
+                .ok_or_else(|| {
+                    HandlerError::internal("the appeal row vanished mid-decision".to_string())
+                })?;
             let moved = crate::service::review::cas_proposal_approved(
                 &tx,
                 id,
