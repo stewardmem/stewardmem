@@ -1301,7 +1301,8 @@ pub fn fetch_source_knowledge_rows(
         let placeholders = vec!["?"; ids.len()].join(",");
         let sql = format!("SELECT * FROM knowledge WHERE id IN ({placeholders}) ORDER BY id");
         let mut stmt = c.prepare(&sql)?;
-        let names: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
+        // rusqlite 0.41: column_names() returns an Iterator directly.
+        let names: Vec<String> = stmt.column_names().map(|s| s.to_string()).collect();
         let rows = stmt.query_map(rusqlite::params_from_iter(ids.iter()), |r| {
             let mut m = HashMap::new();
             for (i, name) in names.iter().enumerate() {

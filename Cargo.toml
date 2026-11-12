@@ -159,10 +159,22 @@ fastembed = { version = "=7.1.0", optional = true, default-features = false }
 # FFI symbol unchanged).
 # 2026-10-04: rusqlite 0.40.1 → 0.40.2 (patch; r2d2_sqlite 0.35.0's `^0.40`
 # requirement is satisfied unchanged, so the pool stack did not move).
-rusqlite = { version = "0.40.2", features = ["bundled"] }
+# 2026-11-12 SECURITY ACT (IMPROVE16 S0): RUSTSEC-2026-0459 / CVE-2026-119375 —
+# bundled SQLite < 3.54.0 can return uninitialized page-cache memory on a
+# mismatched-page-size DB+WAL pair; 0.38.2 bundled 3.53.2 (affected). Target
+# pinned by the pool: r2d2_sqlite's newest (0.36.0) requires rusqlite ^0.41, so
+# rusqlite 0.42.0 forks the graph — the coherent set is rusqlite 0.41.1 +
+# r2d2_sqlite 0.36.0 + libsqlite3-sys 0.39.1 (bundled SQLite 3.54.1). The tree's
+# whole 0.41 API-break surface is one line (migrate_merge.rs column_names
+# returns an Iterator; `.iter()` dropped). sqlite-vec stays 0.1.9 (0.1.10 is
+# alphas only); `sqlite3_auto_extension` loading persists in 0.41. Both edges
+# were already declared directly here — ZERO new dependency lines (the count
+# stays 58); the erasure law (secure_delete + wal_checkpoint + VACUUM) is
+# re-verified ON 3.54.1 by the round's pins (SA-1..SA-4).
+rusqlite = { version = "0.41.1", features = ["bundled"] }
 sqlite-vec = "0.1.9"
 r2d2 = "0.8.10"
-r2d2_sqlite = "0.35.0"
+r2d2_sqlite = "0.36.0"
 
 # Async Stack - Axum 0.8.x Standard
 # `sse` feature: v1.17.3 "UMP" M2 `GET /ump/subscribe` (§3.8 change feed).

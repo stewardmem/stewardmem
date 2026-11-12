@@ -22839,12 +22839,18 @@ mod r42_authority_bindings {
         assert_eq!(
             names.len(),
             58,
-            "the dependency ceiling is 58 — IMPROVE15 (2026-11-12) moved it 57 → 58 with \
+            "the dependency ceiling is 58 — IMPROVE16 S0 (2026-11-12) added ZERO lines: \
+             the SQLite security act (RUSTSEC-2026-0459) bumped the ALREADY-declared \
+             rusqlite 0.40.2 → 0.41.1 and r2d2_sqlite 0.35.0 → 0.36.0 in place \
+             (libsqlite3-sys 0.38.2 → 0.39.1, bundled SQLite 3.53.2 → 3.54.1), so the \
+             count stays 58 and the caveat below is retired: the advisories arm is GREEN \
+             on this tree — the whole deny gate, all four arms. IMPROVE15 (2026-11-12) \
+             moved it 57 → 58 with \
              askama (the thin customer portal's build-time templates): FIVE crates enter \
              the lock (askama, askama_derive, askama_parser, basic-toml, winnow) — the \
              deny gate's bans/licenses/sources arms green on all five; its advisories arm \
-             was red at that run on libsqlite3-sys (RUSTSEC-2026-0459), a crate this round's \
-             lock diff does not touch — recorded, not claimed green. IMPROVE04 (2026-11-07) \
+             was red at that run on libsqlite3-sys (RUSTSEC-2026-0459), a crate that \
+             round's lock diff did not touch — closed by the S0 act. IMPROVE04 (2026-11-07) \
              moved it 55 → 57 with \
              pdf-extract + lopdf: lopdf was already a lock transitive (declared directly for \
              the page-count cross-check), so ONE new crate enters the graph — the deny \
@@ -23638,7 +23644,10 @@ mod r43_releases {
         assert_eq!(
             names.len(),
             58,
-            "the dependency count is 58 — IMPROVE04 (2026-11-07) moved it 55 → 57 with \
+            "the dependency count is 58 — IMPROVE16 S0 (2026-11-12) added ZERO lines: the \
+             SQLite security act bumped the already-declared rusqlite 0.40.2 → 0.41.1 and \
+             r2d2_sqlite 0.35.0 → 0.36.0 in place (libsqlite3-sys → 0.39.1, SQLite \
+             3.54.1), so the count stays 58; IMPROVE04 (2026-11-07) moved it 55 → 57 with \
              pdf-extract + lopdf (one new crate in the graph — the deny gate's named act); \
              IMPROVE15 (2026-11-12) moved it 57 → 58 with askama (the thin customer \
              portal's build-time templates; the lock gains five crates, the deny gate's \
@@ -24263,7 +24272,10 @@ mod r44_outcomes {
         assert_eq!(
             names.len(),
             58,
-            "the dependency count is 58 — IMPROVE04 (2026-11-07) moved it 55 → 57 with \
+            "the dependency count is 58 — IMPROVE16 S0 (2026-11-12) added ZERO lines: the \
+             SQLite security act bumped the already-declared rusqlite 0.40.2 → 0.41.1 and \
+             r2d2_sqlite 0.35.0 → 0.36.0 in place (libsqlite3-sys → 0.39.1, SQLite \
+             3.54.1), so the count stays 58; IMPROVE04 (2026-11-07) moved it 55 → 57 with \
              pdf-extract + lopdf (one new crate in the graph — the deny gate's named act); \
              IMPROVE15 (2026-11-12) moved it 57 → 58 with askama (the thin customer \
              portal's build-time templates; the lock gains five crates, the deny gate's \
