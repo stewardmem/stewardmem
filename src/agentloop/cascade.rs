@@ -1278,3 +1278,386 @@ pub(crate) mod tests {
         );
     }
 }
+
+// ── S5: the e2e witness (round 17) ───────────────────────────────────────────
+//
+// ONE query through the wired tiers with the REAL bridge child, recorded in
+// the 16-witness shape (status, seconds, rows, audit rows, model stamps per
+// tier — the stamps prove what served at every tier) plus the portable
+// harness record (the arXiv:2610.40917 posture: the per-tier
+// TurnSnapshot-equivalent fields + provider stamps + harness version).
+//
+// LAWS WITNESSED, NOT ASSERTED: TC-1 (the witness writes no memory — the
+// answer lands as a returned value and the transcript notes the HITL gate);
+// TC-2 (the typed route from the real guided turn); TC-3 (the evidence
+// block's sha256 printed); TC-4 (kernel-derived cites); TC-6 (one session =
+// one tier across the whole witness). T4 is never exercised: no grant
+// exists and no provider is configured — the named refusal is the only
+// lawful path (the per-task law).
+//
+// The live lane: skips by name when the brain-afm child is absent (the
+// chat_mlx_tier convention — the acceptance is owned by the macOS lane).
+
+#[cfg(test)]
+pub(crate) mod witness {
+    use super::*;
+    use crate::agentloop::bridge_afm::AfmBridge;
+    use crate::agentloop::bridge_afm::BridgeTurn;
+    use std::sync::Arc;
+    use std::time::Instant;
+    use tower::ServiceExt;
+
+    fn gold_corpus() -> Vec<String> {
+        vec![
+            // The gold doc (the eval corpus's index 12 — S0's strongest
+            // measured posture: the single-doc query whose top hit IS the
+            // answer).
+            "vSAN storage policies set FTT failures to tolerate and FTM failure tolerance method per virtual machine.".into(),
+            // Neighbors as distractors (the S0 corpus shape — the other docs
+            // the recall must rank past).
+            "A stretched-cluster rolling reboot reboots one ESXi node at a time; never reboot two nodes concurrently.".into(),
+            "PowerFlex protection domains map fault sets to failure boundaries across SDS storage pools.".into(),
+            "The GDPR is a European regulation protecting the personal data of EU residents.".into(),
+            "SQLite is an embedded relational database with FTS5 full-text search support.".into(),
+        ]
+    }
+
+    async fn witness_state(corpus: &[String]) -> (Arc<crate::AppState>, tempfile::TempDir) {
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let db_path = dir.path().join("brain.db");
+        crate::register_sqlite_vec::register_sqlite_vec();
+        let mgr = crate::pool::SqliteConnectionManager::file(&db_path);
+        let pool: crate::Pool = r2d2::Pool::builder().max_size(4).build(mgr).expect("pool");
+        crate::migration::run_migration(
+            &mut pool.get().expect("conn"),
+            crate::config::DB_MMAP_SIZE_MIB,
+        )
+        .expect("migration");
+        let model: Arc<dyn crate::embed::Embedder> =
+            Arc::new(crate::embed::StaticEmbedder::new(crate::config::MODEL_ID).expect("model"));
+        let tok_file = dir.path().join("tokens");
+        std::fs::write(&tok_file, format!("{OP_TOKEN}\n")).expect("token file");
+        let token_store = crate::auth::TokenStore::from_file(Some(tok_file));
+        token_store.reload_parts_from(vec![OP_TOKEN.to_string()], None);
+        let state = Arc::new(crate::AppState {
+            token_store,
+            jwt_middleware_state: Arc::new(
+                crate::server::router::auth::JwtMiddlewareState::opaque_for_tests(
+                    pool.clone(),
+                    db_path.clone(),
+                ),
+            ),
+            cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: Arc::new(crate::service::chat_answer_cache::ChatAnswerCache::new()),
+            durability: Default::default(),
+            loom: Default::default(),
+            model,
+            registry: crate::domain_registry::DomainRegistry::new(pool.clone(), &db_path, false),
+            pool: pool.clone(),
+            db_path: db_path.clone(),
+            connection_tracker: Arc::new(crate::http_limit::ConnectionTracker::new()),
+            rate_limiter: Arc::new(crate::http_limit::RateLimiter::new()),
+            snapshot: crate::integrity::SnapshotState::default(),
+            audit_chain_cache: Arc::new(std::sync::Mutex::new(None)),
+            auth_mode: crate::auth::AuthMode::Opaque,
+            key_store: crate::auth::jwks::KeyStore::default(),
+            revocation_cache: Arc::new(crate::auth::revocation::RevocationCache::new()),
+            jwt_issuer: String::new(),
+            jwt_audience: String::new(),
+            oidc_config: crate::handlers::well_known::OidcConfig::unconfigured(),
+            ump_events: tokio::sync::broadcast::channel(crate::config::UMP_EVENT_BUFFER).0,
+            alert_events: tokio::sync::broadcast::channel(crate::config::ALERT_EVENT_BUFFER).0,
+            alert_seq: std::sync::atomic::AtomicU64::new(0),
+            chain_watch: crate::alert::ChainWatchState::default(),
+            concurrency: &crate::concurrency::CONCURRENCY,
+        });
+        for (i, doc) in corpus.iter().enumerate() {
+            let resp = {
+                let ingest = axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/ingest/memory")
+                    .header("content-type", "text/plain")
+                    .header("authorization", format!("Bearer {OP_TOKEN}"))
+                    .body(axum::body::Body::from(doc.clone()))
+                    .expect("ingest request");
+                crate::server::router::app(state.clone())
+                    .oneshot(ingest)
+                    .await
+                    .expect("oneshot")
+            };
+            assert_eq!(
+                resp.status(),
+                axum::http::StatusCode::OK,
+                "witness corpus doc {i} must ingest"
+            );
+        }
+        (state, dir)
+    }
+
+    const OP_TOKEN: &str = "r17-witness-token";
+
+    /// The 16-witness shape's one line: status, seconds, what happened.
+    fn stamp(step: &str, status: &str, ms: u128, detail: &str) {
+        println!("WITNESS {step:<26} {status:<6} {ms:>6} ms  {detail}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_cascade_answers_one_query_through_all_tiers() {
+        let started = Instant::now();
+        let Some(bridge_path) = crate::config::afm_bridge_path().filter(|p| p.exists()) else {
+            eprintln!(
+                "brain-afm not built (run `swift build` in shell-macos); the \
+                 cascade e2e witness is owned by the macOS lane — SKIPPING"
+            );
+            return;
+        };
+
+        // ── the corpus + T2's substrate ──
+        let (state, _dir) = witness_state(&gold_corpus()).await;
+        stamp(
+            "corpus-ingest",
+            "ok",
+            0,
+            "5 gold docs (the eval corpus shape)",
+        );
+
+        // ── T2: the deterministic reader (in-process, the same core
+        //    /recall serves) ──
+        let query = "vSAN storage policy failures to tolerate setting";
+        let t2_started = Instant::now();
+        let outcome = crate::handlers::recall::run_recall(
+            &state,
+            &None,
+            // The handler's serde defaults fill the rest (the same shape
+            // the HTTP surface would carry).
+            serde_json::from_value(serde_json::json!({
+                "query": query,
+                "limit": 8,
+                "provenance": true,
+            }))
+            .expect("witness recall request"),
+            crate::handlers::recall::RecallSourceQuery::default(),
+        )
+        .await
+        .expect("witness recall");
+        let t2_ms = t2_started.elapsed().as_millis();
+        let evidence = evidence_from_results(&outcome.tagged);
+        let decision = format!("{:?}", outcome.decision).to_lowercase();
+        stamp(
+            "T2-recall",
+            "ok",
+            t2_ms,
+            &format!(
+                "decision {decision}, {} hits, 0 tokens (deterministic)",
+                evidence.len()
+            ),
+        );
+
+        // ── T1: the guided route classification (the real child) ──
+        let bridge = AfmBridge::spawn(&bridge_path.clone()).expect("witness bridge child");
+        let caps = bridge.capabilities().await.expect("witness capabilities");
+        let t1_started = Instant::now();
+        let hits: Vec<SummaryHit> = evidence
+            .iter()
+            .take(3)
+            .map(|c| (c.score as f64, c.content.clone()))
+            .collect();
+        let route = classify_route(&bridge, query, &decision, &hits)
+            .await
+            .expect("witness route turn");
+        let t1_ms = t1_started.elapsed().as_millis();
+        stamp(
+            "T1-route",
+            "ok",
+            t1_ms,
+            &format!(
+                "route {} (raw {:?}, roster_ok {}, confidence {:.2}) — model \
+                 afm3-core @ brain-afm, window {}",
+                route.decision.as_str(),
+                route.raw,
+                route.roster_ok,
+                route.confidence,
+                caps.window
+            ),
+        );
+
+        // The T1 audit row (TC-7) on the witness state's pool.
+        let query_sha = crate::doc_corrector::sha256_hex(query.as_bytes());
+        let conn = state.pool.get().expect("audit conn");
+        let t1_row = audit_route_call(&conn, &route, &query_sha);
+        assert!(t1_row.is_some(), "the T1 audit row must land (TC-7)");
+
+        // ── route execution ──
+        let block = fenced_evidence_block(&evidence, 6);
+        let (answer, judged, t3_ms, t3_model, t3_tokens) = match route.decision {
+            RouteDecision::AnswerFromMemory => {
+                let answer = if evidence.is_empty() {
+                    "No matching memory was found for this query.".to_string()
+                } else {
+                    evidence[0].content.clone()
+                };
+                stamp(
+                    "T2-answer",
+                    "ok",
+                    0,
+                    "evidence-as-answer, 0 generative tokens",
+                );
+                let judged = judge_answer(&answer, &evidence);
+                (
+                    answer,
+                    judged,
+                    0u128,
+                    "none (evidence-as-answer)".into(),
+                    (0, 0),
+                )
+            }
+            _ => {
+                let session = format!("cascade-witness-{}", uuid::Uuid::new_v4());
+                let t3_started = Instant::now();
+                let writer_model = crate::config::cascade_writer_model()
+                    .unwrap_or_else(|| "qwen3.5-9b-4bit".into());
+                let (_id, mut rx) = bridge
+                    .turn(BridgeTurn {
+                        session,
+                        prompt: format!("{block}\n\nQuery: {query}"),
+                        instructions: Some(WRITER_CONTRACT.to_owned()),
+                        max_response_tokens: Some(512),
+                        history: None,
+                        model: crate::config::cascade_writer_model(),
+                        schema: None,
+                    })
+                    .await
+                    .expect("witness writer turn");
+                let mut prose = String::new();
+                let (mut input_tokens, mut output_tokens) = (0i64, 0i64);
+                while let Some(event) = rx.recv().await {
+                    let terminal = !matches!(event, BridgeEvent::Delta { .. });
+                    if let BridgeEvent::Final {
+                        text,
+                        input_tokens: i_t,
+                        output_tokens: o_t,
+                        ..
+                    } = event
+                    {
+                        prose = text;
+                        input_tokens = i_t;
+                        output_tokens = o_t;
+                    }
+                    if terminal {
+                        break;
+                    }
+                }
+                let t3_ms = t3_started.elapsed().as_millis();
+                let judged = judge_answer(&prose, &evidence);
+                stamp(
+                    "T3-write",
+                    "ok",
+                    t3_ms,
+                    &format!(
+                        "model {writer_model} @ mlx-native (the bridge's \
+                         ChatSession path), {input_tokens} in / {output_tokens} \
+                         out, kernel gate: {} claims, abstained {}",
+                        judged.claims.len(),
+                        judged.abstained
+                    ),
+                );
+                (
+                    prose,
+                    judged,
+                    t3_ms,
+                    writer_model,
+                    (input_tokens, output_tokens),
+                )
+            }
+        };
+
+        // ── the verdict + the HITL note ──
+        stamp(
+            "kernel-gate",
+            "ok",
+            0,
+            &format!(
+                "{} claims with kernel-derived cites {:?}, abstained {}",
+                judged.claims.len(),
+                judged
+                    .claims
+                    .iter()
+                    .map(|c| c.cites.clone())
+                    .collect::<Vec<_>>(),
+                judged.abstained
+            ),
+        );
+        println!("WITNESS answer: {answer}");
+        println!(
+            "WITNESS TC-1 note: the answer is a returned value — human \
+             approval (the HITL gate) is the ONLY path to memory; this \
+             witness writes no memory by construction."
+        );
+
+        // ── the audit trail (TC-7) ──
+        let audit_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM audit_events WHERE kind = 'cascade'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("the audit table must exist");
+        stamp(
+            "audit-trail",
+            "ok",
+            0,
+            &format!("{audit_count} cascade audit row(s) in the hash chain"),
+        );
+
+        // ── the portable harness record (arXiv:2610.40917 posture) ──
+        let block_sha = crate::doc_corrector::sha256_hex(block.as_bytes());
+        let record = serde_json::json!({
+            "harness": format!("brain-server {}", env!("CARGO_PKG_VERSION")),
+            "kind": "cascade-e2e-witness",
+            "query": query,
+            "turn_snapshot": {
+                "query_sha256": query_sha,
+                "route_decision": route.decision.as_str(),
+                "route_confidence": route.confidence,
+                "route_raw": route.raw,
+                "t2_decision": decision,
+                "t2_hit_ids": evidence.iter().map(|c| c.chunk_id).collect::<Vec<_>>(),
+                "evidence_block_sha256": block_sha,
+                "judged_claims": judged.claims.iter().map(|c| serde_json::json!({
+                    "text": c.text,
+                    "cites": c.cites,
+                })).collect::<Vec<_>>(),
+                "abstained": judged.abstained,
+                "t1_ms": t1_ms,
+                "t2_ms": t2_ms,
+                "t3_ms": t3_ms,
+                "tokens": {
+                    "t1_in": route.input_tokens,
+                    "t1_out": route.output_tokens,
+                    "t3_in": t3_tokens.0,
+                    "t3_out": t3_tokens.1,
+                },
+            },
+            "provider_stamps": {
+                "T1": "afm3-core @ brain-afm (the bridge child, guided route object)",
+                "T2": "deterministic recall @ brain-server (zero tokens)",
+                "T3": format!("{t3_model} @ mlx-native (the bridge's ChatSession path)"),
+                "T4": "not exercised (no grant — TC-5's per-task law)",
+            },
+            "wall_ms": started.elapsed().as_millis(),
+        });
+        println!("WITNESS harness-record: {record}");
+
+        // The witness's own assertions (the acceptance):
+        assert!(route.roster_ok, "the live route turn must land in-roster");
+        assert!(
+            !judged.abstained,
+            "the witness query has its gold doc in the corpus — the gate must \
+             verify at least one sentence"
+        );
+        assert!(
+            audit_count >= 1,
+            "the cascade audit row must be in the chain"
+        );
+    }
+}

@@ -30,6 +30,18 @@ fn read(p: &str) -> String {
     std::fs::read_to_string(&full).unwrap_or_else(|e| panic!("source pin read {p}: {e}"))
 }
 
+/// The module's PRODUCTION section (everything before the first cfg(test)
+/// mod) — the module-shape laws (the async surface, the model assignments,
+/// the http surface) hold there; the test modules legitimately add their
+/// own (the pins and the S5 witness).
+fn production_src() -> String {
+    read(MODULE)
+        .split("#[cfg(test)]")
+        .next()
+        .expect("a production section exists")
+        .to_string()
+}
+
 #[test]
 fn tc1_module_exists_and_registers_in_the_agentloop() {
     let src = read(MODULE);
@@ -52,7 +64,7 @@ fn tc6_coordinator_never_sends_a_model_field() {
     // cascade writer tier — one model per tier turn, from its own seam, so
     // a mid-session swap is never expressible. The grep-law shape (the
     // docling shim's structural-pin precedent).
-    let src = read(MODULE);
+    let src = production_src();
     assert!(
         src.contains("model: None"),
         "the coordinator's classification turn must set model: None (the \
@@ -68,8 +80,12 @@ fn tc6_coordinator_never_sends_a_model_field() {
          the T3 half of one-session-one-tier (the Option rides the BridgeTurn \
          directly; the child validates the vocabulary)"
     );
-    // Exactly TWO model assignments — the coordinator's None and the
-    // writer's configured tier; any third is an unnamed tier sneaking in.
+    // Exactly FOUR `model:` field lines — THREE wire assignments (one per
+    // tier turn: the coordinator's None = absent/afm3-core, the writer's
+    // configured tier, T4's provider profile) plus ONE stamp (the
+    // FrontierProposal's own model field — TC-7's model-that-served, an
+    // audit fact, not a wire assignment). Any other is an unnamed tier
+    // sneaking in.
     assert!(!src.contains("model: Some("), "no literal Some model");
     let assigned = src
         .lines()
@@ -77,18 +93,19 @@ fn tc6_coordinator_never_sends_a_model_field() {
             let t = l.trim_start();
             t.starts_with("model: None")
                 || t.starts_with("model: crate::config::cascade_writer_model()")
+                || t.starts_with("model: profile.model.clone()")
         })
         .count();
     assert_eq!(
-        assigned, 2,
-        "exactly two model assignments (the coordinator's None + the \
-         writer's configured tier)"
+        assigned, 4,
+        "three wire assignments (T1's None + T3's configured tier + T4's \
+         provider profile) plus the proposal's own stamp"
     );
 }
 
 #[test]
 fn tc2_route_schema_rides_the_documented_wire() {
-    let src = read(MODULE);
+    let src = production_src();
     assert!(
         src.contains("schema:"),
         "the route classification must ride the round-14 schema turn field"
@@ -165,7 +182,15 @@ fn tc3_the_reader_is_model_absent_by_construction() {
     // The module's ONE async function is T1's classify_route (the bridge
     // turn) — the reader adds NO async surface at all, so it cannot call a
     // model; and the module names no model-serving wire anywhere.
-    let src = read(MODULE);
+    let src = production_src();
+    // The module carries exactly THREE async fns
+    // — one per tier turn. (The cfg(test) modules — the pins and the S5
+    // witness — are excluded: the scan stops at the first cfg(test) mod.)
+    let src = src
+        .split("#[cfg(test)]")
+        .next()
+        .expect("a production section exists")
+        .to_string();
     // The module carries exactly THREE async fns — one per tier turn
     // (T1's classify_route, T3's writer_turn, T4's escalate_frontier),
     // each the ONLY async surface of its tier. The READER (T2) adds none:
