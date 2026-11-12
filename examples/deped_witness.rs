@@ -46,6 +46,15 @@ fn main() {
         .and_then(|i| args.get(i + 1))
         .cloned()
         .unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
+    // IMPROVE16.1: the tier is a witness argument now — the composed vlm
+    // witness drives the route's vlm lane (the shim reads BRAIN_VLM_OCR_PATH
+    // from THIS process's env) where 16 drove the inherited text-layer.
+    let tier = args
+        .iter()
+        .position(|a| a == "--tier")
+        .and_then(|i| args.get(i + 1))
+        .cloned()
+        .unwrap_or_else(|| "text-layer".to_string());
 
     brain_server::register_sqlite_vec::register_sqlite_vec();
     let dir = tempfile::TempDir::new().expect("temp dir");
@@ -123,10 +132,15 @@ fn main() {
 
     let pdf = std::fs::read(pdf_path).expect("the witness subset pdf");
     eprintln!("witness: {} bytes of PDF ({})", pdf.len(), pdf_path);
+    let title = if tier == brain_server::ingest_document::TIER_VLM {
+        "DepEd Order No. 003, s. 2026 (witness: the raw-scan subset, the vlm tier)".to_string()
+    } else {
+        "DepEd Order No. 003, s. 2026 (witness: pages 27-29, searchable variant)".to_string()
+    };
     let body = serde_json::json!({
         "data": base64::engine::general_purpose::STANDARD.encode(&pdf),
-        "title": "DepEd Order No. 003, s. 2026 (witness: pages 27-29, searchable variant)",
-        "tier": "text-layer",
+        "title": title,
+        "tier": tier,
         "correct": !verbatim_only,
     })
     .to_string();
@@ -208,7 +222,12 @@ fn main() {
             "documents_rows": rows_out,
             "doc_correction_audit_rows": audit_rows,
             "model": format!("{model_name} (served at {base_url} — the local endpoint)"),
-            "corpus": "DepEd Order No. 003, s. 2026 — pages 27-29, the operator's searchable variant (the inherited OCR layer), the CPG page-range pattern",
+            "tier": tier,
+            "corpus": if tier == brain_server::ingest_document::TIER_VLM {
+                "DepEd Order No. 003, s. 2026 — the RAW-scan subset through the vlm tier (the shim reads BRAIN_VLM_OCR_PATH from this process's env), the composed pipeline: the VLM verbatim + the corrector's second artifact"
+            } else {
+                "DepEd Order No. 003, s. 2026 — pages 27-29, the operator's searchable variant (the inherited OCR layer), the CPG page-range pattern"
+            },
             "verbatim_only": verbatim_only,
             "reference": "DO_s2026_003r-1.md — the operator's corrected transcription (pages 27-29)",
         }
