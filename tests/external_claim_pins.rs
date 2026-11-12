@@ -1148,7 +1148,14 @@ fn r45_0_correction_leaves_the_audit_chain_module_byte_untouched() {
 // tests (the hash-only columns, the byte-exact detail vocabulary) and by
 // tests/doc_correction.rs's route pin.
 const CHAIN_MODULE_SHA256: &str =
-    "9d6c923d7e713faed1672ead4feee90008dd5913e76ad8acd216a194f52c465c";
+    "ca134ab836fd195f1eff8bcd1eec48a93f89cb489207103a6424375b10d8ba6e";
+// (Movement history, each its own round with its own red-first battery, the
+// R45-0 pin's own law: IMPROVE16 added `AuditKind::DocCorrection` — the
+// per-call accounting kind, no verdict/key/epoch/link/scheme/check/row-write
+// shape moved; IMPROVE17 S1 added `AuditKind::Cascade` — the per-transition
+// accounting kind, the same precedent verbatim, the pins in
+// tests/cascade_source_pins.rs. The sha tracks the vocabulary's growth; the
+// behavioral pins (r45_0_* below) hold the chain's semantics fixed.)
 
 /// E8's second half: the correction adds no key material and no audit row.
 #[test]

@@ -155,6 +155,14 @@ fn debt_ledger_rules_hold_on_synthetic_cases() {
 const ALLOWED_DUPES: &[(&str, &str)] = &[
     ("main", "[bin] every binary entrypoint"),
     (
+        "SPAN_NGRAM",
+        "[bin] cascade_bench's S0 metric device is DELIBERATELY self-contained: the recorded run's semantics (the ONE declared normalizer + the span law) live in the harness file the evidence cites, so the gate's metrics cannot drift with the production code they measure — the kernel's own copy (agentloop/cascade.rs, the T3 citation law) is the shipped behavior; [reasoned, IMPROVE17]",
+    ),
+    (
+        "verify",
+        "[bin] cascade_bench's per-query verification is the benchmark arm of the span law (self-contained for the same recorded-semantics reason as SPAN_NGRAM); backup.rs's is the restore verifier — same name, different law, different homes; [reasoned, IMPROVE17]",
+    ),
+    (
         "router",
         "server/router/* per-module router() constructors — the axum merge          pattern (chat joins memory; each wire ships in its own module)",
     ),

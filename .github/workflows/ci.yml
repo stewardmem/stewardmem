@@ -114,10 +114,10 @@ jobs:
         run: cargo fmt --all -- --check
       - name: clippy (default, all targets)
         run: cargo clippy --all-targets -- -D warnings
-      - name: clippy (--features bench, all targets)
-        # The bench binary is feature-gated and not exercised by the default
-        # build. Without this, bench-binary changes only catch locally.
-        run: cargo clippy --all-targets --features bench -- -D warnings
+      - name: clippy (--features bench,cascade-bench, all targets)
+        # The harness binaries are feature-gated and not exercised by the
+        # default build. Without this, harness changes only catch locally.
+        run: cargo clippy --all-targets --features bench,cascade-bench -- -D warnings
       - name: unused dependencies (cargo-machete)
         # The "imported a library for something the repo already had a
         # utility for" gate: an unused dep is almost always a duplicate of
@@ -129,9 +129,10 @@ jobs:
           cargo machete
       - name: test (default)
         run: cargo test --all-targets
-      - name: test (--features bench)
-        # The bench feature gates the bench binary + its 4 unit tests.
-        run: cargo test --all-targets --features bench
+      - name: test (--features bench,cascade-bench)
+        # The harness features gate the bench + cascade_bench binaries (the
+        # round-17 S0 gate rides the bench binary's shape).
+        run: cargo test --all-targets --features bench,cascade-bench
       - name: test-count badge drift gate
         # The one comparison `--selfcheck` cannot afford: it needs a real
         # `cargo test --features bench,migrate` run, which is why the cheap
