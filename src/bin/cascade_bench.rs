@@ -403,7 +403,7 @@ fn norm(s: &str) -> String {
     out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-fn ngrams<'a>(words: &'a [String], n: usize) -> impl Iterator<Item = String> + 'a {
+fn ngrams(words: &[String], n: usize) -> impl Iterator<Item = String> + '_ {
     words.windows(n).map(|w| w.join(" "))
 }
 
@@ -1408,10 +1408,13 @@ fn main() {
         for arm in &arms {
             let r = match *arm {
                 "A" => arm_a(q, &memory_docs, &mlx, &mut records),
-                "B" => match &mut afm {
-                    Some(b) => arm_b(q, &memory_docs, b, &format!("b-{}", q.idx), &mut records),
-                    None => Err("arm B needs the AFM bridge".into()),
-                },
+                "B" => {
+                    if let Some(b) = &mut afm {
+                        arm_b(q, &memory_docs, b, &format!("b-{}", q.idx), &mut records)
+                    } else {
+                        Err("arm B needs the AFM bridge".into())
+                    }
+                }
                 "C" => arm_c_or_d("C", q, &docs, &brain, &mut afm, &mlx, &mut records),
                 "D" => arm_c_or_d("D", q, &docs, &brain, &mut afm, &mlx, &mut records),
                 _ => Ok(()),

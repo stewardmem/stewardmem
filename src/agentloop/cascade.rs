@@ -246,10 +246,9 @@ pub(crate) fn parse_route_call(text: &str) -> (String, f64, RouteDecision, bool)
         .as_ref()
         .and_then(|v| v["confidence"].as_f64())
         .unwrap_or(0.0);
-    match RouteDecision::from_wire(&raw) {
-        Some(decision) => (raw, confidence, decision, true),
-        None => (raw, confidence, fallback(), false),
-    }
+    let roster_ok = RouteDecision::from_wire(&raw).is_some();
+    let decision = RouteDecision::from_wire(&raw).unwrap_or_else(fallback);
+    (raw, confidence, decision, roster_ok)
 }
 
 /// The audit row for one classification (TC-7's T1 half — the
@@ -666,10 +665,10 @@ pub(crate) fn escalation_refusal(
     grant: Option<&EscalationGrant>,
 ) -> Result<(), EscalationRefusal> {
     grant.ok_or(EscalationRefusal::NotGranted)?;
-    match profile {
-        Some(_) => Ok(()),
-        None => Err(EscalationRefusal::ProviderUnconfigured),
+    if profile.is_none() {
+        return Err(EscalationRefusal::ProviderUnconfigured);
     }
+    Ok(())
 }
 
 /// The escalation's output: a PROPOSAL value — text, the model that served,
