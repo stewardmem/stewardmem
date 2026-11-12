@@ -15,6 +15,13 @@ categories = ["artificial-intelligence", "database", "command-line-utilities"]
 # the shared dependency-free HTTP client. Off by default so the default build
 # is unchanged. Enable with `cargo run --release --features bench --bin bench`.
 bench = []
+# Round-17 S0 measurement gate (the tiered cascade benchmark). Adds no
+# dependencies — the `cascade_bench` binary reuses the shared dependency-free
+# HTTP client, the kernel's own `wrap_fenced`, and speaks the documented
+# brain-afm JSONL protocol directly. Off by default so the default build is
+# unchanged. Enable with
+# `cargo run --release --features cascade-bench --bin cascade_bench`.
+cascade-bench = []
 # Migration rehearsal tool (v0.9.9 "Qualify" M2). Off by default so the default
 # build is unchanged. Enable with
 # `cargo run --release --features migrate --bin brain-migrate-rehearse`.
@@ -389,6 +396,13 @@ path = "src/bin/mcp.rs"
 name = "bench"
 path = "src/bin/bench.rs"
 required-features = ["bench"]
+
+# Round-17 S0: the tiered-cascade benchmark (the gate that decides whether
+# cascade code may exist — TC-8). Feature-gated, same pattern as `bench`.
+[[bin]]
+name = "cascade_bench"
+path = "src/bin/cascade_bench.rs"
+required-features = ["cascade-bench"]
 
 # v0.9.9 "Qualify" M2: copy-and-verify migration rehearsal tool. Runs against
 # a *copy* of the live DB (server must be stopped). Feature-gated so the
