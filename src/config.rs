@@ -2695,6 +2695,26 @@ pub fn chat_model_id() -> Option<String> {
     Some(trimmed.to_owned())
 }
 
+/// The tiered cascade's writer tier (T3, round 17): the MLX id the
+/// synthesis turn carries (the bridge resolves it through `ChatModelId`
+/// and runs the native `ChatSession` path — the CG-10 session-kind law).
+/// The DEFAULT is the S0-measured tier — `qwen3.5-9b-4bit`, the frontier's
+/// writer in `IMPROVE17_EVIDENCE_2026-11-13.md` — overridable by env for
+/// the fastest-measured alternative (`qwen3.5-4b-uncensored-4bit`, 41.8
+/// tok/s). The kernel does NOT validate the value: the child owns the
+/// vocabulary (`ChatModelId` + `forChat`), and a typo refuses loudly at
+/// the first turn with the child's own named error — transport here,
+/// decision there (the `chat_model_id` precedent verbatim).
+pub fn cascade_writer_model() -> Option<String> {
+    let value =
+        std::env::var("BRAIN_CASCADE_WRITER_MODEL").unwrap_or_else(|_| "qwen3.5-9b-4bit".into());
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(trimmed.to_owned())
+}
+
 /// Resolve the embedding model id for the active profile. `compact` (formerly
 /// `multilingual` — an English model, mislabeled) swaps in the smallest static
 /// model; `enterprise`/`desktop` select the neural tiers (feature-gated — they

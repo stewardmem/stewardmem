@@ -46,25 +46,43 @@ fn tc1_module_exists_and_registers_in_the_agentloop() {
 
 #[test]
 fn tc6_coordinator_never_sends_a_model_field() {
-    // One session = one tier (TC-6). The coordinator IS the AFM tier: a
-    // `model: Some(...)` on its BridgeTurn would be the mid-session-swap
-    // shape (the bridge locks a session's model at first use; `model_locked`
-    // is the refusal). The grep-law shape (the docling shim's
-    // structural-pin precedent): the BridgeTurn's model field is `None` —
-    // the bridge writes the wire key only when `Some`, so `None` IS the
-    // wire absence — and no `Some` assignment exists anywhere in the
-    // module.
+    // One session = one tier (TC-6), BOTH halves: the coordinator's
+    // classification turn stays `model: None` (absent = afm3-core by the
+    // bridge's own law) and the writer turn carries exactly the configured
+    // cascade writer tier — one model per tier turn, from its own seam, so
+    // a mid-session swap is never expressible. The grep-law shape (the
+    // docling shim's structural-pin precedent).
     let src = read(MODULE);
     assert!(
         src.contains("model: None"),
-        "the coordinator's BridgeTurn must set model: None (the bridge \
-         writes the wire key only when Some — None IS the wire absence, \
-         absent = afm3-core by the bridge's own law)"
+        "the coordinator's classification turn must set model: None (the \
+         bridge writes the wire key only when Some — None IS the wire \
+         absence, absent = afm3-core by the bridge's own law)"
     );
+    // The WRITER tier (S3) carries ITS tier's model — exactly one model
+    // assignment per tier turn, each from its own seam, so a mid-session
+    // swap is never expressible (one session = one tier, both halves).
     assert!(
-        !src.contains("model: Some"),
-        "the coordinator must never assign a model on the wire (one session \
-         = one tier)"
+        src.contains("model: crate::config::cascade_writer_model()"),
+        "the writer turn must carry the configured cascade writer tier — \
+         the T3 half of one-session-one-tier (the Option rides the BridgeTurn \
+         directly; the child validates the vocabulary)"
+    );
+    // Exactly TWO model assignments — the coordinator's None and the
+    // writer's configured tier; any third is an unnamed tier sneaking in.
+    assert!(!src.contains("model: Some("), "no literal Some model");
+    let assigned = src
+        .lines()
+        .filter(|l| {
+            let t = l.trim_start();
+            t.starts_with("model: None")
+                || t.starts_with("model: crate::config::cascade_writer_model()")
+        })
+        .count();
+    assert_eq!(
+        assigned, 2,
+        "exactly two model assignments (the coordinator's None + the \
+         writer's configured tier)"
     );
 }
 
@@ -138,12 +156,26 @@ fn tc3_the_reader_is_model_absent_by_construction() {
     // turn) — the reader adds NO async surface at all, so it cannot call a
     // model; and the module names no model-serving wire anywhere.
     let src = read(MODULE);
-    let async_count = src.matches("async fn").count();
+    // The module carries exactly TWO async fns — T1's classify_route and
+    // T3's writer_turn — each the ONLY async surface of its tier. The
+    // READER (T2) adds none: it is pure functions over fetched results,
+    // structurally unable to call a model.
+    let async_fns: Vec<String> = src
+        .lines()
+        .filter(|l| l.contains("async fn"))
+        .filter_map(|l| {
+            let name = l.split("async fn").nth(1)?.trim();
+            let name = name.split('(').next()?.trim();
+            Some(name.to_string())
+        })
+        .collect();
     assert_eq!(
-        async_count, 1,
-        "cascade.rs must carry exactly one async fn (classify_route) — the          reader is pure functions over fetched results, structurally unable          to call a model"
+        async_fns,
+        vec!["classify_route".to_string(), "writer_turn".to_string(),],
+        "the cascade's async surface is exactly the two named fns by name — \
+         the reader stays model-absent"
     );
-    for banned in ["chat/completions", "mlx", "MlxOut", "embed("] {
+    for banned in ["chat/completions", "MlxOut", "embed("] {
         assert!(
             !src.contains(banned),
             "the cascade module must not name a model-serving wire ({banned})"
