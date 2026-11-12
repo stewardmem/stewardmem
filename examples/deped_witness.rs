@@ -28,7 +28,9 @@ const OP_TOKEN: &str = "improve16-witness-op-token";
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 3 {
-        eprintln!("usage: deped_witness <pdf-path> <out-json-path> [model] [--verbatim]");
+        eprintln!(
+            "usage: deped_witness <pdf-path> <out-json-path> [model] [--verbatim] [--url URL]"
+        );
         std::process::exit(2);
     }
     let pdf_path = &args[1];
@@ -38,6 +40,12 @@ fn main() {
         .map(|s| s.trim_start_matches("--").to_string())
         .unwrap_or_else(|| "qwen2.5:3b".to_string());
     let verbatim_only = args.iter().any(|a| a == "--verbatim");
+    let base_url = args
+        .iter()
+        .position(|a| a == "--url")
+        .and_then(|i| args.get(i + 1))
+        .cloned()
+        .unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
 
     brain_server::register_sqlite_vec::register_sqlite_vec();
     let dir = tempfile::TempDir::new().expect("temp dir");
@@ -104,7 +112,7 @@ fn main() {
     }
     // SAFETY: witness process; the env is the configuration.
     unsafe {
-        std::env::set_var("BRAIN_DOC_CORRECTOR_BASE_URL", "http://127.0.0.1:11434");
+        std::env::set_var("BRAIN_DOC_CORRECTOR_BASE_URL", &base_url);
         std::env::set_var("BRAIN_DOC_CORRECTOR_MODEL", &model_name);
         std::env::set_var("BRAIN_DOC_CORRECTOR_SECRET_FILE", "corrector.key");
         std::env::set_var(
@@ -199,7 +207,7 @@ fn main() {
             "response": body_json,
             "documents_rows": rows_out,
             "doc_correction_audit_rows": audit_rows,
-            "model": format!("{model_name} (ollama, 127.0.0.1:11434 — the local endpoint)"),
+            "model": format!("{model_name} (served at {base_url} — the local endpoint)"),
             "corpus": "DepEd Order No. 003, s. 2026 — pages 27-29, the operator's searchable variant (the inherited OCR layer), the CPG page-range pattern",
             "verbatim_only": verbatim_only,
             "reference": "DO_s2026_003r-1.md — the operator's corrected transcription (pages 27-29)",
