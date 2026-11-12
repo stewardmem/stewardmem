@@ -956,7 +956,7 @@ fn r47_single_authorize_decision_still_holds() {
 fn r47_rbac_adds_no_table_no_stamp_no_dependency() {
     let layout = read_repo("src/storage_layout.rs");
     assert!(
-        layout.contains("LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_34;"),
+        layout.contains("LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_35;"),
         "the schema stamp is untouched: R47 adds no table and no stamp (the ceiling itself is \
          re-pinned by each schema round — R57b moved it, for the trace citation, R60 moved it \
          for the disproof condition's six columns on `claims`, the scope round moved it for the \
@@ -993,13 +993,15 @@ fn r47_rbac_adds_no_table_no_stamp_no_dependency() {
         .collect();
     assert_eq!(
         names.len(),
-        57,
-        "the dependency count is 57 — the oracle is a const table and pure, needing no crate \
+        58,
+        "the dependency count is 58 — the oracle is a const table and pure, needing no crate \
          functions; the ceiling is re-pinned by each round that legitimately adds one (the \
          knowledge-version axis extraction moved it 52 → 53 with the brain-evolve-core \
          workspace path edge; the pack round moved it 53 → 55 with blake2 + flate2, both \
          already in the lock as transitives; IMPROVE04 moved it 55 → 57 with pdf-extract + \
-         lopdf — one new crate in the graph, the deny gate's named act) (found {}: {names:?})",
+         lopdf — one new crate in the graph, the deny gate's named act; IMPROVE15 moved it \
+         57 → 58 with askama — the thin customer portal's build-time templates, five crates \
+         in the lock, the deny gate green on all) (found {}: {names:?})",
         names.len()
     );
     // The completeness half: the guard must not pass on an empty round.

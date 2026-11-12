@@ -390,7 +390,7 @@ pub async fn coach_proposal(
 /// without the shown digest refuses BY NAME (`appeal_digest_required`); a
 /// digest no decided decision in the domain answers refuses too
 /// (`appeal_target_unknown`). The appeal lands in the EXISTING review
-/// queue; the dispose rides the existing verbs + `hitl_decision_events`;
+/// queue; the dispose rides the existing verbs + the HITL decision ledger;
 /// NOTHING auto-reverses.
 #[derive(Debug, Deserialize)]
 pub struct ClientAppealRequest {

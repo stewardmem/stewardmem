@@ -22838,8 +22838,14 @@ mod r42_authority_bindings {
             .collect();
         assert_eq!(
             names.len(),
-            57,
-            "the dependency ceiling is 57 — IMPROVE04 (2026-11-07) moved it 55 → 57 with \
+            58,
+            "the dependency ceiling is 58 — IMPROVE15 (2026-11-12) moved it 57 → 58 with \
+             askama (the thin customer portal's build-time templates): FIVE crates enter \
+             the lock (askama, askama_derive, askama_parser, basic-toml, winnow) — the \
+             deny gate's bans/licenses/sources arms green on all five; its advisories arm \
+             was red at that run on libsqlite3-sys (RUSTSEC-2026-0459), a crate this round's \
+             lock diff does not touch — recorded, not claimed green. IMPROVE04 (2026-11-07) \
+             moved it 55 → 57 with \
              pdf-extract + lopdf: lopdf was already a lock transitive (declared directly for \
              the page-count cross-check), so ONE new crate enters the graph — the deny \
              gate's named act, `cargo deny check` green after the update. Prior history: \
@@ -23631,9 +23637,12 @@ mod r43_releases {
             .collect();
         assert_eq!(
             names.len(),
-            57,
-            "the dependency count is 57 — IMPROVE04 (2026-11-07) moved it 55 → 57 with \
+            58,
+            "the dependency count is 58 — IMPROVE04 (2026-11-07) moved it 55 → 57 with \
              pdf-extract + lopdf (one new crate in the graph — the deny gate's named act); \
+             IMPROVE15 (2026-11-12) moved it 57 → 58 with askama (the thin customer \
+             portal's build-time templates; the lock gains five crates, the deny gate's \
+             bans/licenses/sources green on all); \
              prior history: the knowledge-version axis extraction (R5) moved the \
              ceiling from 52 by adding brain-evolve-core as a workspace path edge; C2 (plan 28) \
              moved it 53 → 55 with blake2 + flate2 (both already in the lock as transitives) \
@@ -24253,9 +24262,12 @@ mod r44_outcomes {
             .collect();
         assert_eq!(
             names.len(),
-            57,
-            "the dependency count is 57 — IMPROVE04 (2026-11-07) moved it 55 → 57 with \
+            58,
+            "the dependency count is 58 — IMPROVE04 (2026-11-07) moved it 55 → 57 with \
              pdf-extract + lopdf (one new crate in the graph — the deny gate's named act); \
+             IMPROVE15 (2026-11-12) moved it 57 → 58 with askama (the thin customer \
+             portal's build-time templates; the lock gains five crates, the deny gate's \
+             bans/licenses/sources green on all); \
              prior history: the knowledge-version axis extraction (R5) moved the \
              ceiling from 52 by adding brain-evolve-core as a workspace path edge; the read \
              model itself needs no new crate; C2 (plan 28) moved it 53 → 55 with blake2 + \

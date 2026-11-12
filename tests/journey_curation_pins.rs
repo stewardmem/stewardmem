@@ -658,9 +658,18 @@ fn control_the_poison_scan_catches_a_passthrough_projection() {
 fn the_journey_surface_writes_nothing() {
     let handler = std::fs::read_to_string("src/handlers/clients.rs").expect("handler");
     let projection = std::fs::read_to_string("src/workflow/journey.rs").expect("projection");
-    for (name, src) in [("handler", &handler), ("projection", &projection)] {
+    // THE FETCH CORE IS IN THE SCAN: the journey's SQL lives in the service
+    // core (handlers are protocol adapters), so a scan that read only the
+    // handler block and the pure projection would go quiet over the one file
+    // that actually talks to the database. The core is scanned WHOLE.
+    let core = std::fs::read_to_string("src/service/journey.rs").expect("fetch core");
+    for (name, src) in [
+        ("handler", &handler),
+        ("projection", &projection),
+        ("fetch core", &core),
+    ] {
         // The journey BLOCK only (the handler file carries other surfaces):
-        let block = match name {
+        let block: &str = match name {
             "handler" => {
                 let start = src
                     .find("pub async fn client_journey")
@@ -671,7 +680,7 @@ fn the_journey_surface_writes_nothing() {
                     .unwrap_or(src.len());
                 &src[start..end]
             }
-            _ => &projection,
+            _ => src.as_str(),
         };
         for banned in [
             "INSERT INTO",

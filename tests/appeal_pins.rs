@@ -296,7 +296,8 @@ fn ap5_a_missed_dispose_fires_the_existing_alerting_path() {
 
 #[test]
 fn ap6_the_ttl_machine_never_expires_an_appeal() {
-    let mut conn = migrated_db();
+    // rusqlite's execute/query take &Connection — the seeding needs no mut.
+    let conn = migrated_db();
     // an appeal proposal LONG past the ordinary TTL:
     conn.execute(
         "INSERT INTO proposals(kind, content, status, created_at, novelty, salience, derived_from, domain) \

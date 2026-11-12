@@ -369,7 +369,7 @@ fn r48_the_runbook_names_the_offsite_approval_requirement() {
 fn r48_adds_no_table_no_stamp_no_dependency() {
     let layout = read_repo("src/storage_layout.rs");
     assert!(
-        layout.contains("LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_34;"),
+        layout.contains("LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_35;"),
         "the schema stamp is re-pinned by each schema round: R48 adds no table and no stamp \
          (the ceiling itself is re-pinned by each schema round — R57b moved it, for the \
          trace citation, R60 moved it for the disproof condition's six columns on `claims`, \
@@ -381,8 +381,11 @@ fn r48_adds_no_table_no_stamp_no_dependency() {
          the LL-04 round moved it for the chat turn's support_decision verdict column, \
          IMPROVE05 moved it for the documents row's OCR provenance, IMPROVE07 moved it \
          for the knowledge row's scholarly provenance column, IMPROVE08 moved it \
-         for the research watch's three tables, and IMPROVE11 moved it last, \
-         for the HITL decision-event ledger)"
+         for the research watch's three tables, IMPROVE11 moved it \
+         for the HITL decision-event ledger, IMPROVE13 moved it \
+         for the MemForm provenance stamps, and IMPROVE15 moved it last, \
+         for the CustomerProvenance schema act — the appeal's provenance \
+         value joining the derived_from CHECK)"
     );
     let manifest = read_repo("Cargo.toml");
     let deps = manifest
@@ -399,15 +402,19 @@ fn r48_adds_no_table_no_stamp_no_dependency() {
         .collect();
     assert_eq!(
         names.len(),
-        57,
-        "the dependency count is 57 — R48 added no crate; each later round that legitimately \
+        58,
+        "the dependency count is 58 — R48 added no crate; each later round that legitimately \
          adds one re-pins the ceiling (the knowledge-version axis extraction moved it \
          52 → 53 with the brain-evolve-core workspace path edge; C2 moved it 53 → 55 with \
          blake2 + flate2 — both ALREADY in the lock as transitives, declared directly for \
          the pack key's verifier and the pack archive's gzip framing, zero new crates; \
          IMPROVE04 moved it 55 → 57 with pdf-extract + lopdf — lopdf was ALREADY in the \
          lock as pdf-extract's transitive, declared directly for the page-count \
-         cross-check, so the graph gains ONE new crate — the deny gate's named act) \
+         cross-check, so the graph gains ONE new crate — the deny gate's named act; \
+         IMPROVE15 moved it 57 → 58 with askama — the thin customer portal's \
+         build-time templates, the stack the round preregistered; the lock gains FIVE \
+         crates (askama, askama_derive, askama_parser, basic-toml, winnow), the deny \
+         gate's bans/licenses/sources green on all five) \
          (found {}: {names:?})",
         names.len()
     );
@@ -438,7 +445,13 @@ fn r48_the_route_tables_are_unchanged() {
     // create-loop suite's `route_tables_count_six_more_rows_than_the_prior_freeze`,
     // which states the same property positively and cannot be satisfied by
     // deleting rows.
-    const OPEN_ROUTES: usize = 226;
+    // +3 rows (229/217): IMPROVE15's customer journey — the chain-projected
+    // transparency read (GET /clients/{name}/journey), the appeal's filing
+    // door (POST /clients/{name}/appeals), and the customer's DSAR/erase
+    // request door (POST /clients/{name}/requests); openapi.yaml +
+    // docs/api.md + gen:api landed in the same commits — a named act, not
+    // drift.
+    const OPEN_ROUTES: usize = 229;
     // +4 rows (208): the chat session store — the listing GET, the turn-page
     // GET, and the {session} path carrying PATCH rename (Write) and DELETE
     // erase (Read, the erasure posture) — a named act, not drift.
@@ -458,7 +471,7 @@ fn r48_the_route_tables_are_unchanged() {
     // +1 row (226/214): IMPROVE08 S4's POST /research/synthesize (Admin) —
     // the explicit per-task synthesis act (RW-2's only invocation site);
     // the contract rows landed in the same commit — a named act, not drift.
-    const OPEN_GATES: usize = 214;
+    const OPEN_GATES: usize = 217;
 
     let guards = read_repo("src/server/router/route_guards.rs");
     let between = |start: &str| -> String {
