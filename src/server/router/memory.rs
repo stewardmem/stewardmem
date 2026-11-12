@@ -3005,6 +3005,14 @@ pub(crate) struct DocumentPayload {
     /// value is a named refusal.
     #[serde(default)]
     tier: Option<String>,
+    /// IMPROVE16: the doc-correction request flag. Absent/false = the
+    /// DEFAULT pipeline, byte-identical to the pre-lane shape (CA-1). True
+    /// = the route ALSO produces the corrected variant as a SECOND
+    /// artifact — never a rewrite (the verbatim row is untouched), refused
+    /// named when the lane is unconfigured. The correction is an explicit,
+    /// operator-configured act — never a silent hot-path step (OV-5).
+    #[serde(default)]
+    correct: Option<bool>,
 }
 
 fn document_error(
@@ -3058,6 +3066,40 @@ pub async fn ingest_document(
             format!("request body is not a valid document payload: {e}"),
         )
     })?;
+
+    // IMPROVE16 — the doc-correction lane's config gate, BEFORE any work:
+    // an unconfigured lane refuses NAMED (CA-1) and NOTHING lands (the
+    // request was correction-shaped; a silent verbatim-only insert would
+    // hide the operator's intent). The GDL all-or-nothing law: a PARTIAL
+    // profile is the named config refusal, never a half-built client.
+    let correct_requested = payload.correct.unwrap_or(false);
+    let corrector_profile = if correct_requested {
+        match crate::config::DocCorrectorProfile::from_env() {
+            Err(_) => {
+                return Err(document_error(
+                    axum::http::StatusCode::BAD_REQUEST,
+                    "corrector_config_invalid",
+                    "document corrector configuration is invalid or incomplete \
+                     (BRAIN_DOC_CORRECTOR_BASE_URL/_MODEL/_SECRET_FILE/_SECRET_ROOT \
+                     are all-or-nothing)"
+                        .to_string(),
+                ));
+            }
+            Ok(None) => {
+                return Err(document_error(
+                    axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                    "corrector_unconfigured",
+                    "the doc-correction lane is not configured: set \
+                     BRAIN_DOC_CORRECTOR_BASE_URL/_MODEL/_SECRET_FILE/_SECRET_ROOT \
+                     (all four; none = the lane is OFF)"
+                        .to_string(),
+                ));
+            }
+            Ok(Some(profile)) => Some(profile),
+        }
+    } else {
+        None
+    };
 
     // Tier selection. Tier 0 (`text-layer`) is the DEFAULT and needs zero
     // configuration. `docling` is the Tier-2 variant (IMPROVE06): the probe
@@ -3248,7 +3290,16 @@ pub async fn ingest_document(
                 ));
             }
         };
-        return Ok(Json(serde_json::json!({
+        // IMPROVE16: the re-derive proved byte-identity, so the corrected
+        // variant's lineage anchor IS row.markdown_sha256 (sha(M_v)). When
+        // the operator asked for correction on an already-stored document:
+        // the corrected variant EXISTS → the duplicate response names it
+        // (additive; a re-request never silently re-corrects or
+        // overwrites — the two-artifact law's dedupe posture); it does NOT
+        // exist → the correction runs NOW on the re-derived verbatim
+        // markdown (the lane's actual usage pattern: re-post a scanned PDF
+        // with correct:true after an initial plain ingest).
+        let mut duplicate_response = serde_json::json!({
             "success": true,
             "status": "duplicate",
             "document_id": row.id,
@@ -3259,7 +3310,75 @@ pub async fn ingest_document(
             "layout_unverified": row.layout_unverified,
             "chunk_ids": [],
             "markdown": derived,
-        })));
+        });
+        if let (true, Some(profile)) = (correct_requested, corrector_profile.as_ref()) {
+            let existing_corrected = {
+                let pool = state.pool.clone();
+                let sha = row.markdown_sha256.clone();
+                task::spawn_blocking(move || {
+                    pool.get().map_err(|e| e.to_string()).and_then(|conn| {
+                        crate::ingest_document::find_document_by_sha(&conn, &sha)
+                            .map_err(|e| e.to_string())
+                    })
+                })
+                .await
+                .map_err(|_| HandlerError::internal("Task join error".to_string()))
+                .and_then(|r| r.map_err(HandlerError::internal))?
+            };
+            match existing_corrected {
+                Some(c_row) => {
+                    duplicate_response
+                        .as_object_mut()
+                        .expect("the duplicate response is an object")
+                        .insert(
+                            "corrected".to_string(),
+                            serde_json::json!({
+                                "status": "exists",
+                                "document_id": c_row.id,
+                                "sha256": c_row.sha256,
+                                "tier": c_row.tier,
+                                "corrector": c_row.extractor_version,
+                            }),
+                        );
+                }
+                None => {
+                    let correction =
+                        run_correction(&state, profile, &derived, &title, &principal.0).await?;
+                    let (write_c, _) = write_corrected_row(
+                        &state,
+                        &correction,
+                        row.pages,
+                        row.page_tiers.clone(),
+                        row.low_confidence_pages,
+                        row.ocr_engine.clone(),
+                        &title,
+                        &source,
+                        &domain,
+                        &owner,
+                    )
+                    .await?;
+                    duplicate_response
+                        .as_object_mut()
+                        .expect("the duplicate response is an object")
+                        .insert(
+                            "corrected".to_string(),
+                            serde_json::json!({
+                                "document_id": write_c.document_id,
+                                "sha256": correction.input_sha,
+                                "tier": correction.tier,
+                                "corrector": correction.stamp,
+                                "pages": row.pages,
+                                "chunk_ids": write_c.chunk_ids,
+                                "entries_added": write_c.inserted,
+                                "duplicates_skipped": write_c.duplicates,
+                                "quarantined_chunk_ids": write_c.quarantined_chunk_ids,
+                                "markdown": correction.markdown,
+                            }),
+                        );
+                }
+            }
+        }
+        return Ok(Json(duplicate_response));
     }
 
     // ── the extraction. The Tier-2 converter (IMPROVE06), when requested and
@@ -3414,6 +3533,25 @@ pub async fn ingest_document(
             .map_err(|e| HandlerError::internal(e.inner.message))?;
             proposal_ids.push(p.id);
         }
+        // IMPROVE16 (CA-6): the corrected variant files its OWN proposals —
+        // the same gate, the same cap, nothing auto-promoted. The
+        // correction call runs (the operator asked; HITL governs what
+        // PROMOTES, not what gets corrected), the cage verifies the
+        // structure, and the corrected chunks propose like the verbatim
+        // ones. No rows land under review.
+        let mut corrected_proposal_ids: Vec<i64> = Vec::new();
+        if let Some(profile) = corrector_profile.as_ref() {
+            let correction =
+                run_correction(&state, profile, &markdown, &title, &principal.0).await?;
+            corrected_proposal_ids = propose_corrected_chunks(
+                &state,
+                principal.0.clone(),
+                &correction.markdown,
+                &source,
+                &domain,
+            )
+            .await?;
+        }
         return Err(HandlerError {
             status: axum::http::StatusCode::ACCEPTED,
             inner: crate::handlers::ApiError::new(
@@ -3422,6 +3560,7 @@ pub async fn ingest_document(
                     "success": true,
                     "status": "proposal_pending",
                     "proposal_ids": proposal_ids,
+                    "corrected_proposal_ids": corrected_proposal_ids,
                 })
                 .to_string(),
             ),
@@ -3500,7 +3639,48 @@ pub async fn ingest_document(
         .map_err(|_| HandlerError::internal("Task join error".to_string()))??
     };
 
-    Ok(Json(serde_json::json!({
+    // IMPROVE16 — the corrected variant, AFTER the verbatim write (two
+    // artifacts, one lineage: the verbatim row is the audit anchor and is
+    // NEVER touched again; a refused correction leaves it whole). The
+    // cage, the stamps, and the second row all live in `run_correction`.
+    let corrected_block = match corrector_profile.as_ref() {
+        None => None,
+        Some(profile) => {
+            let correction =
+                run_correction(&state, profile, &markdown, &title, &principal.0).await?;
+            // the corrected row's lineage anchor IS the verbatim markdown
+            // sha (what was corrected); its markdown_sha256 is what was
+            // produced. The duplicate check happened inside run_correction
+            // (before the provider call — a refusal needs no outbound act).
+            let (write_c, _) = write_corrected_row(
+                &state,
+                &correction,
+                page_count as i64,
+                page_tiers_json.clone(),
+                low_confidence_pages,
+                ocr_engine.clone(),
+                &title,
+                &source,
+                &domain,
+                &owner,
+            )
+            .await?;
+            Some(serde_json::json!({
+                "document_id": write_c.document_id,
+                "sha256": correction.input_sha,
+                "tier": correction.tier,
+                "corrector": correction.stamp,
+                "pages": page_count,
+                "chunk_ids": write_c.chunk_ids,
+                "entries_added": write_c.inserted,
+                "duplicates_skipped": write_c.duplicates,
+                "quarantined_chunk_ids": write_c.quarantined_chunk_ids,
+                "markdown": correction.markdown,
+            }))
+        }
+    };
+
+    let mut response = serde_json::json!({
         "success": true,
         "status": "created",
         "document_id": write_result.document_id,
@@ -3517,7 +3697,332 @@ pub async fn ingest_document(
         "duplicates_skipped": write_result.duplicates,
         "quarantined_chunk_ids": write_result.quarantined_chunk_ids,
         "markdown": markdown,
-    })))
+    });
+    // The ADDITIVE wire law: the default response (no correction) is
+    // byte-identical to the pre-lane shape — the key exists ONLY when the
+    // correction ran.
+    if let Some(block) = corrected_block {
+        response
+            .as_object_mut()
+            .expect("the response is an object")
+            .insert("corrected".to_string(), block);
+    }
+    Ok(Json(response))
+}
+
+/// The doc-correction lane's shared body (IMPROVE16 S2): everything the
+/// review posture and the open posture both need — the duplicate-corrected
+/// check (BEFORE the provider call: a refusal needs no outbound act), the
+/// client construction, the ONE correction call, the audit row per call,
+/// the route-owned re-header, and the CAGE ([`verify_anchor_contract`] on
+/// the assembled markdown — a structure-breaking correction refuses
+/// `correction_contract_violation`, the deterministic veto; no model sits
+/// in the gate). Returns the assembled corrected markdown, its derived
+/// row fields, and its chunked+embedded chunks.
+#[allow(clippy::too_many_lines)]
+async fn run_correction(
+    state: &Arc<AppState>,
+    profile: &crate::config::DocCorrectorProfile,
+    verbatim_markdown: &str,
+    title: &str,
+    principal: &Option<crate::auth::Principal>,
+) -> Result<CorrectedArtifact, crate::handlers::HandlerError> {
+    use crate::handlers::HandlerError;
+    // The verbatim header is the lineage source for the corrected one.
+    let verbatim_header = crate::ingest_document::parse_document_header(verbatim_markdown)
+        .map_err(|e| HandlerError::internal(format!("the verbatim header does not parse: {e}")))?;
+    let input_sha = crate::ingest_document::sha256_hex(verbatim_markdown.as_bytes());
+
+    // The corrected duplicate check FIRST: a second `correct: true` for a
+    // document that already carries a corrected row refuses named —
+    // re-correction is an operator data act (clearing the row), never a
+    // silent overwrite (the two-artifact law's dedupe posture; §1.5: a
+    // re-derive re-runs the VERBATIM pipeline and never re-corrects).
+    {
+        let pool = state.pool.clone();
+        let sha = input_sha.clone();
+        let existing = task::spawn_blocking(move || {
+            pool.get().map_err(|e| e.to_string()).and_then(|conn| {
+                crate::ingest_document::find_document_by_sha(&conn, &sha).map_err(|e| e.to_string())
+            })
+        })
+        .await
+        .map_err(|_| HandlerError::internal("Task join error".to_string()))
+        .and_then(|r| r.map_err(HandlerError::internal))?;
+        if existing.is_some() {
+            return Err(document_error(
+                axum::http::StatusCode::CONFLICT,
+                "corrected_already_exists",
+                "this document already carries a corrected variant; re-correction is an \
+                 explicit data act (clear the corrected row first) — a re-request never \
+                 silently overwrites the second artifact"
+                    .to_string(),
+            ));
+        }
+    }
+
+    // The client: the secret read + the endpoint screen happen here (the
+    // GDL construction shape, per call). A screened-refused endpoint is
+    // the named unavailable posture.
+    let client = crate::doc_corrector::DocCorrectorClient::new(profile).map_err(|_| {
+        document_error(
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            "corrector_unavailable",
+            "the configured corrector endpoint could not be resolved/screened or its \
+             secret file is invalid"
+                .to_string(),
+        )
+    })?;
+
+    // THE call — the outbound act. Bounded, one retry, audited per call.
+    let (outcome, record) = client.correct(verbatim_markdown).await;
+    {
+        let pool = state.pool.clone();
+        let input = input_sha.clone();
+        let actor = crate::handlers::gate::content_owner_stamp(principal)
+            .unwrap_or_else(|| "api".to_string());
+        let record = record.clone();
+        task::spawn_blocking(move || {
+            if let Ok(conn) = pool.get() {
+                crate::doc_corrector::record_correction_audit(&conn, &actor, &input, &record);
+            }
+        })
+        .await
+        .map_err(|_| HandlerError::internal("Task join error".to_string()))?;
+    }
+    let content = match outcome {
+        crate::doc_corrector::CorrectorOutcome::Corrected {
+            content,
+            model_served,
+        } => {
+            let stamp = crate::doc_corrector::corrector_stamp(&profile.model, Some(&model_served));
+            (content, stamp)
+        }
+        crate::doc_corrector::CorrectorOutcome::Unavailable => {
+            return Err(document_error(
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                "corrector_unavailable",
+                "the corrector endpoint never answered a usable completion after the \
+                 retry ceiling; the verbatim document row is whole"
+                    .to_string(),
+            ));
+        }
+        crate::doc_corrector::CorrectorOutcome::Failed => {
+            return Err(document_error(
+                axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+                "corrector_failed",
+                "the corrector endpoint's answer was unusable (4xx, malformed, or \
+                 empty); the verbatim document row is whole"
+                    .to_string(),
+            ));
+        }
+    };
+    let (content, stamp) = content;
+
+    // The route owns the header wholesale; the body is the corrector's
+    // (reasoning-stripped, from the first page heading).
+    let corrected_utc = chrono::Utc::now().to_rfc3339();
+    let header = crate::ingest_document::emit_corrected_header(
+        &verbatim_header,
+        &input_sha,
+        &corrected_utc,
+        &stamp,
+    );
+    let corrected_markdown = crate::ingest_document::assemble_corrected_markdown(&content, header)
+        .map_err(|e| {
+            document_error(
+                axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+                "correction_contract_violation",
+                format!("the corrected markdown does not carry the page structure: {e}"),
+            )
+        })?;
+    // THE CAGE: the corrected markdown re-passes the SAME deterministic
+    // contract the verbatim pipeline's own output passes (DI-2). A
+    // correction that breaks the structure refuses NAMED — the anchor
+    // contract IS the veto (the EditVeto frame's deterministic analogue:
+    // no model in the gate).
+    crate::ingest_document::verify_anchor_contract(&corrected_markdown, verbatim_header.pages)
+        .map_err(|e| {
+            document_error(
+                axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+                "correction_contract_violation",
+                format!("the corrected markdown violates the anchor contract: {e}"),
+            )
+        })?;
+    // The corrector's OUTPUT is untrusted input like the PDF bytes were:
+    // it crosses the SAME two-layer injection screen the verbatim markdown
+    // crossed (Reject → the named refusal; Quarantine → the corrected
+    // chunks land flagged, no vector — the door's verdict semantics).
+    let screen_result_c = screen::screen(&corrected_markdown, title);
+    if screen_result_c == screen::ScreenResult::Reject {
+        return Err(document_error(
+            axum::http::StatusCode::BAD_REQUEST,
+            "invalid_document",
+            "the corrected markdown contains suspicious patterns".to_string(),
+        ));
+    }
+    let quarantine_flagged_c = screen_result_c == screen::ScreenResult::Quarantine;
+
+    let chunks = chunker::chunk_markdown(&corrected_markdown);
+    let chunk_texts: Vec<String> = chunks.iter().map(|c| c.text.clone()).collect();
+    let model = Arc::clone(&state.model);
+    let embeddings = task::spawn_blocking(move || {
+        let refs: Vec<&str> = chunk_texts.iter().map(String::as_str).collect();
+        model.encode(&refs)
+    })
+    .await
+    .map_err(|_| HandlerError::internal("Embedding task failed".to_string()))?;
+    if embeddings.len() != chunks.len() {
+        return Err(HandlerError::internal(
+            "Embedding count mismatch".to_string(),
+        ));
+    }
+    let markdown_sha_c = crate::ingest_document::sha256_hex(corrected_markdown.as_bytes());
+    Ok(CorrectedArtifact {
+        quarantine_flagged: quarantine_flagged_c,
+        markdown: corrected_markdown,
+        markdown_sha: markdown_sha_c,
+        input_sha,
+        stamp,
+        tier: crate::ingest_document::corrected_tier(&verbatim_header.tier),
+        corrected_utc,
+        chunks,
+        embeddings,
+    })
+}
+
+/// The corrected artifact between the cage and the row write.
+struct CorrectedArtifact {
+    quarantine_flagged: bool,
+    markdown: String,
+    markdown_sha: String,
+    input_sha: String,
+    stamp: String,
+    tier: String,
+    corrected_utc: String,
+    chunks: Vec<chunker::Chunk>,
+    embeddings: Vec<Vec<f32>>,
+}
+
+/// The corrected row's write — the SAME core the verbatim row went through
+/// ([`write_document_ingest`]: row + chunks + vec0 + source linkage +
+/// audit, one tx), over the corrected vocabulary: sha256 = the verbatim
+/// markdown sha (the lineage anchor), markdown_sha256 = the corrected
+/// bytes, extractor = `doc-corrector` carrying the stamp, tier = the
+/// verbatim tier + `-corrected`. The OCR provenance fields carry over —
+/// they are LINEAGE, not the corrector's.
+#[allow(clippy::too_many_arguments)]
+async fn write_corrected_row(
+    state: &Arc<AppState>,
+    correction: &CorrectedArtifact,
+    pages: i64,
+    page_tiers_json: Option<String>,
+    low_confidence_pages: i64,
+    ocr_engine: Option<String>,
+    title: &str,
+    source: &str,
+    domain: &str,
+    owner: &Option<String>,
+) -> Result<(DocumentIngestOutcome, ()), crate::handlers::HandlerError> {
+    use crate::handlers::HandlerError;
+    let input_sha_c = correction.input_sha.clone();
+    let md_sha_c = correction.markdown_sha.clone();
+    let tier_c = correction.tier.clone();
+    let stamp_c = correction.stamp.clone();
+    let utc_c = correction.corrected_utc.clone();
+    let chunks_c = correction.chunks.clone();
+    let embeddings_c = correction.embeddings.clone();
+    let flagged_c = correction.quarantine_flagged;
+    let source_c = source.to_string();
+    let domain_c = domain.to_string();
+    let owner_c = owner.clone();
+    let title_c = title.to_string();
+    let pool = state.pool.clone();
+    let outcome = task::spawn_blocking(move || -> Result<DocumentIngestOutcome, HandlerError> {
+        let mut conn = pool
+            .get()
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
+        let outcome = write_document_ingest(
+            &tx,
+            &crate::ingest_document::DocumentRow {
+                id: 0,
+                sha256: input_sha_c,
+                title: title_c,
+                tier: tier_c,
+                extractor: crate::ingest_document::DOC_CORRECTOR_EXTRACTOR.to_string(),
+                extractor_version: stamp_c,
+                pages,
+                layout_unverified: true,
+                source: source_c,
+                domain: domain_c,
+                owner: owner_c,
+                extracted_utc: utc_c,
+                markdown_sha256: md_sha_c,
+                page_tiers: page_tiers_json,
+                low_confidence_pages,
+                ocr_engine,
+            },
+            &chunks_c,
+            &embeddings_c,
+            flagged_c,
+        )
+        .map_err(|e| HandlerError::internal(e.to_string()))?;
+        tx.commit()
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
+        Ok(outcome)
+    })
+    .await
+    .map_err(|_| HandlerError::internal("Task join error".to_string()))??;
+    Ok((outcome, ()))
+}
+
+/// The review posture's corrected-variant proposals (CA-6): the same gate,
+/// the same cap, one proposal per chunk, nothing auto-promoted.
+async fn propose_corrected_chunks(
+    state: &Arc<AppState>,
+    principal: Option<crate::auth::Principal>,
+    corrected_markdown: &str,
+    source: &str,
+    domain: &str,
+) -> Result<Vec<i64>, crate::handlers::HandlerError> {
+    use crate::handlers::HandlerError;
+    const MAX_REVIEW_CHUNKS: usize = 50;
+    let chunks = chunker::chunk_markdown(corrected_markdown);
+    if chunks.len() > MAX_REVIEW_CHUNKS {
+        return Err(document_error(
+            axum::http::StatusCode::BAD_REQUEST,
+            "too_many_chunks_for_review",
+            format!(
+                "too_many_chunks_for_review (max 50 per corrected variant under review posture; got {})",
+                chunks.len()
+            ),
+        ));
+    }
+    let mut ids = Vec::with_capacity(chunks.len());
+    for chunk in &chunks {
+        let p = crate::handlers::gate::create_proposal(
+            state.clone(),
+            principal.clone(),
+            crate::handlers::gate::ProposalRequest {
+                content: chunk.text.clone(),
+                kind: "fact".to_string(),
+                source: Some(source.to_string()),
+                authority: None,
+                observed_at: None,
+                domain: Some(domain.to_string()),
+                title: None,
+                source_prompt: None,
+                origin_context: None,
+            },
+        )
+        .await
+        .map_err(|e| HandlerError::internal(e.inner.message))?;
+        ids.push(p.id);
+    }
+    Ok(ids)
 }
 
 /// The Tier-0 + OCR pipeline, verbatim as the improve05 round landed it: the

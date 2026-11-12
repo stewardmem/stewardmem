@@ -311,7 +311,7 @@ export interface paths {
         put?: never;
         /**
          * Ingest a PDF document (Tier 0 text-layer extraction, requires title)
-         * @description IMPROVE04 + IMPROVE05. Base64-bounded JSON under the shared 1 MiB cap (no multipart). The PDF becomes page-anchored annotated markdown (docs/DOCUMENT_INGESTION_CONTRACT.md): a machine-checkable header (sha256, source, pages, tier, extracted, extractor, layout — plus ocr-engine and pages-tier exactly when OCR ran) plus one ## Page N block per page closed by an anchor comment. Deterministic zero-token extraction; no LLM anywhere (the OCR text enters VERBATIM — no post-OCR correction exists, arXiv:2611.05539's class refused by construction); the extracted text crosses the existing doors only (screen, trace strip, dedupe, trust-label bounds, HITL posture). Tier 0 never claims layout verified. tier=ocr routes PER PAGE: a page with a text layer is never sent to the sidecar; the response tier is DERIVED from what ran (text-layer | ocr | mixed), never echoed from the request. tier=docling (IMPROVE06) runs the operator-configured converter tool ONE-SHOT per docs/DOCLING_TOOL_PROTOCOL.md and the whole document converts through the same doors; a docling row's map is all-docling and the extractor is the tool's own meta stamp. Named refusals: document_too_large (413), invalid_document (400), no_text_layer (422), document_parse_incomplete (422), unsupported_tier (400), document_extraction_unavailable (503 — the isolation child is not installed), converter_unavailable (503 — tier=docling and BRAIN_DOCLING_PATH is unset/absent), converter_failed (422 — the tool failed or violated its output contract; the message carries the bounded stderr tail, never a row), converter_timeout (422 — killed at CONVERTER_TIMEOUT_SECS = 300 s, or the tool refused to emit a partial document), converter_remote_refused (503 — the tool refused a remote/generative configuration posture), ocr_unavailable (503 — tier=ocr and the shell-vision sidecar is absent: BRAIN_VISION_BRIDGE unset/absent and none beside the server), ocr_page_failed (422 — the sidecar refused named pages; the document is not ingested with a hole), raster_failed (422 — the sidecar could not rasterize the document), ocr_sidecar_failed (502 — the sidecar died, timed out, or answered nonsense).
+         * @description IMPROVE04 + IMPROVE05. Base64-bounded JSON under the shared 1 MiB cap (no multipart). The PDF becomes page-anchored annotated markdown (docs/DOCUMENT_INGESTION_CONTRACT.md): a machine-checkable header (sha256, source, pages, tier, extracted, extractor, layout — plus ocr-engine and pages-tier exactly when OCR ran) plus one ## Page N block per page closed by an anchor comment. Deterministic zero-token extraction; no LLM anywhere (the OCR text enters VERBATIM — no post-OCR correction exists, arXiv:2611.05539's class refused by construction); the extracted text crosses the existing doors only (screen, trace strip, dedupe, trust-label bounds, HITL posture). Tier 0 never claims layout verified. tier=ocr routes PER PAGE: a page with a text layer is never sent to the sidecar; the response tier is DERIVED from what ran (text-layer | ocr | mixed), never echoed from the request. tier=docling (IMPROVE06) runs the operator-configured converter tool ONE-SHOT per docs/DOCLING_TOOL_PROTOCOL.md and the whole document converts through the same doors; a docling row's map is all-docling and the extractor is the tool's own meta stamp. Named refusals: document_too_large (413), invalid_document (400), no_text_layer (422), document_parse_incomplete (422), unsupported_tier (400), document_extraction_unavailable (503 — the isolation child is not installed), converter_unavailable (503 — tier=docling and BRAIN_DOCLING_PATH is unset/absent), converter_failed (422 — the tool failed or violated its output contract; the message carries the bounded stderr tail, never a row), converter_timeout (422 — killed at CONVERTER_TIMEOUT_SECS = 300 s, or the tool refused to emit a partial document), converter_remote_refused (503 — the tool refused a remote/generative configuration posture), ocr_unavailable (503 — tier=ocr and the shell-vision sidecar is absent: BRAIN_VISION_BRIDGE unset/absent and none beside the server), ocr_page_failed (422 — the sidecar refused named pages; the document is not ingested with a hole), raster_failed (422 — the sidecar could not rasterize the document), ocr_sidecar_failed (502 — the sidecar died, timed out, or answered nonsense). IMPROVE16 (the doc-correction lane): correct=true ALSO produces the corrected variant as a SECOND artifact (the verbatim row is never mutated; the corrected row is stamped corrector: <model>@<served>, tier = <verbatim-tier>-corrected, and its markdown re-passes the anchor contract — the deterministic cage; no model sits in the gate). Named lane refusals: corrector_unconfigured (503 — the lane is OFF; nothing lands), corrector_config_invalid (400 — the GDL all-or-nothing profile is partial), corrector_unavailable (503 — the endpoint never answered a usable completion after the one named-retry ceiling; the verbatim row is whole), corrector_failed (422 — the endpoint's answer was unusable; the verbatim row is whole), correction_contract_violation (422 — the corrected markdown broke the page/anchor structure or carried suspicious patterns), corrected_already_exists (409 — a re-correction is an explicit data act, never a silent overwrite).
          */
         post: operations["ingestDocument"];
         delete?: never;
@@ -6733,6 +6733,8 @@ export interface operations {
                      * @enum {string|null}
                      */
                     tier?: "text-layer" | "docling" | "ocr" | null;
+                    /** @description IMPROVE16: also produce the corrected variant as a second artifact (never a rewrite; the lane is OFF unless BRAIN_DOC_CORRECTOR_* is configured all-or-nothing; unconfigured → corrector_unconfigured 503 and nothing lands). Absent/false = the default pipeline, byte-identical to the pre-lane shape */
+                    correct?: boolean | null;
                 };
             };
         };
@@ -6767,8 +6769,34 @@ export interface operations {
                         quarantined_chunk_ids?: number[];
                         /** @description The annotated markdown (the contract output) */
                         markdown?: string;
+                        /** @description IMPROVE16: present ONLY when correct=true produced the corrected variant (the default response is byte-identical to the pre-lane shape). On a duplicate re-serve with correct=true, names the existing artifact: {status: 'exists', document_id, sha256, tier, corrector} */
+                        corrected?: {
+                            document_id?: number;
+                            /** @description the corrected row's lineage anchor: sha256 of the VERBATIM markdown (what was corrected); the row's markdown_sha256 is sha of the corrected bytes */
+                            sha256?: string;
+                            /** @description the verbatim tier + '-corrected' */
+                            tier?: string;
+                            /** @description the stamp <model>@<served>, identical to the row's extractor_version and the header's corrector: field */
+                            corrector?: string;
+                            pages?: number;
+                            chunk_ids?: number[];
+                            entries_added?: number;
+                            duplicates_skipped?: number;
+                            quarantined_chunk_ids?: number[];
+                            /** @description the corrected annotated markdown (cage-verified) */
+                            markdown?: string;
+                            /** @description 'exists' on a duplicate re-serve (the artifact already carries a corrected variant) */
+                            status?: string;
+                        } | null;
                     };
                 };
+            };
+            /** @description corrected_already_exists — a re-correction is an explicit data act, never a silent overwrite (IMPROVE16; the open-path backstop) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description document_too_large — the request exceeds the shared cap (named, never truncated) */
             413: {
@@ -6777,7 +6805,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description no_text_layer (image-only scan) or document_parse_incomplete — both named */
+            /** @description no_text_layer (image-only scan), document_parse_incomplete, corrector_failed, or correction_contract_violation — all named */
             422: {
                 headers: {
                     [name: string]: unknown;

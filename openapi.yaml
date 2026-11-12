@@ -724,6 +724,21 @@ paths:
         raster_failed (422 — the sidecar could not rasterize the document),
         ocr_sidecar_failed (502 — the sidecar died, timed out, or answered
         nonsense).
+        IMPROVE16 (the doc-correction lane): correct=true ALSO produces the
+        corrected variant as a SECOND artifact (the verbatim row is never
+        mutated; the corrected row is stamped corrector: <model>@<served>,
+        tier = <verbatim-tier>-corrected, and its markdown re-passes the
+        anchor contract — the deterministic cage; no model sits in the
+        gate). Named lane refusals: corrector_unconfigured (503 — the lane
+        is OFF; nothing lands), corrector_config_invalid (400 — the GDL
+        all-or-nothing profile is partial), corrector_unavailable (503 —
+        the endpoint never answered a usable completion after the one
+        named-retry ceiling; the verbatim row is whole), corrector_failed
+        (422 — the endpoint's answer was unusable; the verbatim row is
+        whole), correction_contract_violation (422 — the corrected
+        markdown broke the page/anchor structure or carried suspicious
+        patterns), corrected_already_exists (409 — a re-correction is an
+        explicit data act, never a silent overwrite).
       requestBody:
         required: true
         content:
@@ -746,6 +761,10 @@ paths:
                   nullable: true
                   enum: [text-layer, docling, ocr]
                   description: "Tier 0 'text-layer' is the default; 'docling' is the Tier-2 variant (IMPROVE06: the operator-configured converter tool, docs/DOCLING_TOOL_PROTOCOL.md); 'ocr' is the IMPROVE05 hybrid (the shell-vision sidecar, per-page routing)"
+                correct:
+                  type: boolean
+                  nullable: true
+                  description: "IMPROVE16: also produce the corrected variant as a second artifact (never a rewrite; the lane is OFF unless BRAIN_DOC_CORRECTOR_* is configured all-or-nothing; unconfigured → corrector_unconfigured 503 and nothing lands). Absent/false = the default pipeline, byte-identical to the pre-lane shape"
       responses:
         "200":
           description: Ingest result (status created|duplicate; markdown is the annotated contract output)
@@ -783,10 +802,40 @@ paths:
                     type: array
                     items: { type: integer }
                   markdown: { type: string, description: "The annotated markdown (the contract output)" }
+                  corrected:
+                    type: object
+                    nullable: true
+                    description: "IMPROVE16: present ONLY when correct=true produced the corrected variant (the default response is byte-identical to the pre-lane shape). On a duplicate re-serve with correct=true, names the existing artifact: {status: 'exists', document_id, sha256, tier, corrector}"
+                    properties:
+                      document_id: { type: integer }
+                      sha256:
+                        type: string
+                        description: "the corrected row's lineage anchor: sha256 of the VERBATIM markdown (what was corrected); the row's markdown_sha256 is sha of the corrected bytes"
+                      tier:
+                        type: string
+                        description: "the verbatim tier + '-corrected'"
+                      corrector:
+                        type: string
+                        description: "the stamp <model>@<served>, identical to the row's extractor_version and the header's corrector: field"
+                      pages: { type: integer }
+                      chunk_ids:
+                        type: array
+                        items: { type: integer }
+                      entries_added: { type: integer }
+                      duplicates_skipped: { type: integer }
+                      quarantined_chunk_ids:
+                        type: array
+                        items: { type: integer }
+                      markdown: { type: string, description: "the corrected annotated markdown (cage-verified)" }
+                      status:
+                        type: string
+                        description: "'exists' on a duplicate re-serve (the artifact already carries a corrected variant)"
+        "409":
+          description: corrected_already_exists — a re-correction is an explicit data act, never a silent overwrite (IMPROVE16; the open-path backstop)
         "413":
           description: document_too_large — the request exceeds the shared cap (named, never truncated)
         "422":
-          description: no_text_layer (image-only scan) or document_parse_incomplete — both named
+          description: no_text_layer (image-only scan), document_parse_incomplete, corrector_failed, or correction_contract_violation — all named
   /graph/entity/{name}:
     get:
       summary: Get an entity and its relations

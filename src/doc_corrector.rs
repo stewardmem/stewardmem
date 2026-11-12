@@ -494,10 +494,8 @@ pub(crate) mod tests {
                         }
                     }
                     let raw = String::from_utf8_lossy(&buf).to_string();
-                    if let Some(body_part) = raw.split("\r\n\r\n").nth(1) {
-                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(body_part) {
-                            received_clone.lock().unwrap().push(v);
-                        }
+                    if let Some(Ok(v)) = raw.split("\r\n\r\n").nth(1).map(serde_json::from_str) {
+                        received_clone.lock().unwrap().push(v);
                     }
                     let reason = match status {
                         200 => "OK",

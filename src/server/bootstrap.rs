@@ -461,6 +461,13 @@ pub fn bootstrap() -> Result<BootOutcome> {
     config::validate_research_config()
         .map_err(|e| anyhow::anyhow!("fatal research provider config: {e}"))?;
 
+    // ── fail-closed doc-correction posture (IMPROVE16) ──────────────────
+    // The SAME region and law: a partial/invalid corrector profile is
+    // fatal at boot. Unconfigured is fine — the lane is OFF (CA-1; the
+    // route's corrector_unconfigured refusal is the posture operators see).
+    config::validate_doc_corrector_config()
+        .map_err(|e| anyhow::anyhow!("fatal document corrector config: {e}"))?;
+
     // ── fail-closed delivery-bindings posture ───────────
     // The SAME region and the SAME law as the provider gate above, because the
     // bindings are the machine's standing authority over an external system:

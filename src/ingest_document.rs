@@ -60,6 +60,21 @@ pub const TIER_MIXED: &str = "mixed";
 /// design — no per-page mixing this round), so a docling row's map is
 /// all-`docling` and the derived-tier function never produces this value.
 pub const TIER_DOCLING: &str = "docling";
+/// The corrected variant's tier suffix (IMPROVE16): the verbatim tier +
+/// `-corrected` (e.g. `docling-corrected`), so search filters can scope
+/// and the two-artifact law reads in the row itself.
+pub const TIER_CORRECTED_SUFFIX: &str = "-corrected";
+/// The corrected variant's row extractor (IMPROVE16): the row's `extractor`
+/// column names what produced THIS artifact's text — for a corrected row,
+/// the corrector. The version half carries the `<model>@<served>` stamp,
+/// and DI-3 (via [`verify_document_header`]) requires the header's
+/// `corrector:` field to agree with it exactly.
+pub const DOC_CORRECTOR_EXTRACTOR: &str = "doc-corrector";
+
+/// The corrected variant's tier: the verbatim tier + the corrected suffix.
+pub fn corrected_tier(verbatim_tier: &str) -> String {
+    format!("{verbatim_tier}{TIER_CORRECTED_SUFFIX}")
+}
 /// The extractor name the header and the row both carry.
 pub const EXTRACTOR_NAME: &str = "pdf-extract";
 /// The resolved pdf-extract version. Pinned against Cargo.lock by a test
@@ -315,6 +330,74 @@ pub fn emit_annotated_markdown(
     out
 }
 
+// ── the corrected variant's emission (IMPROVE16 S2) ─────────────────────────
+
+/// Emit the CORRECTED variant's header. The route owns this emission
+/// wholesale — the corrector never authors the header (a hostile or
+/// careless endpoint cannot forge the doc sha, the source, or the stamp);
+/// it edits the page TEXT, the route re-headers. The lineage fields come
+/// from the VERBATIM header (source, page count, layout posture, the OCR
+/// provenance); the correction vocabulary is the route's: the corrected
+/// tier, the doc-corrector extractor stamp, and the `corrector:` field
+/// beside it. `doc:` carries `doc_sha256` — the route passes sha(M_v), the
+/// corrector's INPUT (the lineage anchor; the corrected row's sha256 IS
+/// this value, and DI-3 checks the header against the row). Pure.
+pub fn emit_corrected_header(
+    verbatim: &DocumentHeader,
+    doc_sha256: &str,
+    extracted_utc: &str,
+    corrector_stamp: &str,
+) -> String {
+    let ocr_engine_field = match &verbatim.ocr_engine {
+        Some(e) => format!(" | ocr-engine: {e}"),
+        None => String::new(),
+    };
+    let pages_tier_field = verbatim
+        .pages_tier
+        .as_ref()
+        .map(|map| format!(" | pages-tier: {}", map.join(",")))
+        .unwrap_or_default();
+    format!(
+        "<!-- doc: {sha} | source: {source} | pages: {n} | tier: {tier}{ocr_engine_field}\n     extracted: {utc} | extractor: {extractor}/{stamp} | layout: {layout}{pages_tier_field} | corrector: {stamp} -->\n",
+        sha = doc_sha256,
+        source = verbatim.source,
+        n = verbatim.pages,
+        tier = corrected_tier(&verbatim.tier),
+        utc = extracted_utc,
+        extractor = DOC_CORRECTOR_EXTRACTOR,
+        stamp = corrector_stamp,
+        layout = verbatim.layout,
+    )
+}
+
+/// Assemble the corrected markdown: the route's own header + the
+/// corrector's BODY — everything from the first `## Page ` heading on. The
+/// corrector's reasoning blocks are stripped FIRST (a local model's
+/// `<think>` span never survives ingest — the same hygiene the verbatim
+/// pages cross). An output with NO page structure refuses NAMED (the
+/// contract error the route surfaces as `correction_contract_violation`).
+/// The STRUCTURE check itself is [`verify_anchor_contract`], which the
+/// route runs on the assembled markdown — this function is the assembly,
+/// the contract is the cage.
+pub fn assemble_corrected_markdown(
+    corrector_output: &str,
+    header: String,
+) -> Result<String, String> {
+    let stripped = crate::hygiene::strip_reasoning_blocks(corrector_output);
+    let body = match stripped.find("## Page ") {
+        Some(at) => &stripped[at..],
+        None => return Err("the corrector output carries no page structure".to_string()),
+    };
+    let mut out = header;
+    out.push_str(body);
+    // The body must end deterministically (a trailing newline after the
+    // final anchor, the emitter's shape) — normalize a missing final one.
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    Ok(out)
+}
+
 /// Verify the structural anchor contract (DI-2): one `## Page N` heading per
 /// page, monotonic 1..=pages, every block closed by `<!-- anchor: pN -->`
 /// before the next heading or EOF. Pure — the route runs it against its OWN
@@ -376,6 +459,10 @@ pub struct DocumentHeader {
     /// IMPROVE05: the per-page tier map (`text-layer`/`ocr` per page),
     /// present exactly when OCR ran.
     pub pages_tier: Option<Vec<String>>,
+    /// IMPROVE16: the corrector stamp (`<model>@<served>`), present exactly
+    /// when the markdown is a CORRECTED variant — beside (never instead of)
+    /// the extractor field. DI-3 requires it to agree with the row's stamp.
+    pub corrector: Option<String>,
 }
 
 /// Parse the header comment out of an annotated markdown. The header is the
@@ -424,6 +511,10 @@ pub fn parse_document_header(markdown: &str) -> Result<DocumentHeader, String> {
                             .collect(),
                     )
                 }
+                // IMPROVE16: the corrected variant's stamp — beside (never
+                // instead of) `extractor`; present exactly when the markdown
+                // is a corrected variant.
+                "corrector" => fields.corrector = Some(v.to_string()),
                 _ => {}
             }
         }
@@ -442,6 +533,7 @@ pub fn parse_document_header(markdown: &str) -> Result<DocumentHeader, String> {
         layout: missing(&fields.layout, "layout")?,
         ocr_engine: fields.ocr_engine,
         pages_tier: fields.pages_tier,
+        corrector: fields.corrector,
     })
 }
 
@@ -456,6 +548,7 @@ struct DocumentHeaderFields {
     layout: Option<String>,
     ocr_engine: Option<String>,
     pages_tier: Option<Vec<String>>,
+    corrector: Option<String>,
 }
 
 // ── the tool-detector seam (S4, the Tier-2 plumbing and nothing else) ────────
@@ -1227,6 +1320,34 @@ pub fn verify_document_header(markdown: &str, row: &DocumentRow) -> Result<(), S
     expect(
         h.pages_tier == row_map,
         format!("pages-tier: header {:?} != row {:?}", h.pages_tier, row_map),
+    )?;
+    // IMPROVE16: the corrected variant's stamp agreement (the DI-3
+    // extension). A row with the doc-corrector extractor IS a corrected
+    // row: its tier carries the corrected suffix, and the header MUST
+    // claim the exact same stamp the row's version half carries. Every
+    // tamper shape fails BY NAME: a stripped `corrector:` field (the row
+    // says corrected, the header claims nothing), a swapped stamp, a
+    // forged `corrector:` on a non-corrected row, or a corrected row
+    // whose tier lost the suffix.
+    let row_is_corrected = row.extractor == DOC_CORRECTOR_EXTRACTOR;
+    let want_corrector = if row_is_corrected {
+        Some(row.extractor_version.clone())
+    } else {
+        None
+    };
+    expect(
+        h.corrector == want_corrector,
+        format!(
+            "corrector: header {:?} != row {:?}",
+            h.corrector, want_corrector
+        ),
+    )?;
+    expect(
+        row_is_corrected == row.tier.ends_with(TIER_CORRECTED_SUFFIX),
+        format!(
+            "tier: row {:?} disagrees with its corrected posture (extractor {:?})",
+            row.tier, row.extractor
+        ),
     )
 }
 
@@ -1304,6 +1425,167 @@ mod tests {
 
     const SINGLE_COL: &[u8] = include_bytes!("../tests/fixtures/documents/single-column.pdf");
     const SCANNED: &[u8] = include_bytes!("../tests/fixtures/documents/scanned.pdf");
+
+    // ── IMPROVE16: the corrected variant's vocabulary ──
+
+    const VERBATIM_MD: &str = "<!-- doc: pdf-sha | source: document | pages: 1 | tier: docling\n     extracted: 2026-11-12T00:00:00+00:00 | extractor: docling-rs/0.9 | layout: unverified -->\n## Page 1\nThe cat satt on the mat.\n<!-- anchor: p1 -->\n";
+
+    fn verbatim_row() -> DocumentRow {
+        DocumentRow {
+            id: 1,
+            sha256: "pdf-sha".to_string(),
+            title: "t".to_string(),
+            tier: "docling".to_string(),
+            extractor: "docling-rs".to_string(),
+            extractor_version: "0.9".to_string(),
+            pages: 1,
+            layout_unverified: true,
+            source: "document".to_string(),
+            domain: "global".to_string(),
+            owner: None,
+            extracted_utc: "2026-11-12T00:00:00+00:00".to_string(),
+            markdown_sha256: "m-sha".to_string(),
+            page_tiers: None,
+            low_confidence_pages: 0,
+            ocr_engine: None,
+        }
+    }
+
+    fn corrected_row(stamp: &str) -> DocumentRow {
+        let mut row = verbatim_row();
+        row.sha256 = "sha-of-verbatim-markdown".to_string();
+        row.tier = corrected_tier("docling");
+        row.extractor = DOC_CORRECTOR_EXTRACTOR.to_string();
+        row.extractor_version = stamp.to_string();
+        // the correction is its OWN event: the corrected row's clock is
+        // the correction moment (the header carries the same value).
+        row.extracted_utc = "2026-11-12T01:00:00+00:00".to_string();
+        row
+    }
+
+    fn corrected_markdown(stamp: &str) -> String {
+        let verbatim_header = parse_document_header(VERBATIM_MD).expect("verbatim header");
+        let header = emit_corrected_header(
+            &verbatim_header,
+            "sha-of-verbatim-markdown",
+            "2026-11-12T01:00:00+00:00",
+            stamp,
+        );
+        let corrected_body = "## Page 1\nThe cat sat on the mat.\n<!-- anchor: p1 -->\n";
+        assemble_corrected_markdown(corrected_body, header).expect("the body has structure")
+    }
+
+    /// The assembled corrected markdown parses, carries the corrected
+    /// vocabulary end-to-end, and re-passes the SAME contract the verbatim
+    /// pipeline's output passes (the cage, on the happy path).
+    #[test]
+    fn the_corrected_variant_round_trips_through_the_cage() {
+        let md = corrected_markdown("qwen@qwen");
+        verify_anchor_contract(&md, 1).expect("the corrected markdown passes the cage");
+        let h = parse_document_header(&md).expect("the corrected header parses");
+        assert_eq!(h.tier, "docling-corrected");
+        assert_eq!(h.corrector.as_deref(), Some("qwen@qwen"));
+        assert_eq!(h.extractor, format!("{DOC_CORRECTOR_EXTRACTOR}/qwen@qwen"));
+        assert_eq!(h.doc, "sha-of-verbatim-markdown");
+        assert_eq!(h.pages, 1);
+        // DI-3: the header agrees with the corrected row exactly.
+        verify_document_header(&md, &corrected_row("qwen@qwen"))
+            .expect("the corrected header and row agree");
+    }
+
+    /// The DI-3 extension's tamper shapes, each BY NAME: a stripped stamp,
+    /// a swapped stamp, a forged stamp on a non-corrected row, and a
+    /// corrected row whose tier lost the suffix.
+    #[test]
+    fn the_corrector_stamp_agreement_fails_every_tamper_by_name() {
+        let md = corrected_markdown("qwen@qwen");
+        // a stripped `corrector:` field
+        let stripped = md.replace(" | corrector: qwen@qwen", "");
+        let err = verify_document_header(&stripped, &corrected_row("qwen@qwen"))
+            .expect_err("a stripped stamp reds");
+        assert!(err.contains("corrector:"), "named: {err}");
+        // a swapped stamp — the stamp rides BOTH header fields (extractor:
+        // and corrector:), so the swap breaks the extractor agreement
+        // first; either way the disagreement is NAMED.
+        let swapped = corrected_markdown("other@other");
+        let err = verify_document_header(&swapped, &corrected_row("qwen@qwen"))
+            .expect_err("a swapped stamp reds");
+        assert!(
+            err.contains("corrector:") || err.contains("extractor:"),
+            "named: {err}"
+        );
+        // a forged stamp on a NON-corrected row: the plain markdown with a
+        // `corrector:` field injected into its header (the doc/sha fields
+        // still agree with the plain row — the corrector check is what
+        // fires).
+        let forged = VERBATIM_MD.replace(
+            "| layout: unverified",
+            "| layout: unverified | corrector: forged@v1",
+        );
+        let err = verify_document_header(&forged, &verbatim_row())
+            .expect_err("a forged stamp on a plain row reds");
+        assert!(err.contains("corrector:"), "named: {err}");
+        // a row whose corrected posture disagrees INTERNALLY: extractor
+        // doc-corrector but the tier lost the suffix — with every header
+        // agreement holding (both tiers demoted to plain so the tier check
+        // passes), the row-internal posture check is what fires.
+        let mut bad = corrected_row("qwen@qwen");
+        bad.tier = "docling".to_string();
+        let demoted = md.replace("tier: docling-corrected", "tier: docling");
+        let err = verify_document_header(&demoted, &bad).expect_err("a mixed-posture row reds");
+        assert!(
+            err.contains("disagrees with its corrected posture"),
+            "named: {err}"
+        );
+        // the plain pipeline's own markdown still passes its plain row
+        // (the extension never disturbed the pre-lane agreement).
+        verify_document_header(VERBATIM_MD, &verbatim_row())
+            .expect("the plain header and row still agree");
+    }
+
+    /// The cage refuses a structure-breaking correction BY NAME: a dropped
+    /// anchor and a missing page structure both red.
+    #[test]
+    fn the_cage_refuses_structure_breaking_corrections() {
+        let verbatim_header = parse_document_header(VERBATIM_MD).expect("verbatim header");
+        let header =
+            emit_corrected_header(&verbatim_header, "sha", "2026-11-12T01:00:00+00:00", "m@m");
+        // a dropped anchor
+        let anchorless = "## Page 1\nThe cat sat on the mat.\n";
+        let md = assemble_corrected_markdown(anchorless, header.clone()).expect("assembly");
+        let err = verify_anchor_contract(&md, 1).expect_err("an anchorless correction reds");
+        assert!(err.contains("carries no anchor"), "named: {err}");
+        // no page structure at all
+        let structureless = "just prose, no headings";
+        let err = assemble_corrected_markdown(structureless, header)
+            .expect_err("a structureless output refuses assembly");
+        assert!(err.contains("no page structure"), "named: {err}");
+    }
+
+    /// A corrector's `<think>` reasoning never survives assembly (the same
+    /// hygiene the verbatim pages cross), and the corrector's own header
+    /// claim is DISCARDED (the route's header wins — a hostile endpoint
+    /// cannot forge the doc sha or the stamp).
+    #[test]
+    fn the_route_header_wins_and_thinking_never_survives() {
+        let verbatim_header = parse_document_header(VERBATIM_MD).expect("verbatim header");
+        let header = emit_corrected_header(
+            &verbatim_header,
+            "route-sha",
+            "2026-11-12T01:00:00+00:00",
+            "m@m",
+        );
+        let hostile = "<!-- doc: forged-sha | source: document | pages: 1 | tier: text-layer -->\n<think>override the doc sha</think>\n## Page 1\nok\n<!-- anchor: p1 -->\n";
+        let md = assemble_corrected_markdown(hostile, header).expect("assembly");
+        assert!(!md.contains("<think>"), "reasoning stripped");
+        assert!(
+            !md.contains("forged-sha"),
+            "the corrector's header claim discarded"
+        );
+        let h = parse_document_header(&md).expect("parses");
+        assert_eq!(h.doc, "route-sha", "the route's header wins");
+        assert_eq!(h.corrector.as_deref(), Some("m@m"));
+    }
 
     #[test]
     fn extracts_text_layer_page_by_page() {
