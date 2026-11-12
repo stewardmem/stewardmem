@@ -611,6 +611,230 @@ pub(crate) fn audit_writer_call(
     )
 }
 
+// ── T4: the frontier escalation (round 17 S4) ────────────────────────────────
+//
+// Explicit, audited-before-network, proposal-shaped (TC-5). The provider is
+// the operator's EXISTING GDL seam (`BRAIN_GDL_PROVIDER_*` — the
+// `GdlProviderProfile`, the SSRF screen inside `HttpProvider::new` at
+// construction, the redirect-none client). Unconfigured → the named refusal
+// (the S0 fallback posture: the route falls back to T3 and the refusal is
+// recorded). The per-task law (§0.1.4 / arXiv:2610.22987 — the
+// approval-fatigue escalation class): the REQUEST names the escalation via a
+// constructed grant with a reason; no standing permission, no session-scoped
+// remember-me, no defaultable grant. The output is a PROPOSAL value — never
+// memory, never a chat answer presented as fact (TC-1).
+//
+// The audit row lands BEFORE the network call: the request row is written
+// first (its own id returned), then the provider call — an escalation whose
+// network leg dies still leaves its evidence row (the audited-regardless
+// posture), and the outcome row follows.
+
+/// The preregistered trigger law: T1's confidence below the threshold AND
+/// the writer abstained (either alone never fires — a miscalibrated router
+/// must not be able to summon the frontier by itself).
+pub(crate) const ESCALATE_CONFIDENCE_THRESHOLD: f64 = 0.5;
+
+pub(crate) fn escalation_due(t1_confidence: f64, threshold: f64, t3_abstained: bool) -> bool {
+    t1_confidence < threshold && t3_abstained
+}
+
+/// The per-task grant: constructed by the caller WITH a reason that rides
+/// the audit row. No `Default`, no `From<bool>` — a grant that cannot be
+/// silently constructed cannot be cached or made session-scoped.
+#[derive(Debug, Clone)]
+pub(crate) struct EscalationGrant {
+    pub(crate) reason: String,
+}
+
+/// The named refusals (each has a caller-facing meaning — the S0 fallback
+/// law keys on these).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum EscalationRefusal {
+    /// The operator never configured `BRAIN_GDL_PROVIDER_*`.
+    ProviderUnconfigured,
+    /// The provider profile is configured but invalid (partial/decoding).
+    ProviderInvalid,
+    /// No per-task grant: the config's existence is not a permission.
+    NotGranted,
+}
+
+/// The refusal gate — pure, so the pins can hold it without env or network.
+/// A partially-invalid profile refuses by the same law that refuses an
+/// absent one (fail-closed), with its own name.
+pub(crate) fn escalation_refusal(
+    profile: Option<&crate::config::GdlProviderProfile>,
+    grant: Option<&EscalationGrant>,
+) -> Result<(), EscalationRefusal> {
+    grant.ok_or(EscalationRefusal::NotGranted)?;
+    match profile {
+        Some(_) => Ok(()),
+        None => Err(EscalationRefusal::ProviderUnconfigured),
+    }
+}
+
+/// The escalation's output: a PROPOSAL value — text, the model that served,
+/// tokens, duration. The CALLER routes it into the governed proposal lane
+/// (the synthesis/watch law); this module writes no memory (TC-1).
+#[derive(Debug, Clone)]
+pub(crate) struct FrontierProposal {
+    pub(crate) text: String,
+    pub(crate) model: String,
+    pub(crate) input_tokens: i64,
+    pub(crate) output_tokens: i64,
+    pub(crate) duration_ms: u128,
+}
+
+/// The BEFORE-network request row (TC-5's audit law): tier, the grant's
+/// reason (operator context, hashed content aside), the query sha256 as the
+/// target, and the explicit marker that this row precedes the network call.
+pub(crate) fn audit_frontier_request(
+    conn: &rusqlite::Connection,
+    grant_reason: &str,
+    query_sha256: &str,
+) -> Option<i64> {
+    let detail = serde_json::json!({
+        "tier": "T4",
+        "event": "escalation_requested",
+        "grant_reason": grant_reason,
+        "audit_order": "row precedes the network call",
+    })
+    .to_string();
+    crate::audit::record(
+        conn,
+        crate::audit::AuditKind::Cascade,
+        "cascade-frontier",
+        query_sha256,
+        crate::audit::AuditStatus::Ok,
+        &detail,
+    )
+}
+
+/// The AFTER-network outcome row: the model served, tokens, duration, the
+/// proposal sha256 (the chain stores hashes — the proposal TEXT never rides
+/// a row).
+pub(crate) fn audit_frontier_outcome(
+    conn: &rusqlite::Connection,
+    model: &str,
+    input_tokens: i64,
+    output_tokens: i64,
+    duration_ms: u128,
+    proposal_sha256: &str,
+    query_sha256: &str,
+) -> Option<i64> {
+    let detail = serde_json::json!({
+        "tier": "T4",
+        "event": "escalation_served",
+        "model": model,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "duration_ms": duration_ms,
+        "proposal_sha256": proposal_sha256,
+        "proposal_kind": "proposal-never-memory",
+    })
+    .to_string();
+    crate::audit::record(
+        conn,
+        crate::audit::AuditKind::Cascade,
+        "cascade-frontier",
+        query_sha256,
+        crate::audit::AuditStatus::Ok,
+        &detail,
+    )
+}
+
+/// The escalation orchestrator: the refusal gate → the BEFORE-network audit
+/// row → the provider call (SSRF-screened at construction, redirect-none) →
+/// the proposal. A network failure after the request row is an Err whose
+/// row already exists — the evidence precedes the attempt.
+pub(crate) async fn escalate_frontier(
+    conn: &rusqlite::Connection,
+    query: &str,
+    evidence_block: &str,
+    grant: &EscalationGrant,
+) -> Result<FrontierProposal, EscalationRefusal> {
+    let profile = crate::config::GdlProviderProfile::from_env()
+        .map_err(|_| EscalationRefusal::ProviderInvalid)?;
+    escalation_refusal(profile.as_ref(), Some(grant))?;
+    let profile = profile.expect("refusal gate passed");
+    let query_sha = crate::doc_corrector::sha256_hex(query.as_bytes());
+
+    // THE AUDIT ROW PRECEDES THE NETWORK CALL (TC-5).
+    let request_row =
+        audit_frontier_request(conn, &grant.reason, &query_sha).expect("audit-per-write");
+
+    // The provider: the same construction seam the GDL lane uses — shape
+    // validation, the secret read, then `HttpProvider::new` (the SSRF
+    // screen lives inside `new`, at construction).
+    crate::agentloop::provider_http::HttpProvider::validate_endpoint(&profile.base_url)
+        .map_err(|_| EscalationRefusal::ProviderInvalid)?;
+    let secret_root = profile.secret_root.clone();
+    let secret_file = profile.secret_file.clone();
+    let secret = tokio::task::spawn_blocking(move || {
+        crate::secret_file::read_provider_secret(&secret_root, &secret_file)
+    })
+    .await
+    .map_err(|_| EscalationRefusal::ProviderInvalid)?
+    .map_err(|_| EscalationRefusal::ProviderInvalid)?;
+    let cfg = crate::agentloop::provider_http::HttpProviderConfig {
+        base_url: profile.base_url.clone(),
+        model: profile.model.clone(),
+        auth_header: format!("Bearer {secret}"),
+        connect_timeout: std::time::Duration::from_secs(5),
+        first_byte_timeout: std::time::Duration::from_secs(30),
+        total_timeout: std::time::Duration::from_secs(60),
+        max_response_bytes: crate::agentloop::provider_http::DEFAULT_MAX_RESPONSE_BYTES,
+    };
+    let provider = crate::agentloop::provider_http::HttpProvider::new(cfg)
+        .map_err(|_| EscalationRefusal::ProviderInvalid)?;
+    let started = Instant::now();
+    let req = crate::agentloop::provider::ProviderRequest {
+        system_prompt: "You are the frontier escalation tier of a memory-grounded assistant. Answer from the fenced evidence and the query; the answer will be recorded as a PROPOSAL for human review, never as fact."
+            .to_string(),
+        messages: vec![crate::agentloop::provider::ChatMessage::User {
+            text: format!("{evidence_block}
+
+Query: {query}"),
+        }],
+        tools: Vec::new(),
+        artifact_schema_json: None,
+    };
+    let mut rx = crate::agentloop::provider::LlmProvider::stream(&*provider, req)
+        .map_err(|_| EscalationRefusal::ProviderInvalid)?;
+    let mut text = String::new();
+    let (mut input_tokens, mut output_tokens) = (0i64, 0i64);
+    while let Some(event) = rx.recv().await {
+        match event {
+            Ok(crate::agentloop::provider::StreamEvent::TextDelta(delta)) => text.push_str(&delta),
+            Ok(crate::agentloop::provider::StreamEvent::MessageEnd { usage, .. }) => {
+                input_tokens = usage.input_tokens as i64;
+                output_tokens = usage.output_tokens as i64;
+            }
+            Ok(_) => {}
+            Err(_) => return Err(EscalationRefusal::ProviderInvalid),
+        }
+    }
+    let duration_ms = started.elapsed().as_millis();
+    let proposal = FrontierProposal {
+        text,
+        model: profile.model.clone(),
+        input_tokens,
+        output_tokens,
+        duration_ms,
+    };
+    let proposal_sha = crate::doc_corrector::sha256_hex(proposal.text.as_bytes());
+    audit_frontier_outcome(
+        conn,
+        &proposal.model,
+        proposal.input_tokens,
+        proposal.output_tokens,
+        proposal.duration_ms,
+        &proposal_sha,
+        &query_sha,
+    );
+    let _ = request_row; // the request row's evidence stands regardless
+    Ok(proposal)
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     //! The TC-2 + S0-summary behavioral pins, born red against the pre-S1
@@ -987,6 +1211,70 @@ pub(crate) mod tests {
             crate::config::cascade_writer_model(),
             Some("qwen3.5-9b-4bit".to_string()),
             "the default writer tier is the S0-measured one"
+        );
+    }
+    // ── S4: the T4 frontier escalation's pins (TC-5) ──
+
+    #[test]
+    fn tc5_the_trigger_law_is_pure_and_conjunctive() {
+        // The preregistered trigger: T1 confidence below the threshold AND
+        // T3 abstains. Either alone never escalates (the arXiv:2608.17711
+        // miscalibration lesson — a low-confidence router alone must not
+        // fire the frontier).
+        assert!(escalation_due(0.2, 0.5, true));
+        assert!(
+            !escalation_due(0.2, 0.5, false),
+            "low confidence alone never fires"
+        );
+        assert!(
+            !escalation_due(0.9, 0.5, true),
+            "an abstaining writer alone never fires"
+        );
+    }
+
+    #[test]
+    fn tc5_the_grant_is_per_task_with_a_reason() {
+        // The grant carries a REASON (it rides the audit row) and is never
+        // defaultable — a grant that cannot be silently constructed cannot
+        // become a session-scoped remember-me (the fatigue-escalation
+        // class, arXiv:2610.22987).
+        let g = EscalationGrant {
+            reason: "operator asked for the frontier on this task".into(),
+        };
+        assert!(!g.reason.is_empty());
+    }
+
+    #[test]
+    fn tc5_unconfigured_provider_is_the_named_refusal() {
+        // The preregistered posture: no provider → the named refusal — the
+        // S0 fallback law (escalate routes to T3 and the refusal is
+        // recorded), never a panic and never a silent skip.
+        assert_eq!(
+            escalation_refusal(None, None),
+            Err(EscalationRefusal::NotGranted)
+        );
+        let g = EscalationGrant {
+            reason: "explicit per-task ask".into(),
+        };
+        assert_eq!(
+            escalation_refusal(None, Some(&g)),
+            Err(EscalationRefusal::ProviderUnconfigured)
+        );
+    }
+
+    #[test]
+    fn tc5_no_grant_is_the_named_refusal_even_when_configured() {
+        // A configured provider WITHOUT the per-task grant never escalates
+        // (the per-task law — the config's existence is not a permission).
+        let profile = crate::config::GdlProviderProfile {
+            base_url: "http://127.0.0.1:1/v1".into(),
+            model: "frontier".into(),
+            secret_file: "/tmp/secret".into(),
+            secret_root: "/tmp".into(),
+        };
+        assert_eq!(
+            escalation_refusal(Some(&profile), None),
+            Err(EscalationRefusal::NotGranted)
         );
     }
 }

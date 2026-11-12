@@ -100,12 +100,22 @@ fn tc2_route_schema_rides_the_documented_wire() {
             && src.contains("escalate_frontier"),
         "the four-case roster must be named in the coordinator"
     );
-    // No new socket: the only egress is the bridge child.
+    // No raw socket, no unscreened client: T1's only egress is the bridge
+    // child (stdio); the module's ONE http reference is the screened
+    // provider door T4 constructs through (the SSRF screen lives inside
+    // HttpProvider::new).
     assert!(
-        !src.contains("TcpStream") && !src.contains("reqwest") && !src.contains("http::"),
-        "the coordinator must not open sockets — the AFM bridge (stdio) is \
-         the one door"
+        !src.contains("TcpStream") && !src.contains("reqwest"),
+        "no raw sockets and no unscreened client anywhere in the module"
     );
+    // Every http reference is the screened provider door's own path —
+    // no bare http:: and no other client crate.
+    assert_eq!(
+        src.matches("http::").count(),
+        src.matches("provider_http::").count(),
+        "the only http surface is the screened provider door"
+    );
+    assert!(src.contains("provider_http::HttpProvider::new(cfg)"));
 }
 
 #[test]
@@ -156,10 +166,11 @@ fn tc3_the_reader_is_model_absent_by_construction() {
     // turn) — the reader adds NO async surface at all, so it cannot call a
     // model; and the module names no model-serving wire anywhere.
     let src = read(MODULE);
-    // The module carries exactly TWO async fns — T1's classify_route and
-    // T3's writer_turn — each the ONLY async surface of its tier. The
-    // READER (T2) adds none: it is pure functions over fetched results,
-    // structurally unable to call a model.
+    // The module carries exactly THREE async fns — one per tier turn
+    // (T1's classify_route, T3's writer_turn, T4's escalate_frontier),
+    // each the ONLY async surface of its tier. The READER (T2) adds none:
+    // it is pure functions over fetched results, structurally unable to
+    // call a model.
     let async_fns: Vec<String> = src
         .lines()
         .filter(|l| l.contains("async fn"))
@@ -171,9 +182,13 @@ fn tc3_the_reader_is_model_absent_by_construction() {
         .collect();
     assert_eq!(
         async_fns,
-        vec!["classify_route".to_string(), "writer_turn".to_string(),],
-        "the cascade's async surface is exactly the two named fns by name — \
-         the reader stays model-absent"
+        vec![
+            "classify_route".to_string(),
+            "writer_turn".to_string(),
+            "escalate_frontier".to_string(),
+        ],
+        "the cascade's async surface is exactly the three named tier turns \
+         by name — the reader stays model-absent"
     );
     for banned in ["chat/completions", "MlxOut", "embed("] {
         assert!(
@@ -198,5 +213,74 @@ fn s2_the_reader_rides_the_substrate_caps_not_new_ones() {
     assert!(
         src.contains("wrap_fenced"),
         "the evidence block rides the kernel's own fence"
+    );
+}
+
+#[test]
+fn tc5_audit_precedes_network_and_output_is_proposal() {
+    // TC-5's audit law, structurally: in the escalation orchestrator the
+    // BEFORE-network row's call site appears BEFORE the provider call's
+    // construction, and the outcome row names the proposal kind
+    // proposal-never-memory (TC-1's law at the T4 boundary).
+    let src = read(MODULE);
+    let audit_idx = src
+        .find("audit_frontier_request(conn, &grant.reason, &query_sha)")
+        .expect("the orchestrator writes the request row");
+    let provider_idx = src
+        .find("HttpProvider::new(cfg)")
+        .expect("the provider call");
+    assert!(
+        audit_idx < provider_idx,
+        "the request row precedes the provider construction — the audit \
+         precedes the network call"
+    );
+    assert!(
+        src.contains("\"proposal_kind\": \"proposal-never-memory\""),
+        "the outcome row names the proposal kind (never memory)"
+    );
+}
+
+#[test]
+fn tc5_no_allowlist_no_session_scope() {
+    // The per-task law: the module carries no allowlist surface — no
+    // "remember", no session-scoped grant cache, no set-based grant store.
+    let src = read(MODULE);
+    for banned in [
+        "allowlist",
+        "grant_cache",
+        "PERMITTED_TASKS",
+        "remembered_grants",
+    ] {
+        assert!(
+            !src.contains(banned),
+            "the escalation must not carry an allowlist or remember-me \
+             surface ({banned})"
+        );
+    }
+    // The grant is a constructed VALUE with a reason — the only way in.
+    assert!(
+        src.contains("pub(crate) struct EscalationGrant"),
+        "the grant is a typed per-task value"
+    );
+    assert!(
+        !src.contains("impl Default for EscalationGrant"),
+        "the grant must not be defaultable (a silent grant is a cached one)"
+    );
+}
+
+#[test]
+fn tc5_the_provider_rides_the_screened_door() {
+    // The frontier's only network door is HttpProvider — the SSRF screen
+    // lives inside its `new` (at construction), the client is
+    // redirect-none; no raw socket anywhere in the module.
+    let src = read(MODULE);
+    assert!(
+        src.contains("HttpProvider::new(cfg)"),
+        "the escalation constructs through HttpProvider::new (the SSRF \
+         screen at construction)"
+    );
+    assert!(
+        !src.contains("TcpStream"),
+        "no raw sockets in the cascade module"
     );
 }
