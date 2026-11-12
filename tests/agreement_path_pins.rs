@@ -307,7 +307,7 @@ fn the_reviewer_id_is_a_payload_field_and_not_a_column() {
     );
     let layout = read("src/storage_layout.rs");
     assert!(
-        layout.contains("LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_34"),
+        layout.contains("LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_35"),
         "the schema version is re-pinned by each schema round (the model-citation-key round \
          moved it to 1.32.25, the proposal-edge round to 1.32.26, the approve-action round \
          to 1.32.27 — the roster manages column, the uninstall round to 1.32.28 — the \
