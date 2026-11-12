@@ -238,7 +238,7 @@ impl DocCorrectorClient {
         let request_sha256 = sha256_hex(&body_bytes);
         let bytes_in = markdown.len();
 
-        let mut attempts: u32 = 0;
+        let mut attempts = 0u32;
         let mut last: Option<(CorrectorOutcome, usize, String)> = None;
         while attempts < 2 {
             attempts += 1;
