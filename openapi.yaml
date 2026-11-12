@@ -759,8 +759,8 @@ paths:
                 tier:
                   type: string
                   nullable: true
-                  enum: [text-layer, docling, ocr]
-                  description: "Tier 0 'text-layer' is the default; 'docling' is the Tier-2 variant (IMPROVE06: the operator-configured converter tool, docs/DOCLING_TOOL_PROTOCOL.md); 'ocr' is the IMPROVE05 hybrid (the shell-vision sidecar, per-page routing)"
+                  enum: [text-layer, docling, ocr, vlm]
+                  description: "Tier 0 'text-layer' is the default; 'docling' is the Tier-2 variant (IMPROVE06: the operator-configured converter tool, docs/DOCLING_TOOL_PROTOCOL.md); 'ocr' is the IMPROVE05 hybrid (the shell-vision sidecar, per-page routing); 'vlm' is IMPROVE16.1's generative-extraction tier (the operator-configured VLM-OCR tool, docs/VLM_OCR_TIER.md — measured before adopted: WER 5.66% on the witness subset / 12.15% on the annex-forms subset vs the 17.12% docling-py bar, the recorded gate in plans-repo improve161-vlm-gate; OFF unless BRAIN_VLM_OCR_PATH is set — absent + tier:vlm answers vlm_ocr_unavailable 503)"
                 correct:
                   type: boolean
                   nullable: true
@@ -787,8 +787,8 @@ paths:
                   page_tiers:
                     type: array
                     nullable: true
-                    items: { type: string, enum: [text-layer, ocr] }
-                    description: "the per-page tier map (OV-2), present exactly when OCR ran"
+                    items: { type: string, enum: [text-layer, ocr, docling, vlm] }
+                    description: "the per-page tier map (OV-2), present exactly when OCR or a whole-document tool tier ran (a docling row's map is all-docling; a vlm row's is all-vlm)"
                   low_confidence_pages:
                     type: integer
                     description: "the count of pages flagged below the named confidence floor (OV-3)"

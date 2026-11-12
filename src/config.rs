@@ -2615,6 +2615,26 @@ pub fn document_converter_path() -> Option<std::path::PathBuf> {
     Some(std::path::PathBuf::from(trimmed))
 }
 
+/// The vlm tier's tool path (`BRAIN_VLM_OCR_PATH`, IMPROVE16.1) — the FOURTH
+/// probe sibling, beside `afm_bridge_path` / `document_converter_path` /
+/// `ocr_bridge_path`. Strictly operator-configured, the same shape as
+/// `document_converter_path` (no exe-sibling default: the VLM-OCR shim is an
+/// operator-installed MLX stack — the poppler + mlx-vlm venv + the
+/// pre-fetched HF cache — that never ships beside the kernel), and `None`
+/// (unset/empty) is a POSTURE, not an error: the vlm variant answers
+/// `vlm_ocr_unavailable` and Tier 0 — the default — is unaffected and needs
+/// zero configuration. The measurement gate that adopted this tier is the
+/// recorded WER table (plans-repo improve161-vlm-gate); this seam only
+/// detects.
+pub fn vlm_ocr_path() -> Option<std::path::PathBuf> {
+    let explicit = std::env::var("BRAIN_VLM_OCR_PATH").ok()?;
+    let trimmed = explicit.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(std::path::PathBuf::from(trimmed))
+}
+
 /// Resolve the OCR sidecar path (`shell-vision`, IMPROVE05) — the THIRD
 /// probe sibling, beside `afm_bridge_path` (above) and
 /// `document_converter_path` (above). Order: the env override

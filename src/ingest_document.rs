@@ -60,6 +60,20 @@ pub const TIER_MIXED: &str = "mixed";
 /// design — no per-page mixing this round), so a docling row's map is
 /// all-`docling` and the derived-tier function never produces this value.
 pub const TIER_DOCLING: &str = "docling";
+/// The vlm tier (IMPROVE16.1): the whole document went through the
+/// operator-configured VLM-OCR tool (docs/VLM_OCR_TIER.md) — GENERATIVE
+/// EXTRACTION, its own named tier value. It honors the docling tool
+/// protocol's FILE contract (the two files, the markers, the exits) but NOT
+/// that protocol's "No LLM anywhere" law's name: a VLM read is a model's
+/// transcription, accepted AS PRODUCED, stamped BY RECORD (model+quant +
+/// mlx-vlm version per run; DI-1 does NOT hold for this tier — temperature 0
+/// is DECLARED, not guaranteed), fenced LOCAL-ONLY (the tool's exit-5
+/// refuses a remote posture before any work), and gated by MEASUREMENT (the
+/// adoption is the recorded WER table's verdict, plans-repo
+/// improve161-vlm-gate). The whole document goes through the VLM read, so a
+/// vlm row's map is all-`vlm` and the derived-tier function never produces
+/// this value.
+pub const TIER_VLM: &str = "vlm";
 /// The corrected variant's tier suffix (IMPROVE16): the verbatim tier +
 /// `-corrected` (e.g. `docling-corrected`), so search filters can scope
 /// and the two-artifact law reads in the row itself.
@@ -254,6 +268,13 @@ pub enum DocumentProvenance {
     /// lockfile-pinned); the header carries NO ocr-engine field and the
     /// per-page map is all-`docling` (the whole-document read).
     Converter { tool: String, version: String },
+    /// The IMPROVE16.1 vlm read: the whole document went through the
+    /// operator-configured VLM-OCR tool (GENERATIVE EXTRACTION — the tier's
+    /// own law, never the docling no-LLM law's name). The extractor
+    /// name/version are the TOOL's (meta.json — the by-record stamp law:
+    /// model+quant + mlx-vlm version per run); the header carries NO
+    /// ocr-engine field and the per-page map is all-`vlm`.
+    Vlm { tool: String, version: String },
 }
 
 impl DocumentProvenance {
@@ -262,18 +283,22 @@ impl DocumentProvenance {
         match self {
             Self::TextLayer => format!("{EXTRACTOR_NAME}/{EXTRACTOR_VERSION}"),
             Self::Ocr(_) => format!("{EXTRACTOR_NAME}/{EXTRACTOR_VERSION}"),
-            Self::Converter { tool, version } => format!("{tool}/{version}"),
+            Self::Converter { tool, version } | Self::Vlm { tool, version } => {
+                format!("{tool}/{version}")
+            }
         }
     }
 
     /// The per-page tier map over `page_count` pages, or `None` for the
     /// postures that carry no map (Tier 0). The OCR map is what ran; the
-    /// converter map is all-`docling` (the whole-document read).
+    /// converter map is all-`docling`; the vlm map is all-`vlm` (both
+    /// whole-document reads).
     pub fn page_tier_map(&self, page_count: usize) -> Option<Vec<&'static str>> {
         match self {
             Self::TextLayer => None,
             Self::Ocr(a) => Some(a.page_tier_map(page_count)),
             Self::Converter { .. } => Some(vec![TIER_DOCLING; page_count]),
+            Self::Vlm { .. } => Some(vec![TIER_VLM; page_count]),
         }
     }
 }
@@ -286,7 +311,10 @@ impl DocumentProvenance {
 /// pre-improve05 shape; `Ocr` adds the engine + per-page map to the header
 /// and one marker line per OCR page block; `Converter` stamps the tool's
 /// extractor name/version and the all-`docling` map — and NEVER an
-/// ocr-engine field or a confidence marker.
+/// ocr-engine field or a confidence marker; `Vlm` (IMPROVE16.1) stamps the
+/// tool's extractor name/version and the all-`vlm` map under the same
+/// never-an-ocr-engine law — the tier value itself is the BY-RECORD
+/// determinism posture's marker (DI-1 does not hold for a VLM read).
 pub fn emit_annotated_markdown(
     extracted: &ExtractedDocument,
     sha256: &str,
@@ -604,6 +632,15 @@ pub fn probe_document_converter(configured: Option<&std::path::Path>) -> Convert
         Some(p) if p.is_file() => ConverterProbe::Present(p.to_path_buf()),
         Some(_) => ConverterProbe::PathMissing,
     }
+}
+
+/// Probe the configured vlm-ocr tool path (IMPROVE16.1) — the vlm tier's
+/// NAMED sibling of [`probe_document_converter`] (the OV-4 shape, the fourth
+/// probe). The same three arms (the tool FILE contract is the same shape);
+/// the NAME is the seam: the route's vlm arm and the docs read this, and the
+/// env read happens in `config::vlm_ocr_path()`.
+pub fn probe_vlm_ocr(configured: Option<&std::path::Path>) -> ConverterProbe {
+    probe_document_converter(configured)
 }
 
 // ── the isolation boundary (the child parse) ─────────────────────────────────

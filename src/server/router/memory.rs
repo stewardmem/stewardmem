@@ -3103,9 +3103,13 @@ pub async fn ingest_document(
 
     // Tier selection. Tier 0 (`text-layer`) is the DEFAULT and needs zero
     // configuration. `docling` is the Tier-2 variant (IMPROVE06): the probe
-    // runs FIRST (OV-4's shape — the three probes are independent), and a
+    // runs FIRST (OV-4's shape — the probes are independent), and a
     // present tool runs the REAL pipeline below. `ocr` is the IMPROVE05
-    // hybrid (the second probe). Tier 0 is never touched by any of this.
+    // hybrid (the second probe). `vlm` is IMPROVE16.1's generative-extraction
+    // tier (the FOURTH probe sibling — the shim honors the tool protocol's
+    // FILE contract under the vlm tier's OWN law, docs/VLM_OCR_TIER.md;
+    // measured before adopted, plans-repo improve161-vlm-gate). Tier 0 is
+    // never touched by any of this.
     let tier = payload
         .tier
         .clone()
@@ -3122,6 +3126,28 @@ pub async fn ingest_document(
                     "converter_unavailable",
                     "the Tier-2 converter is not available: BRAIN_DOCLING_PATH is unset or its \
                      path does not exist; Tier 0 (text-layer) needs no configuration"
+                        .to_string(),
+                ));
+            }
+        }
+    } else {
+        None
+    };
+    // IMPROVE16.1: the vlm arm — the FOURTH probe sibling. The probe runs
+    // BEFORE any extraction work (OV-4: absent → the named 503 posture;
+    // the other arms are unaffected — the probes are independent). Present →
+    // the same run_converter pipeline below (the tool protocol's FILE
+    // contract is the shim's, the kernel's cross-check is shared).
+    let vlm_exe = if tier == crate::ingest_document::TIER_VLM {
+        match crate::ingest_document::probe_vlm_ocr(crate::config::vlm_ocr_path().as_deref()) {
+            crate::ingest_document::ConverterProbe::Present(path) => Some(path),
+            crate::ingest_document::ConverterProbe::Unconfigured
+            | crate::ingest_document::ConverterProbe::PathMissing => {
+                return Err(document_error(
+                    axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                    "vlm_ocr_unavailable",
+                    "the vlm tier is not available: BRAIN_VLM_OCR_PATH is unset or its path \
+                     does not exist; Tier 0 (text-layer) needs no configuration"
                         .to_string(),
                 ));
             }
@@ -3157,15 +3183,17 @@ pub async fn ingest_document(
     if tier != crate::ingest_document::TIER_TEXT_LAYER
         && tier != crate::ingest_document::TIER_OCR
         && tier != crate::ingest_document::TIER_DOCLING
+        && tier != crate::ingest_document::TIER_VLM
     {
         return Err(document_error(
             axum::http::StatusCode::BAD_REQUEST,
             "unsupported_tier",
             format!(
-                "tier {tier:?} is not available in this build; supported: {}, {}, {}",
+                "tier {tier:?} is not available in this build; supported: {}, {}, {}, {}",
                 crate::ingest_document::TIER_TEXT_LAYER,
                 crate::ingest_document::TIER_OCR,
-                crate::ingest_document::TIER_DOCLING
+                crate::ingest_document::TIER_DOCLING,
+                crate::ingest_document::TIER_VLM
             ),
         ));
     }
@@ -3410,6 +3438,35 @@ pub async fn ingest_document(
             provenance,
             crate::ingest_document::TIER_DOCLING.to_string(),
         )
+    } else if let Some(tool_exe) = vlm_exe {
+        // IMPROVE16.1: the vlm lane — the IDENTICAL run_converter machinery
+        // (the tool FILE contract, the exit vocabulary, the DC-5 cross-check)
+        // under the vlm tier's OWN law. The provenance carries the tool's
+        // meta.json identity (the by-record stamp); the derived tier is the
+        // named `vlm` value; the doors below are INHERITED, no bypass.
+        let pdf = pdf_bytes.clone();
+        let tool = tool_exe.clone();
+        let output =
+            task::spawn_blocking(move || crate::ingest_document::run_converter(&tool, &pdf))
+                .await
+                .map_err(|_| {
+                    HandlerError::internal("the converter task could not complete".to_string())
+                })?;
+        let output = match output {
+            Ok(output) => output,
+            Err(e) => return Err(converter_refusal(e)),
+        };
+        let provenance = crate::ingest_document::DocumentProvenance::Vlm {
+            tool: output.tool.clone(),
+            version: output.version.clone(),
+        };
+        (
+            crate::ingest_document::ExtractedDocument {
+                pages: output.pages,
+            },
+            provenance,
+            crate::ingest_document::TIER_VLM.to_string(),
+        )
     } else {
         let (extracted, ocr_assembly, tier_ran) =
             tier0_extract_and_route_ocr(&pdf_bytes, ocr_sidecar, &tier).await?;
@@ -3483,7 +3540,8 @@ pub async fn ingest_document(
         _ => None,
     };
     let (row_extractor, row_extractor_version) = match &provenance {
-        crate::ingest_document::DocumentProvenance::Converter { tool, version } => {
+        crate::ingest_document::DocumentProvenance::Converter { tool, version }
+        | crate::ingest_document::DocumentProvenance::Vlm { tool, version } => {
             (tool.clone(), version.clone())
         }
         _ => (
@@ -4323,10 +4381,27 @@ fn rederive_document_markdown(
     // fails verify_document_header BY NAME (the improve05 engine-pin law,
     // extractor-shaped); an absent tool refuses ConverterUnavailable; a
     // remote/generative posture in the operator's env refuses named.
-    if row.tier == crate::ingest_document::TIER_DOCLING {
-        let tool = match crate::ingest_document::probe_document_converter(
-            crate::config::document_converter_path().as_deref(),
-        ) {
+    // IMPROVE16.1: a vlm row re-derives identically under its OWN tool
+    // seam (BRAIN_VLM_OCR_PATH) and its own provenance value — the stamp
+    // law is the same by-record law, so a moved shim version refuses the
+    // same named way (VO-2's re-derive half).
+    let tool_seam = if row.tier == crate::ingest_document::TIER_DOCLING {
+        Some((
+            crate::ingest_document::probe_document_converter(
+                crate::config::document_converter_path().as_deref(),
+            ),
+            false,
+        ))
+    } else if row.tier == crate::ingest_document::TIER_VLM {
+        Some((
+            crate::ingest_document::probe_vlm_ocr(crate::config::vlm_ocr_path().as_deref()),
+            true,
+        ))
+    } else {
+        None
+    };
+    if let Some((probe, is_vlm)) = tool_seam {
+        let tool = match probe {
             crate::ingest_document::ConverterProbe::Present(path) => path,
             crate::ingest_document::ConverterProbe::Unconfigured
             | crate::ingest_document::ConverterProbe::PathMissing => {
@@ -4366,10 +4441,17 @@ fn rederive_document_markdown(
             // The tool's layout reading is the TOOL's claim; the row was
             // stored with the kernel's unverified posture either way.
             crate::ingest_document::LAYOUT_UNVERIFIED,
-            &crate::ingest_document::DocumentProvenance::Converter {
-                tool: output.tool,
-                version: output.version,
-            },
+            &(if is_vlm {
+                crate::ingest_document::DocumentProvenance::Vlm {
+                    tool: output.tool,
+                    version: output.version,
+                }
+            } else {
+                crate::ingest_document::DocumentProvenance::Converter {
+                    tool: output.tool,
+                    version: output.version,
+                }
+            }),
         );
         crate::ingest_document::verify_document_header(&markdown, row)
             .map_err(RederiveFailure::Mismatch)?;

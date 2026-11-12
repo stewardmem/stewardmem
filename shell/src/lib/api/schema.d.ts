@@ -6729,10 +6729,10 @@ export interface operations {
                     /** @description Target domain (defaults to 'global') */
                     domain?: string | null;
                     /**
-                     * @description Tier 0 'text-layer' is the default; 'docling' is the Tier-2 variant (IMPROVE06: the operator-configured converter tool, docs/DOCLING_TOOL_PROTOCOL.md); 'ocr' is the IMPROVE05 hybrid (the shell-vision sidecar, per-page routing)
+                     * @description Tier 0 'text-layer' is the default; 'docling' is the Tier-2 variant (IMPROVE06: the operator-configured converter tool, docs/DOCLING_TOOL_PROTOCOL.md); 'ocr' is the IMPROVE05 hybrid (the shell-vision sidecar, per-page routing); 'vlm' is IMPROVE16.1's generative-extraction tier (the operator-configured VLM-OCR tool, docs/VLM_OCR_TIER.md — measured before adopted: WER 5.66% on the witness subset / 12.15% on the annex-forms subset vs the 17.12% docling-py bar, the recorded gate in plans-repo improve161-vlm-gate; OFF unless BRAIN_VLM_OCR_PATH is set — absent + tier:vlm answers vlm_ocr_unavailable 503)
                      * @enum {string|null}
                      */
-                    tier?: "text-layer" | "docling" | "ocr" | null;
+                    tier?: "text-layer" | "docling" | "ocr" | "vlm" | null;
                     /** @description IMPROVE16: also produce the corrected variant as a second artifact (never a rewrite; the lane is OFF unless BRAIN_DOC_CORRECTOR_* is configured all-or-nothing; unconfigured → corrector_unconfigured 503 and nothing lands). Absent/false = the default pipeline, byte-identical to the pre-lane shape */
                     correct?: boolean | null;
                 };
@@ -6758,8 +6758,8 @@ export interface operations {
                         /** @description the OCR engine stamp (apple-vision/recognize-text@<os-build>), present exactly when OCR ran */
                         ocr_engine?: string | null;
                         pages?: number;
-                        /** @description the per-page tier map (OV-2), present exactly when OCR ran */
-                        page_tiers?: ("text-layer" | "ocr")[] | null;
+                        /** @description the per-page tier map (OV-2), present exactly when OCR or a whole-document tool tier ran (a docling row's map is all-docling; a vlm row's is all-vlm) */
+                        page_tiers?: ("text-layer" | "ocr" | "docling" | "vlm")[] | null;
                         /** @description the count of pages flagged below the named confidence floor (OV-3) */
                         low_confidence_pages?: number;
                         layout_unverified?: boolean;
