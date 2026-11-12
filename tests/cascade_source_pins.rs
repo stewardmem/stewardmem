@@ -130,3 +130,41 @@ fn tc1_no_memory_write_in_the_coordinator() {
         );
     }
 }
+
+#[test]
+fn tc3_the_reader_is_model_absent_by_construction() {
+    // TC-3's structural law: NO model import anywhere in the reader's path.
+    // The module's ONE async function is T1's classify_route (the bridge
+    // turn) — the reader adds NO async surface at all, so it cannot call a
+    // model; and the module names no model-serving wire anywhere.
+    let src = read(MODULE);
+    let async_count = src.matches("async fn").count();
+    assert_eq!(
+        async_count, 1,
+        "cascade.rs must carry exactly one async fn (classify_route) — the          reader is pure functions over fetched results, structurally unable          to call a model"
+    );
+    for banned in ["chat/completions", "mlx", "MlxOut", "embed("] {
+        assert!(
+            !src.contains(banned),
+            "the cascade module must not name a model-serving wire ({banned})"
+        );
+    }
+}
+
+#[test]
+fn s2_the_reader_rides_the_substrate_caps_not_new_ones() {
+    // The reader's limits come from the substrate (BRAIN_RECALL_* at the
+    // run_recall call the caller makes) and the packer's preregistered
+    // caps — the module must not invent a second recall implementation.
+    let src = read(MODULE);
+    assert!(
+        src.contains("EVIDENCE_MAX_HITS")
+            && src.contains("EVIDENCE_HIT_CAP_CHARS")
+            && src.contains("EVIDENCE_TOTAL_CAP_CHARS"),
+        "the packer's caps are named constants (S0's preregistered law)"
+    );
+    assert!(
+        src.contains("wrap_fenced"),
+        "the evidence block rides the kernel's own fence"
+    );
+}

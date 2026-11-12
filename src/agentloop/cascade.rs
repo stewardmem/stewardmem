@@ -291,6 +291,95 @@ pub(crate) fn audit_route_call(
     )
 }
 
+// ── T2: the reader (round 17 S2) ─────────────────────────────────────────────
+//
+// The deterministic, model-absent tier: the existing substrate (`run_recall`
+// — the same core `/recall` serves) with a larger `limit` for the `read_more`
+// lane, under the `BRAIN_RECALL_*` caps the substrate already enforces. The
+// reader adds NO model surface by construction: every function here is PURE
+// over results the caller fetched — the module's one async function is T1's
+// `classify_route` (pinned: the reader section cannot call a model because
+// it has no async surface at all).
+//
+// The evidence shape carries the substrate's own structured provenance —
+// the `search::Evidence` the retrievers populate on a provenance-requested
+// recall (the 1-indexed source line span, the heading breadcrumb, the
+// canonical source URI, the immutable revision id) — plus the hit index the
+// writer's claims cite. TC-3: deterministic (same query → same evidence →
+// same fenced block bytes) and model-absent.
+
+/// The evidence packer's caps — S0's preregistered law, now in production
+/// code: per-hit truncation and a greedy block total (the chat spine's
+/// grounding-budget law, `GROUNDING_TOKEN_BUDGET = 1_024`, in character
+/// form). The noise corpus's whole-document chunks are exactly the input
+/// the caps exist for.
+pub(crate) const EVIDENCE_HIT_CAP_CHARS: usize = 1_000;
+pub(crate) const EVIDENCE_TOTAL_CAP_CHARS: usize = 4_000;
+pub(crate) const EVIDENCE_MAX_HITS: usize = 6;
+
+/// One evidence chunk as the cascade carries it: the substrate's own
+/// provenance struct plus the 0-based hit index the writer's claims cite.
+#[derive(Debug, Clone)]
+pub(crate) struct EvidenceChunk {
+    pub(crate) hit_index: usize,
+    pub(crate) chunk_id: i64,
+    pub(crate) score: f32,
+    pub(crate) title: Option<String>,
+    pub(crate) content: String,
+    /// The substrate's structured provenance (`search::Evidence`): line
+    /// span, heading path, source URI, revision id, validity window.
+    /// `None` when the recall ran without a provenance request — the
+    /// caller's lane decides whether to request it; the reader carries
+    /// what the substrate gave, verbatim.
+    pub(crate) provenance: Option<crate::search::Evidence>,
+}
+
+/// Map the substrate's recall results into the reader's evidence chunks.
+/// Pure, order-preserving (the hit index IS the substrate rank), and
+/// content-faithful: the chunk's content rides verbatim — the CAPS apply at
+/// the fenced block, not here (the claims' span verification needs the
+/// full chunk text; truncation at the packer is recorded there).
+pub(crate) fn evidence_from_results(
+    results: &[(crate::SearchResult, String)],
+) -> Vec<EvidenceChunk> {
+    results
+        .iter()
+        .enumerate()
+        .map(|(hit_index, (r, _domain))| EvidenceChunk {
+            hit_index,
+            chunk_id: r.id,
+            score: r.score,
+            title: r.title.clone(),
+            content: r.content.clone(),
+            provenance: r.evidence.clone(),
+        })
+        .collect()
+}
+
+/// The fenced evidence block the writer sees (T3's only view of memory):
+/// hits labeled by index, each capped, the block greedy-stopped at the
+/// total cap and the hit count — all through the kernel's own fence
+/// (`wrap_fenced`), so the block's own words carry the DATA-not-instructions
+/// law. Deterministic: same chunks in, same bytes out (TC-3).
+pub(crate) fn fenced_evidence_block(chunks: &[EvidenceChunk], upto: usize) -> String {
+    let mut body = String::new();
+    let take = upto.min(EVIDENCE_MAX_HITS).min(chunks.len());
+    for c in chunks.iter().take(take) {
+        let piece: String = if c.content.len() > EVIDENCE_HIT_CAP_CHARS {
+            format!("{}… [truncated]", &c.content[..EVIDENCE_HIT_CAP_CHARS])
+        } else {
+            c.content.clone()
+        };
+        let line = format!("[hit {}] {}", c.hit_index, piece);
+        if body.len() + line.len() > EVIDENCE_TOTAL_CAP_CHARS {
+            break;
+        }
+        body.push_str(&line);
+        body.push('\n');
+    }
+    crate::fence::wrap_fenced(body.trim_end())
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     //! The TC-2 + S0-summary behavioral pins, born red against the pre-S1
@@ -450,5 +539,116 @@ pub(crate) mod tests {
         assert!((conf - 0.5).abs() < 1e-9);
         assert_eq!(d, RouteDecision::Synthesize, "the preregistered fallback");
         assert!(!ok);
+    }
+    // ── S2: the T2 reader's pins (TC-3 + the caps law) ──
+
+    #[test]
+    fn tc3_reader_is_deterministic_same_input_same_bytes() {
+        // Same query → same evidence → same fenced-block bytes (TC-3). The
+        // reader is PURE over the substrate's results — the S0 HTTP witness
+        // proved the substrate's determinism end-to-end; this pin proves
+        // the reader adds no entropy.
+        let mk = || {
+            let r = crate::SearchResult {
+                id: 7,
+                score: 0.9,
+                title: Some("t1".into()),
+                content: "The chunk content rides verbatim.".into(),
+                ..Default::default()
+            };
+            evidence_from_results(&[(r, "global".into())])
+        };
+        let a = mk();
+        let b = mk();
+        assert_eq!(a.len(), b.len());
+        assert_eq!(a[0].chunk_id, b[0].chunk_id);
+        assert_eq!(a[0].content, b[0].content);
+        assert_eq!(
+            fenced_evidence_block(&a, 6),
+            fenced_evidence_block(&b, 6),
+            "same chunks in, same fenced bytes out"
+        );
+    }
+
+    #[test]
+    fn tc3_reader_evidence_labels_hit_indices_in_rank_order() {
+        let mk = |id: i64, content: &str| crate::SearchResult {
+            id,
+            score: 0.5,
+            content: content.into(),
+            ..Default::default()
+        };
+        let chunks = evidence_from_results(&[
+            (mk(1, "first"), "global".into()),
+            (mk(2, "second"), "global".into()),
+        ]);
+        assert_eq!(chunks[0].hit_index, 0);
+        assert_eq!(chunks[1].hit_index, 1);
+        let block = fenced_evidence_block(&chunks, 6);
+        assert!(block.contains("[hit 0] first"));
+        assert!(block.contains("[hit 1] second"));
+        // The fence's own words are the contract (the DATA law rides the
+        // block by construction).
+        assert!(block.contains("UNTRUSTED retrieved memory"));
+    }
+
+    #[test]
+    fn s2_caps_law_per_hit_and_block_and_hitcount() {
+        let long = "x".repeat(EVIDENCE_HIT_CAP_CHARS + 500);
+        let chunks: Vec<EvidenceChunk> = (0..8)
+            .map(|i| EvidenceChunk {
+                hit_index: i,
+                chunk_id: i as i64,
+                score: 0.5,
+                title: None,
+                content: long.clone(),
+                provenance: None,
+            })
+            .collect();
+        let block = fenced_evidence_block(&chunks, 8);
+        // The per-hit cap truncates with the recorded marker.
+        assert!(block.contains("[truncated]"));
+        // The hit count caps at EVIDENCE_MAX_HITS — hits 6 and 7 never land.
+        assert!(!block.contains("[hit 6]"));
+        assert!(!block.contains("[hit 7]"));
+        // The block total stays under the cap (+ the fence envelope).
+        assert!(block.len() <= EVIDENCE_TOTAL_CAP_CHARS + 200);
+    }
+
+    #[test]
+    fn s2_provenance_passthrough_carries_the_substrate_shape() {
+        // The reader carries the substrate's structured provenance
+        // VERBATIM (the search::Evidence: line span, heading path, source
+        // URI, revision id) — the shape the writer's claims cite against.
+        let prov = crate::search::Evidence {
+            text: "the matched window".into(),
+            line_start: Some(12),
+            line_end: Some(18),
+            heading_path: Some("Setup > Install".into()),
+            source_uri: Some("manual://abc".into()),
+            revision_id: Some(42),
+            highlights: Vec::new(),
+            valid_from: None,
+            valid_to: None,
+            observed_at: None,
+            authority: None,
+            lifecycle: None,
+            links: Vec::new(),
+            untrusted: true,
+        };
+        let r = crate::SearchResult {
+            id: 9,
+            score: 0.8,
+            content: "content".into(),
+            evidence: Some(prov),
+            ..Default::default()
+        };
+        let chunks = evidence_from_results(&[(r, "global".into())]);
+        let prov = chunks[0].provenance.as_ref().expect("provenance rides");
+        assert_eq!(prov.line_start, Some(12));
+        assert_eq!(prov.line_end, Some(18));
+        assert_eq!(prov.heading_path.as_deref(), Some("Setup > Install"));
+        assert_eq!(prov.source_uri.as_deref(), Some("manual://abc"));
+        assert_eq!(prov.revision_id, Some(42));
     }
 }
