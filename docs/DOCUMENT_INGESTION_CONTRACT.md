@@ -60,6 +60,7 @@ per-line split is the parse the pins test.)
 | `layout` | `unverified` at Tier 0 — always. A `verified` value here is a found bug (DI-2's sibling pin). |
 | `ocr-engine` | IMPROVE05, **present exactly when OCR ran**: the sidecar's engine stamp, `apple-vision/<request-type>@<os-build>` (e.g. `apple-vision/recognize-text@26B123`). Recorded per run — never promised bitwise across OS builds. A docling header NEVER carries this field (the converter is not the OCR sidecar; DC-6's pin asserts the absence). |
 | `pages-tier` | IMPROVE05, **present exactly when OCR ran**: the per-page tier map, comma-joined in page order (`text-layer,ocr,text-layer,ocr`). IMPROVE06: a docling row's header carries the all-`docling` map (`docling,docling,…` — the whole-document read). Machine-checkable; the row carries the same map (DI-3's extension) and the sidecar request named exactly the `ocr` pages (OV-2's three-way agreement). |
+| `corrector` | IMPROVE16, **present exactly on a CORRECTED variant's header** (beside — never instead of — `extractor:`): the stamp `<model>@<served>`. A corrected variant is a SECOND artifact (docs/DOC_CORRECTION_LANE.md): its `doc:` carries the VERBATIM markdown's sha (the lineage anchor), its `tier:` is the verbatim tier + `-corrected`, its `extractor:` is `doc-corrector/<stamp>`, and DI-3 requires the header stamp to agree with the row's `extractor_version` exactly — every tamper shape fails by name. The route authors this header wholesale; the corrector never does. |
 
 ### The page blocks (DI-2's anchor)
 
@@ -94,8 +95,12 @@ per-line split is the parse the pins test.)
 ## 2 · The route: `POST /ingest/document`
 
 - **Body:** JSON, `{"data": <base64 PDF bytes>, "title": <string>, "source":
-  <label>, "domain": <name>, "tier": "text-layer"|"docling"|"ocr"}`. `data` is
+  <label>, "domain": <name>, "tier": "text-layer"|"docling"|"ocr", "correct": true}`. `data` is
   required; `title` is required (the chunker's title law); the rest optional
+  (`correct` defaults to false — the pre-lane pipeline, byte-identical; true
+  = the doc-correction lane ALSO lands the corrected variant as a SECOND
+  artifact, docs/DOC_CORRECTION_LANE.md — never a rewrite, refused named
+  when unconfigured)
   (`source` defaults to `document`, `domain` to `global`, `tier` to
   `text-layer`). The response `tier` is DERIVED from what ran (`text-layer` |
   `ocr` | `mixed`, plus `docling` for the Tier-2 lane), never echoed from the

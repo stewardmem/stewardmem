@@ -477,7 +477,12 @@ pub struct RecallHit {
     /// (memory/markdown/structured/manual/vault/connector), `memory_kind`
     /// (the `node_kind` vocabulary), `lawful_basis` (Art 5/6), `region`
     /// (residency stamp), `origin` (human/model/agent/operator/imported —
-    /// the write-side taint label; absent for legacy rows).
+    /// the write-side taint label; absent for legacy rows). The doc-
+    /// correction lane's corrected chunks (IMPROVE16, the `document`
+    /// ingest kind) are `origin: imported` + corrector-stamped (the row's
+    /// `doc-corrector` extractor carries the `<model>@<served>` stamp) —
+    /// NEVER `human`: machine-processed text never claims human
+    /// authorship (docs/DOC_CORRECTION_LANE.md law 10).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ingest_kind: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
