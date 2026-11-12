@@ -9,6 +9,16 @@ ground record; the doc-ingest contract this plugs into is
 `docs/DOCUMENT_INGESTION_CONTRACT.md`; the sidecar precedent is
 `docs/OCR_SIDECAR_PROTOCOL.md`.
 
+**IMPROVE16.1 (2026-11-12):** the `vlm` tier's shim
+(`scripts/glm-ocr-kernel.sh`) implements THIS protocol's FILE contract —
+the two files, the markers, the exit vocabulary — under its OWN tier law
+(`docs/VLM_OCR_TIER.md`), never under this protocol's NAME: the law below
+says "No LLM anywhere" and a VLM tier is generative extraction, so it rides
+the file SHAPE (and the kernel's markers+1 == pages cross-check keeps its
+two independent sources on the vlm side too) while the no-LLM law stays
+exactly as written for the docling tiers. The kernel cannot tell the vlm
+shim from a docling tool; the TIER VALUE is the named seam.
+
 ## Why a protocol and not the CLI directly
 
 The annotated-markdown contract's per-page anchors (DI-2) need page breaks.

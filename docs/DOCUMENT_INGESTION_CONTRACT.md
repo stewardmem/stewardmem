@@ -54,12 +54,12 @@ per-line split is the parse the pins test.)
 | `doc` | lowercase hex sha256 of the **source PDF bytes** (64 chars). The integrity anchor: the row and the header must agree. |
 | `source` | the trust label the request carried (≤ `MAX_SOURCE` bytes, the closed vocabulary at the write seams). |
 | `pages` | the page count the extractor observed (integer ≥ 1). |
-| `tier` | What RAN, derived from the per-page routing: `text-layer` (every page from the text layer — Tier 0's shape), `ocr` (every page from the sidecar), `mixed` (at least one of each). `docling` (IMPROVE06) is the Tier-2 tier: the WHOLE document went through the operator-configured converter, so the request's tier lands the row unchanged (the converter reads whole documents — no per-page mixing this round). |
+| `tier` | What RAN, derived from the per-page routing: `text-layer` (every page from the text layer — Tier 0's shape), `ocr` (every page from the sidecar), `mixed` (at least one of each). `docling` (IMPROVE06) is the Tier-2 tier: the WHOLE document went through the operator-configured converter, so the request's tier lands the row unchanged (the converter reads whole documents — no per-page mixing this round). `vlm` (IMPROVE16.1, docs/VLM_OCR_TIER.md) is the generative-extraction tier: the WHOLE document went through the operator-configured VLM-OCR tool — the docling tool protocol's FILE contract under the vlm law's own name — so the request's tier lands the row unchanged the same way; measured before adopted (the recorded gate: plans-repo improve161-vlm-gate, 5.66%/12.15% vs the 17.12% bar). |
 | `extracted` | RFC3339 UTC of the extraction event. **The one volatile field** — see the determinism rule below. |
-| `extractor` | `<name>/<version>`, e.g. `pdf-extract/0.12.1`. At Tier 0 the version is the resolved crate version, pinned against the lockfile by a test. On a docling row the stamp is the TOOL's own identity from its meta.json (e.g. `docling/2.148.0` or `docling-rs/2.67.1`) — the operator-installed version, recorded per run like the OCR engine string, never lockfile-pinned (a re-derive under a moved version refuses, the engine-pin law). |
+| `extractor` | `<name>/<version>`, e.g. `pdf-extract/0.12.1`. At Tier 0 the version is the resolved crate version, pinned against the lockfile by a test. On a docling row the stamp is the TOOL's own identity from its meta.json (e.g. `docling/2.148.0` or `docling-rs/2.67.1`) — the operator-installed version, recorded per run like the OCR engine string, never lockfile-pinned (a re-derive under a moved version refuses, the engine-pin law). On a vlm row the stamp is the same tool-tier law: the shim's meta.json (`glm-ocr/<quant>@<mlx-vlm-ver>` — the quant is part of the model id; DI-1 does NOT hold for this tier, preregistered: temperature 0 declared, reproducible-BY-RECORD). |
 | `layout` | `unverified` at Tier 0 — always. A `verified` value here is a found bug (DI-2's sibling pin). |
-| `ocr-engine` | IMPROVE05, **present exactly when OCR ran**: the sidecar's engine stamp, `apple-vision/<request-type>@<os-build>` (e.g. `apple-vision/recognize-text@26B123`). Recorded per run — never promised bitwise across OS builds. A docling header NEVER carries this field (the converter is not the OCR sidecar; DC-6's pin asserts the absence). |
-| `pages-tier` | IMPROVE05, **present exactly when OCR ran**: the per-page tier map, comma-joined in page order (`text-layer,ocr,text-layer,ocr`). IMPROVE06: a docling row's header carries the all-`docling` map (`docling,docling,…` — the whole-document read). Machine-checkable; the row carries the same map (DI-3's extension) and the sidecar request named exactly the `ocr` pages (OV-2's three-way agreement). |
+| `ocr-engine` | IMPROVE05, **present exactly when OCR ran**: the sidecar's engine stamp, `apple-vision/<request-type>@<os-build>` (e.g. `apple-vision/recognize-text@26B123`). Recorded per run — never promised bitwise across OS builds. A docling header NEVER carries this field (the converter is not the OCR sidecar; DC-6's pin asserts the absence); a vlm header NEVER carries it either (the VLM is not the OCR sidecar; VO-2's pin asserts the absence). |
+| `pages-tier` | IMPROVE05, **present exactly when OCR ran**: the per-page tier map, comma-joined in page order (`text-layer,ocr,text-layer,ocr`). IMPROVE06: a docling row's header carries the all-`docling` map (`docling,docling,…` — the whole-document read). IMPROVE16.1: a vlm row's header carries the all-`vlm` map the same way. Machine-checkable; the row carries the same map (DI-3's extension) and the sidecar request named exactly the `ocr` pages (OV-2's three-way agreement). |
 | `corrector` | IMPROVE16, **present exactly on a CORRECTED variant's header** (beside — never instead of — `extractor:`): the stamp `<model>@<served>`. A corrected variant is a SECOND artifact (docs/DOC_CORRECTION_LANE.md): its `doc:` carries the VERBATIM markdown's sha (the lineage anchor), its `tier:` is the verbatim tier + `-corrected`, its `extractor:` is `doc-corrector/<stamp>`, and DI-3 requires the header stamp to agree with the row's `extractor_version` exactly — every tamper shape fails by name. The route authors this header wholesale; the corrector never does. |
 
 ### The page blocks (DI-2's anchor)
@@ -95,7 +95,7 @@ per-line split is the parse the pins test.)
 ## 2 · The route: `POST /ingest/document`
 
 - **Body:** JSON, `{"data": <base64 PDF bytes>, "title": <string>, "source":
-  <label>, "domain": <name>, "tier": "text-layer"|"docling"|"ocr", "correct": true}`. `data` is
+  <label>, "domain": <name>, "tier": "text-layer"|"docling"|"ocr"|"vlm", "correct": true}`. `data` is
   required; `title` is required (the chunker's title law); the rest optional
   (`correct` defaults to false — the pre-lane pipeline, byte-identical; true
   = the doc-correction lane ALSO lands the corrected variant as a SECOND
@@ -103,13 +103,19 @@ per-line split is the parse the pins test.)
   when unconfigured)
   (`source` defaults to `document`, `domain` to `global`, `tier` to
   `text-layer`). The response `tier` is DERIVED from what ran (`text-layer` |
-  `ocr` | `mixed`, plus `docling` for the Tier-2 lane), never echoed from the
+  `ocr` | `mixed`, plus `docling` and `vlm` for the whole-document tool
+  lanes), never echoed from the
   request: a `tier:"ocr"` request on a document whose every page has a text
   layer serves the Tier-0 shape — a page with a text layer is never OCR'd
   (OV-1). A `tier:"docling"` request converts the WHOLE document through the
   operator-configured tool (docs/DOCLING_TOOL_PROTOCOL.md: one-shot spawn,
   kill at `CONVERTER_TIMEOUT_SECS` = 300 s) and the tool's page blocks become
-  the page blocks verbatim (DC-2: no rewrite, no smoothing).
+  the page blocks verbatim (DC-2: no rewrite, no smoothing). A
+  `tier:"vlm"` request runs the SAME spawn/cross-check machinery against the
+  operator-configured VLM-OCR shim (`BRAIN_VLM_OCR_PATH`, unconfigured →
+  `vlm_ocr_unavailable` 503; the shim's exit-5 fence honored as
+  `converter_remote_refused`; docs/VLM_OCR_TIER.md) — the doors inherited,
+  no bypass.
 - **Base64-bounded under the shared 1 MiB cap.** There is no multipart
   machinery in the tree; base64-in-JSON is the existing idiom. The cap is
   applied by the shared body-limit layer BEFORE the handler reads; the handler

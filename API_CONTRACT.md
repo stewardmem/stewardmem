@@ -482,7 +482,12 @@ pub struct RecallHit {
     /// ingest kind) are `origin: imported` + corrector-stamped (the row's
     /// `doc-corrector` extractor carries the `<model>@<served>` stamp) —
     /// NEVER `human`: machine-processed text never claims human
-    /// authorship (docs/DOC_CORRECTION_LANE.md law 10).
+    /// authorship (docs/DOC_CORRECTION_LANE.md law 10). The vlm tier's
+    /// verbatim chunks (IMPROVE16.1, the same `document` ingest kind) are
+    /// the same posture for the same reason: `origin: imported` +
+    /// tool-stamped (the row's `glm-ocr` extractor carries the
+    /// `<quant>@<mlx-vlm-ver>` stamp; docs/VLM_OCR_TIER.md law 10) — a VLM
+    /// read is machine extraction and never claims human authorship.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ingest_kind: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
