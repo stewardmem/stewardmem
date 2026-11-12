@@ -12,6 +12,7 @@
 #![allow(dead_code)]
 
 pub(crate) mod bridge_afm;
+pub(crate) mod cascade;
 pub(crate) mod compaction;
 mod compaction_probes;
 pub(crate) mod context;

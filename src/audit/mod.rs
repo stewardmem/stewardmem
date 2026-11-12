@@ -193,6 +193,14 @@ pub enum AuditKind {
     /// correction calls without detail-hash mining; the chain stores
     /// hashes, so no URL and no secret ever ride a row.
     DocCorrection,
+    /// the tiered cascade's per-transition accounting (IMPROVE17 S1): one
+    /// row per coordinator classification (TC-7's T1 half) — the model asked
+    /// and served, the raw guided route value, the roster verdict,
+    /// confidence, tokens, duration, and the query's sha256 as the target
+    /// (the `DocCorrection` precedent verbatim: the chain stores hashes, so
+    /// no query text rides a row). Tier transitions in S2+ audit under the
+    /// same kind.
+    Cascade,
 }
 
 impl AuditKind {
@@ -228,6 +236,7 @@ impl AuditKind {
             // best-effort write.
             AuditKind::Watch => "watch",
             AuditKind::DocCorrection => "doc-correction",
+            AuditKind::Cascade => "cascade",
         }
     }
 }
