@@ -114,11 +114,7 @@ fn main() {
     }
 
     let pdf = std::fs::read(pdf_path).expect("the witness subset pdf");
-    eprintln!(
-        "witness: {} bytes of PDF ({})",
-        pdf.len(),
-        pdf_path
-    );
+    eprintln!("witness: {} bytes of PDF ({})", pdf.len(), pdf_path);
     let body = serde_json::json!({
         "data": base64::engine::general_purpose::STANDARD.encode(&pdf),
         "title": "DepEd Order No. 003, s. 2026 (witness: pages 27-29, searchable variant)",
@@ -209,7 +205,10 @@ fn main() {
             "reference": "DO_s2026_003r-1.md — the operator's corrected transcription (pages 27-29)",
         }
     });
-    std::fs::write(out_path, serde_json::to_string_pretty(&transcript).expect("json"))
-        .expect("write transcript");
+    std::fs::write(
+        out_path,
+        serde_json::to_string_pretty(&transcript).expect("json"),
+    )
+    .expect("write transcript");
     eprintln!("witness: transcript → {out_path}");
 }

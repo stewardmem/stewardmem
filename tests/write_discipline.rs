@@ -76,7 +76,11 @@ const DEFERRED_BASELINE: &[(&str, usize)] = &[
     // single-writer ingest seam shape as its sibling write_markdown_ingest
     // (whose sites are inside this count); the dedupe COUNT + INSERTs are
     // guard reads in one writer's tx, not a read-modify-write transition.
-    ("src/server/router/memory.rs", 5),
+    // +1 (6): IMPROVE16's corrected-row write (write_corrected_row) — the
+    // verbatim write's SIBLING with the identical shape (INSERT-heavy tx,
+    // the audit row inside via write_document_ingest, no read-modify-write
+    // transition); one document, two rows, each its own single-writer tx.
+    ("src/server/router/memory.rs", 6),
     ("src/service/domains_admin.rs", 1),
     ("src/service/lifecycle/purge.rs", 1),
     ("src/webhook.rs", 1),

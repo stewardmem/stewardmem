@@ -1140,8 +1140,15 @@ fn r45_0_correction_leaves_the_audit_chain_module_byte_untouched() {
 // (the Import precedent exactly); NO verdict, key, epoch, chain-link,
 // scheme, check, or audit-row WRITE shape moved. The tick's row is pinned
 // behaviorally in tests/watch_pins.rs (the CHECKED form + the rollback law).
+// RE-PINNED 2026-11-12 (IMPROVE16 S1, the doc-correction lane): the touch
+// is ONE enum variant + its as_str arm — `AuditKind::DocCorrection`, the
+// lane's per-call accounting row (the Import/Watch precedent exactly); NO
+// verdict, key, epoch, chain-link, scheme, check, or audit-row WRITE shape
+// moved. The call's row is pinned behaviorally in src/doc_corrector.rs's
+// tests (the hash-only columns, the byte-exact detail vocabulary) and by
+// tests/doc_correction.rs's route pin.
 const CHAIN_MODULE_SHA256: &str =
-    "8c6f31f0a4d46b76730317fc965fa5f75ad51038211b5f778e898945940c1360";
+    "9d6c923d7e713faed1672ead4feee90008dd5913e76ad8acd216a194f52c465c";
 
 /// E8's second half: the correction adds no key material and no audit row.
 #[test]
