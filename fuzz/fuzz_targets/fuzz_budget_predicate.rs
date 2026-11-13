@@ -19,6 +19,10 @@ fuzz_target!(|data: &[u8]| {
     }
     let limit = u64::from_le_bytes(data[..8].try_into().expect("8 bytes"));
     let rest = &data[8..];
+    // allow: 1.100's chunks_exact_to_as_chunks suggests as_chunks here; the
+    // chunk-slice form (both byte-halves read in the map) is the harness's
+    // recorded shape, so the lint is held off rather than the shape rewritten.
+    #[allow(clippy::chunks_exact_to_as_chunks)]
     let spends: Vec<(u64, u64)> = rest
         .chunks_exact(16)
         .map(|c| {

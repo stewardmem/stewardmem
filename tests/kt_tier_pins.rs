@@ -36,15 +36,10 @@ fn doc(rel: &str) -> String {
         .unwrap_or_else(|e| panic!("{rel} must exist and be readable: {e}"))
 }
 
-/// A region scanner with a FIXED byte window from a start marker — the
-/// provider_afm M-4 pin's shape — so a second unrelated occurrence of a
-/// token elsewhere in the file cannot satisfy a pin about one site.
-fn region<'a>(code: &'a str, start_marker: &str, window: usize) -> &'a str {
-    let at = code
-        .find(start_marker)
-        .unwrap_or_else(|| panic!("the pinned site exists (live, not a comment): {start_marker}"));
-    &code[at..at + window.min(code.len() - at)]
-}
+// (The region-scanner helper from the provider_afm M-4 pin's shape went:
+// every pin here inlines the .find() + fixed-window slice at its own site,
+// so the shared fn read dead under 1.100's pass and was removed — the
+// fixed-window LAW lives in each pin's window length, not in a helper.)
 
 /// A token the pin NEEDS in the region.
 fn needs(region_text: &str, token: &str, site: &str) {

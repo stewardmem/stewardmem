@@ -880,6 +880,26 @@ pub(crate) fn release(conn: &Connection, run_id: i64, owner: &str) -> rusqlite::
     Ok(())
 }
 
+/// The gate-verdict rows for one run, JSON-shaped: the conformance
+/// harness's failure diagnostics read them. The SQL lives HERE (the
+/// events table's own domain core) — handlers are protocol adapters only
+/// (the no_sql_in_handlers law).
+pub(crate) fn gate_rows_for(conn: &Connection, run_id: i64) -> Vec<serde_json::Value> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT payload_json FROM agent_session_events \
+             WHERE run_id = ?1 AND kind = 'gdl_gate' ORDER BY seq",
+        )
+        .expect("the gdl_gate query prepares");
+    let rows: Vec<String> = stmt
+        .query_map([run_id], |r| r.get(0))
+        .expect("the gdl_gate rows query")
+        .collect::<rusqlite::Result<_>>()
+        .unwrap_or_default();
+    rows.iter()
+        .filter_map(|r| serde_json::from_str(r).ok())
+        .collect()
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1791,25 +1811,4 @@ mod tests {
             "session writes audit under the run's domain"
         );
     }
-}
-
-/// The gate-verdict rows for one run, JSON-shaped: the conformance
-/// harness's failure diagnostics read them. The SQL lives HERE (the
-/// events table's own domain core) — handlers are protocol adapters only
-/// (the no_sql_in_handlers law).
-pub(crate) fn gate_rows_for(conn: &Connection, run_id: i64) -> Vec<serde_json::Value> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT payload_json FROM agent_session_events \
-             WHERE run_id = ?1 AND kind = 'gdl_gate' ORDER BY seq",
-        )
-        .expect("the gdl_gate query prepares");
-    let rows: Vec<String> = stmt
-        .query_map([run_id], |r| r.get(0))
-        .expect("the gdl_gate rows query")
-        .collect::<rusqlite::Result<_>>()
-        .unwrap_or_default();
-    rows.iter()
-        .filter_map(|r| serde_json::from_str(r).ok())
-        .collect()
 }

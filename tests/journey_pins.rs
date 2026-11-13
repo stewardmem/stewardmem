@@ -49,7 +49,6 @@ fn journey_two_renders_are_byte_identical() {
         digest: "aa".repeat(32),
         actor: "m-supervisor".to_string(),
     }];
-    let appeals: Vec<brain_server::workflow::journey::AppealFact> = vec![];
     let holds = vec![brain_server::workflow::journey::HoldFact {
         id: 5,
         held_at: 1_500,

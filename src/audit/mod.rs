@@ -2346,8 +2346,17 @@ mod tests {
         // sqlite3_auto_extension expects; the pointer is process-lifetime
         // static. See main.rs::register_sqlite_vec for the full proof.
         unsafe {
+            // The target type is INFERRED from sqlite3_auto_extension's own
+            // parameter (the Option<unsafe extern "C" fn(...)>) — spelling it
+            // out re-derives the FFI signature by hand, which is how the
+            // `rusqlite::ffi::c_char` path error happened (c_char lives in
+            // std::ffi, not rusqlite::ffi). The source pointer is the lib's
+            // OWN exported symbol at link time (`-l sqlite_vec0` in
+            // register_sqlite_vec.rs); the Rust-path import is cfg(test)-only,
+            // which 1.100's unused-dep lint does not count — the workspace
+            // consumes this lib by LINKAGE, not by a Rust path.
             rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
-                sqlite_vec::sqlite3_vec_init as *const (),
+                sqlite_vec_rs::sqlite3_vec_init as *const (),
             )));
         }
         let mut db = Connection::open_in_memory().expect("open in-memory DB");

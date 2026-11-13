@@ -179,7 +179,13 @@ fastembed = { version = "=7.1.0", optional = true, default-features = false }
 # stays 58); the erasure law (secure_delete + wal_checkpoint + VACUUM) is
 # re-verified ON 3.54.1 by the round's pins (SA-1..SA-4).
 rusqlite = { version = "0.41.1", features = ["bundled"] }
-sqlite-vec = "0.1.9"
+# Renamed in the dependency table (the crate name `sqlite-vec` imports as
+# `sqlite_vec`, which 1.100's unused-dependency lint counts by Rust path —
+# this workspace consumes the lib by LINKAGE (`-l sqlite_vec0` in
+# register_sqlite_vec.rs) plus ONE cfg(test) symbol import, which the lint's
+# own documented limitation (test-only usage) does not see. The alias keeps
+# the dependency honest to the lint while the link law stays byte-identical.
+sqlite_vec_rs = { package = "sqlite-vec", version = "0.1.9" }
 r2d2 = "0.8.10"
 r2d2_sqlite = "0.36.0"
 

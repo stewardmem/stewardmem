@@ -58,6 +58,11 @@
 /// The shared implementation for the source-reading pins. `r63a`'s copy is the
 /// form; `r66b`'s is the previous fix this file supersedes and extends with the
 /// escaped-quote arm.
+// allow: `mod common;` is included by ~20 integration-test targets and not
+// every one of them scans source — the dead-code pass runs PER TARGET, so a
+// helper used by the other targets reads dead here. The module-level law
+// (shared implementation, one copy) is why this is an allow, not a copy.
+#[allow(dead_code)]
 pub fn code_only(src: &str) -> String {
     let chars: Vec<char> = src.chars().collect();
     let n = chars.len();

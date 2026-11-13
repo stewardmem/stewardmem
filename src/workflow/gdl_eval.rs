@@ -1942,10 +1942,10 @@ mod pilot_live {
             ("B", true, false, false),
             ("D", true, false, true),
         ] {
-            if let Some(f) = &arm_filter {
-                if !f.iter().any(|x| x == arm) {
-                    continue;
-                }
+            if let Some(f) = &arm_filter
+                && !f.iter().any(|x| x == arm)
+            {
+                continue;
             }
             eprintln!("KT_ARM_BEGIN {arm}");
             let adapter =

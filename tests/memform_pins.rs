@@ -853,6 +853,10 @@ fn mf2_the_render_exposes_the_batch() {
 // lane through the shared counts fn).
 
 /// Pull an item out of the compliance inventory's items array by artifact name.
+// cfg'd WITH its three callers: every call site sits inside a
+// #[cfg(feature = "compliance-pack")] test, so the plain-battery lane sees
+// a dead fn (the 1.100 clippy pass red on exactly that).
+#[cfg(feature = "compliance-pack")]
 fn inventory_item(inv: &serde_json::Value, name: &str) -> serde_json::Value {
     inv.get("items")
         .and_then(|v| v.as_array())
