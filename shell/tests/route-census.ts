@@ -30,8 +30,8 @@ export const ROUTE_FLOOR = 10;
  * The sidebar frame (2026-10-25) added two surfaces the frame lists beside
  * the conversation: `/audit` (the hash chain, displayed) and `/governance`
  * (domains, roles, retention — what the kernel enforces). `/recall` is the
- * frame's "Memory" entry; the route name stayed because the Dioxus
- * counterpart carries the same path and the trace detail nests under it.
+ * frame's "Memory" entry; the route name stayed (the retired Dioxus
+ * counterpart carried the same path, and the trace detail nests under it).
  * Eight routes: the conversation and the surfaces a conversation cites.
  * Nine (2026-10-30, the dsh-UX round): `/settings` — the app's preferences
  * as a full PAGE (the ChatGPT-desktop shape; the operator's call), reached

@@ -23,7 +23,12 @@ const DECISION_AND_DETAIL_ROUTES = [
 ] as const;
 
 /**
- * II-7d — the SHELL route census, and its parity verdicts.
+ * II-7d — the SHELL route census. Census-form since the decommission
+ * (2026-11-13): the Dioxus counterpart half of this file — the parity
+ * verdicts, the `dioxus`/`nearest` cells, the walk of the client's
+ * `main.rs` — retired WITH the client workspace; the rows are route +
+ * because + authz, and the because fields keep the parity history in
+ * past tense where it still teaches.
  *
  * ## WHY THIS FILE EXISTS AT ALL, and what it is NOT
  *
@@ -33,12 +38,13 @@ const DECISION_AND_DETAIL_ROUTES = [
  * covering every path the composed *router* registers. They are already green
  * and they say NOTHING about the shell.
  *
- * Gate 1's actual text is different: "Every user-reachable **shell** route has
- * parity with its Dioxus counterpart". That is a check against a different
- * artifact, and it did not exist. Asserting the kernel tables again would
- * produce a passing gate that has never looked at the shell — which would look
- * exactly like the work being done. So this file walks the shell's own route
- * tree, and one pin below is dedicated to proving it did.
+ * Gate 1's actual text was different: "Every user-reachable **shell** route has
+ * parity with its Dioxus counterpart" — a check against a different artifact,
+ * which did not exist, and which lost its subject when the Dioxus side retired.
+ * Asserting the kernel tables instead would produce a passing gate that has
+ * never looked at the shell — which would look exactly like the work being
+ * done. So this file walks the shell's own route tree, and one pin below is
+ * dedicated to proving it did.
  *
  * ## THE ANTI-VACUITY FLOOR COMES FIRST, and it is a floor
  *
@@ -110,61 +116,6 @@ function routePathFor(pageFile: string, routesDir: string): string {
 	return segments.length === 0 ? '/' : `/${segments.join('/')}`;
 }
 
-/** The Dioxus counterpart's real route table, read from the app itself.
- *
- * Parsed out of `client/src/main.rs`'s `#[route("…")]` attributes rather than
- * restated from Plan 09 §1's prose table, and that choice is the finding: the
- * plan's table and the tree disagree, so a table written from the plan would be
- * confidently wrong. See `the_dioxus_counterpart_table_is_read_from_the_app`.
- *
- * It takes a PATH and reads the file, not contents-to-be-parsed. The first
- * draft took the file's contents, and the first draft of the parity test passed
- * that PATH — so the regex ran over a filesystem path, matched nothing, and the
- * table came back EMPTY. Every `no_counterpart` verdict was then vacuously
- * true and the `exact` rows failed on `expected [] to include '/'`. The same
- * class of silent-empty result the shell census guards against, reached through
- * the other file, so this one now FAILS CLOSED on an empty parse rather than
- * returning a list that quietly makes half the verdicts true.
- */
-function censusDioxusRoutes(clientMainPath: string): string[] {
-	const source = readFileSync(clientMainPath, 'utf8');
-	const found: string[] = [];
-	const pattern = /#\[route\("([^"]*)"\)\]/g;
-	let match: RegExpExecArray | null;
-	while ((match = pattern.exec(source)) !== null) {
-		found.push(match[1]!);
-	}
-	expect(
-		found.length,
-		`the Dioxus route parse of ${clientMainPath} found no \`#[route(…)]\` attributes. An empty ` +
-			'parse is worse than a failing one: it makes every `no_counterpart` verdict vacuously true.'
-	).toBeGreaterThan(0);
-	return found.sort();
-}
-
-/**
- * A parity verdict, and the three kinds are not interchangeable.
- *
- * - `exact` — the same path exists on the Dioxus side.
- * - `renamed` — a counterpart exists at a DIFFERENT path. This is a real
- *   counterpart, not a gap: `/search` and Dioxus `/recall` are the same
- *   surface under two names, and calling that "missing" would misdescribe the
- *   retirement work.
- *
- *   **III-6 CORRECTED THE EXEMPLAR, and the correction is the point.** It used
- *   to be `/decisions` and Dioxus `/review` — and that rename did NOT hold:
- *   the shell's `/decisions` serves the decision-RUN listing, not the proposal
- *   queue. A `renamed` that is false reads as COVERAGE, and coverage that is
- *   false is worse than a gap: it says the surface exists on both sides when
- *   the one the shell was MISSING is the one the rename claimed to cover. The
- *   rows are corrected, not extended around, and P6 holds the correction.
- * - `no_counterpart` — NO route on the Dioxus side serves this surface. There
- *   is no verdict that says "close enough", and there is no matching to invent:
- *   `nearest` records the closest Dioxus path as a FACT about the tree without
- *   promoting it to a counterpart.
- */
-type ParityVerdict = 'exact' | 'renamed' | 'no_counterpart';
-
 /** The kernel's own authorize() vocabulary, plus `public` for the paths the
  * bearer middleware exempts (`PUBLIC_PATHS`). A scope here is never typed from
  * memory: the tests below read it out of `route_guards.rs` and compare. */
@@ -179,7 +130,7 @@ type KernelScope = 'public' | 'Read' | 'Write' | 'Admin';
  * - `kernel` is compared against the paths the route's own wire calls derive
  *   (its page file's `client.*` call sites plus the `#lib/api/*` symbols it
  *   imports) and against the scope the kernel's own gate table demands for
- *   each. A route that changes its calls, or a table written from
+ *   each. A route that changed its calls, or a table written from
  *   `openapi.yaml` prose, fails.
  * - `mutates` is NOT derivable from scope, and pretending otherwise was the
  *   first draft's mistake: `replay-diff` is Write-scoped and persists
@@ -195,15 +146,12 @@ interface RouteAuthz {
 	readonly mutates: null | { readonly path: string; readonly act: string };
 }
 
-interface RouteParity {
+/** One census row: the route, its reason, and the kernel authority its own
+ * wire exercises. Census-form since the decommission — the parity verdict
+ * cells (`verdict`/`dioxus`/`nearest`) retired WITH the Dioxus workspace;
+ * the because fields keep what still teaches in past tense. */
+interface RouteRow {
 	readonly route: string;
-	readonly verdict: ParityVerdict;
-	/** The Dioxus path that serves this surface, when one does. */
-	readonly dioxus?: string;
-	/** The nearest Dioxus path when there is NO counterpart. A fact about the
-	 * tree, never a match — the field exists so a reader sees the near-miss
-	 * without the table claiming parity on the strength of it. */
-	readonly nearest?: string;
 	readonly because: string;
 	/** III-0b: the kernel authority this route's own wire exercises. Derived
 	 * facts, checked — see `RouteAuthz`. */
@@ -211,32 +159,30 @@ interface RouteParity {
 }
 
 /**
- * THE TABLE. One row per user-reachable shell route, every route carrying a
- * verdict.
+ * THE TABLE. One row per user-reachable shell route. Census-form since the
+ * decommission (2026-11-13): the verdict cells retired with the Dioxus
+ * workspace, and each row states what the route SERVES and the authority its
+ * own wire exercises. The parity HISTORY stays in the because fields, past
+ * tense, where it still teaches: the III-6 false-rename lesson (a claimed
+ * counterpart that reads as coverage) and the MISSING-ON-BOTH-SIDES home
+ * finding, now concluded — the other side retired.
  *
  * M3-a (plan `21_CHAT_FIRST_IA`): the chat is the app. The wizard that served
  * `/` is dropped, `/chat` is PROMOTED to `/`, and `/overview`, `/search` and
- * `/models` retire as routes — so `/` carries `no_counterpart`: the Dioxus
- * `/` is a connect-first landing, and chat has no counterpart on either
- * side. That is Plan 09 §1's original "missing on both" finding for the
- * conversation surface, true by design now that the surface IS the shell's
- * home route. A false `renamed` reads as coverage (the III-6 lesson, twice
- * recorded) — no counterpart is invented to make the home row prettier.
+ * `/models` retire as routes.
  *
- * The sidebar frame (2026-10-25) grew the table to eight rows: `/audit`
- * (renamed — the Dioxus route string carries its filters) and
- * `/governance` (no counterpart — the nearest Dioxus surface is named, not
- * promoted).
+ * The sidebar frame (2026-10-25) grew the table to eight rows: `/audit` and
+ * `/governance`. 2026-10-30 added `/settings`; 2026-11-12 added `/journey`.
  */
-const ROUTE_PARITY: readonly RouteParity[] = [
+const ROUTE_ROWS: readonly RouteRow[] = [
 	{
 		route: '/',
-		verdict: 'no_counterpart',
 		because:
 			'the chat surface, PROMOTED to the home route in M3-a (plan 21: the chat is the app). Plan 09 §1 ' +
 			'records conversation as MISSING ON BOTH SIDES; the shell grew /chat in II-3 and M3-a made it the ' +
-			"shell's `/`. The Dioxus `/` is a connect-first landing — a different surface — and naming it the " +
-			'counterpart would invent a match that does not exist.',
+			"shell's `/`. The retired Dioxus `/` was a connect-first landing — a different surface — so the " +
+			'finding is CONCLUDED, not open: the other side retired 2026-11-13, and the shell home is the ' +
+			'only conversation surface there ever was.',
 		authz: {
 			// The chat surface reaches three kernel verbs via `#lib/api/*`, and
 			// each is derived from the SYMBOL the page imports (the typed
@@ -260,12 +206,12 @@ const ROUTE_PARITY: readonly RouteParity[] = [
 	},
 	{
 		route: '/recall',
-		verdict: 'exact',
-		dioxus: '/recall',
 		because:
-			'the same path on both sides. The sidebar frame lists it as "Memory": the same POST /recall ' +
+			'the memory surface. The sidebar frame lists it as "Memory": the POST /recall ' +
 			'wire rendered as memory cards, with the store\'s count beside the empty state and an ' +
-			'"Add memory" that files a PROPOSAL into the review queue — never a memory.',
+			'"Add memory" that files a PROPOSAL into the review queue — never a memory. (History: ' +
+			'exact parity with the retired Dioxus /recall — the same path on both sides until the ' +
+			'decommission.)',
 		authz: {
 			// The page's own POST /recall, plus the two api symbols it imports:
 			// `fetchKernelFacts` (the public /health probe and the Read-scoped
@@ -284,13 +230,11 @@ const ROUTE_PARITY: readonly RouteParity[] = [
 	},
 	{
 		route: '/audit',
-		verdict: 'renamed',
-		dioxus: '/audit?:since&:principal',
 		because:
-			'the same surface at a different route SHAPE: the Dioxus audit panel carries its filters ' +
-			'(since/principal) as URL segments in the route string; the shell\'s /audit reads the same ' +
-			'chain newest-first with limit/offset paging and shows the chain verdict beside it. A ' +
-			'query-shape difference, not a different surface.',
+			'the operator\'s hash-chain read: the chain newest-first with limit/offset paging and the ' +
+			'chain verdict beside it, filters as query params. (History: the retired Dioxus audit ' +
+			'panel carried its since/principal filters as URL segments in the route string — a ' +
+			'query-shape difference, not a different surface.)',
 		authz: {
 			// Both reads are operator reads in the kernel's own table: the
 			// event list and the chain recomputation are Admin.
@@ -300,15 +244,13 @@ const ROUTE_PARITY: readonly RouteParity[] = [
 	},
 	{
 		route: '/journey',
-		verdict: 'no_counterpart',
-		nearest: '/audit?:since&:principal',
 		because:
-			'no Dioxus route serves "the chain the customer sees": the journey (IMPROVE15) reads the ' +
-			'kernel\'s chain-projected transparency surface (/clients/{name}/journey — closed customer ' +
-			'sentences, roles not names, receipts not scores, zero new state) through the pure ' +
-			'projection. The nearest Dioxus surface is /audit (the operator\'s hash-chain read), ' +
-			'recorded as a fact about the tree and not promoted to a counterpart: the audit shows the ' +
-			'chain to the OPERATOR; the journey shows the customer-facing projection of it.',
+			'"the chain the customer sees": the journey (IMPROVE15) reads the kernel\'s chain-projected ' +
+			'transparency surface (/clients/{name}/journey — closed customer sentences, roles not names, ' +
+			'receipts not scores, zero new state) through the pure projection. The retired Dioxus side ' +
+			'had no route for it — the nearest surface there was /audit (the operator\'s hash-chain ' +
+			'read), a fact about the old tree and never a counterpart: the audit showed the chain to ' +
+			'the OPERATOR; the journey shows the customer-facing projection of it.',
 		authz: {
 			// The journey's OWN authz law lives kernel-side in the handler (the
 			// client's own principal + the operator; everyone else answers the
@@ -321,13 +263,11 @@ const ROUTE_PARITY: readonly RouteParity[] = [
 	},
 	{
 		route: '/governance',
-		verdict: 'no_counterpart',
-		nearest: '/system',
 		because:
-			'no Dioxus route serves "what the kernel enforces" as one surface: domains live under the ' +
-			'Dioxus /system console group, retention under /data, and roles have no Dioxus surface at ' +
-			'all. The nearest is /system (it carries the domains), recorded as a fact about the tree and ' +
-			'not promoted to a counterpart.',
+			'"what the kernel enforces" as one surface: domains, roles and retention read together. ' +
+			'On the retired Dioxus side, domains lived under the /system console group, retention ' +
+			'under /data, and roles had no surface at all — no aggregation existed there to retire ' +
+			'alongside.',
 		authz: {
 			// Domains and roles are Read; retention is Admin — three reads with
 			// two scopes, each section rendering its own answer.
@@ -337,10 +277,10 @@ const ROUTE_PARITY: readonly RouteParity[] = [
 	},
 	{
 		route: '/settings',
-		verdict: 'no_counterpart',
 		because:
-			'the app preferences as a full PAGE (the 2026-10-30 dsh-UX round, the ChatGPT-desktop shape): ' +
-			'no Dioxus route serves preferences — the Dioxus shell had none. The page reads the kernel ' +
+			'the app preferences as a full PAGE (the 2026-10-30 dsh-UX round, the ChatGPT-desktop shape). ' +
+			'The retired Dioxus shell had no preferences page — its settings were a native-menu concern ' +
+			'it never carried as a route. The page reads the kernel ' +
 			'through `#lib/api/kernel-facts` (fetchKernelFacts → /health + /stats, and the model posture ' +
 			'via /health/db) for the model + About panes; the token and origin panes are TAURI-ONLY ' +
 			'(keychain + rotation through the shell commands, no kernel wire), and the locale pane is ' +
@@ -359,12 +299,10 @@ const ROUTE_PARITY: readonly RouteParity[] = [
 	},
 	{
 		route: '/recall/[trace_id]/trace',
-		verdict: 'renamed',
-		dioxus: '/recall/:trace_id',
 		because:
-			'the same surface at a different SHAPE: the shell nests a literal `/trace` segment under ' +
-			'the id, Dioxus puts the trace at the leaf. Worth stating because a path-shape change is ' +
-			'a routing decision, not a rename.',
+			'the trace replay view: the shell nests a literal `/trace` segment under the id. (History: ' +
+			'the retired Dioxus side put the trace at the leaf, /recall/:trace_id — a path-shape ' +
+			'decision, not a rename.)',
 		authz: {
 			// The trace surface is Admin: replaying a stored run is an operator
 			// read (trace replay + DSAR are operator surfaces, per the kernel's
@@ -375,15 +313,13 @@ const ROUTE_PARITY: readonly RouteParity[] = [
 	},
 	{
 		route: '/decisions',
-		verdict: 'renamed',
-		dioxus: '/runs/:run_id',
 		because:
 			'the shell\'s /decisions serves the DECISION-RUN listing (`GET /workflow/decision-runs`), an ' +
 			'Admin surface — NOT the proposal queue. Until III-6 this row claimed the Dioxus /review ' +
 			'(the proposal queue) as its counterpart: a rename that did not hold, because the two are ' +
 			'different surfaces, and the one the shell was MISSING is the one the rename claimed to ' +
-			'cover. The Dioxus side\'s run surface is /runs/:run_id (the workflow-run conversation), and ' +
-			'the proposal queue is now carried by the shell\'s own /review row.',
+			'cover. The retired Dioxus side\'s run surface was /runs/:run_id (the workflow-run ' +
+			'conversation), and the proposal queue is carried by the shell\'s own /review row.',
 		authz: {
 			// The decision-run LIST is an operator surface in the kernel's own
 			// table (Admin), and the shell reads it — /decisions is not a
@@ -394,13 +330,11 @@ const ROUTE_PARITY: readonly RouteParity[] = [
 	},
 	{
 		route: '/decisions/[id]',
-		verdict: 'renamed',
-		dioxus: '/runs/:run_id',
 		because:
-			'the single-run detail view, renamed: the shell\'s /decisions/[id] reads the DECISION-RUN ' +
+			'the single-run detail view: the shell\'s /decisions/[id] reads the DECISION-RUN ' +
 			'trace (`GET /workflow/decision-runs/{id}`), not a proposal — until III-6 this row claimed ' +
 			'the Dioxus /review/:proposal_id, which is the single-PROPOSAL view, and it was the same ' +
-			'false rename as /decisions, one row over. The Dioxus side\'s single-run view is ' +
+			'false rename as /decisions, one row over. The retired Dioxus side\'s single-run view was ' +
 			'/runs/:run_id.',
 		authz: {
 			// The one Write here is replay-diff, which re-executes a stored run
@@ -416,10 +350,8 @@ const ROUTE_PARITY: readonly RouteParity[] = [
 	},
 	{
 		route: '/review',
-		verdict: 'exact',
-		dioxus: '/review',
 		because:
-			'the same path on both sides: the human review queue. The Dioxus app served it at /review ' +
+			'the human review queue. The retired Dioxus app served it at /review ' +
 			'and could approve, reject and edit rows; the shell\'s /review reads the SAME queue and — ' +
 			'as of the III-6 amendment (the approve-action round, C2 G-6) — carries EXACTLY ONE of the ' +
 			'three verbs back: the approve, for the authorized, digest-bound, audited. The affordance ' +
@@ -514,141 +446,50 @@ test('the_shell_route_census_finds_every_page_and_asserts_its_own_floor', () => 
 	);
 });
 
-test('every_user_reachable_shell_route_carries_a_parity_verdict', () => {
+test('every_user_reachable_shell_route_carries_a_census_row', () => {
 	const routes = censusShellRoutes(join(shellRoot, 'src', 'routes'));
-	const clientMain = join(shellRoot, '..', 'client', 'src', 'main.rs');
-	const dioxus = censusDioxusRoutes(clientMain);
 
 	// ---- EXHAUSTIVE over the census: one row per route, no route unjudged ----
-	const judged = new Set(ROUTE_PARITY.map((row) => row.route));
+	const judged = new Set(ROUTE_ROWS.map((row) => row.route));
 	for (const route of routes) {
 		expect(
 			judged.has(route),
-			`${route} has no parity verdict. Every user-reachable shell route needs one, and the ` +
-				'verdict may legitimately be "no counterpart".'
+			`${route} has no census row. Every user-reachable shell route needs one.`
 		).toBe(true);
 	}
 	// And no row for a route that does not exist — a table that invents a route
 	// is the same defect as one that misses one.
-	for (const row of ROUTE_PARITY) {
+	for (const row of ROUTE_ROWS) {
 		expect(
 			routes,
-			`the parity table names ${row.route}, which the census did not find. A row for a route ` +
+			`the census table names ${row.route}, which the census did not find. A row for a route ` +
 				'that does not exist would make the table agree with itself.'
 		).toContain(row.route);
 	}
-	expect(ROUTE_PARITY.length).toBe(routes.length);
+	expect(ROUTE_ROWS.length).toBe(routes.length);
 
-	// ---- EVERY ROW'S VERDICT IS TRUE OF THE REAL DIOXUS TABLE ----
+	// ---- EVERY ROW CARRIES A REASON ----
 	//
-	// This is the arm that makes the table a measurement rather than an essay.
-	// `exact` and `renamed` both assert the named path EXISTS on the Dioxus
-	// side, so a Dioxus route removed or renamed fails here and the table must
-	// be corrected rather than left to rot.
-	for (const row of ROUTE_PARITY) {
-		switch (row.verdict) {
-			case 'exact':
-				expect(
-					dioxus,
-					`${row.route} claims EXACT parity with Dioxus ${row.dioxus}, which is not in the ` +
-						'route table any more'
-				).toContain(row.dioxus);
-				break;
-			case 'renamed':
-				expect(
-					dioxus,
-					`${row.route} claims a counterpart at Dioxus ${row.dioxus}, which is not in the ` +
-						'route table. A renamed route whose counterpart is gone is a no_counterpart.'
-				).toContain(row.dioxus);
-				break;
-			case 'no_counterpart': {
-				// The load-bearing assertion: NO Dioxus route serves this surface,
-				// and the table must NOT name one as a counterpart.
-				expect(
-					row.dioxus,
-					`${row.route} is recorded as having no counterpart but names Dioxus ${row.dioxus}. ` +
-						'A no_counterpart row may carry `nearest`, never `dioxus` — a match must not be ' +
-						'invented to fill the cell.'
-				).toBeUndefined();
-				// And `nearest`, if present, must be a REAL Dioxus path — it is a
-				// claim about the tree too, just not about parity.
-				if (row.nearest !== undefined) {
-					expect(
-						dioxus,
-						`${row.route} names ${row.nearest} as its nearest Dioxus path, which is not in ` +
-							'the route table'
-					).toContain(row.nearest);
-				}
-				break;
-			}
-		}
-		// Every verdict carries a reason. A row with an empty `because` is the
-		// decoration Plan 08 §0 warns about.
+	// The parity verdicts retired WITH the Dioxus workspace (2026-11-13); what
+	// remains load-bearing on every row is the reason and the authority. A row
+	// with an empty `because` is the decoration Plan 08 §0 warns about.
+	for (const row of ROUTE_ROWS) {
 		expect(
 			row.because.length,
-			`${row.route} carries a verdict with no reason`
+			`${row.route} carries a row with no reason`
 		).toBeGreaterThan(20);
 	}
 
-	// ---- THE FINDING THE PROMPT NAMED: `/` HAS NO COUNTERPART ----
+	// ---- THE HOME ROW'S FINDING, CONCLUDED ----
 	//
-	// Stated as its own assertion rather than left implicit in the table, because
-	// it is the row a reader is most likely to assume was quietly filled in —
-	// the Dioxus side DOES have a `/`, and it is a different surface (a
-	// connect-first landing, not the conversation). M3-a promoted the chat to
-	// the shell's `/`; the verdict is Plan 09 §1's "missing on both", true by
-	// design now.
-	const home = ROUTE_PARITY.find((row) => row.route === '/');
-	expect(home, '/ must carry a verdict — it is the app\'s home route').toBeDefined();
-	expect(home!.verdict).toBe('no_counterpart');
-	expect(home!.dioxus).toBeUndefined();
+	// Plan 09 §1's "missing on both sides" is the one parity finding a reader
+	// is most likely to assume was quietly filled in. It stays asserted in its
+	// CONCLUDED form: the other side retired 2026-11-13, and the shell home is
+	// the conversation surface.
+	const home = ROUTE_ROWS.find((row) => row.route === '/');
+	expect(home, '/ must carry a row — it is the app\'s home route').toBeDefined();
 	expect(home!.because).toContain('MISSING ON BOTH SIDES');
-	// And the Dioxus root is a DIFFERENT surface: no chat or conversation path
-	// exists on that side, so the verdict is a measurement rather than a stance.
-	expect(dioxus.some((path) => path.includes('chat') || path.includes('conversation'))).toBe(
-		false
-	);
-
-	// ---- AND THE VERDICT MIX IS ITSELF A FINDING ----
-	//
-	// Gate 1 says "every shell route has parity with its Dioxus counterpart".
-	// Four of the six do not carry `exact`, and the home row is the one a
-	// reader is most likely to "fix" — asserting the mix means a future route
-	// that arrives `exact` by default, or a table edited to make gate 1 look
-	// reachable, fails here.
-	//
-	// III-6: `/review` arrived `exact` (the Dioxus path is the same), and the
-	// two FALSE `renamed` rows were corrected rather than added around. M3-a:
-	// the wizard `/` (an `exact` row over the packs read) retired WITH the
-	// wizard, and the promoted chat `/` arrived `no_counterpart` — the mix
-	// moved from {3, 4, 3} to {2, 3, 1}. The sidebar frame: `/audit` arrived
-	// `renamed` (the Dioxus route string carries its filters) and
-	// `/governance` arrived `no_counterpart` (no Dioxus route gathers domains,
-	// roles and retention) — {2, 4, 2}.
-	const mix = ROUTE_PARITY.reduce<Record<ParityVerdict, number>>(
-		(acc, row) => ({ ...acc, [row.verdict]: (acc[row.verdict] ?? 0) + 1 }),
-		{} as Record<ParityVerdict, number>
-	);
-	// 2026-10-30: /settings joins as no_counterpart (a shell-only
-	// preferences page — the Dioxus shell had none) → 3. The gate moves as
-	// a NAMED ACT: /settings is not unreconciled debt the way the first
-	// two were — the Dioxus shell genuinely had NO preferences surface
-	// (its settings were a native-menu concern the Dioxus shell never
-	// had), so there is nothing to reconcile against; the row is the
-	// record, and the count is the census's truth, not a debt to burn
-	// down. GATE 1: 2 → 3 (the operator's UX round, recorded here and in
-		// the register).
-	// 2026-11-12: /journey joins as no_counterpart (IMPROVE15, a shell-only
-	// surface — the Dioxus shell predates the customer journey and serves no
-	// chain-projection read; the nearest Dioxus path, the audit panel, is
-	// recorded as a fact about the tree, never promoted to a counterpart)
-	// → 4. GATE 1: 3 → 4, same named-act shape as /settings: nothing to
-	// reconcile against, the row is the record.
-	expect(mix).toEqual({ exact: 2, renamed: 4, no_counterpart: 4 });
-	expect(
-		mix.no_counterpart,
-		'gate 1 cannot go green while a route has a counterpart left unreconciled — /settings and /journey have NONE to reconcile against (recorded, the honest shape)'
-	).toBe(4);
+	expect(home!.because).toContain('CONCLUDED');
 });
 
 test('this_census_reads_the_SHELL_not_the_kernel_route_tables', () => {
@@ -704,58 +545,12 @@ test('this_census_reads_the_SHELL_not_the_kernel_route_tables', () => {
 	expect(existsSync(join(shellRoot, '..', 'src', 'server', 'router', 'route_guards.rs'))).toBe(true);
 });
 
-test('the_dioxus_counterpart_table_is_read_from_the_app_not_from_the_plan', () => {
-	const clientMain = join(shellRoot, '..', 'client', 'src', 'main.rs');
-	const dioxus = censusDioxusRoutes(clientMain);
-
-	// Anti-vacuity: the parse found the route table. An empty parse would make
-	// every `no_counterpart` verdict vacuously true — which is the failure this
-	// whole file could have. (`censusDioxusRoutes` now fails closed on this
-	// itself; the assertion stays because it also pins the COUNT.)
-	expect(dioxus.length, 'the Dioxus route parse found fewer routes than expected').toBeGreaterThan(
-		10
-	);
-	expect(dioxus).toContain('/');
-	expect(dioxus).toContain('/recall');
-
-	// THE PLAN-TRUTH FINDING, asserted so it cannot be quietly reconciled.
-	//
-	// Plan 09 §1's table marks overview, search, decisions and models as covered
-	// on the Dioxus side. Against the real route table: `/overview` and `/models`
-	// do not exist there at all, and `/search` and `/decisions` exist under other
-	// names. Writing the parity table from the plan's prose would have produced a
-	// confidently wrong file; reading it from the app is what found this.
-	for (const absentInDioxus of ['/overview', '/models', '/search', '/decisions']) {
-		expect(
-			dioxus,
-			`${absentInDioxus} is asserted absent from the Dioxus route table. Plan 09 §1 lists it as ` +
-				'covered; if it now exists there, the plan-truth finding in the register must be updated.'
-		).not.toContain(absentInDioxus);
-	}
-
-	// And the routes the plan DID get right, so the finding is a difference and
-	// not a wholesale disagreement: the root and /recall match exactly.
-	//
-	// III-6's CORRECTION, and it is the reason the plan's table was not the
-	// source: the Dioxus side's proposal queue really IS /review — which is
-	// exactly the surface the shell was MISSING, and which the plan's table
-	// claimed was covered by the shell's `/decisions`. The Dioxus route table
-	// still carries both /review paths; what changed is what the shell serves
-	// at each path.
-	expect(dioxus).toContain('/review');
-	expect(dioxus).toContain('/review/:proposal_id');
-	expect(dioxus).toContain('/recall/:trace_id');
-
-	// The catch-all is present and is NOT a counterpart for anything: a route
-	// that matches everything cannot be cited as a specific surface existing.
-	expect(dioxus).toContain('/:..segments');
-});
-
 /**
  * ────────────────────── III-0b — the AUTHORITY derivation ──────────────────
  *
- * The census above proves every shell route is PARITY-judged (gate 1); this
- * section proves every route is AUTHORITY-judged (gate 3): the `authz` field
+ * The census above proves every shell route is ROW-judged (one row per
+ * user-reachable route, each with a reason); this section proves every route
+ * is AUTHORITY-judged (gate 3): the `authz` field
  * on each row names the kernel scopes its calls demand and its mutating reach,
  * and three tests below hold those names to derivations:
  *
@@ -1020,7 +815,7 @@ test('every_user_reachable_shell_route_carries_its_kernels_own_authz_verdict', (
 
 	let derivedTotal = 0;
 	for (const entry of entries) {
-		const row = ROUTE_PARITY.find((r) => r.route === entry.route);
+		const row = ROUTE_ROWS.find((r) => r.route === entry.route);
 		expect(row, `${entry.route} has no row`).toBeDefined();
 		const declared = row!.authz.kernel;
 		expect(
@@ -1218,7 +1013,7 @@ test('every_mutating_reach_is_enumerated_and_the_forget_affordance_is_soft_only_
 		'/workflow/decision-runs/{id}/replay-diff'
 	]);
 
-	const mutatingRows = ROUTE_PARITY.filter((row) => row.authz.mutates !== null);
+	const mutatingRows = ROUTE_ROWS.filter((row) => row.authz.mutates !== null);
 	const namedPaths = new Set(mutatingRows.map((row) => row.authz.mutates!.path));
 	for (const path of writePaths) {
 		expect(

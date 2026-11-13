@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
 
 /**
- * D9 — the five catalogs (en/de/fr/es/nl, the Dioxus parity set) must
+ * D9 — the five catalogs (en/de/fr/es/nl — the set the retired Dioxus
+ * client also shipped, kept at five since) must
  * carry EXACTLY the same key sets: a missing key in ANY locale is a red
  * test, not a runtime fallback surprise.
  */

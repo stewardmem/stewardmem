@@ -411,26 +411,26 @@ test('P4 an empty queue is the kernel saying so, not a refusal', async () => {
 
 // ── P5 · the four artifacts carry the route ─────────────────────────────────
 
-/** One parity row's source block, as the table holds it. */
+/** One census row's source block, as the table holds it. */
 function parityRowBlock(source: string, route: string): string {
 	const start = source.indexOf(`route: '${route}',`);
-	expect(start, `the parity table has no row for ${route}`).toBeGreaterThan(-1);
+	expect(start, `the census table has no row for ${route}`).toBeGreaterThan(-1);
 	const open = source.lastIndexOf('{', start);
 	const close = source.indexOf('\n\t},', start);
 	return source.slice(open, close === -1 ? undefined : close);
 }
 
-test('P5 the census, the parity row, the sweep arm and the catalogs carry the route', () => {
+test('P5 the census, the census row, the sweep arm and the catalogs carry the route', () => {
 	// The census — and its floor, which is a floor on the walk, not on the list.
 	expect([...CENSUS_ROUTES]).toContain('/review');
 	expect(ROUTE_FLOOR).toBe(CENSUS_ROUTES.length);
 
-	// The parity row — and its SHAPE, not just its presence. The amendment
-	// is IN the row: the surface now names the ONE write it carries.
+	// The census row — and its SHAPE, not just its presence. The amendment
+	// is IN the row: the surface NAMES its kernel wire paths (the Read the
+	// queue rides, the ONE Write the amendment granted), and the parity
+	// cells retired with the Dioxus workspace (2026-11-13) cannot come back.
 	const parity = readFileSync(join(shellRoot, 'tests', 'route-parity.test.ts'), 'utf8');
 	const row = parityRowBlock(parity, '/review');
-	expect(row).toContain("verdict: 'exact'");
-	expect(row).toContain("dioxus: '/review'");
 	expect(row).toContain("'/proposals': 'Read'");
 	expect(row).toContain("'/proposals/{id}/approve': 'Write'");
 	expect(row).toContain("mutates: {");
@@ -442,6 +442,11 @@ test('P5 the census, the parity row, the sweep arm and the catalogs carry the ro
 	expect(authzBlock.toLowerCase()).not.toContain('reject');
 	expect(authzBlock).not.toContain("'/proposals/{id}/reject'");
 	expect(authzBlock).not.toContain("'/proposals/{id}/edit'");
+	// The retired counterpart cell cannot return: there is no other side
+	// left to claim against.
+	expect(row, 'the retired dioxus cell must not return to the census row').not.toContain(
+		'dioxus:'
+	);
 
 	// The sweep arm.
 	const sweep = readFileSync(join(shellRoot, 'tests', 'route-a11y.test.ts'), 'utf8');
@@ -458,9 +463,9 @@ test('P5 the census, the parity row, the sweep arm and the catalogs carry the ro
 	}
 });
 
-// ── P6 · the parity rows for the decision surfaces are TRUE ─────────────────
+// ── P6 · the decision rows name their wire and claim only what they serve ────
 
-test('P6 the parity rows for /decisions and /decisions/[id] are TRUE', () => {
+test('P6 the census rows for /decisions and /decisions/[id] name their wire, never the queue', () => {
 	const parity = readFileSync(join(shellRoot, 'tests', 'route-parity.test.ts'), 'utf8');
 
 	for (const route of ['/decisions', '/decisions/[id]']) {
@@ -471,17 +476,15 @@ test('P6 the parity rows for /decisions and /decisions/[id] are TRUE', () => {
 			'/workflow/decision-runs'
 		);
 		// … and does NOT claim the proposal queue. This is the claim that was
-		// FALSE, and a false `renamed` reads as coverage.
+		// FALSE (the III-6 false rename — a false counterpart reads as
+		// coverage), and the row is the record of the correction.
 		expect(block.toLowerCase(), `${route}'s row still claims the proposal queue`).not.toContain(
 			'review queue'
 		);
-		// … and its counterpart is a RUN surface, never a proposal path.
-		const dioxus = /dioxus: '([^']+)'/.exec(block);
-		expect(dioxus, `${route}'s row names no counterpart`).not.toBeNull();
-		expect(
-			dioxus![1]!.startsWith('/review'),
-			`${route} still names the Dioxus proposal surface (${dioxus![1]}) as its counterpart`
-		).toBe(false);
+		// … and the retired counterpart cell cannot return: the correction is
+		// carried by the row naming its OWN wire, not by pointing at the
+		// retired side.
+		expect(block, `${route}'s row resurrects the retired dioxus cell`).not.toContain('dioxus:');
 
 		// And the route's OWN wire call is the decision-run listing, not the
 		// proposal queue. The row and the code must agree.

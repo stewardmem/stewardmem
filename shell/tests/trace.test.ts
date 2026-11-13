@@ -36,8 +36,9 @@ afterEach(() => {
 
 /**
  * The R25 named tests (R25_PREREG §8): the recall-trace replay view —
- * the defensive parse (parse-or-refuse, nothing invented), the Dioxus
- * parity rendering with invisible chars stripped BEFORE render, the
+ * the defensive parse (parse-or-refuse, nothing invented), the rendering
+ * with invisible chars stripped BEFORE render (born as the Dioxus parity
+ * arm; the rendering law outlived the retired side), the
  * verbatim-bytes export (the byte-parity gate, filename trace-{id}.json),
  * and the honest 404 state. The wire is stubbed at fetch (the openapi-fetch
  * seam) so the typed client and the capture middleware run FOR REAL.
