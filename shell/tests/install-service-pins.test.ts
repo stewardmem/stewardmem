@@ -29,6 +29,20 @@ test('the_installer_never_writes_through_a_symlink_destination', () => {
 	expect(script).toContain('TOOLS_ROOT');
 });
 
+test('the_stale_bundle_refusal_names_the_bundle_dir_it_actually_reads', () => {
+	// The installer reads the bundle from the aarch64 target dir
+	// (ARM64-ONLY since III-5, 2026-10-29 — APP_BUNDLE_DIR above). The
+	// stale-bundle refusal's remedy must name the target that lands a
+	// bundle in THAT dir; the old text named universal-apple-darwin, the
+	// pre-III-5 shape — a command that builds a bundle the installer
+	// never reads (and that no longer builds: tauri's universal path
+	// demands the crate's every src/bin target, measured 2026-11-13).
+	expect(script).toContain(
+		'pnpm tauri build --bundles app --target aarch64-apple-darwin'
+	);
+	expect(script).not.toContain('--target universal-apple-darwin');
+});
+
 test('a_tools_layout_link_gets_the_pkg_own_versioned_install_and_flip', () => {
 	// The version is MEASURED from the built binary, fail-closed — an
 	// unparseable `--version` is a refusal, never an empty dir name (the

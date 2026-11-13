@@ -218,10 +218,12 @@ done
 #     since III-5, and the bundle now lives under the aarch64 target dir.
 APP_BUNDLE_DIR="$REPO/shell/src-tauri/target/aarch64-apple-darwin/release/bundle/macos"
 APP_INSTALL_DIR="${APP_INSTALL_DIR:-/Applications}"
-SRC_APP=""
-for cand in "StewardMem.app"; do
-    [[ -d "$APP_BUNDLE_DIR/$cand" ]] && SRC_APP="$APP_BUNDLE_DIR/$cand" && break
-done
+# One candidate, no loop: the pre-rebrand names ("Brain Shell.app",
+# "Brain-Shell.app") are HISTORY (see above), so a one-iteration for-loop
+# here would only re-introduce the SC2043 lint warning for a shape nothing
+# extends.
+SRC_APP="$APP_BUNDLE_DIR/StewardMem.app"
+[[ -d "$SRC_APP" ]] || SRC_APP=""
 if [[ -z "$SRC_APP" ]]; then
     log "no .app in $APP_BUNDLE_DIR -> desktop app install skipped (build the shell first: cd shell && pnpm tauri build)"
 else
@@ -238,7 +240,7 @@ else
     [[ -n "$SRC_KERNEL" ]] || die "staged app's provenance names no kernel_version: $SRC_PROV"
     NEW_KERNEL="$("$SRC_BIN" --version 2>/dev/null | awk '{print $NF}' || true)"
     [[ -n "$NEW_KERNEL" ]] || die "cannot read the new kernel's version from $SRC_BIN --version"
-    [[ "$SRC_KERNEL" == "$NEW_KERNEL" ]] || die "staged app ships kernel $SRC_KERNEL but this install runs kernel $NEW_KERNEL — the app's version gate would refuse it at launch. Re-stage the bundle: node shell/scripts/sidecar.mjs stage && (cd shell && pnpm tauri build --bundles app --target universal-apple-darwin)"
+    [[ "$SRC_KERNEL" == "$NEW_KERNEL" ]] || die "staged app ships kernel $SRC_KERNEL but this install runs kernel $NEW_KERNEL — the app's version gate would refuse it at launch. Re-stage the bundle: node shell/scripts/sidecar.mjs stage && (cd shell && pnpm tauri build --bundles app --target aarch64-apple-darwin)"
     DEST_APP="$APP_INSTALL_DIR/$(basename "$SRC_APP")"
     # Never replace a RUNNING app: the live instance would keep executing a
     # half-replaced bundle while its resources shift underneath it.
