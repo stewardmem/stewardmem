@@ -991,4 +991,4 @@ jobs:
           fi
       - name: Watchdog (changed lines must add no diagnostic)
         run: |
-          lipstyk --diff "${{ steps.base.outputs.ref }}" --exclude-tests src client plugin crates shell/src-tauri shell/src
+          lipstyk --diff "${{ steps.base.outputs.ref }}" --exclude-tests src plugin crates shell/src-tauri shell/src

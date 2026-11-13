@@ -1148,14 +1148,19 @@ fn r45_0_correction_leaves_the_audit_chain_module_byte_untouched() {
 // tests (the hash-only columns, the byte-exact detail vocabulary) and by
 // tests/doc_correction.rs's route pin.
 const CHAIN_MODULE_SHA256: &str =
-    "ca134ab836fd195f1eff8bcd1eec48a93f89cb489207103a6424375b10d8ba6e";
+    "a8816c8dabf69ddbff7040fc349209c23d9318229fa3ebfeedf0e24b004a62f7";
 // (Movement history, each its own round with its own red-first battery, the
 // R45-0 pin's own law: IMPROVE16 added `AuditKind::DocCorrection` — the
 // per-call accounting kind, no verdict/key/epoch/link/scheme/check/row-write
 // shape moved; IMPROVE17 S1 added `AuditKind::Cascade` — the per-transition
 // accounting kind, the same precedent verbatim, the pins in
 // tests/cascade_source_pins.rs. The sha tracks the vocabulary's growth; the
-// behavioral pins (r45_0_* below) hold the chain's semantics fixed.)
+// behavioral pins (r45_0_* below) hold the chain's semantics fixed; 18
+// S-F-partial (5d28f355) touched the module's cfg(test) code only — the
+// sqlite_vec_rs dependency rename + the inference comment, the 1.100
+// unused-dep lint's own remedy — no chain shape moved; the hash was
+// re-derived by plan 19 S6's battery, the drift the never-run 18 verify-after
+// would have caught.)
 
 /// E8's second half: the correction adds no key material and no audit row.
 #[test]

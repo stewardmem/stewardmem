@@ -2229,24 +2229,29 @@ mod tests {
     #[test]
     fn the_final_arm_persists_the_pair_and_the_failed_arm_persists_nothing() {
         let src = include_str!("chat.rs");
-        let forwarder = src
-            .split("BridgeEvent::Final {")
-            .nth(1)
+        // THE SCAN REGION, re-derived (plan 19 S6's battery finding): the
+        // old second-occurrence split desynced when the cascade forwarder
+        // (the S-A era) grew its own `BridgeEvent::Final {` arm — split's
+        // nth(1) is the text BETWEEN the first two occurrences, which the
+        // extra arm silently empties of the Failed arm. The law is
+        // unchanged; the mechanism now anchors on the MAIN turn forwarder:
+        // the LAST `BridgeEvent::Final {` before the test module, with its
+        // Failed arm following it in the same region.
+        let scan = src
+            .split("#[cfg(test)]")
+            .next()
+            .expect("the test module marker exists");
+        let final_start = scan
+            .rfind("BridgeEvent::Final {")
             .expect("the forwarder carries a Final arm");
-        let (final_arm, failed_arm) = {
-            let rest = forwarder
-                .split("BridgeEvent::Failed {")
-                .next()
-                .expect("the Failed arm follows the Final arm in the forwarder");
-            // final_arm = everything from the Final arm's start to the
-            // Failed arm's start — that slice contains the persistence call.
-            let final_slice = &forwarder[..rest.len()];
-            let failed_slice = forwarder
-                .split("BridgeEvent::Failed {")
-                .nth(1)
-                .expect("the Failed arm body");
-            (final_slice, failed_slice)
-        };
+        let after_final = &scan[final_start..];
+        let failed_at = after_final
+            .find("BridgeEvent::Failed {")
+            .expect("the Failed arm follows the Final arm in the forwarder");
+        // final_arm = everything from the Final arm's start to the
+        // Failed arm's start — that slice contains the persistence call.
+        let final_arm = &after_final[..failed_at];
+        let failed_arm = &after_final[failed_at..];
         assert!(
             final_arm.contains("persist_turn_pair"),
             "the Final arm must persist the turn pair (the durable session store)"

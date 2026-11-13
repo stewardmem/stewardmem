@@ -21728,14 +21728,10 @@ mod r42sh_artifact_integrity {
             .split_whitespace()
             .map(str::to_string)
             .collect();
-        for tree in [
-            "src",
-            "client",
-            "plugin",
-            "crates",
-            "shell/src-tauri",
-            "shell/src",
-        ] {
+        // The scan set is a named act (the decommission, plan 19 S3): the
+        // Dioxus `client` tree left the repo, and the watchdog's SCAN_PATHS
+        // lost it with the tree itself.
+        for tree in ["src", "plugin", "crates", "shell/src-tauri", "shell/src"] {
             assert!(
                 scan_paths.iter().any(|p| p == tree),
                 "`{tree}` must be in the watchdog's scan list, found {scan_paths:?} — \
