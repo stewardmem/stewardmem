@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The macOS platform declaration Apple's own apps carry. Without it
+	     System Information classifies the bundle arch_ios ("Kind: iOS"):
+	     SPApplicationsReporter reads CFBundleSupportedPlatforms / DTSDKName
+	     first (MacOSX → arch_arm, iPhoneOS/iPadOS → arch_ios) and falls
+	     through to the Mach-O archetypes only when both are absent.
+	     Measured 2026-11-13: the same binary reads arch_arm with these
+	     two keys and arch_ios without them. -->
+	<key>CFBundleSupportedPlatforms</key>
+	<array>
+		<string>MacOSX</string>
+	</array>
+	<key>DTPlatformName</key>
+	<string>macosx</string>
+</dict>
+</plist>
