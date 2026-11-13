@@ -88,7 +88,7 @@ have no call in it.
 | `src/workflow/gdl.rs:7154` `adversarial_task_bound_is_pinned_by_value` |
 | `src/workflow/gdl.rs:7165` `artifact_bounds_are_pinned_by_value` |
 | `src/workflow/reflection.rs:1173` `the_adversarial_fallback_value_is_frozen` |
-| `src/workflow/session_log.rs:1161` `scope_caps_are_pinned_by_value` |
+| `src/workflow/session_log.rs:1181` `scope_caps_are_pinned_by_value` |
 | `tests/watch_pins.rs:184` `rw8_the_etiquette_constants_are_pinned` |
 
 ## What this census does NOT police
