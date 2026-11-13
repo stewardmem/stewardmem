@@ -131,7 +131,9 @@ describe('Decision Explorer surfaces', () => {
 		await waitForTestId('decision-list-row');
 		expect(screen.getByTestId('decision-list-row').textContent).toContain('42');
 		expect(screen.getByTestId('decision-list-row').textContent).toContain('1.32.11');
-		expect(screen.getByTestId('decision-list-link').getAttribute('href')).toBe('/decisions/42');
+		// The base law (round 18 S-C): paths.base defaults to /app — the seat
+		// posture — so the deep link carries it.
+		expect(screen.getByTestId('decision-list-link').getAttribute('href')).toBe('/app/decisions/42');
 	});
 
 	test('decision_explorer_renders_mode_and_stage_provenance', async () => {

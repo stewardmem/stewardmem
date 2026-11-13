@@ -62,7 +62,10 @@ test('recall_renders_results_with_trace_links', async () => {
 	expect(card.textContent).toContain('the recall bench seeds a support-ticket doc');
 	expect(card.textContent).toContain('0.823');
 	const link = await screen.findByTestId('trace-link');
-	expect(link.getAttribute('href')).toBe('/recall/4242/trace');
+	// The base law (round 18 S-C): the shell's primary web posture is the
+	// kernel-served /app seat, so SvelteKit's paths.base defaults to /app and
+	// every in-app href carries it.
+	expect(link.getAttribute('href')).toBe('/app/recall/4242/trace');
 
 	// The honest abstention: low_confidence + no hits → the abstain banner,
 	// NO cards, NO trace link (nothing was invented).

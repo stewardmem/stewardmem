@@ -588,7 +588,12 @@ test('the_sidecar_is_wired_macos_only_and_its_artifacts_are_ignored', () => {
 		bundle: {
 			externalBin: string[];
 			resources: string[];
-			macOS: { minimumSystemVersion: string; hardenedRuntime: boolean; signingIdentity: string };
+			macOS: {
+				minimumSystemVersion: string;
+				hardenedRuntime: boolean;
+				signingIdentity: string;
+				infoPlist: string;
+			};
 		};
 	};
 	// brain-afm joins the overlay's externalBin (the chat spine, v1.29.32):
@@ -604,7 +609,12 @@ test('the_sidecar_is_wired_macos_only_and_its_artifacts_are_ignored', () => {
 	expect(overlay.bundle.macOS).toEqual({
 		minimumSystemVersion: '15.0',
 		hardenedRuntime: true,
-		signingIdentity: 'Developer ID Application: Mark Fietje (JHB4UNPL3G)'
+		signingIdentity: 'Developer ID Application: Mark Fietje (JHB4UNPL3G)',
+		// The platform-keys overlay (round 18 S-E): the bundler's sanctioned
+		// infoPlist hook merges CFBundleSupportedPlatforms=[MacOSX] +
+		// DTPlatformName=macosx LAST, so System Information reads the app as
+		// Apple Silicon (arch_arm) instead of the iOS-kind fall-through.
+		infoPlist: './macos-info.plist'
 	});
 	expect(overlay.app.windows[0]?.windowEffects?.effects).toContain('sidebar');
 
