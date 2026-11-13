@@ -13,7 +13,6 @@ ver() { sed -n 's/^version = "\(.*\)"/\1/p' "$1" 2>/dev/null | head -1; }
 
 echo "== brain-server repo brief ($(date -u +%FT%TZ)) =="
 echo "server:  $(ver Cargo.toml)"
-echo "client:  $(ver client/Cargo.toml)"
 echo "plugin:  $(sed -n 's/^  "version": "\(.*\)",/\1/p' plugin/package.json 2>/dev/null || true)"
 echo "HEAD:    $(git log --oneline -1 | head -1)"
 n_dirty=$(git status --porcelain | wc -l | tr -d ' ')

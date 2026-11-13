@@ -103,12 +103,6 @@
     <loc>https://stewardmem.github.io/stewardmem/cli-reference.html</loc>
   </url>
   <url>
-    <loc>https://stewardmem.github.io/stewardmem/client-complete-console.html</loc>
-  </url>
-  <url>
-    <loc>https://stewardmem.github.io/stewardmem/client-gui.html</loc>
-  </url>
-  <url>
     <loc>https://stewardmem.github.io/stewardmem/CONTACT_CENTER_STANDARDS.html</loc>
   </url>
   <url>
@@ -128,9 +122,6 @@
   </url>
   <url>
     <loc>https://stewardmem.github.io/stewardmem/deployment.html</loc>
-  </url>
-  <url>
-    <loc>https://stewardmem.github.io/stewardmem/dioxus-wasm-split-research.html</loc>
   </url>
   <url>
     <loc>https://stewardmem.github.io/stewardmem/docker.html</loc>

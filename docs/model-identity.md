@@ -132,9 +132,10 @@ pre-v1.21 (test-pinned). Routes: `GET /profiles` (the wizard pick list),
 `GET /profiles/{name}`, `POST /profiles/{name}` (Admin, audited), and the
 binding `GET|POST /domains/{name}/profile` (`{"profile": "health-hipaa"}`
 binds, `null` unbinds) (`src/server/router/memory.rs:105-113`,
-`src/handlers/profiles.rs`, [api.md](./api.md)). The client Health panel
-shows the active profile and its effective knobs (`client/src/api.rs`
-`GET /profiles`, `GET /domains/{domain}/profile`; `client/src/panels/system.rs`).
+`src/handlers/profiles.rs`, [api.md](./api.md)). The shell shows the active
+profile and its effective knobs (`GET /profiles`,
+`GET /domains/{domain}/profile`; the Dioxus Health panel that first rendered
+them retired with the client, 2026-11-13).
 
 Layering that matters: `audit_read_events_for` resolves explicit
 `BRAIN_AUDIT_READ_EVENTS` (deployer kill-switch) over the bound profile's
@@ -218,7 +219,7 @@ stated design.
   confirm article numbers.
 - The console never computes a digest: `row_digest` is carried and forwarded,
   `artifact_digest_present` is display-only, and there is no model-registry
-  panel in the `client/` crate (domains/profiles only) — the shell `models`
+  panel (domains/profiles only) — the shell `models`
   route is the console surface.
 - Nothing here claims model quality, out-of-sample accuracy, or
   false-promotion rates; evaluation records stay explicitly non-authoritative

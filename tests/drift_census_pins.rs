@@ -1217,7 +1217,6 @@ fn no_tracked_file_names_an_unpublished_repository() {
         "scripts",
         "tools",
         "crates",
-        "client",
         "shell",
         "deploy",
         "plugin",

@@ -54,10 +54,9 @@ RUN apt-get update \
 WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
-# The client is a separate crate (Dioxus) served from client/dist; it is NOT
-# built here — the image is API/CLI-first. Mount a pre-built client bundle and
-# point BRAIN_CLIENT_DIR at it if you want the web UI in the container (see
-# docs/docker.md).
+# The shell GUI (shell/) is NOT built here — the image is API/CLI-first.
+# Mount a pre-built shell build and point BRAIN_CLIENT_DIST at it if you want
+# the web UI in the container (see docs/docker.md).
 RUN cargo build --release --locked \
     && ls -la target/release/ \
     && for b in brain-server brain mcp brain-connector-stub; do \

@@ -12,7 +12,7 @@ StewardMem is configured entirely through **environment variables** — there is
 | `BRAIN_DATA_ROOT` | — | v1.0 relocation knob — root for all on-disk paths |
 | `BRAIN_WORKER_THREADS` | # cores | Tokio runtime worker threads (set `2` on Jetson) |
 | `CORS_ORIGINS` | `http://localhost:3000,http://localhost:8080` | CORS allowlist |
-| `BRAIN_CLIENT_DIST` | `client/dist` | Directory served at `/app` (the web GUI) |
+| `BRAIN_CLIENT_DIST` | `shell/build` | Directory served at `/app` (the shell GUI); the installer pins the repo-absolute path |
 | `BRAIN_CHAIN_CHECK_SECS` | `60` | How often the background audit-chain integrity check runs |
 | `BRAIN_MULTI_DB` | — | Enables per-domain SQLite files (multi-DB mode) |
 | `BRAIN_CONTROLLER_NAME` | `brain-server operator` | Operator/controller identity label for the Art 30 register (`GET /art30`); empty/unset falls back to the default. Non-secret — must not hold PII. |

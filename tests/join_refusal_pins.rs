@@ -42,7 +42,7 @@
 //   `system_version`, and `evidence_refs` — none names a model. A **value-level**
 //   sweep on top returns only false positives (case dispositions, prose).
 // - All **12** pack run locators (`adm-4471`…`qc-214`) are **absent** from
-//   `src/`, `crates/`, `tests/`, `tools/`, `client/`, probed individually and as
+//   `src/`, `crates/`, `tests/`, `tools/`, probed individually and as
 //   a class. Nothing maps a corpus case id to a trace row, a registry row, or a
 //   run id.
 // - `model_registry_id` is non-null on **exactly one of four** `TraceRow`

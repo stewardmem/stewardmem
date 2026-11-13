@@ -34,7 +34,6 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 version()      { sed -n 's/^version = "\(.*\)"/\1/p' "$REPO/Cargo.toml" | head -1; }
-client_version(){ sed -n 's/^version = "\(.*\)"/\1/p' "$REPO/client/Cargo.toml" | head -1; }
 test_count()   {
   if [[ -n "${BRAIN_TEST_COUNT:-}" ]]; then
     printf '%s' "$BRAIN_TEST_COUNT"
@@ -218,7 +217,6 @@ if [[ "${1:-}" == "--selfcheck" ]]; then
   exit 0
 fi
 
-CLIENT="$(client_version)"
 TESTS="$(test_count)"
 # UMP level is DERIVED, not asserted: the `integration` CI job
 # ("release build + UMP conformance + recall gate" in
@@ -240,7 +238,7 @@ SBOM="$REPO/sbom/brain-server-${VERSION}.cdx.json"
 SBOM_FLAG=no; [[ -f "$SBOM" ]] && SBOM_FLAG=yes
 
 cat <<EOF
-server $VERSION   client $CLIENT   tests $TESTS passed   UMP $UMP   sbom $SBOM_FLAG
+server $VERSION   tests $TESTS passed   UMP $UMP   sbom $SBOM_FLAG
 
 [![Version](https://img.shields.io/badge/version-$VERSION-blue.svg)](#)
 [![Tests](https://img.shields.io/badge/tests-$TESTS%20passed-brightgreen.svg)](#)

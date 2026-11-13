@@ -277,9 +277,6 @@ flowchart TD
 > **Transport note.** Streaming is **SSE** (`text/event-stream` on the `/events` routes).
 > There is no WebSocket endpoint in this server — `axum` is declared without its `ws`
 > feature and no upgrade handler is registered.
->
-> A second GUI also exists: the Dioxus client in `client/` (web, desktop, iOS, Android),
-> retained pending Svelte parity. Both are protocol clients; neither is a backend.
 
 The client is deliberately **not a second backend**.
 

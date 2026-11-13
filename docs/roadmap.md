@@ -16,14 +16,14 @@ on-device pilot's first real measurements, the afm-stdio transport and the
 CRANK scheduler's first flip, over 1.29.34's live chat answers, 1.29.33's
 durable sessions, 1.29.32's grounded chat spine, governed row hashes and
 self-installing app, with the two audit passes of 1.29.3 "Hardening"
-beneath it).** StewardMem ships two operator
-GUIs over one HTTP API: the **Dioxus control surface** (`client/` — one Rust
-codebase, web + desktop) and the **SvelteKit + Tauri shell** (`shell/` — the
-active successor; a typed-wire SvelteKit SPA with a Tauri desktop core, its
-client generated from the kernel's `openapi.yaml`). `/app` serves whichever
-bundle `BRAIN_CLIENT_DIST` points at, and the default is still `client/dist`:
-the shell is CI-gated but not yet the served default, and `shell/README.md`
-freezes the Dioxus `client/` removal until the shell's parity gates pass.
+beneath it).** StewardMem ships one operator
+GUI over one HTTP API: the **SvelteKit + Tauri shell** (`shell/` — a
+typed-wire SvelteKit SPA with a Tauri desktop core, its
+client generated from the kernel's `openapi.yaml`). `/app` serves the shell
+build by default (`BRAIN_CLIENT_DIST`, default `shell/build`; the installer
+pins the repo-absolute path). The Dioxus control surface that shared the seat
+retired 2026-11-13 — the removal the old freeze text waited on, its parity
+gates long passed.
 Mobile is a compile-smoke target only — no store submission has shipped. The v1.28 line
 built the governed loop, then turned it into an enterprise platform:
 1.28.15–1.28.35 ran the governed loop and closed the ISO 10002/10003

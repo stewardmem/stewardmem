@@ -2996,7 +2996,6 @@ cargo clippy --manifest-path crates/Cargo.toml --all-targets -- -D warnings
 cargo test  --manifest-path tools/steward-harness/Cargo.toml         # steward-harness-gate
 cargo clippy --all-targets --features otel -- -D warnings    # otel-gate
 cargo test  --all-targets --features otel
-# client-gate only when client/ touched (slow: wasm + desktop headers).
 
 # FEATURE LANES — every `[features]` entry has a job in .github/workflows/ci.yml.
 # Six did not, and two of those did not compile (`injection-classifier`,
@@ -3021,7 +3020,6 @@ scripts/repo-brief.sh
 # (it fmts only the server tree) and burned the first Charter push. Run them
 # locally as part of the gate, ALWAYS before push:
 scripts/lipstyk-gate.sh
- cargo fmt --manifest-path client/Cargo.toml -- --check
 # lipstyk-gate: the CI watchdog's trap-proof wrapper — the raw
 # `lipstyk --diff "$(git rev-parse origin/main)"` form goes VACUOUS once you
 # push (origin/main == HEAD → empty diff → exit 0 having scanned nothing) and

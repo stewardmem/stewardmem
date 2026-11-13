@@ -173,7 +173,7 @@ brain status          # counts, model, version
 brain check-consistency   # duplicates, conflicts, stale sources
 ```
 
-The audit log is read via the HTTP API (`GET /audit`) or the client console, not the `brain`
+The audit log is read via the HTTP API (`GET /audit`) or the shell's audit surface, not the `brain`
 CLI (the CLI has no audit subcommand).
 
 `/health` reports liveness plus a `capacity` object (docs / DB size / RSS) and a
@@ -243,7 +243,7 @@ loads it when the default artifact resolves at
 `BRAIN_INJECTION_CLASSIFIER=off` disables it. When loaded:
 
 - **FPR calibration** — watch the quarantine rate (`/audit` `quarantined` rows;
-  the client Security panel surfaces the flag count). Tune
+  the shell's audit surface carries the same rows). Tune
   `BRAIN_INJECTION_THRESHOLD_HIGH/LOW` — policy + thresholds read per call, so a
   flip takes effect without a restart (only the model load is cached).
 - **Retrain trigger** — re-run adaptive evals on a threat-model shift (new
@@ -328,36 +328,27 @@ record the timings in the runbook.
 
 ---
 
-## The client GUI
+## The web seat
 
-Two GUIs ship over the same API:
-
-- **Dioxus control surface** (`client/`) — runs as a web app served by the
-  server at `/app`, and as a desktop app. **This is the default bundle**
-  (`BRAIN_CLIENT_DIST` → `client/dist`).
-- **SvelteKit + Tauri shell** (`shell/`) — the active successor: a typed-wire
-  SvelteKit SPA with a Tauri desktop core, generated against `openapi.yaml`.
-
-The Dioxus `client/` removal is frozen until the shell's parity gates pass.
+One GUI ships over the API: the **SvelteKit + Tauri shell** (`shell/`) — a
+typed-wire SvelteKit SPA with a Tauri desktop core, generated against
+`openapi.yaml`. The `/app` seat serves its build BY DEFAULT: the server's
+in-process dist default is `shell/build`, and the installer pins the
+repo-absolute path into the launchd plist (`BRAIN_CLIENT_DIST` — the key's
+name is the retired client's; it predates the one-GUI end-state).
 
 ```bash
-# In the client/ directory — build the web bundle, then deploy it
-./deploy-web.sh
+cd shell && pnpm build   # the /app base — the seat posture
+BRAIN_CLIENT_DIST="$PWD/shell/build" ./target/release/brain-server
 ```
 
-To serve the shell at the same seat instead, point the dist at its build output
-(`pnpm build` → `shell/build/`):
+⚠️ **Posture note:** the seat needs the `/app`-base build, and a plain
+`pnpm build` is exactly that. The Tauri bundle builds its own root-posture
+copy (`SHELL_BASE= pnpm build` via `beforeBuildCommand`) into the same dir —
+after a `pnpm tauri build`, re-run `pnpm build` before serving the seat.
 
-```bash
-BRAIN_CLIENT_DIST=shell/build ./target/release/brain-server
-```
-
-⚠️ **Caveat:** the shell's current build is **root-absolute** (`/_app/...`), while
-the `/app` seat serves under a `/app` prefix, so its assets do not resolve from
-that mount today. Serving it at `/app` needs a base-path build first; serving it
-as its own origin works as-is.
-
-See [Client GUI](./client-gui.md).
+(The Dioxus client that shared this seat was retired 2026-11-13; its removal
+is the decommission this text already reflects.)
 
 ---
 

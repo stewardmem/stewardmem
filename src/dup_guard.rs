@@ -12,8 +12,9 @@
 //! [`ALLOWED_DUPES`]. A second pin keeps the allowlist honest: an entry whose
 //! duplication disappeared must be deleted.
 //!
-//! Scope note: server tree only (`src/`). `crates/` and `client/` are
-//! separate workspaces with their own owners.
+//! Scope note: server tree only (`src/`). `crates/` is a separate workspace
+//! with its own owner (the `client/` workspace left the tree entirely,
+//! 2026-11-13).
 
 #![cfg(test)]
 

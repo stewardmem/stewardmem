@@ -41,8 +41,8 @@ scripts/badges.sh --selfcheck            # version + checklist completeness guar
 The local gate above is not the whole CI matrix (the v1.28.29 and v1.28.31
 lessons). Before every main push, also run the CI dry-run from `AGENTS.md`:
 default-feature clippy/test, the crates + steward-harness + otel jobs, the
-`lipstyk --diff "$(git rev-parse origin/main)" --exclude-tests src client plugin`
-changed-line gate, and `cargo fmt --manifest-path client/Cargo.toml -- --check`.
+`lipstyk` changed-line gate (`scripts/lipstyk-gate.sh`, its SCAN_PATHS), and
+`cargo fmt --check`.
 
 After the push, `scripts/release.sh` cuts the tag and pushes it to `public`,
 where — per the 2026-10-06 billing law (private-repo Actions disabled, the

@@ -760,7 +760,7 @@ not a separate service:
 
 ```mermaid
 flowchart TB
-    CLI["HTTP clients<br/>agent plugin · brain CLI · MCP · Dioxus client · SvelteKit+Tauri shell"]
+    CLI["HTTP clients<br/>agent plugin · brain CLI · MCP · SvelteKit+Tauri shell"]
 
     subgraph PROC["brain-server — one process, one SQLite file"]
         direction TB

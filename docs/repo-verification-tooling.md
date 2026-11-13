@@ -43,9 +43,8 @@ path-line shape), not a type-checked contract; `api.md` uses a
 sibling-segment heuristic after a middle dot, so odd formatting can mislead it;
 sealed history (`CHANGELOG.md`, `*_AUDIT_*.md`, `*_PROOF_*.md`, `AUDIT.md`,
 `AGENTS_HISTORY.md`, `roadmap-and-release-history.md`,
-`LOOP_AUTOCLOSE_RECONCILIATION.md`, `MEMGHOST_MITIGATION.md`,
-`dioxus-wasm-split-research.md`) is skipped by design — stale claims there are
-history, not lies. `MED` never fails the gate; a dangling citation outside a
+`LOOP_AUTOCLOSE_RECONCILIATION.md`, `MEMGHOST_MITIGATION.md`) is skipped by
+design — stale claims there are history, not lies. `MED` never fails the gate; a dangling citation outside a
 HIGH diff still needs a human.
 
 ## `scripts/check-doc-links.py`
@@ -264,5 +263,5 @@ only; other ingest seats are not exercised.
   this page — is the source of truth.
 
 Excluded by scope (one line): one-off / non-gate helpers
-`commit-loose-changes.sh`, `rename-round-test-files.sh`, `repo-brief.sh`, and
-`build-desktop.sh` are intentionally not covered here.
+`commit-loose-changes.sh`, `rename-round-test-files.sh`, and `repo-brief.sh`
+are intentionally not covered here.

@@ -18,6 +18,14 @@ carries no WCAG gate yet. A criterion line is honest about its lane: the
 until the three mechanical gates are ported to `shell/tests/` — that port
 is the open row, owned in the gate-law register.
 
+**Amended 2026-11-13 (the decommission):** the `client/` sources above
+retired from the tree, and with them the mechanical gates that walked them —
+that evidence lane no longer exists to run. The shell vitest lane (the
+sanitize + attribute-canary + route-a11y families in `shell/tests/`) is the
+surviving mechanical evidence, and the port row above is now the whole
+remaining road to shipped-surface WCAG evidence; nothing in this checklist
+claims otherwise.
+
 ## Perceivable
 
 - 1.1.1 Non-text Content — PASS: axe scan; icon-only buttons carry aria-labels from the locale bundle

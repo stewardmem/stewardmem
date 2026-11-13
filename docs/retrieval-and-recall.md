@@ -90,7 +90,7 @@ body with those keys fails deserialization):
 
 ## Provenance
 
-Every result carries `provenance`: per-retriever ranks, the fused score, and any expansion terms. With the **[Client GUI](./client-gui.md)** you can open the recall decision-path viewer to see *why* each chunk was chosen — the per-retriever ranks, fused score, relevance tier, and source. Since v1.27.12 each hit additionally carries its stored **provenance tags** — `source`, `node_kind`, `lawful_basis`, `region` — which the OpenClaw plugin renders as a `[src: · mk: · lb: · reg:]` line inside the untrusted-data fence, so the model can attribute (not just trust) each recalled item.
+Every result carries `provenance`: per-retriever ranks, the fused score, and any expansion terms. The recall decision-path viewer shows *why* each chunk was chosen — the per-retriever ranks, fused score, relevance tier, and source. Since v1.27.12 each hit additionally carries its stored **provenance tags** — `source`, `node_kind`, `lawful_basis`, `region` — which the OpenClaw plugin renders as a `[src: · mk: · lb: · reg:]` line inside the untrusted-data fence, so the model can attribute (not just trust) each recalled item.
 
 ## Abstention: knowing when you don't know
 

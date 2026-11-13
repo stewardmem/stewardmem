@@ -57,19 +57,17 @@ docker compose --profile sso up -d        # + OAuth2-Proxy SSO edge
 See `docker-compose.yml` for the full service definition and
 [docs/proxy-sso.md](./proxy-sso.md) for the SSO profile.
 
-## Web client (optional)
+## Web seat (optional)
 
-The Dioxus GUI is **not** built into the image (it is a separate crate served
-from `client/dist`). The SvelteKit + Tauri shell (`shell/`) is a separate
-frontend that can serve the same `/app` seat once built for that base path. To
-serve the UI from the container, build the bundle (`client/deploy-web.sh`) and
-mount it:
+The shell GUI is **not** built into the image. To serve the UI from the
+container, build it (`cd shell && pnpm build` — the `/app` base, the seat
+posture) and mount it:
 
 ```yaml
     volumes:
-      - ./client/dist:/app/client/dist:ro
+      - ./shell/build:/srv/shell/build:ro
     environment:
-      BRAIN_CLIENT_DIST: /app/client/dist
+      BRAIN_CLIENT_DIST: /srv/shell/build
 ```
 
 ## Backup / restore

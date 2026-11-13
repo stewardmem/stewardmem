@@ -11,7 +11,7 @@ spine repo).
 submission (the webhook-seam POST), kernel-side telemetry ingest, the pack
 designer, cockpit surfaces (M3), keychain token storage + offline approval
 queue (M2), installers/signing/auto-update/kernel sidecar (M4), the Dioxus
-`client/` removal (frozen until Svelte parity gates pass), SvelteKit 3 (not
+the `client/` removal (DONE — the decommission landed 2026-11-13), SvelteKit 3 (not
 stable at this round's pin).
 
 ## Run it

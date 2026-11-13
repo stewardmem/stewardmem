@@ -75,14 +75,16 @@ telephony/CRM numbers) — see "Deliberately absent" at the end.
 
 ## Approval-fatigue telemetry (ASI09, Attestation v1.28.62)
 
-The reviewer's own anti-rubber-stamp detector (the console's calibration
-strip, `client/src/panels/review.rs` `rubber_stamp()`) computed SERVER-SIDE
+The reviewer's own anti-rubber-stamp detector (born as the retired console's
+calibration strip, `client/src/panels/review.rs` `rubber_stamp()`; the
+console retired 2026-11-13) computes SERVER-SIDE
 so the DPO sees the signal on the scoreboard, not only in one reviewer's
 console. The window and the sample cap mirror the client's fetch exactly
 (trailing 7 days on `created_at`, latest 200 per status), and the verdict is
 pinned against the client arithmetic by
-`scoreboard_uniformity_matches_client_math` — the scoreboard and the
-reviewer's console can never disagree.
+`scoreboard_uniformity_matches_client_math` — the pin re-derives that
+arithmetic inline from its recorded form, so the scoreboard can never drift
+from the math the detector was born with.
 
 | Field | Definition / formula | Source (lineage) | Window | Citation |
 |---|---|---|---|---|

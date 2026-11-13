@@ -14,10 +14,9 @@ What does this change do? (One or two sentences.)
 
 Please confirm before requesting review:
 
-- [ ] `cargo fmt --check` clean (server and, if touched, `client/`)
+- [ ] `cargo fmt --check` clean
 - [ ] `cargo clippy --all-targets --features bench,migrate -- -D warnings` clean (client: `--all-targets -- -D warnings`)
 - [ ] `cargo test --all-targets --features bench,migrate` green (client: `--all-targets`)
-- [ ] Client wasm build green if `client/` touched (`cargo build --target wasm32-unknown-unknown`)
 - [ ] New routes documented in `openapi.yaml` + added to the authz wiring-guard table
 - [ ] Schema changes reflected in `test_migration_schema_contract`
 - [ ] `CHANGELOG.md` updated for user-facing changes

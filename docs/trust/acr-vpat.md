@@ -42,8 +42,10 @@ its documented ceiling. Highlights:
 
 - **Locale negotiation is exact-match only.** The switcher sanitizes to the
   supported set without region/script subtag matching (`fr-CA` falls to
-  default `en`, not `fr`); the requested→available→default scheme is
-  documented in `client/src/i18n.rs` and full BCP-47 matching remains
+  default `en`, not `fr`); the requested→available→default scheme was
+  documented in the retired client's `client/src/i18n.rs` (the client left
+  the tree 2026-11-13; the shell's locale pane carries the same exact-match
+  ceiling) and full BCP-47 matching remains
   future work with the fluent-langneg upgrade.
 - **axe browser gate covers the web console only.** The axe scan runs against
   the served console build; the desktop shell is covered by the manual

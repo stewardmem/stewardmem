@@ -144,8 +144,9 @@ mod tests {
     /// lane — EXHAUSTIVE. The fixture (plugin/fixtures/invisible-classes.json,
     /// parity-synced into the fork's extension tree) is asserted equal to
     /// `is_invisible` over EVERY scalar value: a class added or removed on
-    /// either side fails here. The plugin/client/fork lanes consume the same
-    /// file, so one truth pins four trees.
+    /// either side fails here. The plugin and fork lanes consume the same
+    /// file, so one truth pins three trees (the retired client lane was the
+    /// fourth until the 2026-11-13 decommission).
     #[test]
     fn invisible_set_fixture_is_exhaustive_truth() {
         let fixture: serde_json::Value =

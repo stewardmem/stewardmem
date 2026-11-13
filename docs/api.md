@@ -12,7 +12,7 @@ machine-readable contract is at **`GET /openapi.yaml`** at runtime and
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/` · `/app/*` | The operator GUI SPA, served from `BRAIN_CLIENT_DIST` when built and mounted (static asset surface — the JSON API routes are unaffected). The default bundle is the Dioxus client (`client/`); the SvelteKit + Tauri shell (`shell/`) is a successor GUI over the same API, not yet the served default |
+| GET | `/` · `/app/*` | The shell SPA, served from `BRAIN_CLIENT_DIST` (default `shell/build`; the installer pins the repo-absolute path). `/` redirects to `/app/` (static asset surface — the JSON API routes are unaffected) |
 | GET | `/health` | Liveness probe (minimal `{status, version}`; detail on `/health/db`) |
 | GET | `/ready` | Readiness probe for load balancers; includes the redacted `gdl_provider` posture (`disabled`, `configured`, or `invalid`; invalid is `NOT_READY`) |
 | GET | `/health/db` | Admin-gated detail (v1.28.70: the full body — capacity, pool, hardening, model, otel, DPO, concurrency, durability, rerank echo (CG-12: `off`/`loading`/`ready`/`failed` + the model actually loaded + `top_n`) — is operator telemetry); a Read credential gets the reduced probe `{status, version, db_ok}`; Read-only dashboards add the admin credential for the full body |
@@ -457,8 +457,7 @@ no brain credentials — pinned by `relay_holds_no_brain_credentials`).
   domains, ump, backup/restore, key management, and more (see
   [CLI reference](./cli-reference.md)).
 - **`mcp` binary** — search/recall/ingest exposed as MCP tools for agent clients.
-- **Dioxus client** (`client/`) — the visual control surface served at `/app` today.
-- **SvelteKit + Tauri shell** (`shell/`) — the successor GUI over the same API; builds to a static SPA for the same `/app` seat.
+- **SvelteKit + Tauri shell** (`shell/`) — the GUI over the API; builds to a static SPA served at the `/app` seat (the Dioxus client that shared the seat retired 2026-11-13).
 
 ---
 

@@ -28,7 +28,7 @@ Ingest markdown with `POST /ingest/markdown`, structured data with `POST /ingest
 Call `POST /recall` with a `QueryDoc`, or use `brain query "..."`. See **[Retrieval & Recall](./retrieval-and-recall.md)**.
 
 **Is there a GUI?**
-Yes — two GUIs. The **Dioxus control surface** (`client/`, web + desktop) is what `/app` serves by default; the **SvelteKit + Tauri shell** (`shell/`) is the successor under active development, over the same API. In both, `mobile` is a compile-smoke target only; no store submission has shipped. See the **[Client GUI](./client-gui.md)**.
+Yes — one GUI: the **SvelteKit + Tauri shell** (`shell/`), which is what `/app` serves by default (the Dioxus client that shared the seat retired 2026-11-13). `mobile` is a compile-smoke target only; no store submission has shipped.
 
 **Does it work with OpenClaw?**
 Yes — StewardMem is the memory backend for OpenClaw via a `kind: "memory"` plugin. See the **[OpenClaw Integration](./openclaw-integration.md)** page.
