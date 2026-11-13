@@ -21,7 +21,9 @@ test('trace_replay_renders_and_exports_verbatim', async ({ page }) => {
 	expect(wireRes.ok, `the trace GET over the live wire (${wireRes.status})`).toBe(true);
 	const wireBytes = Buffer.from(await wireRes.arrayBuffer());
 
-	await page.goto(`/recall/${traceId}/trace`);
+	// The seat posture's base law (the S-C base: '/app' in the e2e build) —
+	// the pane's URL is /app/recall/… (the wire GET above stays base-less).
+	await page.goto(`/app/recall/${traceId}/trace`);
 
 	// The structured parity view renders over the live wire: the decision
 	// path is visible and the seeded document appears as the injected hit.
@@ -47,6 +49,6 @@ test('trace_replay_renders_and_exports_verbatim', async ({ page }) => {
 
 	// The honest 404: a bogus id renders the not-found STATE — not an
 	// error, not an invented empty view.
-	await page.goto('/recall/999999/trace');
+	await page.goto('/app/recall/999999/trace');
 	await expect(page.getByTestId('trace-not-found')).toBeVisible();
 });

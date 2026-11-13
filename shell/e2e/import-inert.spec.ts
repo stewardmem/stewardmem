@@ -11,7 +11,9 @@ import { expect, test } from '@playwright/test';
  * clicks into.
  */
 test('pwa_settings_import_renders_inert_and_offers_nothing', async ({ page }) => {
-	await page.goto('/settings');
+	// The seat posture's base law (the S-C base: '/app' in the e2e build) —
+	// the out-of-base /settings answers the kit's mismatch notice, not the page.
+	await page.goto('/app/settings');
 
 	// The inert disclosure renders (the honest "nothing to do here" text).
 	await expect(page.getByTestId('settings-import-inert')).toBeVisible({

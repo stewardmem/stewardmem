@@ -59,10 +59,13 @@ test('decision_explorer_live_wire_roundtrip_is_real_and_dedicated_port', async (
 	const listBefore: unknown = await listResponse.json();
 	expect(listBefore).toMatchObject({ count: 1 });
 
-	await page.goto('/decisions');
+	// THE SEAT POSTURE'S BASE LAW (the S-C base: paths.base '/app' in the
+	// e2e build) — the pane's URL is /app/decisions, and the rendered hrefs
+	// carry the base (the 046e908a vitest drift-catch's e2e half).
+	await page.goto('/app/decisions');
 	await expect(page.getByTestId('decision-list-row')).toBeVisible();
 	await expect(page.getByTestId('decision-list-nonpromotable')).toContainText('cannot promote');
-	await expect(page.getByTestId('decision-list-link')).toHaveAttribute('href', `/decisions/${traceId}`);
+	await expect(page.getByTestId('decision-list-link')).toHaveAttribute('href', `/app/decisions/${traceId}`);
 
 	const detailWire = await fetch(`${kernelUrl}/workflow/decision-runs/${traceId}`);
 	expect(detailWire.ok, `the decision detail over the live wire (${detailWire.status})`).toBe(true);
