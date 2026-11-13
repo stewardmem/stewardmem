@@ -5,10 +5,17 @@
  * operator's 8765 service is never queried or mutated. Both the R25 recall
  * fixture and the R32 decision fixture are synthetic and are seeded through
  * the kernel's public HTTP routes before the browser starts.
+ *
+ * A SECOND temporary kernel boots beside it on 127.0.0.1:8809 (its own
+ * scratch db, the same token-stripped posture) with BRAIN_CHAT_CASCADE=1 —
+ * the cascade lane's armed posture (plan 18 §1). The un-armed kernel keeps
+ * every existing pin byte-identical; each kernel's streams tee into its own
+ * log file (E2E_KERNEL_LOG / E2E_CASCADE_KERNEL_LOG), which the specs read
+ * as the kernel-side witness beside the page's rendered state.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createConnection } from 'node:net';
-import { mkdtempSync, rmSync, statSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,9 +24,17 @@ const shellRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const kernelRoot = join(shellRoot, '..');
 const KERNEL_PORT = Number(process.env['E2E_KERNEL_PORT'] ?? 8799);
 const KERNEL_URL = `http://127.0.0.1:${KERNEL_PORT}`;
+// The cascade lane's kernel (plan 18 §1): a SECOND dedicated kernel with
+// BRAIN_CHAT_CASCADE=1 armed, on its own port and its own scratch db. The
+// un-armed kernel above keeps the R139 posture byte-identical — the OFF law
+// is asserted against IT, the armed wiring against this one.
+const CASCADE_PORT = Number(process.env['E2E_CASCADE_PORT'] ?? 8809);
+const CASCADE_URL = `http://127.0.0.1:${CASCADE_PORT}`;
 
 let kernel: ChildProcess | null = null;
 let dataDir: string | null = null;
+let cascadeKernel: ChildProcess | null = null;
+let cascadeDataDir: string | null = null;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -39,8 +54,8 @@ function requiredDigest(value: unknown, label: string): string {
 	return value;
 }
 
-async function postJson(path: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
-	const response = await fetch(`${KERNEL_URL}${path}`, {
+async function postJson(base: string, path: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
+	const response = await fetch(`${base}${path}`, {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
 		body: JSON.stringify(body)
@@ -73,21 +88,21 @@ function portIsFree(port: number): Promise<boolean> {
 	});
 }
 
-async function waitForHealth(timeoutMs: number): Promise<void> {
+async function waitForHealth(base: string, child: ChildProcess | null, timeoutMs: number): Promise<void> {
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
-		if (kernel && kernel.exitCode !== null) {
-			throw new Error(`the e2e kernel exited early (code ${kernel.exitCode})`);
+		if (child && child.exitCode !== null) {
+			throw new Error(`the e2e kernel exited early (code ${child.exitCode})`);
 		}
 		try {
-			const response = await fetch(`${KERNEL_URL}/health`);
+			const response = await fetch(`${base}/health`);
 			if (response.ok) return;
 		} catch {
 			// The child is still starting.
 		}
 		await new Promise((resolve) => setTimeout(resolve, 500));
 	}
-	throw new Error(`the e2e kernel did not become healthy on ${KERNEL_URL} in time`);
+	throw new Error(`the e2e kernel did not become healthy on ${base} in time`);
 }
 
 /**
@@ -99,15 +114,15 @@ async function waitForHealth(timeoutMs: number): Promise<void> {
  * same contract the app's own Settings surface follows. A Failed posture is
  * a NAMED refusal, never a silent seed of vec-less rows.
  */
-async function waitForModelReady(timeoutMs: number): Promise<void> {
+async function waitForModelReady(base: string, child: ChildProcess | null, timeoutMs: number): Promise<void> {
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
-		if (kernel && kernel.exitCode !== null) {
-			throw new Error(`the e2e kernel exited early (code ${kernel.exitCode})`);
+		if (child && child.exitCode !== null) {
+			throw new Error(`the e2e kernel exited early (code ${child.exitCode})`);
 		}
 		let posture: Record<string, unknown> | null = null;
 		try {
-			const response = await fetch(`${KERNEL_URL}/health/db`);
+			const response = await fetch(`${base}/health/db`);
 			if (response.ok) {
 				const parsed: unknown = await response.json();
 				if (typeof parsed === 'object' && parsed !== null) {
@@ -143,19 +158,28 @@ async function cleanup(): Promise<void> {
 		child.kill('SIGTERM');
 		await new Promise<void>((resolve) => child.once('exit', () => resolve()));
 	}
+	const cascadeChild = cascadeKernel;
+	cascadeKernel = null;
+	if (cascadeChild && cascadeChild.exitCode === null) {
+		cascadeChild.kill('SIGTERM');
+		await new Promise<void>((resolve) => cascadeChild.once('exit', () => resolve()));
+	}
 	const directory = dataDir;
 	dataDir = null;
 	if (directory) rmSync(directory, { recursive: true, force: true });
+	const cascadeDirectory = cascadeDataDir;
+	cascadeDataDir = null;
+	if (cascadeDirectory) rmSync(cascadeDirectory, { recursive: true, force: true });
 }
 
-async function seedRecallFixture(): Promise<void> {
-	const add = await postJson('/add', {
+async function seedRecallFixture(base: string): Promise<void> {
+	const add = await postJson(base, '/add', {
 		text: 'StewardMem R32 decision explorer seed: r32 decision explorer seed supports a governed decision trace.',
 		title: 'R32 e2e seed'
 	});
 	if (add['success'] !== true) throw new Error('the e2e /add seed did not report success');
 
-	const recall = await postJson('/recall', {
+	const recall = await postJson(base, '/recall', {
 		v: 1,
 		query: 'verbatim export gate',
 		limit: 10,
@@ -167,7 +191,7 @@ async function seedRecallFixture(): Promise<void> {
 }
 
 async function seedDecisionFixture(): Promise<void> {
-	const run = await postJson('/workflow/runs', {
+	const run = await postJson(KERNEL_URL, '/workflow/runs', {
 		domain: 'global',
 		kind: 'troubleshoot',
 		state_json: '{}'
@@ -188,7 +212,7 @@ async function seedDecisionFixture(): Promise<void> {
 			}
 		]
 	};
-	const registration = await postJson('/workflow/model-registry/register', {
+	const registration = await postJson(KERNEL_URL, '/workflow/model-registry/register', {
 		kind: 'deterministic-rules',
 		rules_config: rulesConfig
 	});
@@ -222,7 +246,7 @@ async function seedDecisionFixture(): Promise<void> {
 			fallback: 'approve'
 		}
 	};
-	const decision = await postJson('/workflow/decision-runs', {
+	const decision = await postJson(KERNEL_URL, '/workflow/decision-runs', {
 		config,
 		rules_config: rulesConfig,
 		run_id: runId,
@@ -262,10 +286,65 @@ async function seedDecisionFixture(): Promise<void> {
 	console.log(`[e2e] decision trace recorded: trace_id ${traceId}`);
 }
 
+/**
+ * The cascade lane's document fixture (plan 18 §1, R18-10): ONE compact
+ * memory whose content is a complete GFM document — a heading, a table, and
+ * a fenced mermaid diagram — small enough to ride a single ingest chunk, so
+ * the evidence-as-answer route (answer_from_memory) serves it VERBATIM and
+ * the live DOM must render the whole pipeline: heading, table, island SVG.
+ */
+async function seedDocumentFixture(base: string): Promise<void> {
+	const document = [
+		'## Payload seal drill',
+		'',
+		'The drill has two stages and one gate.',
+		'',
+		'| stage | result |',
+		'| --- | --- |',
+		'| seal | verified |',
+		'| verify | green |',
+		'',
+		'```mermaid',
+		'graph TD; seal --> verify; verify -->|pass| push;',
+		'```',
+		'',
+		'The drill ends with the push.'
+	].join('\n');
+	const add = await postJson(base, '/add', {
+		text: document,
+		title: 'Cascade e2e payload drill'
+	});
+	if (add['success'] !== true) throw new Error('the e2e document seed did not report success');
+	console.log('[e2e] cascade document fixture seeded');
+}
+
+/**
+ * Tee a kernel's streams into its own log FILE (the browser lane reads the
+ * log as the kernel-side witness — R18-9/12's gate-trace half) while keeping
+ * the harness's `[kernel]`-prefixed mirror on the runner's stdout. Raw chunk
+ * append: the file is byte-faithful, line splits are the reader's business.
+ */
+function teeKernelLog(child: ChildProcess, logPath: string, prefix: string): void {
+	writeFileSync(logPath, '');
+	const pump = (stream: NodeJS.ReadableStream | null): void => {
+		stream?.on('data', (chunk: Buffer) => {
+			appendFileSync(logPath, chunk.toString());
+			process.stdout.write(`[${prefix}] ${chunk}`);
+		});
+	};
+	pump(child.stdout);
+	pump(child.stderr);
+}
+
 export default async function (): Promise<() => Promise<void>> {
 	if (!(await portIsFree(KERNEL_PORT))) {
 		throw new Error(
 			`port ${KERNEL_PORT} is already in use — refusing to run e2e against a process this harness did not boot`
+		);
+	}
+	if (!(await portIsFree(CASCADE_PORT))) {
+		throw new Error(
+			`cascade port ${CASCADE_PORT} is already in use — refusing to run e2e against a process this harness did not boot`
 		);
 	}
 
@@ -329,15 +408,53 @@ export default async function (): Promise<() => Promise<void>> {
 			},
 			stdio: ['ignore', 'pipe', 'pipe']
 		});
-		kernel.stdout?.on('data', (data) => process.stdout.write(`[kernel] ${data}`));
-		kernel.stderr?.on('data', (data) => process.stderr.write(`[kernel!] ${data}`));
-		await waitForHealth(120_000);
+		const kernelLog = join(dataDir, 'kernel.log');
+		teeKernelLog(kernel, kernelLog, 'kernel');
+		process.env['E2E_KERNEL_LOG'] = kernelLog;
+		await waitForHealth(KERNEL_URL, kernel, 120_000);
 		console.log('[e2e] e2e kernel healthy');
-		await waitForModelReady(120_000);
+		await waitForModelReady(KERNEL_URL, kernel, 120_000);
 		console.log('[e2e] retrieval model ready — the bind-first load window is closed');
 
-		await seedRecallFixture();
+		await seedRecallFixture(KERNEL_URL);
 		await seedDecisionFixture();
+
+		// ── THE CASCADE KERNEL (plan 18 §1): the SAME binary, a SECOND
+		// scratch db, the gate ARMED. The un-armed kernel above keeps every
+		// existing pin's posture byte-identical; the armed wiring (R18-9/10)
+		// runs against this one, reached through the page's own origin
+		// override (the settings panel's law, loopback-enforced). The gate
+		// env is EXPLICIT — the armed-values law: only the exact armed
+		// values count.
+		cascadeDataDir = mkdtempSync(join(tmpdir(), 'cascade-e2e-kernel-'));
+		const cascadeLog = join(cascadeDataDir, 'kernel.log');
+		process.env['E2E_CASCADE_KERNEL_LOG'] = cascadeLog;
+		process.env['E2E_CASCADE_PORT'] = String(CASCADE_PORT);
+		cascadeKernel = spawn(join(kernelRoot, 'target/debug/brain-server'), [], {
+			cwd: kernelRoot,
+			env: {
+				...childEnv,
+				BIND_HOST: '127.0.0.1',
+				BIND_PORT: String(CASCADE_PORT),
+				BRAIN_DB_PATH: join(cascadeDataDir, 'brain.db'),
+				BRAIN_WRITE_POSTURE: 'open',
+				BRAIN_AUDIT_READ_EVENTS: 'on',
+				CORS_ORIGINS: 'http://127.0.0.1:4173',
+				BRAIN_CHAT_CASCADE: '1',
+				...(process.env['E2E_AFM_BRIDGE']
+					? { BRAIN_AFM_BRIDGE: process.env['E2E_AFM_BRIDGE'] }
+					: {})
+			},
+			stdio: ['ignore', 'pipe', 'pipe']
+		});
+		teeKernelLog(cascadeKernel, cascadeLog, 'cascade-kernel');
+		await waitForHealth(CASCADE_URL, cascadeKernel, 120_000);
+		console.log('[e2e] cascade kernel healthy');
+		await waitForModelReady(CASCADE_URL, cascadeKernel, 120_000);
+		console.log('[e2e] cascade retrieval model ready');
+
+		await seedRecallFixture(CASCADE_URL);
+		await seedDocumentFixture(CASCADE_URL);
 		return cleanup;
 	} catch (error) {
 			await cleanup();
