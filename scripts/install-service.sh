@@ -418,6 +418,25 @@ else
 	ok "BRAIN_RERANK_MODEL_DIR=$CLS_RERANK_DIR installed (absolute dir; CWD-relative is refused by the server)"
 fi
 
+# 2h. The /app seat's dist (plan 19 S1): pin the shell build as an absolute
+#     BRAIN_CLIENT_DIST in the launchd plist, replacing any prior value —
+#     the Dioxus-era key pointed at client/dist, which the decommission
+#     deletes, and the server's in-process default (the RELATIVE
+#     shell/build) only resolves when the server's CWD is the repo, which
+#     launchd's is not. Never write a dist dir that does not exist:
+#     shell/build is a build artifact of the shell workspace, and an
+#     absent one is a refusal naming the build command, not a dead seat.
+#     NOTE: the seat serves the /app posture (base=/app, `pnpm build`);
+#     a build left by `pnpm tauri build` carries the webview's root
+#     posture (SHELL_BASE=) — re-run `pnpm build` in shell/ before this
+#     script when the bundle build ran last.
+SHELL_DIST="$REPO/shell/build"
+[[ -f "$SHELL_DIST/index.html" ]] \
+	|| die "shell/build is absent ($SHELL_DIST) -- build the shell first: (cd shell && pnpm build) -- then re-run"
+plutil -remove EnvironmentVariables.BRAIN_CLIENT_DIST "$PLIST" 2>/dev/null || true
+plutil -insert EnvironmentVariables.BRAIN_CLIENT_DIST -string "$SHELL_DIST" "$PLIST"
+ok "BRAIN_CLIENT_DIST=$SHELL_DIST pinned (the /app seat serves the shell build)"
+
 # 3. Restart the launchd service so it runs the new binary.
 #    bootout is best-effort (service may not be loaded yet); bootstrap reloads
 #    the plist, which always picks up the current binary at the copied path.

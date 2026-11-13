@@ -65,3 +65,20 @@ test('no_plain_copy_remains_in_the_install_path', () => {
 	// truncated-binary window when the destination is being served.
 	expect(script).toContain('mv -f "$tmp" "$dest"');
 });
+
+test('the_installer_pins_the_shell_build_as_the_seat_dist', () => {
+	// The /app seat's dist is an INSTALLER-MANAGED fact (plan 19 S1): the
+	// Dioxus-era plist key pointed at client/dist, which the decommission
+	// deletes — and the seat's in-process default (the RELATIVE shell/build)
+	// only resolves when the server's CWD is the repo, which launchd's is
+	// not. The installer pins the repo-absolute shell/build with
+	// replace-any-prior-value (remove-then-insert, idempotent), never
+	// writing a dist dir that does not exist: an absent build is a refusal
+	// naming the build command, not a dead seat.
+	expect(script).toContain('SHELL_DIST="$REPO/shell/build"');
+	expect(script).toContain('plutil -remove EnvironmentVariables.BRAIN_CLIENT_DIST');
+	expect(script).toContain('plutil -insert EnvironmentVariables.BRAIN_CLIENT_DIST -string "$SHELL_DIST"');
+	// Fail-closed on an absent dist: the refusal names the build command.
+	expect(script).toContain('pnpm build');
+	expect(script).toContain('die "shell/build is absent');
+});

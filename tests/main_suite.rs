@@ -126,6 +126,7 @@ mod tests {
             dir,
         )
     }
+    pub(crate) use brain_server::server::router::API_CSP;
     pub(crate) use brain_server::server::router::core::{
         OPENAPI_YAML, health, health_body, health_db, verify_audit_chain,
     };
@@ -135,7 +136,6 @@ mod tests {
         ingest_memory, multi_get, parse_annotations, relations_for, write_markdown_ingest,
     };
     pub(crate) use brain_server::server::router::security_headers_middleware;
-    pub(crate) use brain_server::server::router::{API_CSP, CLIENT_CSP};
     use brain_server::*;
 
     /// the graph endpoints return a finite edge set. A hub
@@ -11858,18 +11858,42 @@ Final paragraph after the rule.";
         );
     }
 
+    /// END-STATE CSP LAW (the Dioxus decommission, plan 19 S1): the strict
+    /// API_CSP rides EVERY response — API routes, the seat's near-miss
+    /// paths, AND the seat's non-HTML subresources (no wasm consumer
+    /// remains to serve a second policy for, and a CSP header on a
+    /// non-document is inert: nothing parses a policy over JSON/JS/CSS
+    /// bytes). The ONE exemption: the seat's text/html documents — those
+    /// carry the build-injected meta CSP (per-build script shas, the D6
+    /// injection), and a header CSP would INTERSECT with the meta and kill
+    /// the shell's inline payload scripts (the blank /app/ seat,
+    /// root-caused 2026-11-13). The document's meta is the more precise
+    /// policy. The old CLIENT_CSP (the wasm-unsafe-eval posture) retired
+    /// WITH the Dioxus workspace.
     #[tokio::test]
-    async fn csp_strict_for_api_routes_relaxed_for_client_routes() {
+    async fn csp_strict_everywhere_except_the_seat_html_documents() {
         use tower::ServiceExt;
 
         async fn stub() -> &'static str {
             "ok"
         }
+        // The seat's HTML document as the shell actually serves it: a
+        // text/html body whose policy lives in the build-injected meta.
+        async fn spa_index() -> axum::response::Response {
+            (
+                [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+                "<html><head><meta http-equiv=\"content-security-policy\"></head></html>",
+            )
+                .into_response()
+        }
 
         let app = axum::Router::new()
             .route("/health", get(stub))
-            .route("/app/", get(stub))
-            .route("/app/pkg/app.wasm", get(stub))
+            .route("/app/", get(spa_index))
+            .route("/app/pkg/app.js", get(stub))
+            .route("/app/deep/nested/asset.css", get(stub))
+            .route("/app/boot.json", get(stub))
+            .route("/app/boot.js", get(stub))
             .layer(middleware::from_fn(security_headers_middleware));
 
         let api_csp = app
@@ -11893,7 +11917,7 @@ Final paragraph after the rule.";
         assert!(hdr.contains("default-src 'none'"));
 
         // R5-01: the seat is segment-exact — a future `/app-*` path (or its
-        // error body) must get the STRICT policy, never wasm-unsafe-eval.
+        // error body) must get the STRICT policy, never an exemption.
         for near_miss in ["/apple", "/app-evil", "/appx", "/applications"] {
             let res = app
                 .clone()
@@ -11917,11 +11941,14 @@ Final paragraph after the rule.";
             );
         }
 
-        // The boot-manifest seats ride the CLIENT CSP too (same-origin
-        // scripts/JSON under /app — never the API's strict policy).
-        for client_path in [
-            "/app/",
-            "/app/pkg/app.wasm",
+        // END-STATE: the seat's non-HTML subresources ride the strict API
+        // policy too — no second policy exists to serve there (the wasm
+        // consumer is gone), and a header on a non-document is inert.
+        // Includes a nested deep path so the seat-prefix match is proven
+        // below the seat root, not just at it.
+        for seat_path in [
+            "/app/pkg/app.js",
+            "/app/deep/nested/asset.css",
             "/app/boot.json",
             "/app/boot.js",
         ] {
@@ -11929,7 +11956,7 @@ Final paragraph after the rule.";
                 .clone()
                 .oneshot(
                     axum::http::Request::builder()
-                        .uri(client_path)
+                        .uri(seat_path)
                         .body(axum::body::Body::empty())
                         .unwrap(),
                 )
@@ -11942,22 +11969,36 @@ Final paragraph after the rule.";
                 .to_str()
                 .unwrap();
             assert_eq!(
-                hdr, CLIENT_CSP,
-                "client route {client_path} must get CLIENT_CSP"
-            );
-            assert!(
-                hdr.contains("'wasm-unsafe-eval'"),
-                "client CSP must allow WASM"
-            );
-            assert!(
-                hdr.contains("'unsafe-eval'"),
-                "client CSP must allow the wasm-bindgen glue's new Function() (live-proven 2026-09-14)"
-            );
-            assert!(
-                hdr.contains("connect-src 'self'"),
-                "client CSP must scope connect-src"
+                hdr, API_CSP,
+                "seat non-HTML {seat_path} must get the strict API CSP (the end-state law)"
             );
         }
+
+        // THE EXEMPTION: the seat's text/html document carries NO header
+        // CSP — the build-injected meta (already in the body) is the
+        // policy, and a header would intersect with it and blank the seat.
+        let html = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/app/")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(
+            html.headers()
+                .get(axum::http::header::CONTENT_SECURITY_POLICY)
+                .is_none(),
+            "the seat's HTML document must NOT carry a header CSP — the build-injected meta governs"
+        );
+        assert!(
+            html.headers()
+                .get(axum::http::header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok())
+                .is_some_and(|ct| ct.starts_with("text/html")),
+            "the exemption is proven on an actual text/html document"
+        );
     }
     #[tokio::test]
     async fn jwt_middleware_requires_jws_in_jwt_mode() {

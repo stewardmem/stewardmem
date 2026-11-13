@@ -1,14 +1,16 @@
-//! Static SPA host for the client bundle (the `host-frontend-static` seat).
+//! Static SPA host for the shell build (the `host-frontend-static` seat).
 //!
 //! Semantics: `/app/` and any unmatched `/app/*` GET resolve from the built
-//! client dist (`BRAIN_CLIENT_DIST`, default `client/dist`); a path with no
-//! asset match falls back to `index.html` with 200 so deep links boot the SPA;
-//! a request with an unrecognized extension is served as
-//! `application/octet-stream`; non-GET/HEAD on named routes is 405. Path
+//! shell dist (`BRAIN_CLIENT_DIST`, default `shell/build`; the installer
+//! pins the repo-absolute path in the launchd plist because launchd's CWD
+//! is not the repo — the relative default is the dev/`cargo run` posture);
+//! a path with no asset match falls back to `index.html` with 200 so deep
+//! links boot the SPA; a request with an unrecognized extension is served
+//! as `application/octet-stream`; non-GET/HEAD on named routes is 405. Path
 //! traversal (`..`, absolute) is refused before touching the filesystem.
 //!
 //! The dist dir missing is a 404, never a panic — an API-only deployment has
-//! no client to serve.
+//! no frontend to serve.
 
 use axum::extract::Path;
 
@@ -26,7 +28,7 @@ pub(crate) fn dist_dir() -> &'static PathBuf {
     static DIR: OnceLock<PathBuf> = OnceLock::new();
     DIR.get_or_init(|| {
         std::env::var("BRAIN_CLIENT_DIST")
-            .unwrap_or_else(|_| "client/dist".to_string())
+            .unwrap_or_else(|_| "shell/build".to_string())
             .into()
     })
 }

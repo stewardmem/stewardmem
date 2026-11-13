@@ -41,41 +41,14 @@ use auth::{auth_middleware, jwt_auth_middleware};
 use std::time::Duration as StdDuration;
 
 /// CSP for API routes — the strictest possible (JSON-only, no content executes).
+/// END-STATE (the Dioxus decommission, plan 19 S1): this is the ONLY policy
+/// the middleware serves — every response rides it EXCEPT the seat's
+/// text/html documents (those carry the build-injected meta CSP; a header
+/// would intersect with it). The old CLIENT_CSP — the wasm-unsafe-eval
+/// posture for the Dioxus bundle — retired WITH that workspace: no wasm
+/// consumer remains, and a CSP header on a non-document response is inert
+/// (nothing parses a policy over JSON/JS/CSS bytes).
 pub const API_CSP: &str = "default-src 'none'; frame-ancestors 'none'; form-action 'none'";
-
-/// CSP for client subresources (the retired Dioxus era's posture — allows
-/// WASM compilation, same-origin API calls, self-hosted fonts/CSS; no CDN,
-/// no inline scripts; `'unsafe-eval'` covered the wasm-bindgen glue's
-/// `new Function()` — proven live 2026-09-14, and re-proven 2026-11-13:
-/// do NOT drop it on a version-bump claim without a real browser boot).
-/// ROUND 18 DECOMMISSION NOTE: the SPA's HTML documents no longer ride
-/// THIS header — the served shell carries its OWN build-injected meta CSP
-/// (per-build script shas, the D6 injection), and a header CSP here would
-/// INTERSECT with it and kill the shell's inline payload scripts (the
-/// blank /app/ seat, root-caused 2026-11-13). The header survives only on
-/// the non-HTML client subresources until the Dioxus workspace's removal
-/// lands; the API routes keep the strict API_CSP.
-pub const CLIENT_CSP: &str = concat!(
-    "default-src 'self'; ",
-    "script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'; ",
-    "style-src 'self' 'unsafe-inline'; ",
-    "connect-src 'self'; ",
-    "img-src 'self' data:; ",
-    "font-src 'self' data:; ",
-    "frame-ancestors 'none'; ",
-    "form-action 'self'; ",
-    "base-uri 'self'"
-);
-
-/// Which paths ride the WASM-friendly CLIENT_CSP. Segment-exact: the seat
-/// is `/app` itself, everything under `/app/`,
-/// and the console root `/` — a future `/app-*` route (or its error body,
-/// e.g. `/apple`) must NEVER inherit `wasm-unsafe-eval`; it gets the
-/// strict API_CSP. The old `starts_with("/app")` shape over-matched and is
-/// gone; the auth seat rule (`is_public_path`) already had this exactness.
-pub(crate) fn is_client_path(path: &str) -> bool {
-    path == "/" || path == "/app" || path.starts_with("/app/")
-}
 
 /// Request ID middleware - generates UUID v4 for tracing if not provided.
 pub async fn request_id_middleware(mut req: Request<Body>, next: Next) -> Response {
@@ -96,15 +69,32 @@ pub async fn request_id_middleware(mut req: Request<Body>, next: Next) -> Respon
     next.run(req).await
 }
 
-/// Security headers middleware — applies standard hardening headers to every
-/// response. Path-aware CSP (strict for API, WASM-friendly for client).
+/// Security headers middleware — applies standard hardening headers to
+/// every response. CSP END-STATE (the Dioxus decommission, plan 19 S1):
+/// the strict API_CSP rides EVERY response EXCEPT the seat's text/html
+/// documents — those carry the build-injected meta CSP (per-build script
+/// shas, SvelteKit's own build-time injection), and a header CSP here
+/// would INTERSECT with
+/// the meta and kill the shell's inline payload scripts (the blank /app/
+/// seat, root-caused 2026-11-13). The document's meta is the more precise
+/// policy: sha-pinned inline scripts, no static guessing. There is no
+/// second policy: the Dioxus CLIENT_CSP retired with the workspace (no
+/// wasm consumer remains), and a CSP header on a non-document response is
+/// inert — nothing parses a policy over JSON/JS/CSS bytes — so the strict
+/// policy rides those unchanged.
 pub async fn security_headers_middleware(req: Request<Body>, next: Next) -> Response {
-    // Read the path BEFORE next.run(req) consumes the request.
-    let is_client = is_client_path(req.uri().path());
+    // Read the path BEFORE next.run(req) consumes the request. Segment-
+    // exact: the seat is `/app` itself and everything under `/app/` — a
+    // future `/app-*` route (or its error body, e.g. `/apple`) must never
+    // inherit the exemption; it gets the strict API_CSP.
+    let under_seat = {
+        let path = req.uri().path();
+        path == "/app" || path.starts_with("/app/")
+    };
     let mut res = next.run(req).await;
     // The SPA-HTML probe reads the content type BEFORE the mutable header
     // borrow (the two cannot overlap).
-    let is_spa_html = is_client
+    let is_spa_html = under_seat
         && res
             .headers()
             .get(axum::http::header::CONTENT_TYPE)
@@ -115,18 +105,13 @@ pub async fn security_headers_middleware(req: Request<Body>, next: Next) -> Resp
         axum::http::header::STRICT_TRANSPORT_SECURITY,
         axum::http::HeaderValue::from_static("max-age=63072000; includeSubDomains; preload"),
     );
-    // Path-aware CSP: strict for API, WASM-friendly for client
-    // subresources — EXCEPT the SPA's HTML documents: those carry the
-    // BUILD-INJECTED meta CSP (per-build script shas, the D6 injection),
-    // and a header CSP here would intersect with the meta and kill the
-    // shell's inline payload scripts (the blank /app/ seat, root-caused
-    // 2026-11-13). The document's meta is the more precise policy: sha-
-    // pinned inline scripts, no static guessing.
+    // The ONE CSP exemption: the seat's HTML documents (the build-injected
+    // meta governs — see above). Everything else — API routes, near-miss
+    // paths, the seat's own non-HTML subresources — rides API_CSP.
     if !is_spa_html {
-        let csp = if is_client { CLIENT_CSP } else { API_CSP };
         headers.insert(
             axum::http::header::CONTENT_SECURITY_POLICY,
-            axum::http::HeaderValue::from_static(csp),
+            axum::http::HeaderValue::from_static(API_CSP),
         );
     }
     headers.insert(
