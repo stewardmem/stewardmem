@@ -497,46 +497,59 @@ pub async fn chat_turn(
     )
     .await;
 
-    let (mut grounding_event, mut fenced_context, mut grounding_hit_count, grounding_degraded) =
-        match grounding {
-            Ok(outcome) => {
-                let hits: Vec<serde_json::Value> = outcome
-                    .tagged
-                    .iter()
-                    .map(|(hit, domain)| {
-                        json!({
-                            "id": hit.id,
-                            "title": hit.title,
-                            "score": hit.score,
-                            "domain": domain,
-                            "flagged": hit.flagged,
-                            "trust": hit.trust,
-                        })
+    #[allow(clippy::type_complexity)]
+    let (
+        mut grounding_event,
+        mut fenced_context,
+        mut grounding_hit_count,
+        grounding_degraded,
+        mut grounding_tagged,
+    ) = match grounding {
+        Ok(outcome) => {
+            let hits: Vec<serde_json::Value> = outcome
+                .tagged
+                .iter()
+                .map(|(hit, domain)| {
+                    json!({
+                        "id": hit.id,
+                        "title": hit.title,
+                        "score": hit.score,
+                        "domain": domain,
+                        "flagged": hit.flagged,
+                        "trust": hit.trust,
                     })
-                    .collect();
-                let decision = format!("{:?}", outcome.decision).to_lowercase();
-                let event = build_grounding_event(&decision, hits);
-                // Every hit crosses the untrusted fence — the SAME fence the
-                // context projector uses, so a chat turn and a loop turn wrap
-                // retrieved memory identically.
-                let fenced = fence_hits(&outcome.tagged);
-                // The packed set's SIZE is the verdict's whole universe: a cite
-                // is honest iff it indexes one of THESE.
-                (event, fenced, outcome.tagged.len(), false)
-            }
-            Err(e) => {
-                // Degraded grounding is STATED to the model, never hidden: the
-                // answer must know its evidence is missing.
-                tracing::warn!("chat grounding recall failed: {e:?}");
-                (
-                    build_grounding_event("degraded", Vec::new()),
-                    "(recall is degraded — no memory evidence could be retrieved for this turn.)"
-                        .to_owned(),
-                    0,
-                    true,
-                )
-            }
-        };
+                })
+                .collect();
+            let decision = format!("{:?}", outcome.decision).to_lowercase();
+            let event = build_grounding_event(&decision, hits);
+            // Every hit crosses the untrusted fence — the SAME fence the
+            // context projector uses, so a chat turn and a loop turn wrap
+            // retrieved memory identically.
+            let fenced = fence_hits(&outcome.tagged);
+            // The packed set's SIZE is the verdict's whole universe: a cite
+            // is honest iff it indexes one of THESE.
+            (
+                event,
+                fenced,
+                outcome.tagged.len(),
+                false,
+                outcome.tagged.clone(),
+            )
+        }
+        Err(e) => {
+            // Degraded grounding is STATED to the model, never hidden: the
+            // answer must know its evidence is missing.
+            tracing::warn!("chat grounding recall failed: {e:?}");
+            (
+                build_grounding_event("degraded", Vec::new()),
+                "(recall is degraded — no memory evidence could be retrieved for this turn.)"
+                    .to_owned(),
+                0,
+                true,
+                Vec::new(),
+            )
+        }
+    };
 
     // EVIDENCE CARRY-FORWARD (follow-up grounding): the expanded recall
     // abstained — `ClarifyQuery` + zero hits — and the prior turn grounded
@@ -617,6 +630,7 @@ pub async fn chat_turn(
                 .collect();
             fenced_context = fence_hits(&carried_tagged);
             grounding_hit_count = merged.len();
+            grounding_tagged = carried_tagged;
         }
     }
 
@@ -770,6 +784,349 @@ pub async fn chat_turn(
                     }
                 }
             }
+        });
+        let stream: Pin<Box<dyn Stream<Item = Result<Event, Infallible>> + Send>> =
+            Box::pin(ReceiverStream::new(rx_out));
+        return Sse::new(stream)
+            .keep_alive(axum::response::sse::KeepAlive::default())
+            .into_response();
+    }
+
+    // ── THE TIERED CASCADE (round 18): the operator's routing gate. ──
+    // BRAIN_CHAT_CASCADE=1 arms the cascade in this turn: the SAME grounding
+    // the flow already produced feeds the coordinator, the typed route
+    // drives the execution, and every claim's cites are KERNEL-DERIVED by
+    // span match (judge_answer) — the live-traffic finding's class (a
+    // model-reported 1-based cite judged 0-based reads `unsupported` on
+    // grounded turns) cannot enter this path, because the model never
+    // reports indices here at all. OFF (the default) is byte-identical: the
+    // branch is not taken and the existing flow runs unchanged. A cascade
+    // component failure (the route turn or the writer turn refused) is
+    // logged LOUD and falls through to the existing flow — never a hidden
+    // fallback that pretends the cascade ran. escalate_frontier in a chat
+    // turn has NO grant (the per-task law: a chat user cannot pre-authorize
+    // the frontier), so the route's refusal is recorded in the audit row
+    // and the execution falls back to the writer — the S0 posture.
+    #[allow(clippy::type_complexity)]
+    let cascade_outcome: Option<(
+        serde_json::Value,
+        usize,
+        String,
+        String,
+        (i64, i64),
+        crate::agentloop::cascade::JudgedAnswer,
+    )> = 'cascade: {
+        tracing::info!(
+            "chat cascade gate: enabled={} degraded={} hits={}",
+            crate::config::chat_cascade_enabled(),
+            grounding_degraded,
+            grounding_hit_count
+        );
+        if !(crate::config::chat_cascade_enabled()
+            && !grounding_degraded
+            && grounding_hit_count > 0)
+        {
+            break 'cascade None;
+        }
+        let cascade_summary: Vec<crate::agentloop::cascade::SummaryHit> = grounding_tagged
+            .iter()
+            .take(3)
+            .map(|(r, _)| (r.score as f64, r.content.clone()))
+            .collect();
+        let cascade_decision = grounding_event["decision"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let route_call = match crate::agentloop::cascade::classify_route(
+            &bridge,
+            &message,
+            &cascade_decision,
+            &cascade_summary,
+        )
+        .await
+        {
+            Ok(rc) => rc,
+            Err(e) => {
+                tracing::error!(
+                    "chat cascade: route classification refused, falling through: {e:?}"
+                );
+                break 'cascade None;
+            }
+        };
+
+        // The T1 audit row (TC-7) — the query's sha as the target.
+        tracing::info!(
+            "chat cascade: route {} (confidence {:.2}, raw {:?})",
+            route_call.decision.as_str(),
+            route_call.confidence,
+            route_call.raw
+        );
+        let cascade_query_sha = crate::doc_corrector::sha256_hex(message.as_bytes());
+        if let Ok(conn) = state.pool.get() {
+            crate::agentloop::cascade::audit_route_call(&conn, &route_call, &cascade_query_sha);
+        }
+
+        let mut cascade_evidence =
+            crate::agentloop::cascade::evidence_from_results(&grounding_tagged);
+        // The read_more route's own act: the DEEPER recall replaces the
+        // turn's evidence universe — the grounding event is rebuilt with the
+        // deeper hits BEFORE the first frame leaves, so the client, the
+        // writer, and the support verdict share ONE universe.
+        if route_call.decision == crate::agentloop::cascade::RouteDecision::ReadMore {
+            let deep_request: Option<RecallRequest> = serde_json::from_value(json!({
+                "query": grounding_query,
+                "limit": 32,
+                "provenance": true,
+                "max_context_tokens": GROUNDING_TOKEN_BUDGET,
+            }))
+            .ok();
+            if let Some(request) = deep_request
+                && let Ok(outcome) = run_recall(
+                    &state,
+                    &principal.0,
+                    request,
+                    serde_json::from_str("{}").unwrap_or_default(),
+                )
+                .await
+                && !outcome.tagged.is_empty()
+            {
+                let deep_hits: Vec<serde_json::Value> = outcome
+                    .tagged
+                    .iter()
+                    .map(|(hit, domain)| {
+                        json!({
+                            "id": hit.id,
+                            "title": hit.title,
+                            "score": hit.score,
+                            "domain": domain,
+                            "flagged": hit.flagged,
+                            "trust": hit.trust,
+                        })
+                    })
+                    .collect();
+                grounding_event = build_grounding_event(&cascade_decision, deep_hits);
+                grounding_hit_count = outcome.tagged.len();
+                cascade_evidence =
+                    crate::agentloop::cascade::evidence_from_results(&outcome.tagged);
+            }
+        }
+
+        let cascade_block = crate::agentloop::cascade::fenced_evidence_block(&cascade_evidence, 6);
+
+        // ── route execution ──
+        let (answer, cascade_tier, cascade_tokens, judged): (
+            String,
+            String,
+            (i64, i64),
+            crate::agentloop::cascade::JudgedAnswer,
+        ) = match route_call.decision {
+            crate::agentloop::cascade::RouteDecision::AnswerFromMemory => {
+                // The evidence-as-answer: the top hit's content IS the
+                // answer — zero generative tokens (the S0 frontier's
+                // workhorse, 100% strict when routed right).
+                let answer = cascade_evidence[0].content.clone();
+                let judged = crate::agentloop::cascade::judge_answer(&answer, &cascade_evidence);
+                (
+                    answer,
+                    "deterministic".to_owned(),
+                    (route_call.input_tokens, route_call.output_tokens),
+                    judged,
+                )
+            }
+            _ => {
+                // synthesize / read_more / escalate_frontier(fallback): the
+                // writer turn on the MLX tier. The writer's session rides
+                // the chat session's id under the cascade namespace — one
+                // session = one tier (TC-6): the AFM coordinator and the MLX
+                // writer never share a ledger. A refused writer turn is
+                // loud and falls through to the existing flow.
+                let writer_session = format!("cascade-chat-{session}");
+                let writer_model = crate::config::cascade_writer_model();
+                let turn = bridge
+                    .turn(BridgeTurn {
+                        session: writer_session,
+                        prompt: format!("{cascade_block}\n\n{message}"),
+                        instructions: Some(crate::agentloop::cascade::WRITER_CONTRACT.to_owned()),
+                        max_response_tokens: Some(max_response_tokens),
+                        history: None,
+                        model: writer_model,
+                        schema: None,
+                    })
+                    .await;
+                match turn {
+                    Ok((_id, mut rx)) => {
+                        let mut prose = String::new();
+                        let (mut input_tokens, mut output_tokens) = (0i64, 0i64);
+                        while let Some(event) = rx.recv().await {
+                            let terminal = !matches!(
+                                event,
+                                crate::agentloop::bridge_afm::BridgeEvent::Delta { .. }
+                            );
+                            if let crate::agentloop::bridge_afm::BridgeEvent::Final {
+                                text,
+                                input_tokens: i_t,
+                                output_tokens: o_t,
+                                ..
+                            } = event
+                            {
+                                prose = text;
+                                input_tokens = i_t;
+                                output_tokens = o_t;
+                            }
+                            if terminal {
+                                break;
+                            }
+                        }
+                        let judged =
+                            crate::agentloop::cascade::judge_answer(&prose, &cascade_evidence);
+                        (
+                            prose,
+                            "mlx_native".to_owned(),
+                            (input_tokens, output_tokens),
+                            judged,
+                        )
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "chat cascade: writer turn refused, falling through: {e:?}"
+                        );
+                        break 'cascade None;
+                    }
+                }
+            }
+        };
+
+        // The kernel-DERIVED claims (never the model's) ride the final; the
+        // support verdict re-judges them by the SAME index arithmetic — the
+        // universe is the grounding event's hits.
+        Some((
+            grounding_event.clone(),
+            grounding_hit_count,
+            answer,
+            cascade_tier,
+            cascade_tokens,
+            judged,
+        ))
+    };
+
+    if let Some((
+        cascade_grounding_event,
+        cascade_hit_count,
+        cascade_answer,
+        cascade_tier,
+        cascade_tokens,
+        judged,
+    )) = cascade_outcome
+    {
+        // The kernel-DERIVED claims (never the model's) ride the final; the
+        // support verdict re-judges them by the SAME index arithmetic — the
+        // universe is the grounding event's hits.
+        let derived_claims: Vec<crate::agentloop::bridge_afm::BridgeClaim> = judged
+            .claims
+            .iter()
+            .map(|c| crate::agentloop::bridge_afm::BridgeClaim {
+                text: c.text.clone(),
+                cites: c.cites.iter().map(|i| *i as i64).collect(),
+            })
+            .collect();
+        let support = crate::service::chat_support::support_verdict(
+            judged.abstained,
+            &derived_claims,
+            cascade_hit_count,
+            false,
+        );
+        let now_unix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let cascade_pool = state.pool.clone();
+        let cascade_owner = crate::handlers::gate::content_owner_stamp(&principal.0)
+            .unwrap_or_else(|| crate::handlers::gate::LOOPBACK_OPERATOR_OWNER.to_owned());
+        let cascade_session = session.clone();
+        let cascade_message = message.clone();
+        let cascade_grounding = cascade_grounding_event.to_string();
+        let cascade_tier_row = cascade_tier.clone();
+        let cascade_support_row = support.decision.as_str().to_owned();
+        let cascade_final = json!({
+            "text": cascade_answer,
+            "tier": cascade_tier,
+            "turn": 0,
+            "inputTokens": cascade_tokens.0,
+            "outputTokens": cascade_tokens.1,
+            "abstain": judged.abstained,
+            "claims": derived_claims
+                .iter()
+                .map(|c| json!({ "text": c.text, "cites": c.cites }))
+                .collect::<Vec<_>>(),
+        });
+        let (tx, rx_out) = tokio::sync::mpsc::channel::<Result<Event, Infallible>>(64);
+        tokio::spawn(async move {
+            let send = |event: Event| async { tx.send(Ok(event)).await.is_ok() };
+            let grounding_ok = send(
+                Event::default()
+                    .event("grounding")
+                    .json_data(cascade_grounding_event.clone())
+                    .unwrap_or_default(),
+            )
+            .await;
+            let _ = send(
+                Event::default()
+                    .event("delta")
+                    .json_data(json!({ "text": cascade_answer, "replace": false }))
+                    .unwrap_or_default(),
+            )
+            .await;
+            let final_ok = send(
+                Event::default()
+                    .event("final")
+                    .json_data(cascade_final.clone())
+                    .unwrap_or_default(),
+            )
+            .await;
+            let _ = send(
+                Event::default()
+                    .event("support")
+                    .json_data(json!({
+                        "cited": support.cited,
+                        "uncited": support.uncited,
+                        "unknown_refs": support.unknown_refs,
+                        "decision": support.decision.as_str(),
+                    }))
+                    .unwrap_or_default(),
+            )
+            .await;
+            if grounding_ok && final_ok {
+                // The cascade turn persists through the SAME service tx as
+                // any final — the transcript is the session loop's input,
+                // whatever tier served it.
+                let persisted = tokio::task::spawn_blocking(move || -> Result<i64, String> {
+                    let mut conn = cascade_pool.get().map_err(|e| e.to_string())?;
+                    crate::service::chat_sessions::persist_turn_pair(
+                        &mut conn,
+                        &cascade_session,
+                        &cascade_owner,
+                        &cascade_message,
+                        cascade_final["text"].as_str().unwrap_or_default(),
+                        Some(&cascade_grounding),
+                        Some(cascade_tier_row.as_str()),
+                        Some(cascade_support_row.as_str()),
+                        now_unix,
+                    )
+                    .map_err(|e| e.to_string())
+                })
+                .await;
+                match persisted {
+                    Ok(Ok(_)) => {}
+                    Ok(Err(e)) => tracing::error!("chat cascade persistence failed: {e}"),
+                    Err(e) => tracing::error!("chat cascade persistence task failed: {e}"),
+                }
+            }
+            let _ = (
+                cascade_tokens,
+                judged,
+                cascade_grounding_event,
+                cascade_hit_count,
+            );
         });
         let stream: Pin<Box<dyn Stream<Item = Result<Event, Infallible>> + Send>> =
             Box::pin(ReceiverStream::new(rx_out));

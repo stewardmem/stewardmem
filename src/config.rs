@@ -2705,6 +2705,20 @@ pub fn chat_model_id() -> Option<String> {
 /// vocabulary (`ChatModelId` + `forChat`), and a typo refuses loudly at
 /// the first turn with the child's own named error — transport here,
 /// decision there (the `chat_model_id` precedent verbatim).
+/// The tiered cascade's chat gate (round 18): `BRAIN_CHAT_CASCADE=1` arms
+/// the cascade routing in `POST /chat/turns` — the turn's grounding feeds
+/// the coordinator, the typed route drives the execution, and every claim's
+/// cites are KERNEL-DERIVED by span match. The default is OFF: the branch is
+/// not taken and the existing chat flow runs byte-identically (the OFF law —
+/// the `BIND_PUBLIC` armed-values precedent: only the explicit armed values
+/// count, a set-but-unrecognised value is NOT armed).
+pub fn chat_cascade_enabled() -> bool {
+    matches!(
+        std::env::var("BRAIN_CHAT_CASCADE").as_deref(),
+        Ok("1") | Ok("true")
+    )
+}
+
 pub fn cascade_writer_model() -> Option<String> {
     let value =
         std::env::var("BRAIN_CASCADE_WRITER_MODEL").unwrap_or_else(|_| "qwen3.5-9b-4bit".into());
