@@ -1075,7 +1075,19 @@ describe('the envelope law', () => {
 		// module, the core-journey extension + the sidebar surface, and 28
 		// message keys × five locales → 243,077 gzipped (+6,735): named act,
 		// midpoint moves, register carries it.
-		const R0_BASELINE = 243_077;
+		// AND AGAIN (2026-11-13, the markdown+mermaid round): the chat's
+		// answers render as MARKDOWN DOCUMENTS — svelte-exmarkdown (remark +
+		// GFM: tables, task lists, strikethrough, autolinks), highlight.js
+		// (core + 11 registered grammars), and mermaid (the diagram engine)
+		// — with the two whales (mermaid ~1.2 MB, hljs ~150 KB) LAZY-LOADED
+		// as separate chunks: the initial bundle stays at the old midpoint,
+		// the total payload carries the renderers, the diagram engine mounts
+		// under securityLevel 'strict', and the raw-HTML ban holds (HAST →
+		// Svelte components; rehype-raw deliberately absent) → 1,806,313
+		// gzipped (+1,563,236 — the round's explicit mandate: markdown as
+		// structured content, mermaid as an actual graph visualisation):
+		// named act, midpoint moves, register carries it.
+		const R0_BASELINE = 1_806_313;
 		const BAND = 512;
 		expect(
 			Math.abs(total - R0_BASELINE),

@@ -29,7 +29,8 @@
 	import { provenanceBlock, type ProvenanceBlock } from '#lib/chat/provenance.js';
 	import type { TrustTier } from '#lib/api/recall.js';
 	import { hitToPassage } from '#lib/chat/replay.js';
-	import { splitSentences, mapClaimsToSentences, citeTitles, type SentenceRender } from '#lib/chat/claims.js';
+	import { citeTitles } from '#lib/chat/claims.js';
+	import Markdown from '#lib/components/chat/Markdown.svelte';
 	import {
 		turnSpine,
 		createDeltaBuffer,
@@ -366,10 +367,6 @@
 	// The sentence mapping (which sentence carries a provenance chip, which
 	// renders dimmed with the `unsupported` chip) is `lib/chat/claims.ts`'s
 	// pure work; this file only draws it.
-
-	function mappedSentences(rendering: Extract<TurnRendering, { kind: 'generated' }>): SentenceRender[] {
-		return mapClaimsToSentences(splitSentences(rendering.answer), rendering.claims);
-	}
 
 	/** The grounding hits, as the claim chips resolve them — the passages the
 	 * turn already carries, by INDEX (a cite is an index into the hits, the
@@ -1017,30 +1014,36 @@
 							<p class="text-muted-foreground whitespace-pre-wrap">{turn.rendering.answer}</p>
 						</div>
 					{:else if turn.rendering.claims !== null && turn.rendering.claims.length > 0}
-						<!-- The splitter consumes the whitespace between sentences, so
-						     each piece carries its own trailing margin — spacing is a
-						     style, never a text node the template could collapse. -->
-						<p class="text-sm leading-relaxed" data-testid="chat-answer" data-support={turn.rendering.support ?? ''}>
-							{#each mappedSentences(turn.rendering) as piece, i (i)}
-								<span class="mr-2">
-									{#if piece.claim !== null}
-										<span data-cited={piece.claim.cites.join(',')}>{piece.text}</span>
-										{#each citeTitles(piece.claim.cites, hitsOf(turn.id)) as chip, j (j)}
-											<span class="ml-1 text-xs text-brand" data-testid="chat-cited-chip">{chip}</span>
-										{/each}
-									{:else}
-										<span class="opacity-60" data-testid="chat-unsupported-sentence">
-											{piece.text}
-											<span class="ml-1 text-xs text-destructive" data-testid="chat-unsupported-chip">
-												{m['chat.answer.unsupported_chip']()}
-											</span>
+						<!-- Round 18: the answer renders as a MARKDOWN DOCUMENT (the
+						     structured-content law) and the model's claims render as
+						     the citation RECORD below it — each claim with its cite
+						     chips, an uncited claim dimmed with the `unsupported`
+						     chip. The old inline per-sentence mapping went: mapping
+						     model-reported claims onto prose sentences was the
+						     fragile class the live-traffic finding exposed (a
+						     1-based cite read `unsupported` on a grounded turn);
+						     the chips keep their testids and the kernel's verdict
+						     label stays THE label (the shell never re-derives it). -->
+						<div data-testid="chat-answer" data-support={turn.rendering.support ?? ''}>
+							<Markdown md={turn.rendering.answer} />
+						</div>
+						<ul class="grid gap-1 text-xs text-muted-foreground" data-testid="chat-claims">
+							{#each turn.rendering.claims as claim, i (i)}
+								<li data-testid="chat-claim" data-cited={claim.cites.join(',')}>
+									<span class="opacity-80">{claim.text}</span>
+									{#each citeTitles(claim.cites, hitsOf(turn.id)) as chip, j (j)}
+										<span class="ml-1 text-brand" data-testid="chat-cited-chip">{chip}</span>
+									{/each}
+									{#if claim.cites.length === 0}
+										<span class="ml-1 text-destructive" data-testid="chat-unsupported-chip">
+											{m['chat.answer.unsupported_chip']()}
 										</span>
 									{/if}
-								</span>
+								</li>
 							{/each}
-						</p>
+						</ul>
 					{:else}
-						<p class="text-sm whitespace-pre-wrap">{turn.rendering.answer}</p>
+						<Markdown md={turn.rendering.answer} />
 					{/if}
 					{#if turn.rendering.support !== null}
 						<p
@@ -1070,15 +1073,15 @@
 					{#if turn.provenance}
 						{@render evidenceDisclosure(turn.id, turn.provenance)}
 					{/if}
-					<p class="text-sm whitespace-pre-wrap" data-testid="chat-stream-text">
-						{turn.rendering.text}
-					</p>
+					<div data-testid="chat-stream-text">
+						<Markdown md={turn.rendering.text} streaming={true} />
+					</div>
 				{:else if turn.rendering.kind === 'stream_failed'}
 					<!-- The NAMED end: partial text first (evidence is kept, never
 					     dropped because the turn failed after it), then the one-line
 					     sentence for the code — on the TURN, never the banner. -->
 					{#if turn.rendering.partial.length > 0}
-						<p class="text-sm whitespace-pre-wrap">{turn.rendering.partial}</p>
+						<Markdown md={turn.rendering.partial} />
 					{/if}
 					<p
 						role="status"
