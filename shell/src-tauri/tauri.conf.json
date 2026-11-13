@@ -7,7 +7,7 @@
 		"frontendDist": "../build",
 		"devUrl": "http://localhost:5173",
 		"beforeDevCommand": "pnpm dev",
-		"beforeBuildCommand": "pnpm build"
+		"beforeBuildCommand": "SHELL_BASE= pnpm build"
 	},
 	"app": {
 		"withGlobalTauri": false,

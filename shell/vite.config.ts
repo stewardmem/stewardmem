@@ -14,6 +14,12 @@ import { defineConfig } from 'vitest/config';
 // Vite resolves as part of the plugin array.
 //
 // Settings are carried over verbatim from the deleted `svelte.config.js`.
+// THE BASE LAW (round 18): the shell's primary web posture is the
+// kernel-served `/app/` seat (BRAIN_CLIENT_DIST → this build, same origin —
+// no CORS, the CSP meta governs). The Tauri/PWA posture overrides to the
+// root via `SHELL_BASE=` in the tauri build command (tauri.conf.json).
+const shellBase = process.env.SHELL_BASE === undefined ? '/app' : process.env.SHELL_BASE;
+
 export default defineConfig({
 	plugins: [
 		// Compiles project.inlang -> src/paraglide on every build. The output is
@@ -24,6 +30,7 @@ export default defineConfig({
 			// The SPA posture (D4): one static build serves the PWA AND the
 			// Tauri webview. No server runtime exists — the kernel is the only
 			// backend, reached over the typed wire (D5).
+			paths: { base: shellBase },
 			adapter: adapter({
 				fallback: 'index.html',
 				pages: 'build',

@@ -43,16 +43,18 @@ use std::time::Duration as StdDuration;
 /// CSP for API routes — the strictest possible (JSON-only, no content executes).
 pub const API_CSP: &str = "default-src 'none'; frame-ancestors 'none'; form-action 'none'";
 
-/// CSP for client routes — allows WASM compilation, same-origin API calls,
-/// self-hosted fonts/CSS. No CDN, no inline scripts. `'unsafe-eval'` IS
-/// required: the wasm-bindgen glue (0.2.127, Dioxus 0.8.0-alpha.1) emits
-/// `new Function()` (`__wbg_new_with_args_*`), which is JS eval and is
-/// blocked by `'wasm-unsafe-eval'` alone — proven live 2026-09-14
-/// ("call to Function() blocked by CSP", blank /app/). This is the SECOND
-/// time the trimmed policy failed (first: v1.16.x live fix, same symptom);
-/// do NOT drop `'unsafe-eval'` again on a version-bump claim without a
-/// real browser boot of the built bundle under the trimmed policy.
-/// style-src 'unsafe-inline' covers Dioxus runtime <style> injection.
+/// CSP for client subresources (the retired Dioxus era's posture — allows
+/// WASM compilation, same-origin API calls, self-hosted fonts/CSS; no CDN,
+/// no inline scripts; `'unsafe-eval'` covered the wasm-bindgen glue's
+/// `new Function()` — proven live 2026-09-14, and re-proven 2026-11-13:
+/// do NOT drop it on a version-bump claim without a real browser boot).
+/// ROUND 18 DECOMMISSION NOTE: the SPA's HTML documents no longer ride
+/// THIS header — the served shell carries its OWN build-injected meta CSP
+/// (per-build script shas, the D6 injection), and a header CSP here would
+/// INTERSECT with it and kill the shell's inline payload scripts (the
+/// blank /app/ seat, root-caused 2026-11-13). The header survives only on
+/// the non-HTML client subresources until the Dioxus workspace's removal
+/// lands; the API routes keep the strict API_CSP.
 pub const CLIENT_CSP: &str = concat!(
     "default-src 'self'; ",
     "script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'; ",
@@ -100,17 +102,33 @@ pub async fn security_headers_middleware(req: Request<Body>, next: Next) -> Resp
     // Read the path BEFORE next.run(req) consumes the request.
     let is_client = is_client_path(req.uri().path());
     let mut res = next.run(req).await;
+    // The SPA-HTML probe reads the content type BEFORE the mutable header
+    // borrow (the two cannot overlap).
+    let is_spa_html = is_client
+        && res
+            .headers()
+            .get(axum::http::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|ct| ct.starts_with("text/html"));
     let headers = res.headers_mut();
     headers.insert(
         axum::http::header::STRICT_TRANSPORT_SECURITY,
         axum::http::HeaderValue::from_static("max-age=63072000; includeSubDomains; preload"),
     );
-    // Path-aware CSP: strict for API, WASM-friendly for client.
-    let csp = if is_client { CLIENT_CSP } else { API_CSP };
-    headers.insert(
-        axum::http::header::CONTENT_SECURITY_POLICY,
-        axum::http::HeaderValue::from_static(csp),
-    );
+    // Path-aware CSP: strict for API, WASM-friendly for client
+    // subresources — EXCEPT the SPA's HTML documents: those carry the
+    // BUILD-INJECTED meta CSP (per-build script shas, the D6 injection),
+    // and a header CSP here would intersect with the meta and kill the
+    // shell's inline payload scripts (the blank /app/ seat, root-caused
+    // 2026-11-13). The document's meta is the more precise policy: sha-
+    // pinned inline scripts, no static guessing.
+    if !is_spa_html {
+        let csp = if is_client { CLIENT_CSP } else { API_CSP };
+        headers.insert(
+            axum::http::header::CONTENT_SECURITY_POLICY,
+            axum::http::HeaderValue::from_static(csp),
+        );
+    }
     headers.insert(
         axum::http::header::X_CONTENT_TYPE_OPTIONS,
         axum::http::HeaderValue::from_static("nosniff"),
