@@ -834,6 +834,75 @@ Query: {query}"),
     Ok(proposal)
 }
 
+/// The writer drain's named outcome (plan 18 §2): the answer's prose and
+/// token counts, or the writer turn's OWN refusal — the child's Failed
+/// code (`generation_failed`, `model_locked`, the reader's `bridge_exited`
+/// on a dead child) or the bare-close witness. A refusal here is LOUD at
+/// the caller (the documented fall-through to the existing flow), never an
+/// empty answer masquerading as `mlx_native`.
+pub(crate) enum WriterDrain {
+    Answer {
+        prose: String,
+        input_tokens: i64,
+        output_tokens: i64,
+    },
+    Refused {
+        code: String,
+        message: Option<String>,
+    },
+}
+
+/// Drain a writer turn's event stream into its named outcome. `Final` is
+/// the answer; `Failed` is a REFUSAL that names itself (the child's own
+/// code rides — the chat contract's vocabulary, the spine parses it); a
+/// stream that ends without any terminal event is the bridge dying
+/// mid-writer-turn, named `bridge_exited` (the forwarder's own word for
+/// exactly this shape). Deltas accumulate nothing here — the writer's
+/// answer is the Final, not the deltas (the cascade turn renders once).
+pub(crate) async fn drain_writer_turn(
+    mut rx: tokio::sync::mpsc::Receiver<BridgeEvent>,
+) -> WriterDrain {
+    let mut prose = String::new();
+    let (mut input_tokens, mut output_tokens) = (0i64, 0i64);
+    let mut refused: Option<(String, Option<String>)> = None;
+    let mut saw_terminal = false;
+    while let Some(event) = rx.recv().await {
+        let terminal = !matches!(event, BridgeEvent::Delta { .. });
+        match event {
+            BridgeEvent::Final {
+                text,
+                input_tokens: i_t,
+                output_tokens: o_t,
+                ..
+            } => {
+                prose = text;
+                input_tokens = i_t;
+                output_tokens = o_t;
+            }
+            BridgeEvent::Failed { code, message, .. } => refused = Some((code, message)),
+            BridgeEvent::Delta { .. } => {}
+        }
+        if terminal {
+            saw_terminal = true;
+            break;
+        }
+    }
+    if let Some((code, message)) = refused {
+        return WriterDrain::Refused { code, message };
+    }
+    if !saw_terminal {
+        return WriterDrain::Refused {
+            code: "bridge_exited".to_owned(),
+            message: Some("the writer stream ended without a terminal event".to_owned()),
+        };
+    }
+    WriterDrain::Answer {
+        prose,
+        input_tokens,
+        output_tokens,
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     //! The TC-2 + S0-summary behavioral pins, born red against the pre-S1
@@ -845,6 +914,93 @@ pub(crate) mod tests {
     //! in-module rather than in a test binary.
 
     use super::*;
+
+    /// THE WRITER DRAIN'S NAMED OUTCOMES (plan 18 §2 — the unit form of
+    /// the masquerade the chat_writer_refusal pins caught red at the
+    /// handler): a `Failed` terminal refuses BY NAME with the child's own
+    /// code preserved; a bare channel close names `bridge_exited`; a
+    /// `Final` is the answer. Deltas never confuse it.
+    #[tokio::test]
+    async fn the_writer_drain_names_a_failed_terminal() {
+        let (tx, rx) = tokio::sync::mpsc::channel::<BridgeEvent>(8);
+        tx.send(BridgeEvent::Delta {
+            text: "partial".into(),
+            replace: false,
+        })
+        .await
+        .expect("delta");
+        tx.send(BridgeEvent::Failed {
+            code: "generation_failed".into(),
+            message: Some("the child refused".into()),
+            shortfall_tokens: None,
+            feedback: None,
+        })
+        .await
+        .expect("failed");
+        drop(tx);
+        match drain_writer_turn(rx).await {
+            WriterDrain::Refused { code, message } => {
+                assert_eq!(code, "generation_failed", "the child's own code rides");
+                assert_eq!(message.as_deref(), Some("the child refused"));
+            }
+            WriterDrain::Answer { .. } => {
+                panic!("a Failed terminal must refuse, never answer");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn the_writer_drain_names_a_bare_channel_close() {
+        let (tx, rx) = tokio::sync::mpsc::channel::<BridgeEvent>(8);
+        tx.send(BridgeEvent::Delta {
+            text: "partial".into(),
+            replace: false,
+        })
+        .await
+        .expect("delta");
+        drop(tx);
+        match drain_writer_turn(rx).await {
+            WriterDrain::Refused { code, .. } => {
+                assert_eq!(
+                    code, "bridge_exited",
+                    "a stream that ends without a terminal is a dead writer"
+                );
+            }
+            WriterDrain::Answer { .. } => {
+                panic!("a bare close must refuse, never answer");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn the_writer_drain_answers_a_final() {
+        let (tx, rx) = tokio::sync::mpsc::channel::<BridgeEvent>(8);
+        tx.send(BridgeEvent::Final {
+            text: "the answer".into(),
+            tier: "mlx_native".into(),
+            turn: 0,
+            input_tokens: 3,
+            output_tokens: 5,
+            abstain: false,
+            claims: Vec::new(),
+        })
+        .await
+        .expect("final");
+        drop(tx);
+        match drain_writer_turn(rx).await {
+            WriterDrain::Answer {
+                prose,
+                input_tokens,
+                output_tokens,
+            } => {
+                assert_eq!(prose, "the answer");
+                assert_eq!((input_tokens, output_tokens), (3, 5));
+            }
+            WriterDrain::Refused { code, .. } => {
+                panic!("a Final is the answer, never a refusal: {code}");
+            }
+        }
+    }
 
     #[test]
     fn tc2_from_wire_accepts_exactly_the_four_case_roster() {

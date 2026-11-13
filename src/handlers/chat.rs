@@ -954,37 +954,43 @@ pub async fn chat_turn(
                     })
                     .await;
                 match turn {
-                    Ok((_id, mut rx)) => {
-                        let mut prose = String::new();
-                        let (mut input_tokens, mut output_tokens) = (0i64, 0i64);
-                        while let Some(event) = rx.recv().await {
-                            let terminal = !matches!(
-                                event,
-                                crate::agentloop::bridge_afm::BridgeEvent::Delta { .. }
-                            );
-                            if let crate::agentloop::bridge_afm::BridgeEvent::Final {
-                                text,
-                                input_tokens: i_t,
-                                output_tokens: o_t,
-                                ..
-                            } = event
-                            {
-                                prose = text;
-                                input_tokens = i_t;
-                                output_tokens = o_t;
+                    Ok((_id, rx)) => {
+                        // THE WRITER'S REFUSAL NAMES ITSELF (plan 18 §2): the
+                        // drain maps a `Failed` terminal (the child's own code
+                        // — `generation_failed`, `model_locked`, the reader's
+                        // `bridge_exited`) and a bare channel close to the
+                        // named refusal. The OLD shape swallowed both and
+                        // stamped the EMPTY prose `mlx_native` — an answer
+                        // that was never written, with an abstention's copy
+                        // for a refusal that never named itself (the
+                        // chat_writer_refusal pins' masquerade, born red
+                        // against exactly this arm).
+                        match crate::agentloop::cascade::drain_writer_turn(rx).await {
+                            crate::agentloop::cascade::WriterDrain::Answer {
+                                prose,
+                                input_tokens,
+                                output_tokens,
+                            } => {
+                                let judged = crate::agentloop::cascade::judge_answer(
+                                    &prose,
+                                    &cascade_evidence,
+                                );
+                                (
+                                    prose,
+                                    "mlx_native".to_owned(),
+                                    (input_tokens, output_tokens),
+                                    judged,
+                                )
                             }
-                            if terminal {
-                                break;
+                            crate::agentloop::cascade::WriterDrain::Refused { code, message } => {
+                                tracing::error!(
+                                    "chat cascade: writer turn broke ({}{}), falling through",
+                                    code,
+                                    message.map(|m| format!(" — {m}")).unwrap_or_default()
+                                );
+                                break 'cascade None;
                             }
                         }
-                        let judged =
-                            crate::agentloop::cascade::judge_answer(&prose, &cascade_evidence);
-                        (
-                            prose,
-                            "mlx_native".to_owned(),
-                            (input_tokens, output_tokens),
-                            judged,
-                        )
                     }
                     Err(e) => {
                         tracing::error!(
