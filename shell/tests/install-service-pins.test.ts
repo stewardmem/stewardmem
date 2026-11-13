@@ -66,6 +66,27 @@ test('no_plain_copy_remains_in_the_install_path', () => {
 	expect(script).toContain('mv -f "$tmp" "$dest"');
 });
 
+test('the_installer_carries_the_chat_bridge_beside_the_kernel', () => {
+	// The 2026-11-13 500 class, measured live: install-service.sh updated
+	// ~/.local/bin/brain-server to a kernel speaking the prewarm bridge
+	// protocol while ~/.local/bin/brain-afm stayed at its Oct-25 build —
+	// the chat writer died on `unknown op prewarm` and every grounded turn
+	// answered 500 Internal Error. brain-afm is a Swift sidecar (built by
+	// the sidecar stage, never by cargo), so the installer's bin lists
+	// never carried it. THE LAW: the bridge moves WITH the kernel it
+	// serves — installed from the staged artifact only when the sealed
+	// provenance names the SAME kernel_version as the binary being
+	// installed; absent or mismatched, the skip is LOUD and names the
+	// failure class it re-opens.
+	expect(script).toContain('SIDECAR_PROVENANCE');
+	expect(script).toContain('brain-afm');
+	expect(script).toContain('kernel_version');
+	// The version match is against the binary actually being installed.
+	expect(script).toContain('SRC_KERNEL_VERSION');
+	// The skip warning names the protocol-break class, not a silent skip.
+	expect(script).toContain('unknown op prewarm');
+});
+
 test('the_installer_pins_the_shell_build_as_the_seat_dist', () => {
 	// The /app seat's dist is an INSTALLER-MANAGED fact (plan 19 S1): the
 	// Dioxus-era plist key pointed at client/dist, which the decommission

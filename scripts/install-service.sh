@@ -204,6 +204,31 @@ for entry in "${OPTIONAL_BINS[@]}"; do
 	fi
 done
 
+# 1d. The chat writer bridge (brain-afm — a Swift sidecar built by the
+#     sidecar stage, never by cargo, so the bin lists above cannot carry
+#     it). THE 2026-11-13 CLASS, measured live: a kernel upgrade that
+#     leaves an older brain-afm beside it breaks the chat writer's
+#     protocol — the new kernel's `prewarm` op met `unknown op prewarm`
+#     and every grounded turn answered 500 Internal Error. The bridge
+#     moves WITH the kernel it serves: installed from the staged sidecar
+#     artifact only when the sealed provenance names the SAME
+#     kernel_version as the binary being installed. Absent or mismatched,
+#     the skip is LOUD — the operator must know the chat writer keeps its
+#     old protocol.
+AFM_SRC="$REPO/shell/src-tauri/binaries/brain-afm-aarch64-apple-darwin"
+SIDECAR_PROV="$REPO/shell/src-tauri/binaries/SIDECAR_PROVENANCE.json"
+if [[ -x "$AFM_SRC" && -f "$SIDECAR_PROV" ]]; then
+	SRC_KERNEL_VERSION="$(plutil -extract kernel_version raw "$SIDECAR_PROV" 2>/dev/null || true)"
+	if [[ -n "$SRC_KERNEL_VERSION" && "$SRC_KERNEL_VERSION" == "$BUILD_VERSION" ]]; then
+		install_bin "$AFM_SRC" "$DEST_DIR/brain-afm"
+		ok "installed brain-afm beside the kernel (sealed provenance, kernel $SRC_KERNEL_VERSION)"
+	else
+		log "brain-afm NOT updated: staged provenance names kernel ${SRC_KERNEL_VERSION:-none}, installing kernel $BUILD_VERSION — the bridge must move WITH the kernel (an old bridge breaks the chat writer: unknown op prewarm)"
+	fi
+else
+	log "brain-afm NOT updated: no staged sidecar artifact (stage first: node shell/scripts/sidecar.mjs stage) — an old bridge beside the new kernel breaks the chat writer: unknown op prewarm"
+fi
+
 # 2a. Install the StewardMem desktop app (v1.29.31: the chat-first IA — the
 #     app is now the product surface, so an operator install should not have
 #     to hand-copy the bundle out of the target tree). Best-effort like the
