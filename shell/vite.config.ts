@@ -18,7 +18,13 @@ import { defineConfig } from 'vitest/config';
 // kernel-served `/app/` seat (BRAIN_CLIENT_DIST → this build, same origin —
 // no CORS, the CSP meta governs). The Tauri/PWA posture overrides to the
 // root via `SHELL_BASE=` in the tauri build command (tauri.conf.json).
-const shellBase = process.env.SHELL_BASE === undefined ? '/app' : process.env.SHELL_BASE;
+// SvelteKit types `base` as `'' | \`/${string}\``; the env override is
+// trusted to be one of the two postures — the empty string IS the root
+// posture the Tauri build passes (`SHELL_BASE=` in beforeBuildCommand),
+// the default '/app' is the kernel-served seat.
+const shellBase = (
+	process.env.SHELL_BASE === undefined ? '/app' : process.env.SHELL_BASE
+) as '' | `/${string}`;
 
 export default defineConfig({
 	plugins: [
