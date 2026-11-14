@@ -3195,3 +3195,61 @@ is kept here.
 > tag-era matrix is the measurement of record). Plans-repo record:
 > `18_KV_MAIN_ADOPTION_2026-11-14.md` + the rehearsal inventory
 > `18_KV_BUMP_REHEARSAL_INVENTORY_2026-11-14.md`.
+>
+> **G-1 THE PII READ SEAM (2026-11-14): THE CHAT GROUNDING PATH CROSSES THE
+> READ SEAM NO MORE — the law's extension LANDED, red-first, six commits
+> `acdd8876` → `8f0920ea`.** The defect was live on every chat turn served:
+> `run_recall`'s outcome — `RecallOutcome.tagged` — left the core RAW, and
+> chat grounding consumed it (the SSE grounding event's raw `hit.title` at
+> chat.rs:515/604/899, `fence_hits`' raw `hit.content` into the model's
+> fenced context, the carried-forward + cascade maps, and the persisted
+> `chat_turns.grounding_json`) — while `/recall`'s own mapping masked, the
+> classic "one binding forgot" shape the clamp law sentence exists to kill.
+> THE FIX (Option A, unchanged from the 2026-11-09 plan): ONE
+> `sanitize_search_result(&mut SearchResult, &Option<Principal>)` extracted
+> into gate.rs beside the read-seam helpers (every text field the row emits —
+> title, content, snippet, evidence.text/heading_path, assertion_kind,
+> ingest_kind, memory_kind, lawful_basis, region, origin — the tree is the
+> field-list authority), `results_to_hits` delegates (byte-identical), and
+> `run_recall` applies it to EVERY tagged row immediately before the outcome
+> assembly — the OUTPUT-side law, the twin of the request-side clamp; the
+> law comment at recall.rs now names BOTH arms. THE RED FIRST (P1's failure
+> output IS the before-receipt, archived in the commit):
+> "G-1 RED — raw email leaked into outcome.tagged (chat grounding renders
+> this into the model context and grounding_json)". THE PIN LEDGER: P1
+> RED→GREEN (pii=1 row, non-admin JWT, masked at the boundary), P5
+> RED→GREEN (the EchoLeak markdown-image exfil + zero-width + `<script>`
+> stripped for pii=0 rows too — the strip arm covers unflagged rows), P2/P3
+> GREEN THROUGHOUT (loopback `None` and admin keep raw text — the
+> `has_pii_read` trust posture, falsifier F1 guarded), P4 GREEN at the
+> extraction (idempotence ×2 ≡ ×1 over the hostile corpus — masked forms,
+> EchoLeak, invisible Unicode, fence markers, hostile elements, multibyte —
+> under all three postures, Debug-field-complete comparison because the
+> seamed fields are `#[serde(skip)]`), P6 documented (no chat-module pin —
+> the seam sits at the core). THE RECEIPT (the external-claim item CLOSED):
+> a two-arm live wire capture through the REAL router + REAL bridge, one
+> seed, one query — ARM 1 non-admin JWT: the grounding event's title MASKED
+> on the wire (`alpha contact [redacted:email] call[redacted:phone]card
+> [redacted:card]`), the answer clean, the stored turns clean; ARM 2
+> loopback: the title is the FULL RAW ROW — the trust posture preserved on
+> the wire; the fenced context's receipt is the core-level pair (fence_hits
+> consumes tagged verbatim). Receipt + evidence home:
+> plans repo `plans/improvements/G1_EVIDENCE_2026-11-14.md`; the gap
+> register row stamped CLOSED in
+> `plans/EXTERNAL_ENGAGEMENT_ROADMAP_2026-11-09.md`. GATES: fmt clean,
+> clippy zero warnings all four Rust lanes (default, bench, bench,migrate,
+> otel — the otel lane matters: run_recall carries the cfg_attr
+> instrument), deny ok, suites green (recall in-file 24/24, gate 66/66,
+> pen_test 8/8, chat_grounding_flow 1/1, chat_followup_grounding 2/2,
+> chat_cascade 3/3, chat_seeding 1/1, ump_target_authz_pins 7/7), badges
+> selfcheck OK, census 4277 → 4282 (behavioral_pin 3597 → 3602 — exactly
+> the five G-1 pins). DOC-TRUTH: blog 14's EchoLeak arm trued to the landed
+> transform (`![alt](url)` → `[alt]`, bare alt text — not "a link"); no doc
+> rendered raw values in a non-admin grounding context. Must-NOT-change all
+> held: wire shapes (values only), the trust posture, the fence wrapper,
+> GROUNDING_TOKEN_BUDGET, retrieval defaults, no new dependency, the Rust
+> surface only. Two docs-only commits (`f83cb05b` blog 14, `d227943f`
+> research 24) landed mid-round from a parallel session — the dup-guard
+> held (`git log -S sanitize_search_result` names `b637a0f1` alone; the §0
+> hard-stop never fired). Sequencing note honored: the seam covered the
+> grounding path BEFORE plan 19 grows its volume.
