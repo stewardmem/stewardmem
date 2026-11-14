@@ -3001,7 +3001,7 @@ mod trap_tests {
         };
         // near-miss pool: 2 traps (1 correct abstain, 1 over-commit) + 2
         // controls (1 correct answer, 1 false decline)
-        let recs = vec![
+        let recs = [
             mk("near-miss", "correct_abstain"),
             mk("near-miss", "over_commit"),
             mk("near-miss-control", "correct_answer"),

@@ -95,6 +95,8 @@ allow = [
     "CDLA-Permissive-2.0",     # DATA license for the webpki root store (webpki-roots), not code
     "AGPL-3.0-only",           # FIRST-PARTY: tools/signal-gateway declares it; libsignal-* is the canonical Signal protocol stack it binds. A third-party AGPL addition is a NEW named act, never covered by this entry
     "Apache-2.0 WITH LLVM-exception", # the rustc-shipped standard library + blake3's dual branch — the WITH expression is allowed whole (0.20.x rejects a bare exception id)
+    "blessing",                # SQLite Blessing — public-domain-equivalent royalty-free; the bundled SQLCipher/SQLite C source (sqlcipher-src 420.0.0, the libsqlite3-sys 0.40.0 build-dep that closes RUSTSEC-2026-0459/0502), evaluated 2026-11-14
+    "WTFPL",                   # rides in the same sqlcipher-src bundle (libtomcrypt 1.18.2, build-dep only) — FSF Free/Libre, permissive; evaluated 2026-11-14 with the RUSTSEC close
 ]
 
 [bans]
