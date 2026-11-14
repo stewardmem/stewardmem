@@ -588,6 +588,9 @@ pub async fn run_recall(
         // norms after quantization); RRF on ranks is the correct merge.
         let mut per_domain: Vec<(String, Vec<crate::SearchResult>)> = Vec::new();
         let mut tel = crate::search::SearchTelemetry::default();
+        // the routed near-miss witness (round 20 S3): last routed domain
+        // wins; `None` unless the contrast fired.
+        let mut near_miss_witness: Option<crate::nearmiss::NearMissWitness> = None;
         for (domain, pool) in &targets {
             // the per-domain filter law (in-DB domain scope + bound-profile
             // retention replacement) lives in the recall core.
@@ -612,6 +615,38 @@ pub async fn run_recall(
                         f.as_of.is_some(),
                         f.include_flagged,
                     );
+                    // THE NEAR-MISS CONTRAST (round 20 S3;
+                    // BRAIN_RECALL_NEARMISS=1, OFF at rest — no default
+                    // moves): a query that NAMES an entity this domain's
+                    // corpus provably never stored routes the whole served
+                    // set to the clarify-or-abstain vocabulary — every
+                    // served row is wrong-entity evidence. The declaration
+                    // is four-gated (all mechanical, zero model tokens —
+                    // the detector's only model call is the store's own
+                    // embedding of the name surfaces): the capitalized
+                    // mid-query token absent from every served row; ≥2
+                    // shared tokens with the top row (the confusable family
+                    // the retriever served instead); a REAL collision
+                    // family per the preregistered 0.6·jaccard_lex +
+                    // 0.4·cos name-edge above the threshold; and the
+                    // store-grounded FTS presence check confirming the
+                    // token is in NO row — the false-decline guard (a
+                    // token present anywhere means the real entity may
+                    // exist, so the contrast stands down and the
+                    // retrieval's own ranking stands). The witness records
+                    // WHAT the query collided with; the rows stay in the
+                    // store untouched — never merged, never rewritten.
+                    if crate::config::recall_nearmiss_enabled()
+                        && let Some(nm) = crate::nearmiss::detect(&query, &rs, &*model)
+                    {
+                        let present = pool.get().ok().map(|conn| {
+                            crate::search::near_miss_token_present(&conn, &nm.token)
+                        });
+                        if present == Some(false) {
+                            near_miss_witness = Some(nm.into());
+                            rs.clear();
+                        }
+                    }
                     per_domain.push((domain.clone(), rs));
                 }
                 Err(e) => {
@@ -626,6 +661,7 @@ pub async fn run_recall(
             }
         }
         let all = crate::service::recall::rrf_merge_domains(per_domain, k);
+        tel.near_miss = near_miss_witness;
         (all, tel)
     });
 
@@ -690,7 +726,17 @@ pub async fn run_recall(
     // `Recommendation`, which is what the evidence-gated roadmap requires
     // ("no fixed universal confidence threshold until held-out benefit is
     // demonstrated").
-    let decision = abstention_decision(tel.recommendation, tagged.is_empty());
+    // THE NEAR-MISS DECISION (round 20 S3): a routed near-miss that emptied
+    // the fused set takes the store's own clarify-or-abstain vocabulary —
+    // the established EMPTY `low_confidence` envelope (the ClarifyQuery
+    // mapping, unchanged), so the kernel's zero-hit abstain gate composes
+    // downstream exactly as pinned (`abstains_without_bridge`: hit_count == 0
+    // && low_confidence → the deterministic abstain notice, zero model
+    // tokens for the decision).
+    let mut decision = abstention_decision(tel.recommendation, tagged.is_empty());
+    if tel.near_miss.is_some() && tagged.is_empty() {
+        decision = crate::handlers::RecallDecision::LowConfidence;
+    }
 
     // domains of the returned hits, always present
     // (empty array when no hits). Only telemetry stays provenance-gated.

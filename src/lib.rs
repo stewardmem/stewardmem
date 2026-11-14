@@ -195,6 +195,15 @@ pub mod integrity;
 pub mod legal_hold;
 pub mod linker;
 pub mod loom;
+/// THE NEAR-MISS COLLISION SURFACE (round 20 S3, the DISCERN adoption's
+/// conditional mechanism — landed because the trap probe MEASURED the
+/// failure class here): the preregistered name-edge formula
+/// (`0.6·jaccard_lex + 0.4·cos`, threshold-gated, mechanical, no LLM), the
+/// near-miss detector, and the telemetry witness. The recall seam routes a
+/// detected near-miss to the store's own clarify-or-abstain vocabulary
+/// (`handlers::recall`, `BRAIN_RECALL_NEARMISS=1`, off at rest); the rows
+/// stay in the store untouched — linked, never merged.
+pub mod nearmiss;
 /// the Tier C pack format (plan 28 §4): a minisign-signed archive carrying
 /// ONLY data and declarations for one vertical — domain, roles, procedures,
 /// taxonomy, rules, i18n, a Tier A UI manifest. This module is the format as

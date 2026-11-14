@@ -1042,6 +1042,13 @@ pub struct SearchTelemetry {
     /// gold answer was supplied.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub answer_in_context: Option<bool>,
+    /// THE NEAR-MISS WITNESS (round 20 S3, `BRAIN_RECALL_NEARMISS=1`, off at
+    /// rest): the routed near-miss — the distinguishing name-token the store
+    /// provably lacks, plus the served collision family's row ids (the
+    /// preregistered 0.6·jaccard_lex + 0.4·cos name-edge above the
+    /// threshold). Telemetry only: never a merge, the rows stay untouched.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub near_miss: Option<crate::nearmiss::NearMissWitness>,
 }
 
 // ── Similarity ────────────────────────────────────────────────────────────
@@ -1940,6 +1947,25 @@ fn fts_search(
         .filter_map(|r| r.ok())
         .collect();
     Ok(results)
+}
+
+/// THE NEAR-MISS PRESENCE CHECK (round 20 S3 — the contrast's false-decline
+/// guard): does ANY row in this domain's corpus contain the token? The FTS
+/// leg is the store's own ground truth here: a token PRESENT anywhere means
+/// the real entity may exist (its chunk may merely rank below the served
+/// set), so the caller STANDS THE CONTRAST DOWN — the guard errs toward
+/// serving, never toward a fabricated refusal. Quoted per the
+/// [`query::quote_bare_fts_query`] discipline: caller tokens are terms,
+/// never FTS5 syntax.
+pub fn near_miss_token_present(conn: &Connection, token: &str) -> bool {
+    let quoted = query::quote_bare_fts_query(token);
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM knowledge_fts WHERE knowledge_fts MATCH ?1)",
+        rusqlite::params![quoted],
+        |r| r.get::<_, i64>(0),
+    )
+    .map(|e| e != 0)
+    .unwrap_or(false)
 }
 
 /// The FROM/JOIN half of the legacy scan. `source_revisions` is joined only

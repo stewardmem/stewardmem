@@ -2231,6 +2231,20 @@ pub fn brain_retention_enabled() -> bool {
     )
 }
 
+/// THE NEAR-MISS CONTRAST (round 20 S3, the DISCERN adoption's conditional
+/// mechanism): `BRAIN_RECALL_NEARMISS=1` enables the recall seam's near-miss
+/// route — a query that names an entity the store provably never stored
+/// routes to the clarify-or-abstain vocabulary instead of committing a
+/// confusable neighbor's chunk. OFF AT REST (the default is the exact
+/// pre-S3 behavior; no default moves without witnesses — December S0 owns
+/// any default). Read per call, the kill-switch pattern.
+pub fn recall_nearmiss_enabled() -> bool {
+    std::env::var("BRAIN_RECALL_NEARMISS")
+        .map(|v| v.trim().to_lowercase())
+        .map(|v| v == "1" || v == "true")
+        .unwrap_or(false)
+}
+
 /// Resolve the effective per-kind retention (days) from the env override
 /// `BRAIN_RETENTION_KIND_DAYS` (a JSON map like `{"fact":365,"episodic":30}`)
 /// merged over the defaults. Keys unknown to the defaults are accepted so an

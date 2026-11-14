@@ -372,7 +372,9 @@ pub fn pack(
 }
 
 /// Jaccard similarity over two token sets (0..1). Empty sets ⇒ 0.
-fn jaccard(a: &[String], b: &[String]) -> f32 {
+/// `pub(crate)`: the near-miss collision surface (`nearmiss.rs`) reuses
+/// this instead of a second copy — the dup guard's own preference.
+pub(crate) fn jaccard(a: &[String], b: &[String]) -> f32 {
     if a.is_empty() || b.is_empty() {
         return 0.0;
     }
