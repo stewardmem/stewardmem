@@ -533,7 +533,18 @@ pub(crate) mod tests {
         base_url: &str,
         bounds: BoundedCall,
     ) -> (DocCorrectorClient, std::path::PathBuf) {
-        let root = std::env::temp_dir().join(format!("doc-corrector-test-{}", std::process::id()));
+        // Each call gets its OWN root: the tests run in parallel threads over
+        // a shared pid-keyed dir, and one test's end-of-test remove_dir_all
+        // used to delete the directory out from under a sibling between its
+        // create_dir_all and its secret write — "write secret: NotFound" at
+        // line 539, the compliance-pack lane's red (2026-11-14). A per-call
+        // sequence number makes the cleanups independent.
+        static FIXTURE_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let root = std::env::temp_dir().join(format!(
+            "doc-corrector-test-{}-{}",
+            std::process::id(),
+            FIXTURE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        ));
         std::fs::create_dir_all(&root).expect("mkdir root");
         let secret_path = root.join("corrector.key");
         std::fs::write(&secret_path, "fixture-secret").expect("write secret");
