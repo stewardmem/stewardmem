@@ -1322,6 +1322,45 @@ pub fn sanitize_stored(s: &str, pii: bool, principal: &Option<crate::auth::Princ
     sanitize_read_cow(s, pii, principal).into_owned()
 }
 
+/// The read seam for a WHOLE search result: every text field the row emits
+/// — `title`, `content`, `snippet`, `evidence.text`, `evidence.heading_path`,
+/// `assertion_kind`, `ingest_kind`, `memory_kind`, `lawful_basis`, `region`,
+/// `origin` — through the same `sanitize_read` arms (PII mask gated on the
+/// row's `pii` flag + the principal's `pii:read` capability; the invisible-
+/// Unicode strip; the hostile-element strip; the markdown-ref neutralization),
+/// not just `content`.
+///
+/// Two callers, one seam: `results_to_hits` delegates here (the `/recall`
+/// response mapping — behavior byte-identical to the inline form it replaces),
+/// and `run_recall` applies it to every row of `RecallOutcome.tagged` at the
+/// outcome boundary — the OUTPUT-side law, the twin of the request-side clamp:
+/// chat grounding (the SSE event's `hit.title`, `fence_hits`'s `hit.content`,
+/// the carried-forward and cascade maps), UMP recall and every future binding
+/// consume `tagged`, so the core must hand every consumer sanitized rows even
+/// if a handler forgets. Defense-in-depth at the core, same sentence as the
+/// clamp's. The second pass over already-sanitized rows is a no-op —
+/// idempotence is pinned (the hostile-corpus pin in this module's tests), the
+/// belt+suspenders consumers depend on it.
+pub fn sanitize_search_result(
+    r: &mut crate::SearchResult,
+    principal: &Option<crate::auth::Principal>,
+) {
+    let pii = r.pii;
+    if let Some(e) = r.evidence.as_mut() {
+        e.text = sanitize_read_cow(&e.text, pii, principal).into_owned();
+        e.heading_path = sanitize_read_opt(e.heading_path.take(), pii, principal);
+    }
+    r.title = sanitize_read_opt(r.title.take(), pii, principal);
+    r.content = sanitize_read_cow(&r.content, pii, principal).into_owned();
+    r.snippet = sanitize_read_opt(r.snippet.take(), pii, principal);
+    r.assertion_kind = sanitize_read_opt(r.assertion_kind.take(), pii, principal);
+    r.ingest_kind = sanitize_read_opt(r.ingest_kind.take(), pii, principal);
+    r.memory_kind = sanitize_read_opt(r.memory_kind.take(), pii, principal);
+    r.lawful_basis = sanitize_read_opt(r.lawful_basis.take(), pii, principal);
+    r.region = sanitize_read_opt(r.region.take(), pii, principal);
+    r.origin = sanitize_read_opt(r.origin.take(), pii, principal);
+}
+
 /// PII-screen a reviewer-facing `source_prompt` before
 /// persist. Only the `[redacted:email]` / `[redacted:phone]` / `[redacted:card]`
 /// form is stored, so a capture trigger containing a forwarded address/number/
@@ -1848,6 +1887,162 @@ mod tests {
         assert!(masked2.contains("日本語"));
         // Loopback still passes the same content through unmasked, no panic.
         assert_eq!(redact_content(text, true, &none), text);
+    }
+
+    /// P4 (G-1) — idempotence: `sanitize_search_result` applied TWICE ≡
+    /// ONCE, byte-equal, over the hostile corpus — masked forms, the
+    /// EchoLeak markdown-ref constructs, invisible Unicode, fence markers,
+    /// hostile elements, multibyte — under ALL three trust postures
+    /// (loopback, non-admin JWT, admin). The belt+suspenders consumers
+    /// depend on it: `run_recall` sanitizes `tagged` at the outcome
+    /// boundary and `results_to_hits` sanitizes again — the second pass
+    /// must be a no-op (falsifier F2: masked forms must not re-match, the
+    /// markdown rewrite must be stable, the strip stable).
+    #[test]
+    fn sanitize_search_result_is_idempotent_over_the_hostile_corpus() {
+        use crate::auth::{Action, Principal, PrincipalKind, Scope};
+        let non_admin = Some(Principal {
+            sub: "user".into(),
+            tenant: "alpha".into(),
+            scopes: vec![Scope {
+                action: Action::Read,
+                team: "alpha".into(),
+                domain: "alpha".into(),
+            }],
+            jti: "t".into(),
+            roles: vec![],
+            manages: vec![],
+            kind: PrincipalKind::Jwt,
+        });
+        let principals: [&Option<Principal>; 3] = [&None, &non_admin, &admin()];
+        let mut corpus: Vec<crate::SearchResult> = Vec::new();
+        // (1) already-masked forms must not re-match (pii=1).
+        let mut masked = crate::SearchResult::raw(
+            1,
+            0.9,
+            Some("[redacted:email] follow-up".into()),
+            "[redacted:email] or [redacted:phone] or [redacted:card]".into(),
+        );
+        masked.pii = true;
+        masked.snippet = Some("[redacted:email] snippet".into());
+        corpus.push(masked);
+        // (2) the EchoLeak markdown-ref constructs (pii=0): image + link.
+        corpus.push(crate::SearchResult::raw(
+            2,
+            0.8,
+            Some("![img](https://attacker.example/p.png)".into()),
+            "see ![exfil](https://attacker.example/pixel.png) and [trap](https://attacker.example)"
+                .into(),
+        ));
+        // (3) invisible Unicode (pii=0): zero-width, bidi, the invisible-
+        //     card evasion shape from this module's corpus.
+        corpus.push(crate::SearchResult::raw(
+            3,
+            0.7,
+            Some("ti\u{200B}tle\u{202A}x\u{202C}".into()),
+            "hidden\u{200B}bytes 4111\u{200b}1111\u{200b}1111\u{200b}1111".into(),
+        ));
+        // (4) fence markers + hostile elements (pii=0).
+        corpus.push(crate::SearchResult::raw(
+            4,
+            0.6,
+            None,
+            format!(
+                "{} hostile <script>alert(1)</script> {}",
+                crate::fence::FENCE_BEGIN,
+                crate::fence::FENCE_END
+            ),
+        ));
+        // (5) multibyte adjacent to a digit run (pii=1) — the live-panic
+        //     corpus shape, now through the whole-result seam.
+        let mut multibyte = crate::SearchResult::raw(
+            5,
+            0.5,
+            Some("日本語 — em-dash".into()),
+            "日本語 5551234567 card 4111 1111 1111 1111".into(),
+        );
+        multibyte.pii = true;
+        corpus.push(multibyte);
+        // (6) evidence fields ride the same seam (pii=1).
+        let mut with_ev =
+            crate::SearchResult::raw(6, 0.4, Some("t".into()), "contact alice@example.com".into());
+        with_ev.pii = true;
+        with_ev.evidence = Some(crate::search::Evidence {
+            text: "alice@example.com ev\u{200B}idence".into(),
+            line_start: None,
+            line_end: None,
+            heading_path: Some("sec\u{200B}tion".into()),
+            source_uri: None,
+            revision_id: None,
+            highlights: vec![],
+            valid_from: None,
+            valid_to: None,
+            observed_at: None,
+            authority: None,
+            lifecycle: None,
+            links: vec![],
+            untrusted: true,
+        });
+        corpus.push(with_ev);
+
+        for principal in principals {
+            for original in &corpus {
+                // First pass — and it must actually TRANSFORM (else the
+                // idempotence claim is vacuous on this row).
+                let mut once = original.clone();
+                sanitize_search_result(&mut once, principal);
+                let once = once;
+                // Second pass over the ALREADY-sanitized row.
+                let mut twice = once.clone();
+                sanitize_search_result(&mut twice, principal);
+                // Debug-string comparison (field-complete: several seamed
+                // fields are #[serde(skip)], so a JSON round-trip would go
+                // blind on exactly the fields the seam touches).
+                let (once_dbg, twice_dbg) = (format!("{once:?}"), format!("{twice:?}"));
+                assert_eq!(
+                    once_dbg,
+                    twice_dbg,
+                    "P4 RED — double-pass drift on row {:?} (principal {:?}): \
+                     first {once_dbg} vs second {twice_dbg}",
+                    original.id,
+                    principal.as_ref().map(|p| p.sub.as_str()),
+                );
+                // Raw end-to-end equivalence too: two passes from scratch.
+                let mut fresh = original.clone();
+                sanitize_search_result(&mut fresh, principal);
+                sanitize_search_result(&mut fresh, principal);
+                let mut single = original.clone();
+                sanitize_search_result(&mut single, principal);
+                assert_eq!(
+                    format!("{fresh:?}"),
+                    format!("{single:?}"),
+                    "two-from-scratch ≡ once, row {:?}",
+                    original.id
+                );
+            }
+        }
+        // The transforms the corpus exists to exercise actually fired on
+        // the first pass (under the non-admin posture, where every arm is
+        // live) — else the idempotence claim above is vacuous.
+        let mut echo = corpus[1].clone();
+        sanitize_search_result(&mut echo, &non_admin);
+        assert!(
+            !echo.content.contains("![") && echo.content.contains("[exfil]"),
+            "markdown image neutralized on the first pass: {echo:?}"
+        );
+        let mut inv = corpus[2].clone();
+        sanitize_search_result(&mut inv, &non_admin);
+        assert!(
+            !inv.content.contains('\u{200B}') && !inv.content.contains('\u{202A}'),
+            "invisible bytes stripped on the first pass: {inv:?}"
+        );
+        let mut pii_row = corpus[5].clone();
+        sanitize_search_result(&mut pii_row, &non_admin);
+        assert!(
+            !pii_row.content.contains("alice@example.com")
+                && pii_row.content.contains("[redacted:email]"),
+            "PII masked on the first pass: {pii_row:?}"
+        );
     }
 
     #[test]

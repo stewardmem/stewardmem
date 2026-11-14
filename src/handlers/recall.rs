@@ -917,22 +917,20 @@ fn results_to_hits(
         .into_iter()
         .map(|(mut r, domain)| {
             // every text field the chunk emits goes through the read
-            // seam — PII redaction + invisible-Unicode strip — not just `content`.
-            let pii = r.pii;
-            let evidence = r.evidence.map(|mut e| {
-                e.text = crate::gate::sanitize_read_cow(&e.text, pii, principal).into_owned();
-                e.heading_path = crate::gate::sanitize_read_opt(e.heading_path, pii, principal);
-                e
-            });
-            let conflict = evidence.as_ref().map(|e| {
+            // seam — PII redaction + invisible-Unicode strip — not just
+            // `content`; the per-result seam lives in gate.rs and is
+            // shared with run_recall's outcome boundary (G-1), so this
+            // pass is the suspenders over the core's belt (idempotent).
+            crate::gate::sanitize_search_result(&mut r, principal);
+            let conflict = r.evidence.as_ref().map(|e| {
                 e.links
                     .iter()
                     .any(|l| l.kind == "contradicts" || l.kind == "supersedes")
             });
             RecallHit {
                 id: r.id,
-                title: crate::gate::sanitize_read_opt(r.title, pii, principal),
-                content: crate::gate::sanitize_read_cow(&r.content, pii, principal).into_owned(),
+                title: r.title,
+                content: r.content,
                 score: r.score,
                 domain: Some(domain),
                 source: Some(map_source(r.source)),
@@ -941,26 +939,27 @@ fn results_to_hits(
                 } else {
                     None
                 },
-                evidence,
-                snippet: crate::gate::sanitize_read_opt(r.snippet, pii, principal),
+                evidence: r.evidence,
+                snippet: r.snippet,
                 untrusted: true,
                 conflict,
                 confidence: r.confidence,
                 // assertion_kind is free text at POST /ingest (no
                 // vocabulary check), ingest_kind is free text via loopback
                 // /add, memory_kind rides the UMP raw_kind round-trip — all
-                // stored text, all through the same read seam.
-                assertion_kind: crate::gate::sanitize_read_opt(r.assertion_kind, pii, principal),
+                // stored text, all through the same read seam (sanitized
+                // in place by sanitize_search_result above).
+                assertion_kind: r.assertion_kind,
                 relevance: Some(crate::gate::relevance_tier(r.score)),
                 decayed: include_decayed.then(|| crate::gate::is_decayed(r.expires_at, now_unix)),
-                ingest_kind: crate::gate::sanitize_read_opt(r.ingest_kind, pii, principal),
-                memory_kind: crate::gate::sanitize_read_opt(r.memory_kind, pii, principal),
+                ingest_kind: r.ingest_kind,
+                memory_kind: r.memory_kind,
                 // provenance labels are stored text
                 // (lawful_basis is free-form; region is regex-validated but the
-                // read seam is the uniform control) — run through sanitize.
-                lawful_basis: crate::gate::sanitize_read_opt(r.lawful_basis.take(), pii, principal),
-                region: crate::gate::sanitize_read_opt(r.region.take(), pii, principal),
-                origin: crate::gate::sanitize_read_opt(r.origin.take(), pii, principal),
+                // read seam is the uniform control) — sanitized above.
+                lawful_basis: r.lawful_basis,
+                region: r.region,
+                origin: r.origin,
                 flagged: r.flagged,
                 authority: r.authority,
                 trust: r.trust,
