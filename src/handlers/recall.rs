@@ -1600,6 +1600,301 @@ mod tests {
         assert!(!hits_loop[0].content.contains('\u{202A}'));
         assert!(!hits_loop[0].title.as_deref().unwrap().contains('\u{200B}'));
     }
+
+    // ------------------------------------------------------------------
+    // G-1 · THE PII READ SEAM — the OUTPUT-side pins (2026-11-14).
+    //
+    // The clamp law above defends the request side; these pins defend the
+    // outcome: `RecallOutcome.tagged` leaves `run_recall` RAW today, and
+    // chat grounding (the grounding event's `hit.title`, `fence_hits`'s
+    // `hit.content`, the carried-forward and cascade maps), UMP recall and
+    // every future binding consume it. P1 is the red: a `pii=1` row's raw
+    // email/phone/card ride out of the core. P2/P3 pin the trust posture
+    // (loopback `None` + admin keep raw text — the `has_pii_read` law);
+    // P5 pins the strip arm for UNFLAGGED rows (redaction is not the
+    // seam's only service).
+    //
+    // P6 (documented, no pin): the seam sits at the core, so NO
+    // chat-module pin is needed — chat wiring is covered transitively by
+    // P1, because every chat site renders `outcome.tagged`. The existing
+    // chat pins (locale, carry-forward) must stay green.
+    // ------------------------------------------------------------------
+
+    /// The G-1 test store: a single-DB AppState (the `gate.rs` test_state
+    /// shape) — real pool + migration + the static embedder, so
+    /// `run_recall` runs its actual search path.
+    fn g1_test_state() -> (tempfile::TempDir, std::sync::Arc<crate::AppState>) {
+        crate::register_sqlite_vec::register_sqlite_vec();
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let db_path = dir.path().join("brain.db");
+        let mgr = crate::pool::SqliteConnectionManager::file(&db_path);
+        let pool: crate::Pool = r2d2::Pool::builder().build(mgr).expect("pool");
+        crate::migration::run_migration(&mut pool.get().expect("conn"), 0).expect("migration");
+        let state = std::sync::Arc::new(crate::AppState {
+            token_store: crate::auth::TokenStore::new(),
+            jwt_middleware_state: std::sync::Arc::new(
+                crate::server::router::auth::JwtMiddlewareState::opaque_for_tests(
+                    pool.clone(),
+                    db_path.clone(),
+                ),
+            ),
+            cors: tower_http::cors::CorsLayer::new(),
+            chat_answer_cache: std::sync::Arc::new(
+                crate::service::chat_answer_cache::ChatAnswerCache::new(),
+            ),
+            durability: Default::default(),
+            loom: Default::default(),
+            model: std::sync::Arc::new(
+                crate::embed::StaticEmbedder::new(crate::config::MODEL_ID).expect("model"),
+            ),
+            registry: crate::domain_registry::DomainRegistry::new(pool.clone(), &db_path, false),
+            pool,
+            db_path,
+            connection_tracker: std::sync::Arc::new(crate::http_limit::ConnectionTracker::new()),
+            rate_limiter: std::sync::Arc::new(crate::http_limit::RateLimiter::new()),
+            snapshot: crate::integrity::SnapshotState::default(),
+            audit_chain_cache: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            auth_mode: crate::auth::AuthMode::Opaque,
+            key_store: crate::auth::jwks::KeyStore::default(),
+            revocation_cache: std::sync::Arc::new(crate::auth::revocation::RevocationCache::new()),
+            jwt_issuer: String::new(),
+            jwt_audience: String::new(),
+            oidc_config: crate::handlers::well_known::OidcConfig::unconfigured(),
+            ump_events: tokio::sync::broadcast::channel(16).0,
+            alert_events: tokio::sync::broadcast::channel(16).0,
+            alert_seq: std::sync::atomic::AtomicU64::new(0),
+            chain_watch: crate::alert::ChainWatchState::default(),
+            concurrency: &crate::concurrency::CONCURRENCY,
+        });
+        (dir, state)
+    }
+
+    /// Seed a knowledge row (title=content, the seed helper shape) with
+    /// the given `pii` flag, owned by `ana` in the `global` label — the
+    /// owner-bound no-role posture (`record_read_gate`: `owner_in = [sub]`)
+    /// means the non-admin JWT principal (sub `ana`) can find it.
+    fn g1_seed(state: &crate::AppState, content: &str, pii: bool) -> i64 {
+        use zerocopy::IntoBytes;
+        let conn = state.pool.get().expect("pool");
+        conn.execute(
+            "INSERT INTO knowledge (title, content, content_hash, source, domain, owner, access_scope, pii)
+             VALUES (?1, ?2, ?3, 'structured', 'global', 'ana', 'private', ?4)",
+            rusqlite::params![content, content, format!("h-{content}"), pii as i64],
+        )
+        .expect("seed knowledge row");
+        let kid = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO vec_knowledge (knowledge_id, embedding_int8, embedding_bit, source, created_at)
+             VALUES (?1, vec_quantize_int8(?2, 'unit'), vec_quantize_binary(?2), 'structured', datetime('now'))",
+            rusqlite::params![kid, vec![0.5f32; 512].as_bytes()],
+        )
+        .expect("seed vec row");
+        kid
+    }
+
+    /// The G-1 recall request: forced into the `global` label (the seeded
+    /// row's), skipping routing so the search is deterministic.
+    fn g1_req(query: &str) -> RecallRequest {
+        let mut r = req(query);
+        r.domain = Some("global".to_string());
+        r
+    }
+
+    /// The G-1 non-admin JWT principal: no roles, one domain-scoped read —
+    /// owner-bound (`record_read_gate`) and NOT a trusted reader
+    /// (`has_pii_read` = false).
+    fn g1_reader() -> Option<crate::auth::Principal> {
+        use crate::auth::{Principal, PrincipalKind, Scope};
+        Some(Principal {
+            sub: "ana".into(),
+            tenant: "team-alpha".into(),
+            scopes: vec![Scope::parse("read:team-alpha/global").expect("scope parses")],
+            jti: "g1".into(),
+            roles: vec![],
+            manages: vec![],
+            kind: PrincipalKind::Jwt,
+        })
+    }
+
+    /// The admin-scoped JWT (the standing trusted-reader group): the
+    /// `admin:*/*` scope is the `pii:read` capability (`has_pii_read`),
+    /// plus the domain read scope `authorize` requires.
+    fn g1_admin() -> Option<crate::auth::Principal> {
+        use crate::auth::{Principal, PrincipalKind, Scope};
+        Some(Principal {
+            sub: "root".into(),
+            tenant: "team-alpha".into(),
+            scopes: vec![
+                Scope::parse("admin:*/*").expect("scope parses"),
+                Scope::parse("read:team-alpha/global").expect("scope parses"),
+            ],
+            jti: "g1-admin".into(),
+            roles: vec![],
+            manages: vec![],
+            kind: PrincipalKind::Jwt,
+        })
+    }
+
+    /// The G-1 attack row: email + phone + Luhn-valid card in the title
+    /// AND the content (the grounding event renders `hit.title` raw; the
+    /// fence renders `hit.content`). The values are the `gate.rs` corpus's
+    /// own attack strings.
+    const G1_PII_ROW: &str =
+        "alpha contact alice@example.com call 5551234567 card 4111 1111 1111 1111";
+
+    /// P1 — THE RED: a `pii=1` chunk's raw email/phone/card ride out of
+    /// `run_recall` in `outcome.tagged` — the values chat grounding
+    /// renders into the SSE event AND persists in `chat_turns.grounding_json`.
+    /// RED today: the failure output NAMES the leak (the raw email in
+    /// tagged) — the register's behavioral evidence. GREEN once the
+    /// output-side read seam lands at the outcome boundary: masked forms
+    /// present, raw values gone.
+    #[tokio::test]
+    async fn g1_run_recall_masks_pii_rows_for_non_admin_principals() {
+        let (_dir, state) = g1_test_state();
+        g1_seed(&state, G1_PII_ROW, true);
+        let outcome = run_recall(
+            &state,
+            &g1_reader(),
+            g1_req("alpha contact"),
+            RecallSourceQuery::default(),
+        )
+        .await
+        .expect("g1 recall");
+        assert!(
+            !outcome.tagged.is_empty(),
+            "the pii row must be found (owner-bound principal + global label) — an empty \
+             tagged makes this pin vacuous"
+        );
+        for (hit, _domain) in &outcome.tagged {
+            let c = &hit.content;
+            assert!(
+                !c.contains("alice@example.com"),
+                "G-1 RED — raw email leaked into outcome.tagged (chat grounding renders \
+                 this into the model context and grounding_json): {c:?}"
+            );
+            assert!(
+                !c.contains("5551234567"),
+                "G-1 RED — raw phone leaked into outcome.tagged: {c:?}"
+            );
+            assert!(
+                !c.contains("4111"),
+                "G-1 RED — raw card leaked into outcome.tagged: {c:?}"
+            );
+            assert!(
+                c.contains("[redacted:email]"),
+                "the masked form must be present: {c:?}"
+            );
+            if let Some(t) = &hit.title {
+                assert!(
+                    !t.contains("alice@example.com")
+                        && !t.contains("5551234567")
+                        && !t.contains("4111"),
+                    "G-1 RED — raw PII leaked in the hit title (the grounding event \
+                     interpolates hit.title raw): {t:?}"
+                );
+            }
+        }
+    }
+
+    /// P2 — the loopback trust posture (the over-fix guard): the SAME
+    /// request with no principal (loopback/opaque superuser) keeps the raw
+    /// text verbatim. Green before the seam lands; must STAY green after —
+    /// any masked form under a `None` principal reds this (falsifier F1:
+    /// the trust posture is a law, not a preference).
+    #[tokio::test]
+    async fn g1_loopback_keeps_raw_text_verbatim() {
+        let (_dir, state) = g1_test_state();
+        g1_seed(&state, G1_PII_ROW, true);
+        let outcome = run_recall(
+            &state,
+            &None,
+            g1_req("alpha contact"),
+            RecallSourceQuery::default(),
+        )
+        .await
+        .expect("loopback recall");
+        assert!(!outcome.tagged.is_empty(), "loopback finds the row");
+        assert!(
+            outcome
+                .tagged
+                .iter()
+                .any(|(hit, _)| hit.content.contains("alice@example.com")),
+            "loopback trust posture: raw text preserved verbatim (P2)"
+        );
+    }
+
+    /// P3 — admin preserved (the `has_pii_read` law): an admin-scoped JWT
+    /// is the standing trusted-reader group; raw text preserved through the
+    /// outcome boundary.
+    #[tokio::test]
+    async fn g1_admin_principal_keeps_raw_text() {
+        let (_dir, state) = g1_test_state();
+        g1_seed(&state, G1_PII_ROW, true);
+        let outcome = run_recall(
+            &state,
+            &g1_admin(),
+            g1_req("alpha contact"),
+            RecallSourceQuery::default(),
+        )
+        .await
+        .expect("admin recall");
+        assert!(!outcome.tagged.is_empty(), "admin finds the row");
+        assert!(
+            outcome
+                .tagged
+                .iter()
+                .any(|(hit, _)| hit.content.contains("alice@example.com")),
+            "admin reads raw (the has_pii_read law) — P3"
+        );
+    }
+
+    /// P5 — the strip arm covers UNFLAGGED rows too: a `pii=0` chunk with
+    /// hostile markdown (the EchoLeak markdown-image exfil class) +
+    /// invisible Unicode comes out of `run_recall` neutralized + stripped.
+    /// Redaction is not the seam's only service; chat grounding
+    /// (`fence_hits` renders `hit.content` into the model context) must
+    /// get the strip arm as well. RED today via the core (raw tagged).
+    #[tokio::test]
+    async fn g1_unflagged_rows_still_stripped_at_the_outcome_boundary() {
+        let (_dir, state) = g1_test_state();
+        let content = "alpha notes ![exfil](https://attacker.example/pixel.png) \
+                       hidden\u{200B}bytes <script>alert(1)</script> link [trap](https://attacker.example)";
+        g1_seed(&state, content, false);
+        let outcome = run_recall(
+            &state,
+            &g1_reader(),
+            g1_req("alpha notes"),
+            RecallSourceQuery::default(),
+        )
+        .await
+        .expect("g1 unflagged recall");
+        assert!(
+            !outcome.tagged.is_empty(),
+            "the unflagged row must be found — an empty tagged makes this pin vacuous"
+        );
+        for (hit, _domain) in &outcome.tagged {
+            let c = &hit.content;
+            assert!(
+                !c.contains("!["),
+                "G-1 RED — markdown-image exfil construct survived into outcome.tagged \
+                 (a model that echoes fenced markdown carries the fetch outward): {c:?}"
+            );
+            assert!(
+                !c.contains("<script"),
+                "hostile element survived the outcome boundary: {c:?}"
+            );
+            assert!(
+                !c.contains('\u{200B}'),
+                "invisible byte survived the outcome boundary: {c:?}"
+            );
+            assert!(
+                c.contains("[exfil]"),
+                "the image neutralized to its alt text: {c:?}"
+            );
+        }
+    }
+
     /// NO DIRECT SQLITE ON THE ASYNC RUNTIME IN `/recall`.
     ///
     /// This handler is the hottest read surface in the server and it used to touch
