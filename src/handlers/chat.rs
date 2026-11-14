@@ -990,13 +990,14 @@ pub async fn chat_turn(
                                 tracing::error!(
                                     "chat cascade: writer turn broke ({}{}), falling through",
                                     crate::server::router::memory::LogValue::new(&code),
-                                    message.map(|m| {
-                                        format!(
-                                            " — {}",
-                                            crate::server::router::memory::LogValue::new(&m)
-                                        )
-                                    })
-                                    .unwrap_or_default()
+                                    message
+                                        .map(|m| {
+                                            format!(
+                                                " — {}",
+                                                crate::server::router::memory::LogValue::new(&m)
+                                            )
+                                        })
+                                        .unwrap_or_default()
                                 );
                                 break 'cascade None;
                             }

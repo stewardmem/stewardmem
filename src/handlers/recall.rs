@@ -639,9 +639,10 @@ pub async fn run_recall(
                     if crate::config::recall_nearmiss_enabled()
                         && let Some(nm) = crate::nearmiss::detect(&query, &rs, &*model)
                     {
-                        let present = pool.get().ok().map(|conn| {
-                            crate::search::near_miss_token_present(&conn, &nm.token)
-                        });
+                        let present = pool
+                            .get()
+                            .ok()
+                            .map(|conn| crate::search::near_miss_token_present(&conn, &nm.token));
                         if present == Some(false) {
                             near_miss_witness = Some(nm.into());
                             rs.clear();

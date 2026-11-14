@@ -152,10 +152,7 @@ pub fn detect(
             continue;
         }
         let low = tok.to_lowercase();
-        if !normed
-            .iter()
-            .any(|n| n.split(' ').any(|w| w == low))
-        {
+        if !normed.iter().any(|n| n.split(' ').any(|w| w == low)) {
             token = Some(low);
             break;
         }
@@ -265,7 +262,10 @@ mod tests {
     fn the_reused_similarity_legs_edge_cases() {
         // the jaccard leg is the packing module's own helper (no second copy)
         let a = vec!["a".to_string()];
-        assert_eq!(crate::search::packing::jaccard(&[], &["x".to_string()]), 0.0);
+        assert_eq!(
+            crate::search::packing::jaccard(&[], &["x".to_string()]),
+            0.0
+        );
         assert!((crate::search::packing::jaccard(&a, &a) - 1.0).abs() < 1e-9);
         // the cos leg is the search module's own helper (it zips shorter on
         // a length mismatch — a case same-dim embedders never produce)
@@ -288,8 +288,13 @@ mod tests {
                 .map(|t| {
                     // hash the text into a unit-ish vector, identical text →
                     // identical vector, different text → far apart
-                    let h = t.bytes().fold(0u64, |a, b| a.wrapping_mul(31).wrapping_add(b as u64));
-                    vec![(h % 1000) as f32 / 1000.0, ((h / 1000) % 1000) as f32 / 1000.0 + 0.5]
+                    let h = t
+                        .bytes()
+                        .fold(0u64, |a, b| a.wrapping_mul(31).wrapping_add(b as u64));
+                    vec![
+                        (h % 1000) as f32 / 1000.0,
+                        ((h / 1000) % 1000) as f32 / 1000.0 + 0.5,
+                    ]
                 })
                 .collect()
         }
@@ -303,7 +308,10 @@ mod tests {
         let results = vec![
             result(3, "Zephyron Cloud Solutions was founded in 2014."),
             result(2, "Zephyron Cloud Solutions is headquartered in Seattle."),
-            result(1, "Zephyron Cloud Solutions reported annual revenue of 5.1 billion dollars for fiscal 2025."),
+            result(
+                1,
+                "Zephyron Cloud Solutions reported annual revenue of 5.1 billion dollars for fiscal 2025.",
+            ),
             result(7, "Northwind Analytics is headquartered in Rotterdam."),
         ];
         let nm = detect(
@@ -328,12 +336,14 @@ mod tests {
             result(3, "Zephyron Cloud Solutions was founded in 2014."),
         ];
         // every query token is served — no distinguishing token, no near-miss
-        assert!(detect(
-            "Where is Zephyron Cloud Solutions headquartered?",
-            &results,
-            &StubEmbedder,
-        )
-        .is_none());
+        assert!(
+            detect(
+                "Where is Zephyron Cloud Solutions headquartered?",
+                &results,
+                &StubEmbedder,
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -344,27 +354,32 @@ mod tests {
             result(3, "Zephyron Cloud Solutions was founded in 2014."),
             result(7, "Northwind Analytics is headquartered in Rotterdam."),
         ];
-        assert!(detect(
-            "What is the revenue of Zephyron Cloud Systems?",
-            &results,
-            &StubEmbedder,
-        )
-        .is_none());
+        assert!(
+            detect(
+                "What is the revenue of Zephyron Cloud Systems?",
+                &results,
+                &StubEmbedder,
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn detect_stands_down_without_two_shared_tokens() {
-        let results = vec![
-            result(2, "Zephyron Cloud Solutions is headquartered in Seattle."),
-        ];
+        let results = vec![result(
+            2,
+            "Zephyron Cloud Solutions is headquartered in Seattle.",
+        )];
         // the distinguishing token is absent, but the query shares only ONE
         // content token with the served top row — no confusable family was
         // served, and the family gate stands the contrast down
-        assert!(detect(
-            "Frobnitz Cloud Systems uptime record",
-            &results,
-            &StubEmbedder,
-        )
-        .is_none());
+        assert!(
+            detect(
+                "Frobnitz Cloud Systems uptime record",
+                &results,
+                &StubEmbedder,
+            )
+            .is_none()
+        );
     }
 }

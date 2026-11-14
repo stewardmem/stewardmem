@@ -1457,10 +1457,7 @@ fn parse_trap_fixtures(path: &str) -> Result<(Vec<String>, Vec<TrapQuery>), Stri
                     .copied()
                     .find(|k| *k == cur_kind.as_str())
                     .ok_or_else(|| {
-                        format!(
-                            "### T{}: unknown trap kind '{cur_kind}'",
-                            queries.len() + 1
-                        )
+                        format!("### T{}: unknown trap kind '{cur_kind}'", queries.len() + 1)
                     })?;
                 queries.push(TrapQuery {
                     idx: queries.len(),
@@ -1925,9 +1922,7 @@ fn classify_pool(
                     / nm.len() as f64,
             ),
             Some(
-                nm.iter()
-                    .filter(|r| r.twin_in_answer == Some(true))
-                    .count() as f64
+                nm.iter().filter(|r| r.twin_in_answer == Some(true)).count() as f64
                     / nm.len() as f64,
             ),
         )
