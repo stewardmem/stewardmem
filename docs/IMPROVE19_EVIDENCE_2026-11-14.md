@@ -166,6 +166,32 @@ The probe method: the full safetensors header (the u64-length JSON) of every sha
 
 **The scheme-interaction note (December's domain):** the classic refusal fired at the full-precision default posture; whether a quantized KV scheme makes the hybrid cache "stageable" is the KV matrix's question — out of this round's scope by law (§4), named here so December's S0 reads the refusal with this note.
 
+## §S4b · THE MTP SELF-DRAFTER PROBE (the operator-named addendum, 2026-11-14)
+
+**Why it ran:** the S4 park said "until a model/weights change" — same day, the weights change appeared (the oQ4e-mtp quant family ships the MTP layer the pipenetwork quants dropped), and the operator named the probe. The instrument: the driver's new `PROBE_MTP_SELF=1` arm — `Qwen35TextMTPRegistration.register()` → `MTPDrafterModelFactory.shared.load` on the TARGET'S OWN checkpoint (the self-drafter shape: one shared layer, no second resident model) → `SpeculativeDecodingConfig(mtpDrafter:blockSize:2)` (the `max(2, narrowest+1)` law at full precision). Checkpoint: `TheWirelessPhoenix/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-NEO-IMATRIX-MAX-oQ4e-mtp` (~6.2 GB, oQ 4-bit; 29 `language_model.mtp.*` tensors — the naming the upstream registered-factory fixtures cover). Raw logs `/tmp/round19/mtp_oq4e_self.log` + `/tmp/round19/oq4e_baseline.log`.
+
+**The four S4 questions, answered:**
+
+1. **Does the factory load the checkpoint's naming?** YES — the drafter load succeeded against the `language_model.mtp.*` naming (no named error, the session built).
+2. **Does the MTP iterator run on the hybrid GDN cache?** YES — no `KVCacheError`, accept= telemetry flows, and the continuation machinery works across turns AND across the tool turn (the mtpStateIsRecoverable path held). The classic path's structural refusal does NOT govern MTP.
+3. **Acceptance vs the 40% gate?** **83–94%** — the gate clears by more than 2×.
+4. **Is it faster?** **NO — measured 20–27% SLOWER on this machine.** The paired run (same checkpoint, MTP off):
+
+| Turn | without MTP | with MTP (accept) | delta |
+|---|---|---|---|
+| turn 1 | 34.2 tok/s, gen 5.50 s | 27.4 tok/s, gen 6.86 s (**94%**) | −20% tok/s, +25% wall |
+| turn 2 | 33.6 tok/s, gen 4.47 s | 26.8 tok/s, gen 5.60 s (86%) | −20% tok/s, +25% wall |
+| tool | 33.7 tok/s, gen 1.07 s | 26.4 tok/s, gen 1.36 s (85%) | −22% tok/s, +27% wall |
+| cold | 33.6 tok/s, gen 5.95 s | 24.6 tok/s, gen 8.14 s (83%) | −27% tok/s, +37% wall |
+
+**The structural read:** the naive MTP arithmetic (draft ≈ 1/40 of a pass; a 2-token verify ≈ 1 batched pass; at α=0.9 expect ≈1.8×) promised a large win — the hybrid cache eats it. The GDN recurrent layers process the verification block SEQUENTIALLY through the recurrent state, so the "batched" 2-token verify on this machine costs ≈2.3 passes, not 1: the measured cost per cycle (1.86 tokens ÷ 0.78× speed ⇒ ≈2.38 pass-equivalents) shows the batching benefit does not materialize on the recurrent class — the same architectural fact that blocks the classic path's trimmable/stageable requirement and the prefix rewind. **The user's/operator's instinct ("MTP would be slower on this machine") is now a measured verdict, at acceptance levels that would be spectacular on standard attention.**
+
+**The losslessness held:** outputs and token counts are IDENTICAL between the paired runs (188/150/36/200 out-tokens; 630c/569c/239c/836c reasoning) — speculation verified against the target's own distribution, as constructed. Quality cannot degrade; only speed moved, and it moved the wrong way.
+
+**F3 FINAL: the park converts from presumed to MEASURED.** The 40% acceptance gate alone is insufficient as an admission gate on the hybrid class — acceptance cleared it by 2× and the lever still lost 20–27%. **The December lesson (preregistered here): the decode gate on this machine class must be a NET tok/s delta gate on the SAME checkpoint, never an acceptance-rate gate.** The lever parks until an engine/weights change that makes the hybrid verification batchable — not merely a weights change that ships the MTP layer.
+
+**The secondary finding (the real speed candidate):** the oQ4e checkpoint ITSELF — MTP off — decodes at **33.6–34.2 tok/s vs the roster's pipenetwork 5-bit heretic at ~22 tok/s (~1.5× faster**, oQ 4-bit vs 5-bit, a different fine-tune), AND its tool turn answers **correctly** (`184/97`, 36 tokens, cached=319) — the pipenetwork heretic's model-intrinsic decimal miss is GONE in this fine-tune (a weights fact, not an MTP effect: MTP is lossless). Memory works, cold honest posture unchanged (the cold turn still burns the 200 clamp — the L1 budget's finding applies to this tier equally). **This is the December S0's named admission candidate for the agentic tier** — its admission is the December vehicle (the probe battery + the operator's provenance read on the DavidAU→TheWirelessPhoenix chain); this round only measured it, the roster is untouched.
+
 ## §S5 · THE ROUND RECORD
 
 **The commit ledger (brain-server, one commit per step):** `b000ddd0` (S0 the design note) → `b1e256af` (S1 the seam + 13 pins) → `df64026d` (S2 the gate table) → `88eda02a` (S3 the prefix ledger) → `902c5b56` (S4 the MTP verdict) → this commit (S5 the record). Plans repo: `8a3bb6a` (the L2 draft, DRAFT-NOT-FILED) + the plan §7 record row.
@@ -179,7 +205,7 @@ The probe method: the full safetensors header (the u64-length JSON) of every sha
 **The falsifiers' final ledger (all four named):**
 - **F1** (budget forces a non-empty answer failing citation identity): **did not fire.** The needle identity holds on every tier/shape (LX-4471, 3,098 tok); the tool-turn content miss is MODEL-INTRINSIC — proven twice (the 4B at max=180 produces the same decimal; the heretic produces it budgeted AND unbudgeted with identical rsn 274c).
 - **F2** (`applyingThinkingBudget` unwireable without forking): **did not fire — pre-resolved at S0.** The path existed: `session.components` is the engine's public extension seam and `applyingThinkingBudget` chains (never replaces) the existing factory.
-- **F3** (MTP acceptance < 40% everywhere): **fires in spirit, stronger than its letter.** No acceptance was obtainable: the MTP head is ABSENT in the shipped weights (0 mtp keys across all shards; configs still declare the layer) AND the classic drafter is structurally refused on the hybrid cache (named `KVCacheError` on all three tiers); the 8B control (where the path runs) measures 28–38% — below the gate — at 11.7 tok/s, slower than unassisted. **Parked BY NAME until a model/weights change.**
+- **F3** (MTP acceptance < 40% everywhere): **fires, and the S4b addendum converts the park from presumed to MEASURED.** At S4 no acceptance was obtainable (absent weights + the classic path's structural refusal + the below-gate 8B control). The operator-named S4b probe then shipped the missing weights (the oQ4e-mtp self-drafter) and measured **83–94% acceptance — the gate clears by 2× — and the lever still runs 20–27% SLOWER** (the hybrid cache's sequential verification costs ≈2.3 passes; the batching benefit does not materialize on the recurrent class). **The decode gate on this machine class must be a NET tok/s delta gate on the same checkpoint, never an acceptance-rate gate** — the December lesson, preregistered in §S4b. The park holds on a measured verdict.
 - **F4** (prefix re-prefill within the 1.5× framing): **the split verdict, both readings recorded.** Per-token the rebuild pays the fresh rate everywhere (0.994/1.029/0.991 — within framing, the accepted-cost branch holds at the per-token reading); the absolute long-context quantity (the whole-prompt rebuild, 4.2/10.9/21.5 s per assistant turn at ~3,100 tokens, `cached=0`) is the documented pain class the S3 draft carries. The December matrix re-reads at the tag era.
 
 **The verify-after checklist (plan §6):** the budget's gate table exists (quality + latency, per tier, S2) · the prefix cost table exists (two scales, the ledger's split verdict recorded, the draft DRAFT-NOT-FILED beside the 18 home, S3) · the MTP verdict exists (head-absent per tier + the structural refusal + the below-gate control, S4) · everything env-gated OFF at rest · the falsifiers' outcomes recorded by name · the plans repo carries the draft + the record row · both repos pushed.

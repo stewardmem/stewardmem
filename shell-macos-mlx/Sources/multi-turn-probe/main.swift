@@ -585,6 +585,30 @@ func run() async throws {
     } else {
         print("spec decode: off")
     }
+    // S4b (IMPROVE19 addendum): the MTP SELF-DRAFTER probe — the weights
+    // change the S4 park verdict named. A checkpoint that SHIPS its own
+    // mtp.* weights (the oQ4e-mtp quant family) can serve as its own
+    // drafter: the MTP layer is one shared transformer layer (~1/40 of a
+    // forward pass), no second resident model — structurally different
+    // economics from the classic 0.6B drafter the S4 control measured at
+    // 2.2x slower. This arm answers, in one run: (a) does the registered
+    // MTPDrafterModelFactory path load THIS checkpoint's naming, (b) does
+    // the MTP iterator run on the hybrid GDN cache, (c) the acceptance
+    // rate vs the preregistered 40% gate. Lossless by construction —
+    // verification is against the target's own distribution — so the
+    // worst case is speed, never quality. A MEASUREMENT, not adoption:
+    // the roster is untouched either way.
+    if ProcessInfo.processInfo.environment["PROBE_MTP_SELF"] == "1" {
+        await Qwen35TextMTPRegistration.register()
+        print("mtp self-drafter: loading the target's own checkpoint as the drafter…")
+        let drafterContext = try await MTPDrafterModelFactory.shared.load(
+            from: #hubDownloader(),
+            using: #huggingFaceTokenizerLoader(),
+            configuration: ModelConfiguration(id: modelID))
+        let drafter = MTPDrafterModelFactory.shared._wrap(drafterContext)
+        speculative = try SpeculativeDecodingConfig(mtpDrafter: drafter, blockSize: 2)
+        print("spec decode: ON (MTP self-drafter from \(modelID), blockSize=2)")
+    }
     // L1 (IMPROVE19): the budget knob's state, named on every run — the
     // instrument records its own posture.
     if let budget = MLXBridge.thinkingBudgetOverride {
