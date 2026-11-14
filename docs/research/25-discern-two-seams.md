@@ -119,7 +119,7 @@ read latency is **7.6 s mean, 4.1 turns and 5.7 tool calls per query**.
    client-declared with no collision surface at all.
 2. **The four-way terminal contract.** Our abstain gate is binary and
    retrieval-keyed; there is no `clarify` (surviving ambiguity → ask), no
-   `update` action, and no earned-*answer* gate forcing an ambiguity check
+   `update` action, and no earned-answer gate forcing an ambiguity check
    before commit. The paper's point is that these are **decidable functions of
    the store** — implementable without any LLM judgment, which is precisely the
    on-device-friendly shape.
@@ -135,6 +135,35 @@ read latency is **7.6 s mean, 4.1 turns and 5.7 tool calls per query**.
    directly adoptable as a probe against our store — the same shape
    LongMemEval (ICLR 2025) pioneered as knowledge-update and abstention
    abilities, which DISCERN then industrialized.
+
+**Audited against the source, 2026-11-14 (the pass after the first write —
+two of the four verdicts above were partially wrong and the blog carries the
+corrected text):** (1) the collision surface is **OPEN** — the one real gap;
+(2) the terminal contract is **PARTIAL, not absent** —
+`Recommendation::ClarifyQuery` exists in `src/search/quality.rs` and
+`DeferralOutcome::Clarify` in `src/workflow/confidence.rs`, but the deferral
+table routes every class to a human today ("clarify/stop are not yet
+reachable" in the auto path, by documented decision) and `update` exists only
+as write-time revise; what DISCERN adds is the machine-emitted half, and
+whether it *should* fire automatically here is a product question — this
+store's contract deliberately hands ambiguity to a person; (3) earned
+commitment is **SPLIT** — the answer side is closed and *stricter than the
+paper's* (the kernel's citation gate sentence-splits and span-matches the
+writer's prose against evidence by deterministic code, citation indices
+derived never model-reported — "a model cannot fabricate an index it does not
+produce" — and zero verified sentences → abstain; `src/agentloop/cascade.rs`),
+while earned-abstain against a collision family is open (absence is keyed on
+hit set + calibrated low-confidence — the same root as gap 1); (4) the
+evaluation axis is **PARTIAL** — the cascade bench already scores abstain
+correctness with preregistered absence markers and anti-fabrication grading;
+the missing pieces are the entity-trap taxonomy and the precision/recall
+framing. The multi-source frame this audit sharpened: the store is a synthesis
+of the pre-DISCERN literature — the bi-temporal filter is "exactly the
+Graphiti" one (note 01), the PPR retrieval is HippoRAG-2-style
+(`src/search/graph_ppr.rs`, note 04), TRACE typed edges (note 03), submodular
+packing (note 02) — the same papers DISCERN builds on and benchmarks against.
+Its genuine delta is the read-time navigation contract and the abstention
+trap taxonomy.
 
 **What brain-server has that DISCERN does not (the direction their paper
 cannot see):** every *security* seam. Their write path screens nothing — no
