@@ -1336,8 +1336,12 @@ impl WatchTransport {
                 if url_host != *host {
                     return Err(WatchError::FetchHostMismatch);
                 }
+                // The REQUEST is built from the parsed, scheme-enforced Url —
+                // never from the raw string (the non-https-url law: the
+                // pre-I/O checks above run on the parsed value, and the same
+                // verified value is what the client consumes).
                 let mut resp = client
-                    .get(url)
+                    .get(parsed)
                     .send()
                     .await
                     .map_err(|_| WatchError::TransportFailed)?;

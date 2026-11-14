@@ -1405,9 +1405,20 @@ impl ScholarTransport {
         match self {
             ScholarTransport::Replay(replay) => replay.get(url).await,
             ScholarTransport::Live { client, throttle } => {
+                // The transport's own https enforcement, on the SAME value
+                // the client consumes: the URL is parsed, its scheme is
+                // enforced on the parsed value, and the REQUEST is built
+                // from that verified Url — never from the raw string (the
+                // allowlist's `https://` strip_prefix is the host law; this
+                // is the scheme law, refusing by name before any I/O or
+                // budget spend).
+                let parsed = reqwest::Url::parse(url).map_err(|_| ScholarError::HostRefused)?;
+                if parsed.scheme() != "https" {
+                    return Err(ScholarError::HostRefused);
+                }
                 throttle.acquire().await;
                 let resp = client
-                    .get(url)
+                    .get(parsed)
                     .header(reqwest::header::ACCEPT, "application/json")
                     .send()
                     .await
