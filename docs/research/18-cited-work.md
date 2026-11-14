@@ -86,7 +86,7 @@ retriever cannot rewrite the query on its own. The citation is for the technique
 being gated, not for the gate.
 Used in [07-prf-evidence](./07-prf-evidence.md).
 
-- Lavrenko, V., & Croft, W. B. (2001). *Relevance-Based Language Models.* IJCAI 2001. <https://www.ijcai.org/Proceedings/01/Papers/129.pdf>
+- Lavrenko, V., & Croft, W. B. (2001). *Relevance-Based Language Models.* IJCAI 2001. <https://doi.org/10.1145/3130348.3130376>
 - Ponte, J. M., & Croft, W. B. (1998). *A Language Modeling Approach to Information Retrieval.* SIGIR '98. <https://doi.org/10.1145/290941.291008>
 
 *Correction worth recording:* this entry previously attributed PRF to Cormack
@@ -264,7 +264,7 @@ the receiver. The loop's `ipass_facts` renders sender-owned sections only, and a
 escalation lands exactly one pre-filled offer draft behind a human gate.
 Used in [14-governed-diagnostic-loop](./14-governed-diagnostic-loop.md).
 
-- Starmer, J. W., et al. (2014). *Changes in Medical Errors after Implementation of a Handoff Program.* NEJM 371(14). <https://doi.org/10.1056/NEJMsa1403936>
+- Starmer, J. W., et al. (2014). *Changes in Medical Errors after Implementation of a Handoff Program.* NEJM 371(14). <https://doi.org/10.1056/NEJMsa1405556>
 
 ### Emergency Severity Index, v4 (AHRQ) and Emergency Triage (Manchester)
 
@@ -276,7 +276,7 @@ never binds resourcing.
 Used in [14-governed-diagnostic-loop](./14-governed-diagnostic-loop.md).
 
 - Gilboy, R., et al. *Emergency Severity Index.* AHRQ. <https://www.ahrq.gov/priority/safety/esi/>
-- Jones, M., & Kelly, J. *Emergency Triage.* Manchester Triage Group. <https://www.urgentcareinternational.com/>
+- Jones, M., & Kelly, J. *Emergency Triage.* Manchester Triage Group. Wiley. <https://doi.org/10.1002/9781118299029>
 
 ## Software engineering research
 
@@ -288,7 +288,7 @@ are the empirical backing for gates rather than for memory mechanics.
 - Bacchelli & Bird (2013), ICSE. Defect comments are roughly one in seven of review comments; understanding the change is the hard part. <https://doi.org/10.1109/ICSE.2013.6606617>
 - McIntosh et al. (2016), Empirical Software Engineering. Review coverage, participation, and expertise correlate with post-release defects. <https://rebels.cs.uwaterloo.ca/papers/emse2016_mcintosh.pdf>
 - Sadowski et al. (2018), ICSE SEIP. Google's study of nine million reviewed changes. <https://research.google/pubs/modern-code-review-a-case-study-at-google/>
-- Becker et al., METR (2025). Randomized trial: experienced open-source developers were 19% slower with AI tools while forecasting a speedup beforehand. <https://metr.org/blog/2025-07-10-2025-early-2025-ai-experienced-os-dev-study/> · <https://arxiv.org/abs/2507.09089>
+- Becker et al., METR (2025). Randomized trial: experienced open-source developers were 19% slower with AI tools while forecasting a speedup beforehand. <https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/> · <https://arxiv.org/abs/2507.09089>
 - Google Cloud, *DORA Accelerate State of DevOps 2024*. <https://dora.dev/research/2024/dora-report/>
 
 ## What this note is not

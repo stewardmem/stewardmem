@@ -169,6 +169,8 @@
 - [The Post-Convergence Watch, October 2026](./research/22-post-convergence-watch-oct-2026.md)
 - [The Agent-Memory Research Sweep, November 2026](./research/23-agent-memory-research-nov-2026-sweep.md)
 - [The Local-Inference Science Round, November 2026](./research/24-local-inference-science-nov-2026.md)
+- [DISCERN and the two seams](./research/25-discern-two-seams.md)
+- [The REKRA plan preregistration](./REKRA_PLAN_PREREGISTRATION_2026-11-14.md)
 
 # Blog
 
@@ -200,6 +202,10 @@
 - [A gate that refuses everything is not a gate](./blog/25-a-gate-that-refuses-everything.md)
 - [Delete is a verb, not a promise](./blog/26-delete-is-a-verb-not-a-promise.md)
 - [Catch it on the way in, because it comes back every turn](./blog/27-catch-it-on-the-way-in.md)
+- [Speed is a knob. Honesty is a route.](./blog/28-speed-is-a-knob-honesty-is-a-route.md)
+- [Two seams, found twice](./blog/29-two-seams-found-twice.md)
+- [Adopting the unreleased engine](./blog/13-adopting-the-unreleased-engine.md)
+- [Every binding gets the seam](./blog/14-every-binding-gets-the-seam.md)
 
 # Product site
 

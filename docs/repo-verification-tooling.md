@@ -1,7 +1,7 @@
 # Repo Verification Tooling — the gates with no other doc home
 
 The scripts below enforce repo hygiene but are documented nowhere else.
-[`scripts/env-truth.sh`](../scripts/env-truth.sh) (the env-var truth gate) is the
+[`scripts/env-truth.sh`](https://github.com/stewardmem/stewardmem/blob/main/scripts/env-truth.sh) (the env-var truth gate) is the
 sibling reference: it is already listed in the [Scripts appendix](release-checklist.md#scripts-appendix).
 This page gives each unlisted gate the same treatment: what it checks, when it
 runs, the exact invocation, how to read a failure, and its honest ceiling.
@@ -9,7 +9,8 @@ runs, the exact invocation, how to read a failure, and its honest ceiling.
 Related doors: [release-checklist.md](release-checklist.md) (the six artifacts +
 the gates that must stay green) and [CONTRIBUTING](CONTRIBUTING.md) (the
 `fmt` / `clippy` / `test` quality gates every PR must pass). The local
-[pre-push hook](../.git/hooks/pre-push) enforces CHANGELOG release notes +
+pre-push hook (machine-local, `.git/hooks/pre-push` — not part of the
+published tree) enforces CHANGELOG release notes +
 `cargo fmt --check` + `lipstyk-gate.sh --hook`.
 
 ## `scripts/docs-truth.sh` (+ `scripts/docs-truth.py`)
@@ -80,7 +81,7 @@ closed on the two modes that make a naive local run lie: a moving base
 new files (untracked files appear in no `git diff`, closed via
 `git add -N` intent-to-add, content unstaged and reversible with `git reset`).
 
-When it runs: the [pre-push hook](../.git/hooks/pre-push) runs
+When it runs: the local pre-push hook (`.git/hooks/pre-push`) runs
 `scripts/lipstyk-gate.sh --hook`; CI runs the equivalent diff-watchdog job
 (the scan list is pinned against this script by
 `lipstyk_gate_scan_paths_match_the_ci_watchdog`, so the two cannot drift);

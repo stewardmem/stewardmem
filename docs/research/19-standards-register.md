@@ -211,7 +211,7 @@ single-platform establishment. Reporting runs through **ENISA**'s single
 platform, with the national CSIRT or coordinator CSIRT as the receiving
 authority.
 - <https://eur-lex.europa.eu/eli/reg/2024/2847/oj>
-- <https://www.enisa.europa.eu/topics/csr/cyber-resilience-act>
+- <https://digital-strategy.ec.europa.eu/en/policies/cyber-resilience-act>
 
 ## Security and risk frameworks
 

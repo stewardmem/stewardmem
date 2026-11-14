@@ -13,7 +13,9 @@ makes the landing a config+key exercise, not a protocol rewrite. The
 horizon we plan against: NIST IR 8547 / OMB M-26-15 / CNSA 2.0
 (key-establishment migration complete by 2030-12-31; signatures 2031).
 Sources: <https://csrc.nist.gov/pubs/ir/8547/final> ·
-<https://nvlpubs.nist.gov/nistpubs/specialpublications/NIST.SP.1800-38B.pdf>
+<https://www.nccoe.nist.gov/applied-cryptography/migration-to-pqc>
+(the NCCoE SP 1800-38 practice-guide drafts, incl. the B volume this file's
+shape follows, were superseded by white papers on the project page)
 
 ## Algorithm inventory
 

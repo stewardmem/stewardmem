@@ -9,7 +9,8 @@ without its dictionary entry. All rates are **integer ten-thousandths**
 (10000 = 100%); per-thousand densities are hundredths; times are seconds;
 money is cents.
 
-**Machine-readable twin:** [`metrics/metrics.json`](../metrics/metrics.json)
+**Machine-readable twin:** [`metrics/metrics.json`](https://github.com/stewardmem/stewardmem/blob/main/metrics/metrics.json)
+(repo file — the Pages site ships the book only)
 (schema-versioned, `scorer_version`-stamped) mirrors every **scoreboard /
 report-cadence** entry below with the full attribute set structured — name ·
 formula · unit · source table.column · window · inclusion/exclusion · citation ·

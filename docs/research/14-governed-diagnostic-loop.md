@@ -37,7 +37,7 @@ cannot argue with, in deterministic Rust, with every refusal citing its law.
   situation-awareness / synthesis sections, assembled — never synthesized —
   by the sender. The loop's `ipass_facts` renders sender-owned sections
   only; the C3 escalated case lands exactly one pre-filled offer draft,
-  HITL-gated. <https://doi.org/10.1056/NEJMsa1403936>
+  HITL-gated. <https://doi.org/10.1056/NEJMsa1405556>
 - **Triage acuity.** Gilboy et al., *Emergency Severity Index, v4* (AHRQ),
   and Mackway-Jones et al., *Emergency Triage* (the Manchester system):
   banded acuity with wait windows. <https://www.ahrq.gov/priority/safety/esi/>

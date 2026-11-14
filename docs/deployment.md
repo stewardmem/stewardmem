@@ -641,10 +641,10 @@ service environment and add only site-specific values (`BRAIN_DB_PATH`,
 
 | Tier | Who | Shape | Profile |
 |---|---|---|---|
-| **T1 solo** | One operator / micro-centre | loopback bind, single domain, single DB, no roles | [`deploy/tiers/t1.env`](../deploy/tiers/t1.env) |
-| **T2 team** | A small team (≤ ~25 agents) | roles enabled, HITL proposal review queue on, crew presence visible | [`deploy/tiers/t2.env`](../deploy/tiers/t2.env) |
-| **T3 site** | A site or BPO campaign | multi-domain/multi-DB, calibration + public KB feedback live, WFM feeds feeding the centre's tool | [`deploy/tiers/t3.env`](../deploy/tiers/t3.env) |
-| **T4 global** | Multi-site / multi-region | T3 plus knowledge parcels, residency stamps, follow-the-sun handover via the shift ring | [`deploy/tiers/t4.env`](../deploy/tiers/t4.env) |
+| **T1 solo** | One operator / micro-centre | loopback bind, single domain, single DB, no roles | [`deploy/tiers/t1.env`](https://github.com/stewardmem/stewardmem/blob/main/deploy/tiers/t1.env) |
+| **T2 team** | A small team (≤ ~25 agents) | roles enabled, HITL proposal review queue on, crew presence visible | [`deploy/tiers/t2.env`](https://github.com/stewardmem/stewardmem/blob/main/deploy/tiers/t2.env) |
+| **T3 site** | A site or BPO campaign | multi-domain/multi-DB, calibration + public KB feedback live, WFM feeds feeding the centre's tool | [`deploy/tiers/t3.env`](https://github.com/stewardmem/stewardmem/blob/main/deploy/tiers/t3.env) |
+| **T4 global** | Multi-site / multi-region | T3 plus knowledge parcels, residency stamps, follow-the-sun handover via the shift ring | [`deploy/tiers/t4.env`](https://github.com/stewardmem/stewardmem/blob/main/deploy/tiers/t4.env) |
 
 ### Per-tier config matrix
 

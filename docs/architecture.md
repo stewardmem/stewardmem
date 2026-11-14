@@ -1334,7 +1334,11 @@ wrong, the correction is recorded rather than silently applied.
 
 - **[R1]** Argyris, C. & Schön, D. A. (1974). "Organizational Learning and
   Action." *Harvard Business Review*, May–June 1974. — single-loop learning.
-  <https://hbr.org/1974/05/organizational-learning-and-action>
+  *(The magazine's own archive no longer carries a copy of this piece — the
+  hbr.org URL that used to serve it is 404 and no publisher or archive record
+  remains; the citation stands on the bibliography record, and the link is
+  removed rather than pointing somewhere false. The verifiable companion piece
+  is [R2] below.)*
 - **[R2]** Argyris, C. (1977). "Double Loop Learning in Organizations."
   *Harvard Business Review*, September 1977. — the governing-variable
   distinction. Expanded with Schön in *Organizational Learning: Action as Adaptive

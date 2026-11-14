@@ -34,5 +34,7 @@ proof map.
 - [Catch it on the way in, because it comes back every turn](./27-catch-it-on-the-way-in.md), *why the injection screen sits at the write seam, and what fail-open costs*
 - [Speed is a knob. Honesty is a route.](./28-speed-is-a-knob-honesty-is-a-route.md), *six engines, two questions, one clamp: the tiered chat architecture the measurements demand*
 - [Two seams, found twice](./29-two-seams-found-twice.md), *DISCERN (Amazon, Nov 11) independently published the architecture shipped and documented here since September — the complete mapping, where they lead, where they are blind*
+- [Adopting the unreleased engine](./13-adopting-the-unreleased-engine.md), *the public-facing account of the main-adoption round — riding the engine Apple has not yet released, measured before adoption (2026-11-14)*
+- [Every binding gets the seam](./14-every-binding-gets-the-seam.md), *the public-facing account of the security round — a gate for what the model reads, a budget for what it thinks (2026-11-14)*
 
 Positions and one-liners live in the [media kit](../media-kit.md).
