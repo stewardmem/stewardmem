@@ -826,6 +826,21 @@ pub async fn run_recall(
         span.record("query_hash", crate::otel::query_hash(&trace_query));
     }
 
+    // THE OUTPUT-SIDE READ SEAM (G-1): every row the core emits is
+    // sanitized — the twin of the clamp law above, on the other side of
+    // the boundary. Every binding of run_recall (the /recall handler, UMP
+    // recall, CHAT GROUNDING — the SSE event's hit.title, fence_hits' hit
+    // content, the carried-forward and cascade maps) and every future
+    // binding consumes `tagged`; the core hands them sanitized rows even
+    // if a handler forgets. results_to_hits' own pass is the suspenders
+    // over this belt — idempotent (pinned by the hostile-corpus pin in
+    // gate.rs), so the double pass is a no-op. The trust posture is
+    // UNCHANGED: loopback (None) and admin principals keep raw text
+    // (has_pii_read), pinned by P2/P3.
+    for (row, _domain) in tagged.iter_mut() {
+        crate::gate::sanitize_search_result(row, principal);
+    }
+
     Ok(RecallOutcome {
         tagged,
         tel,
