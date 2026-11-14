@@ -32,3 +32,10 @@ libsqlite3-sys = { version = "0.40.0", features = [] }
 [dev-dependencies]
 tokio = { version = "1.48.0", features = ["rt", "macros"] }
 rand = "0.9"
+
+# The version pin IS this dependency's purpose: the [patch] override's whole
+# point is forcing the patched libsqlite3-sys resolution (RUSTSEC-2026-0459/
+# 0502), and no source import exists — the unused-dependency watchdog would
+# otherwise read the pin as dead. Machete's own documented escape hatch.
+[package.metadata.cargo-machete]
+ignored = ["libsqlite3-sys"]

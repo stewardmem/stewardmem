@@ -13,9 +13,9 @@ patch line, and neither can move upstream:
 | `presage-store-sqlite` | 0.8.0-dev (whisperfish/presage rev `6f630791`, the rev this tool pins) | `"0.36.0"` (^0.36 → <0.37) | **upstream `main` still pins `"0.36.0"` explicitly** (verified 2026-11-14) — moving the rev does not lift the cap |
 
 So this directory vendors BOTH crates as **byte-identical upstream source
-with exactly one manifest line changed each**, wired in via `[patch]` in
-the tool's `Cargo.toml`. The copies are compile artifacts of the same
-source the lockfile resolved — zero code deltas.
+with only the manifest deltas listed below** (no source file is touched),
+wired in via `[patch]` in the tool's `Cargo.toml`. The copies are compile
+artifacts of the same source the lockfile resolved — zero code deltas.
 
 ## The deltas (the ONLY edits)
 
@@ -32,6 +32,13 @@ source the lockfile resolved — zero code deltas.
   (`presage-store-sqlite/`). License AGPL-3.0-only — same as this tool
   (see the tool's own license note); the upstream `LICENSE.md` lives at
   the pinned checkout root and governs this copy.
+- `vendor/presage-store-sqlite/Cargo.toml`: a
+  `[package.metadata.cargo-machete]` block ignoring `libsqlite3-sys` — the
+  version pin IS the dependency's purpose here (forcing the patched
+  resolution; no source import exists), and cargo-machete read that as an
+  unused dependency on 2026-11-14 (the gate first surfaced once the clippy
+  red above it was repaired). This is machete's own documented escape
+  hatch, applied to the exact crate whose manifest pins on purpose.
 
 ## The resolved chain (why 0.40.0 and not 0.39.x)
 
