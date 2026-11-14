@@ -4,25 +4,33 @@ StewardMem ships on a strict linear release chain. This page is the roadmap summ
 
 ## Current status
 
-- **Latest server version:** 1.28.65 "Meridian" (2026-09-07) — content hygiene
-  across the model seam, shipped across three trees the same day: `/suggest`
-  joins the untrusted-evidence contract (`untrusted: true` on every hit,
-  recall/search parity); the openclaw plugin's invisible-Unicode strip is
-  pinned to the server's canonical set by a cross-tree drift fixture; the
-  openclaw host strips smuggled Unicode + neutralizes forged host markers at
-  the one plugin-merge seam; MCP tool results ride the untrusted-content
-  envelope. The line's first live end-to-end proof (poisoned memory → real
-  recall → host merge → composed prompt, forgeries absent) is retained in
-  `docs/MERIDIAN_PROOF_20260907.md`.
-- **Latest client version:** 1.28.23 — ships alongside the server.
-- **Latest plugin version:** 0.5.1 (2026-09-07) — the Meridian strip-set
-  parity sync; rides brain-server v1.28.14 and later.
-- **Active line:** the SEAM LINE (v1.28.63 → v1.28.69, one theme per release,
-  closing every code-closeable finding of the 2026-09-06 joint
-  brain-server × openclaw security audit) followed by the REGISTER LINE
-  (v1.28.70 → v1.28.75). Next releases: .66 Truthglass (the approver sees
-  the truth), .67 Pin (tool + signer identity pinned), .68 Shutter (image +
-  beacon egress), .69 Deadbolt (egress + process boundary).
+- **Latest server version:** 1.29.44 (2026-11-14) — the standing-state repair
+  release: every CI red since 2026-11-09 closed at its mechanism (the no-SQL
+  handler pin, the `cargo deny` license allowlist, the `cargo machete` vendor
+  marker, the plugin drift guard's retired client pointers), RUSTSEC-2026-0459
+  + 0502 closed through the vendored `[patch]` override, both CodeQL
+  `non-https-url` alerts fixed at the transport sink, an OCR capability probe
+  that names a machine unable to recognize, and the dependency tree re-derived
+  to the latest in-range versions with all audits clean. It rides over
+  1.29.43's loop lanes (certainty, trust, ranked and re-entering cases,
+  splits, eval hygiene, hand-down, chat follow-ups, the tuned native tiers,
+  the armed rerank tier). The per-version record is
+  [CHANGELOG.md](./CHANGELOG.md); the per-release security register is
+  [SECURITY.md](./SECURITY.md).
+- **Client:** the Dioxus client line ended at 1.28.23 and its tree left the
+  repository on 2026-11-13 (the parity gates it pinned had long passed). The
+  operator GUI is the **SvelteKit + Tauri shell** (`shell/`), whose own
+  version line is deliberately frozen at `1.0.0` — the updater compares
+  KERNEL versions, not the shell line.
+- **Latest plugin version:** 0.6.14 (`@markfietje/brain-server-openclaw`) —
+  independently versioned; rides the current server line.
+- **Active line:** v1.29.x, the governed delivery line — chat-first IA,
+  governed persistence, the engine executor, the replay-gate-promoted release
+  act. What is next lives in [roadmap.md](./roadmap.md) and the
+  `## [Unreleased]` engineering records at the top of CHANGELOG.md, never in
+  a pre-announced list here (this page's old "next releases" block named
+  v1.28.66–.69, all of which shipped in 2026-09 — the block was stale until
+  this rewrite).
 - **v2.0.0 "Cortex"** (multi-team tenancy) remains the first externally-pilotable release — it consumes the v1.2 AuthN/AuthZ foundation.
 
 ## The release line (v0.9 → v1.17)

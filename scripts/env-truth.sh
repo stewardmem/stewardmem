@@ -16,7 +16,7 @@
 # Scope (deliberate):
 #   contract docs: docs/configuration.md docs/deployment.md (what operators read)
 #   live config:   deploy/tiers/*.env (what actually exports)
-#   code:          src crates client tools (where a knob would be read)
+#   code:          src crates tools (where a knob would be read; the Dioxus client tree left 2026-11-13)
 # Excluded on purpose: CHANGELOG.md, docs/AGENTS_HISTORY.md, IMPLEMENTATION_PLAN_*
 #   files — append-only history; past claims there are corrected by new notes,
 #   never rewritten.
@@ -67,7 +67,7 @@ REMOVED_KNOBS=(
 )
 
 # Arm 5 — installer-script knobs: read by scripts/install-service.sh /
-# deploy/install.sh, which sit outside the src|crates|client|tools trees the
+# deploy/install.sh, which sit outside the src|crates|tools trees the
 # code-shape regex walks. Documented so operators can find them; consumed by
 # the pinned external process named in the evidence.
 INSTALLER_KNOBS=(
@@ -83,7 +83,7 @@ INSTALLER_KNOBS=(
 implemented() {
   local name="$1" entry
   if rg -q --no-messages -e "env::(var|var_os|set_var|remove_var)\([^)]*${name}" \
-      "$REPO/src" "$REPO/crates" "$REPO/client" "$REPO/tools" 2>/dev/null; then
+      "$REPO/src" "$REPO/crates" "$REPO/tools" 2>/dev/null; then
     return 0
   fi
   for entry in "${PINNED_CALLSITES[@]}"; do
@@ -171,7 +171,7 @@ if ls "$REPO"/deploy/tiers/*.env >/dev/null 2>&1; then
     while IFS= read -r name; do
       [[ -z "$name" ]] && continue
       if ! implemented "$name"; then
-        echo "ERR: tier file $f exports '$name' with zero code hits (src|crates|client|tools)" >&2
+        echo "ERR: tier file $f exports '$name' with zero code hits (src|crates|tools)" >&2
         fail=1
       fi
     done < <(rg -o --no-filename 'BRAIN_[A-Z0-9_]+' "$f" 2>/dev/null | sort -u || true)

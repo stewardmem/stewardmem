@@ -566,9 +566,11 @@ async fn ocr_text_enters_verbatim_never_corrected() {
         .collect();
     assert_eq!(
         imports,
-        vec!["CoreGraphics", "Foundation", "Vision"],
+        vec!["CoreGraphics", "CoreText", "Foundation", "Vision"],
         "the sidecar's imports are exactly the rasterization+recognition set — \
-         a network or model import is a found bug: {imports:?}"
+         CoreText joined for the capability probe's synthetic stimulus (the \
+         2026-11-14 ocr_assets_unavailable verdict renders text to measure \
+         against); a network or model import is a found bug: {imports:?}"
     );
 }
 
@@ -598,9 +600,19 @@ fn recognition_is_sequential_in_the_sidecar_source() {
              the measured hang hazard (the plan's §0.2.2); sequential is the law"
         );
     }
+    // The recognition request exists (the pin must not pass vacuously) —
+    // and BOTH call sites ride the one construction: the page loop AND the
+    // capability probe (ocr_assets_unavailable's measured stimulus), each
+    // awaiting its perform sequentially.
     assert!(
-        source.contains("try await request.perform"),
-        "the recognition request exists (the pin must not pass vacuously)"
+        source.contains("makeRecognizeTextRequest()"),
+        "the one request construction exists (the pin must not pass vacuously)"
+    );
+    assert_eq!(
+        source.matches(".perform(on:").count(),
+        2,
+        "exactly two recognition sites: the sequential page loop and the \
+         capability probe — a third is a found bug"
     );
 }
 

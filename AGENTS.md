@@ -1,5 +1,25 @@
 # Agent Execution Log — StewardMem
 
+> **RELEASE v1.29.44 (2026-11-14): the standing-state repair release —
+> every CI red from 2026-11-09 closed at its mechanism (the no-SQL handler
+> pin's seed moved to the recall core; `cargo deny` licenses `blessing`/
+> `WTFPL` added as dated named acts; `cargo machete`'s vendor-pin marker;
+> the plugin drift guard's retired client pointers removed from both
+> fixture comments and the lane-pins table; the shell e2e cleanup drill
+> gated on session-creating posture with the bridge-less 404 pin; the OCR
+> capability probe + `ocr_assets_unavailable` honest skip on runners whose
+> Vision stack cannot recognize), RUSTSEC-2026-0459 + 0502 CLOSED via the
+> vendored `[patch]` override (tools/signal-gateway/vendor/, the
+> tools-locks pin teaching the sanctioned redirect), both CodeQL
+> `non-https-url` alerts fixed at the transport sink (requests built from
+> the parsed, scheme-enforced Url), and the dependency tree re-derived to
+> the latest in-range versions across 7 Cargo lockfiles + shell/plugin
+> (jsdom 31 + @napi-rs/canvas, tailwind-variants 4, kit 3.2; paraglide 3
+> and typescript 7 measured and REFUSED — the envelope band and the
+> toolchain are the named reasons). This note sits above R151's — the
+> release wrap per docs/release-checklist.md step 6, which the 1.29.43
+> wrap skipped; the drift ends here.**
+
 > **R151 "The first offered update" (2026-11-03/04): THE CUT IS DONE —
 > the stapled Tools DMG landed on the page, the sums are green over the
 > final published set, the staple is verified from the internet — and

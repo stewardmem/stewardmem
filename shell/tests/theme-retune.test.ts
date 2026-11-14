@@ -392,19 +392,23 @@ test('the_two_scroll_columns_draw_their_bar_only_while_the_pointer_is_inside_and
 		'exactly the two measured regions are scroll columns: the session region and <main>'
 	).toEqual(['session-region', 'main']);
 
-	const thumb = (el: HTMLElement): string => computed(el).getPropertyValue('--scrollbar-thumb').trim();
+	// The emitted surface, not the computed layer: the pin asserts the
+	// component's own flip (idle 'transparent' → live var), and jsdom 31
+	// resolves var() inside computed custom properties (the live token goes
+	// guaranteed-invalid when the global sheet is absent from the test DOM).
+	const thumb = (el: HTMLElement): string => el.style.getPropertyValue('--scrollbar-thumb').trim();
 
 	for (const column of columns) {
 		const name = column.getAttribute('data-testid') ?? column.tagName.toLowerCase();
 		expect(thumb(column), `${name}: idle, the thumb is transparent`).toBe('transparent');
 
-		column.dispatchEvent(new Event('pointerenter'));
+		column.dispatchEvent(new PointerEvent('pointerenter'));
 		flushSync();
 		expect(thumb(column), `${name}: pointer inside, the thumb is drawn`).toBe('var(--scrollbar-thumb-live)');
 
 		vi.useFakeTimers();
 		try {
-			column.dispatchEvent(new Event('pointerleave'));
+			column.dispatchEvent(new PointerEvent('pointerleave'));
 			flushSync();
 			expect(thumb(column), `${name}: just left, the bar lingers`).toBe('var(--scrollbar-thumb-live)');
 			vi.advanceTimersByTime(1999);

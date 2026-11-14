@@ -114,16 +114,25 @@ completeness="skipped (no git repository or missing tags)"
 if git rev-parse --git-dir >/dev/null 2>&1; then
   prev=$(sed -nE 's/^## \[([0-9][0-9.]*)\].*/\1/p' CHANGELOG.md | sort -V \
         | awk -v v="$VERSION" '$0 == v { print p } { p = $0 }')
+  # The range END: the release tag when it exists, else HEAD — the cut is
+  # IN PROGRESS between the version bump and the tag (the bump commit rides
+  # main first, release.sh tags it after), and the completeness arm must
+  # run there too: the version being cut is exactly the cut this check
+  # exists to guard. A skip would leave the gate shape-only on main.
+  if git rev-parse -q --verify "v$VERSION^{commit}" >/dev/null; then
+    range_end="v$VERSION"
+  else
+    range_end="HEAD"
+  fi
   if [ -n "$prev" ] \
-     && git rev-parse -q --verify "v$prev^{commit}" >/dev/null \
-     && git rev-parse -q --verify "v$VERSION^{commit}" >/dev/null; then
+     && git rev-parse -q --verify "v$prev^{commit}" >/dev/null; then
     awk -v ver="$VERSION" '
       /^## \[/ { insec = ($0 ~ "^## \\[" ver "\\]"); next }
       !insec { next }
       { print }
     ' CHANGELOG.md > /tmp/release-notes-section.$$
     grep -oE '[0-9a-f]{7,40}' /tmp/release-notes-section.$$ | sort -u > /tmp/release-notes-tokens.$$ || true
-    git log --format='%H %s' --no-merges "v$prev..v$VERSION" > /tmp/release-notes-range.$$
+    git log --format='%H %s' --no-merges "v$prev..$range_end" > /tmp/release-notes-range.$$
     # the subject sits AFTER the sha on each line — the exclusion anchors
     # must name that gap, or they exclude nothing and every range commit
     # becomes a candidate (the first live run found exactly that).
@@ -150,19 +159,19 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
     while read -r tok; do
       [ -n "$tok" ] || continue
       c=$(git rev-parse -q --verify "$tok^{commit}" 2>/dev/null) || continue
-      if git merge-base --is-ancestor "$c" "v$VERSION" 2>/dev/null \
+      if git merge-base --is-ancestor "$c" "$range_end" 2>/dev/null \
          && ! git merge-base --is-ancestor "$c" "v$prev" 2>/dev/null; then
         continue
       fi
-      echo "CITATION::  $tok does not resolve to a commit in v$prev..v$VERSION" >&2
+      echo "CITATION::  $tok does not resolve to a commit in v$prev..$range_end" >&2
       badcit=$((badcit + 1))
     done < /tmp/release-notes-tokens.$$
     if [ "$badcit" -gt 0 ]; then
       rm -f /tmp/release-notes-*.$$
-      fail "CITATION: $badcit cited commit(s) did not ship in v$prev..v$VERSION — a proof commit must be a commit this release carries."
+      fail "CITATION: $badcit cited commit(s) did not ship in v$prev..$range_end — a proof commit must be a commit this release carries."
     fi
     cand=$(wc -l < /tmp/release-notes-candidates.$$ | tr -d ' ')
-    completeness="$cand candidate commit(s) named, citations verified (range v$prev..v$VERSION)"
+    completeness="$cand candidate commit(s) named, citations verified (range v$prev..$range_end)"
     rm -f /tmp/release-notes-section.$$ /tmp/release-notes-tokens.$$ /tmp/release-notes-range.$$ /tmp/release-notes-candidates.$$
   fi
 fi

@@ -11,12 +11,19 @@ private plans archive on 2026-10-04 — this page is the in-repo roadmap.)
 
 ## Current status
 
-**v1.29.x — the current server line (1.29.35 — the loop runs live: the
-on-device pilot's first real measurements, the afm-stdio transport and the
-CRANK scheduler's first flip, over 1.29.34's live chat answers, 1.29.33's
-durable sessions, 1.29.32's grounded chat spine, governed row hashes and
-self-installing app, with the two audit passes of 1.29.3 "Hardening"
-beneath it).** StewardMem ships one operator
+**v1.29.x — the current server line (1.29.44 — the standing-state repair
+release: every CI red since 2026-11-09 closed at its mechanism, the
+RUSTSEC-2026-0459/0502 close through the vendored `[patch]` override, both
+remaining CodeQL alerts fixed at the transport sink, an OCR capability probe
+that names a machine unable to recognize, and the dependency tree re-derived
+to the latest in-range versions with all audits clean; over 1.29.43's loop
+lanes — certainty, trust, ranked and re-entering cases, splits, eval hygiene,
+hand-down, chat follow-ups, the tuned native tiers, the armed rerank tier —
+1.29.35's live loop (the on-device pilot's first real measurements, the
+afm-stdio transport, the CRANK scheduler's first flip), 1.29.34's live chat
+answers, 1.29.33's durable sessions, 1.29.32's grounded chat spine, governed
+row hashes and self-installing app, with the two audit passes of 1.29.3
+"Hardening" beneath it).** StewardMem ships one operator
 GUI over one HTTP API: the **SvelteKit + Tauri shell** (`shell/` — a
 typed-wire SvelteKit SPA with a Tauri desktop core, its
 client generated from the kernel's `openapi.yaml`). `/app` serves the shell

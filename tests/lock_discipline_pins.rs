@@ -640,8 +640,12 @@ fn no_ignored_advisory_is_fixed_in_the_current_lock() {
         }
     }
     assert!(
-        pairs.len() >= 7,
-        "the ignore list shrank without its register row: {} entries",
+        pairs.len() >= 6,
+        "the ignore list shrank without its register row: {} entries (the \
+         2026-11-14 prune of the three zip waivers — RUSTSEC-2026-0367/0368/0369, \
+         cleared when tauri-plugin-updater's requirement reached the patched 9.x \
+         line — is registered in AUDIT.md; the floor follows the register, and \
+         the next prune moves it again)",
         pairs.len()
     );
     let locks = [

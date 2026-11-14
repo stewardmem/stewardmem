@@ -25,9 +25,10 @@ let package = Package(
     ],
     dependencies: [
         // The MLX tier (CG-10): the bridge child's `.mlx` session kind
-        // constructs `ChatSession`s through this package — whose own pinned
-        // `mlx-swift-lm` (`from: 3.32.3`) is the dependency this lane did NOT
-        // add a new version of. Local path, not a registry fetch.
+        // constructs `ChatSession`s through this package — whose own
+        // `mlx-swift-lm` is revision-pinned to upstream main since the
+        // 18-KV MAIN ADOPTION (2026-11-14; the return-to-tags law re-points
+        // it when 3.33.0 tags). Local path, not a registry fetch.
         .package(path: "../shell-macos-mlx"),
     ],
     targets: [

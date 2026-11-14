@@ -32,7 +32,7 @@
 # retrieval-quality golden pins and the recall floors.
 #
 # RUSTSEC-2024-0429 (glib 0.18.5 VariantStrIter unsoundness / GHSA-wrw7-89jp-8q8g):
-# fixed ONLY in glib ≥ 0.20.0. The shell (and client) lockfiles pin
+# fixed ONLY in glib ≥ 0.20.0. The shell's lockfile pins
 # glib 0.18.5 via tauri 2.x → gtk 0.18 → glib ^0.18 (Linux backend only;
 # macOS/Windows do not load this code). No tauri 2.x release allows glib 0.20 —
 # it needs the GTK4 / gtk 0.20 migration (tauri-apps/tauri#12561). Our shell
@@ -40,24 +40,16 @@
 # VariantStrIter / GVariant child iteration. Accepted as tolerable risk;
 # Dependabot alert #3 dismissed 2026-09-23 on the same grounds.
 #
-# RUSTSEC-2026-0367 / 0368 / 0369 (zip 4.6.1): the ZIP extractor's one-shot
-# `extract()` — SUID/SGID bits preserved, symlink targets escaping the
-# destination directory, and Unix permissions applied through symlinks.
-#
-# WINDOWS-ONLY IN OUR GRAPH. tauri-plugin-updater 2.14 declares `zip` under
-# `[target.'cfg(target_os = "windows")'.dependencies]` (optional,
-# `version = "4"`), and the shell enables no plugin features
-# (`tauri-plugin-updater = { version = "2.14", features = [] }`), so
-# `cargo tree -i zip` on macOS prints NOTHING — the crate is not even
-# COMPILED on the platform we ship. The plugin's macOS and Linux paths
-# extract with `tar` + `flate2` (GzDecoder + tar::Archive), which is the tgz
-# the updater already ships; `zip` is only the Windows artifact path. There
-# is no Windows build and no Windows CI lane, so nothing we publish builds
-# the vulnerable code.
-#
-# The fix IS available upstream (zip >= 9.0.0), but the plugin's `zip = "4"`
-# requirement cannot reach it — 9.0.0 does not satisfy it — so the bump
-# needs a tauri-plugin-updater release first. That is the re-check trigger.
+# RUSTSEC-2026-0367 / 0368 / 0369 (zip): CLEARED 2026-11-14 — the waivers are
+# PRUNED, per this file's own re-check trigger. History: zip 4.6.1's one-shot
+# `extract()` (SUID/SGID preservation, symlink escape, permissions through
+# symlinks) was WINDOWS-ONLY in our graph — tauri-plugin-updater 2.14 declared
+# `zip = "4"` under a windows-only target, nothing we publish compiled it —
+# and the fix (zip >= 9.0.0) needed a tauri-plugin-updater release first.
+# That release happened: the shell's lockfile now resolves zip 9.5.1 (the
+# patched line, >= 9.0.0), `cargo audit --file shell/src-tauri/Cargo.lock`
+# reports no zip advisory, and the three ignores below left with it. The
+# entry stands as the record of why they existed, not as a suppression.
 #
 # RUSTSEC-2026-0381 (webpki-roots 0.26.11): the bundled root certificates
 # allowed a certificate path through the DISTRUSTED `emSign ECC Root CA - G3`
@@ -121,12 +113,12 @@
 # Re-check triggers (any one → revisit these ignores):
 #   - model2vec-rs releases with hf-hub >= 0.5  (clears number_prefix)
 #   - tokenizers release without paste          (clears paste — root/fuzz path;
-#     the client has a SECOND paste path: image → exr → pulp, all latest, so it
-#     clears only when pulp/exr adopt pastey too)
+#     the Dioxus client's second paste path (image → exr → pulp) left the tree
+#     with the client on 2026-11-13)
 #   - a real vulnerability lands against either crate (re-evaluate posture)
 #   - tauri 2.x bumps gtk ≥ 0.19 / glib ≥ 0.20  (clears RUSTSEC-2024-0429)
-#   - tauri-plugin-updater releases whose `zip` requirement reaches >= 9.0.0
-#     (clears RUSTSEC-2026-0367/0368/0369)
+#   - [CLEARED 2026-11-14] tauri-plugin-updater moved its zip requirement to the
+#     9.x line — RUSTSEC-2026-0367/0368/0369 waivers pruned (see above)
 #   - ureq 3.x, or a model2vec-rs release dropping `ureq ^2`, drops the
 #     webpki-roots 0.26 shim (clears RUSTSEC-2026-0381)
 #
@@ -138,12 +130,9 @@
 # lockfile — a fixed-and-removed advisory must not stay suppressed forever.
 ignore = [
     "RUSTSEC-2023-0071", # rsa — the Marvin timing model (X-C7); no fixed upstream
-    "RUSTSEC-2024-0436", # paste — clears when tokenizers drops paste (root, fuzz) AND when image→exr→pulp moves to pastey (client; pulp 0.22.3 is latest and still requires paste ^1)
+    "RUSTSEC-2024-0436", # paste — clears when tokenizers drops paste (root, fuzz); the Dioxus client's image→exr→pulp path left the tree with the client on 2026-11-13
     "RUSTSEC-2024-0429", # glib — clears when tauri bumps gtk >= 0.19 / glib >= 0.20
     "RUSTSEC-2025-0119", # number_prefix — clears when model2vec-rs ships hf-hub >= 0.5
-    "RUSTSEC-2026-0367", # zip — windows-only path in tauri-plugin-updater; the zip feature is off and no windows build ships; clears when the plugin's zip requirement reaches >= 9.0.0
-    "RUSTSEC-2026-0368", # zip — as above
-    "RUSTSEC-2026-0369", # zip — as above
     "RUSTSEC-2026-0381", # webpki-roots
     "RUSTSEC-2026-0387", # crypto-bigint — the 0.7 copy was UPDATED to 0.7.7 (the fixed release); the remaining 0.5.5 copy is unreachable ECDSA code under RS256-pinned jsonwebtoken; clears when elliptic-curve/p256 0.14 (or jsonwebtoken moving to crypto-bigint >= 0.7.6) — the 0.26.11 semver shim compiles in the FIXED 1.0.10 roots (4x emSign G3 in 1.0.9, 0x in 1.0.10); clears when ureq 3.x / model2vec-rs drops ureq ^2
 ]

@@ -1,12 +1,17 @@
 # Security
 
-> Coverage current through R82 (2026-10-07) — includes the R68–R76
-> remediation programme (R76's two messaging-edge controls now carry
-> THREAT_MODEL §5b rows), the 1.29.x governed
-> model-identity line (the digest-pinned model registry
+> Coverage current through the 2026-11-14 repair round (v1.29.44) — the arc
+> since the R82 stamp (2026-10-07): the R68–R76 remediation programme, the
+> 1.29.x governed model-identity line (the digest-pinned model registry
 > `/workflow/model-registry*`, decision-run execute/read/replay routes, and
 > DPO/Admin-gated evaluation records; see
-> [model-governance.md](./model-governance.md)) and its three security fixes.
+> [model-governance.md](./model-governance.md)), the dependency-policy gates
+> (`cargo audit` over every tracked lockfile + `cargo deny` + `cargo
+> machete` + `pnpm audit --prod`), the seven CodeQL closures of the 1.28
+> Enterprise Line and the two 2026-11-14 `non-https-url` sink fixes (zero
+> open CodeQL alerts at v1.29.44), and the vendored `[patch]` override that
+> closed RUSTSEC-2026-0459/0502 (see [THREAT_MODEL.md](./THREAT_MODEL.md),
+> Asset 4).
 
 StewardMem is a local-first memory component for AI agents, so its security
 model centers on three questions: **who is allowed to talk to it, what can they

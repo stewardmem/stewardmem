@@ -1,6 +1,6 @@
 [package]
 name = "brain-server"
-version = "1.29.43"
+version = "1.29.44"
 edition = "2024"
 rust-version = "1.98"
 description = "Local-first agent memory server: UMP 1.0 L3, zero-token embeddings, human-in-the-loop write gate, tamper-evident audit chain, DSAR/GDPR tooling."
@@ -443,7 +443,7 @@ path = "src/bin/classify_probe.rs"
 [profile.release]
 # v1.28.5 "Groundwork" (M6): opt-level "z" (size-minimal) → 2 (speed) — the
 # release binary is now an in-process vector store; the bench binary measures
-# the sha we ship. Client wasm budget is unaffected (separate workspace node).
+# the sha we ship.
 opt-level = 2
 lto = "fat"
 codegen-units = 1

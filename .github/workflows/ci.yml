@@ -19,7 +19,7 @@ name: CI
 #                                   restoring the main push was for.
 #   codeql.yml main           YES — security scanning per merge; alerting on
 #                                   an unmerged state is the point.
-#   shell.yml  main           YES — the client has been refactoring across
+#   shell.yml  main           YES — the shell has been refactoring across
 #                                   majors; shell.yml owns that surface.
 #   docs.yml   main, PATHS    YES, but paths-filtered to book/docs/theme, so
 #                                   a kernel merge does not redeploy Pages.
@@ -60,7 +60,7 @@ on:
     # Deliberately NARROW. `paths-ignore` suppresses the workflow only when
     # EVERY changed file matches, so shell/src/** (hand-written Svelte) and
     # shell/src-tauri/** (Rust) are NOT listed — real shell source changes and
-    # every Tauri, crate, client and tools change still run the full matrix.
+    # every Tauri, crate and tools change still run the full matrix.
     # The paired mitigation for total saturation is dependabot.yml: PR caps
     # plus one grouped PR per ecosystem instead of one per crate.
     paths-ignore:
