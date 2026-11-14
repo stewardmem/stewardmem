@@ -33,5 +33,6 @@ proof map.
 - [Delete is a verb, not a promise](./26-delete-is-a-verb-not-a-promise.md), *four layers between deleting a row and deleting the bytes, and what SQLite keeps by default*
 - [Catch it on the way in, because it comes back every turn](./27-catch-it-on-the-way-in.md), *why the injection screen sits at the write seam, and what fail-open costs*
 - [Speed is a knob. Honesty is a route.](./28-speed-is-a-knob-honesty-is-a-route.md), *six engines, two questions, one clamp: the tiered chat architecture the measurements demand*
+- [Two seams, found twice](./29-two-seams-found-twice.md), *DISCERN (Amazon, Nov 11) independently published the architecture shipped and documented here since September — the complete mapping, where they lead, where they are blind*
 
 Positions and one-liners live in the [media kit](../media-kit.md).
