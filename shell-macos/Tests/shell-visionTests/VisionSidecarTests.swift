@@ -62,21 +62,24 @@ final class VisionSidecarTests: XCTestCase {
 
     /// Spawn the sidecar with the request line + PDF bytes on stdin; parse
     /// the ONE reply line on stdout.
-    private func run(request: [String: Any], pdf: Data) throws -> Reply {
+    private func run(request: [String: Any], pdf: Data, environment: [String: String] = [:]) throws -> Reply {
         let requestLine = try JSONSerialization.data(withJSONObject: request, options: [.sortedKeys])
         var stdin = requestLine
         stdin.append(0x0A)
         stdin.append(pdf)
-        return try runRaw(stdin)
+        return try runRaw(stdin, environment: environment)
     }
 
-    private func runRaw(_ stdin: Data) throws -> Reply {
+    private func runRaw(_ stdin: Data, environment: [String: String] = [:]) throws -> Reply {
         let process = Process()
         process.executableURL = sidecarURL
         process.standardInput = Pipe()
         let stdout = Pipe()
         process.standardOutput = stdout
         process.standardError = Pipe()
+        if !environment.isEmpty {
+            process.environment = environment
+        }
         try process.run()
         // write ALL of stdin then close so the child's read-to-EOF completes
         let inputPipe = process.standardInput as! Pipe
@@ -224,5 +227,31 @@ final class VisionSidecarTests: XCTestCase {
             doc.contains("apple-vision/recognize-text@"),
             "the protocol doc carries the engine-string shape"
         )
+    }
+
+    /// The environment verdict's WIRE SHAPE, deterministically: the probe's
+    /// forced refusal (SHELL_VISION_PROBE_FAIL — the sidecar's env-gated
+    /// test surface) makes every requested page carry
+    /// `ocr_assets_unavailable` with the probe's evidence. This is the
+    /// shape the real-Vision pins skip on when a machine cannot OCR.
+    func testForcedProbeFailureCarriesTheEnvironmentVerdict() throws {
+        let reply = try run(
+            request: ["id": "t7", "op": "ocr", "dpi": 300],
+            pdf: fixture("clean-scan.pdf"),
+            environment: ["SHELL_VISION_PROBE_FAIL": "1"]
+        )
+        XCTAssertEqual(reply.exitCode, 0, "the probe verdict is a per-page verdict; the reply completes")
+        XCTAssertEqual(reply.object["ok"] as? Bool, true)
+        let pages = try XCTUnwrap(reply.object["pages"] as? [[String: Any]])
+        XCTAssertEqual(pages.count, 1)
+        XCTAssertEqual(pages[0]["code"] as? String, "ocr_assets_unavailable")
+        XCTAssertEqual(pages[0]["ok"] as? Bool, false)
+        let message = try XCTUnwrap(pages[0]["message"] as? String)
+        XCTAssertTrue(
+            message.contains("capability probe"),
+            "the probe's evidence rides verbatim, got: \(message)"
+        )
+        XCTAssertNil(pages[0]["text"], "a refused page carries no text")
+        XCTAssertNil(pages[0]["confidence"], "a refused page carries no confidence claim")
     }
 }

@@ -959,11 +959,19 @@ pub fn ocr_pages_via_sidecar(
             )));
         }
         if entry.get("ok") == Some(&serde_json::Value::Bool(false)) {
-            // the per-page named refusal (OV-5: never a fabricated empty)
-            if entry.get("code").and_then(|v| v.as_str()) != Some("ocr_page_failed") {
-                return Err(OcrSidecarError::BadReply(
-                    "a failed page carries a code the protocol does not define".into(),
-                ));
+            // the per-page named refusal (OV-5: never a fabricated empty) —
+            // the protocol's vocabulary is `ocr_page_failed` (a genuine
+            // page-specific refusal) and `ocr_assets_unavailable` (the
+            // machine itself failed the sidecar's capability probe — an
+            // environment verdict, the probe's evidence in the message).
+            // Anything else is a misframing the parser refuses.
+            match entry.get("code").and_then(|v| v.as_str()) {
+                Some("ocr_page_failed") | Some("ocr_assets_unavailable") => {}
+                _ => {
+                    return Err(OcrSidecarError::BadReply(
+                        "a failed page carries a code the protocol does not define".into(),
+                    ));
+                }
             }
             failed.push(index);
             continue;

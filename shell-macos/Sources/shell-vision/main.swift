@@ -21,8 +21,9 @@
 //   correction rewrites text that was already correct; the surface does
 //   not exist here by construction). A page Vision refuses is a NAMED
 //   failure — `ocr_page_failed`, or `ocr_assets_unavailable` when the
-//   refusal IS the machine missing the on-demand recognition model — never
-//   a fabricated empty, never a retry.
+//   CAPABILITY PROBE (measured, once per process, on a synthetic stimulus)
+//   names the machine itself unable to recognize — never a fabricated
+//   empty, never a retry.
 // - Sequential recognition (OV-6): ONE Vision request at a time, pages in
 //   ascending order. Parallel RecognizeTextRequest tasks are the measured
 //   hang hazard (Apple Developer Forums; the plan's §0.2.2) — the loop
@@ -49,6 +50,7 @@
 // requirement); the engine string names the request type that ran.
 
 import CoreGraphics
+import CoreText
 import Foundation
 import Vision
 
@@ -182,20 +184,102 @@ func rasterizePage(_ pdfData: Data, index: Int, dpi: Int) throws -> CGImage {
 
 // ── recognition (SEQUENTIAL — OV-6) ─────────────────────────────────────────
 
-/// One Vision request for one page image. The text is the observations'
-/// top candidates joined line-by-line, VERBATIM; the confidence is the
-/// page's MINIMUM top-candidate confidence (0..1, conservative honesty:
-/// one weak region marks the page), nil when nothing was recognized.
-/// Throws → the caller records ocr_page_failed for this index.
-func recognizePage(_ image: CGImage) async throws -> (text: String, confidence: Double?) {
-    // The Swift-native request (macOS 15+): .accurate for documents,
-    // language correction on, languages auto-detected from the runtime's
-    // own supported set — no hardcoded list (the module header's law).
+/// The ONE request construction: .accurate for documents, language
+/// correction on, languages auto-detected from the runtime's own supported
+/// set — no hardcoded list (the module header's law). Both the page loop
+/// and the capability probe run this exact shape.
+func makeRecognizeTextRequest() -> RecognizeTextRequest {
     var request = RecognizeTextRequest()
     request.recognitionLevel = .accurate
     request.usesLanguageCorrection = true
     request.automaticallyDetectsLanguage = true
-    let observations = try await request.perform(on: image, orientation: .up)
+    return request
+}
+
+/// The capability probe's stimulus: a synthetic text image — "StewardMem"
+/// rendered black-on-white via CoreText. No fixtures, no document bytes;
+/// the same pixels on every machine.
+func capabilityProbeImage() -> CGImage? {
+    let width = 600
+    let height = 120
+    guard let ctx = CGContext(
+        data: nil, width: width, height: height,
+        bitsPerComponent: 8, bytesPerRow: 0,
+        space: CGColorSpace(name: CGColorSpace.sRGB)!,
+        bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+    ) else {
+        return nil
+    }
+    ctx.setFillColor(CGColor(gray: 1.0, alpha: 1.0))
+    ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+    // CGBitmapContext origin is bottom-left and CTLineDraw renders
+    // right-side-up there directly — no flip (the flipped variant renders
+    // upside-down glyphs Vision reads as nothing; measured, not assumed).
+    let font = CTFontCreateWithName("Helvetica" as CFString, 48, nil)
+    let attributes: [CFString: Any] = [
+        kCTFontAttributeName: font,
+        kCTForegroundColorAttributeName: CGColor(gray: 0, alpha: 1),
+    ]
+    guard let attributed = CFAttributedStringCreate(
+        nil, "StewardMem probe" as CFString, attributes as CFDictionary
+    ), let line = CTLineCreateWithAttributedString(attributed) as CTLine? else {
+        return nil
+    }
+    ctx.textPosition = CGPoint(x: 24, y: 36)
+    CTLineDraw(line, ctx)
+    return ctx.makeImage()
+}
+
+/// The machine's OCR capability, MEASURED ONCE per process (never assumed):
+/// the same request shape the page loop uses, pointed at the synthetic
+/// stimulus. The environment verdict has three named outcomes — perform
+/// THROWS (fresh CI volumes without the on-demand recognition model are the
+/// measured case), or perform succeeds but recognizes NOTHING on obvious
+/// text (assets present but the stack cannot actually read) — both are
+/// `ocr_assets_unavailable` for every requested page, with the probe's
+/// evidence verbatim; or the probe READS the stimulus and every per-page
+/// verdict that follows is genuine. The probe is a second recognition
+/// request per process BY DESIGN: it asks a synthetic image, never the
+/// document (the no-retry law governs pages, not the capability check).
+/// `SHELL_VISION_PROBE_FAIL=1` forces the refusal — the test surface, the
+/// kernel's own env-gate discipline, default OFF.
+/// The probe's refusal: the named evidence for why this machine cannot
+/// honestly OCR (a `String` is not an `Error` — the wrapper makes the
+/// Result's Failure side a real error type).
+struct ProbeRefusal: Error {
+    let evidence: String
+}
+
+func ocrCapabilityProbe() async -> Result<Void, ProbeRefusal> {
+    if ProcessInfo.processInfo.environment["SHELL_VISION_PROBE_FAIL"] == "1" {
+        return .failure(ProbeRefusal(evidence: "forced by SHELL_VISION_PROBE_FAIL — the test surface"))
+    }
+    guard let image = capabilityProbeImage() else {
+        // The stimulus could not be rendered — capability UNKNOWN. Fail
+        // open by name: the page loop's own verdicts decide (their messages
+        // carry the evidence either way).
+        return .success(())
+    }
+    do {
+        let observations = try await makeRecognizeTextRequest()
+            .perform(on: image, orientation: .up)
+        let text = observations.compactMap { $0.topCandidates(1).first?.string }.joined()
+        if text.isEmpty {
+            return .failure(ProbeRefusal(evidence: "performed but recognized nothing on the synthetic text stimulus (\(observations.count) observations)"))
+        }
+        return .success(())
+    } catch {
+        return .failure(ProbeRefusal(evidence: visionErrorDetail(error)))
+    }
+}
+
+/// One Vision request for one page image. The text is the observations'
+/// top candidates joined line-by-line, VERBATIM; the confidence is the
+/// page's MINIMUM top-candidate confidence (0..1, conservative honesty:
+/// one weak region marks the page), nil when nothing was recognized.
+/// Throws → the caller records a per-page failure for this index.
+func recognizePage(_ image: CGImage) async throws -> (text: String, confidence: Double?) {
+    let observations = try await makeRecognizeTextRequest().perform(on: image, orientation: .up)
     var lines: [String] = []
     var minConfidence: Double?
     for observation in observations {
@@ -208,21 +292,12 @@ func recognizePage(_ image: CGImage) async throws -> (text: String, confidence: 
     return (text, text.isEmpty ? nil : minConfidence)
 }
 
-/// The per-page failure code for a thrown Vision error. The ASSET class is
-/// its own named verdict — `ocr_assets_unavailable`: the on-demand
-/// recognition model data this page's language needs is not present on this
-/// machine (fresh CI volumes; `dataUnavailable` / `unsupportedRevision` are
-/// how the framework reports it) — an environment condition, not a
-/// recognition failure. Everything else stays `ocr_page_failed`: a genuine
-/// refusal this build must see, never smoothed into an empty. The
-/// underlying message rides verbatim either way.
-func visionErrorCode(_ error: any Error) -> String {
-    switch error {
-    case VisionError.dataUnavailable, VisionError.unsupportedRevision:
-        "ocr_assets_unavailable"
-    default:
-        "ocr_page_failed"
-    }
+/// The error message, verbatim, with the NSError bridge's domain and code
+/// appended — the runner's throw stringified as bare `unknownError` and the
+/// diagnosis was blind; the bridge carries what the string alone does not.
+func visionErrorDetail(_ error: any Error) -> String {
+    let ns = error as NSError
+    return "\(error) [domain=\(ns.domain) code=\(ns.code)]"
 }
 
 // ── the pipeline ─────────────────────────────────────────────────────────────
@@ -262,13 +337,39 @@ func process(requestLine: Data, pdfBytes: Data) async -> (reply: [String: Any], 
         }
     }
     let requested = request.pages ?? Array(1...pageCount)
+    var pages: [[String: Any]] = []
+
+    // THE CAPABILITY PROBE (once per process, before any page work): the
+    // machine either reads the synthetic stimulus — and every per-page
+    // verdict below is genuine — or it cannot run recognition at all, and
+    // EVERY page carries the named environment verdict with the probe's
+    // evidence. A machine that cannot OCR produces no page verdicts that
+    // could be mistaken for document-specific failures.
+    if case .failure(let evidence) = await ocrCapabilityProbe() {
+        for index in requested {
+            pages.append([
+                "index": index,
+                "ok": false,
+                "code": "ocr_assets_unavailable",
+                "message": "capability probe: \(evidence)",
+            ])
+        }
+        return (
+            [
+                "id": request.id ?? NSNull(),
+                "ok": true,
+                "engine": engineString(),
+                "pages": pages,
+            ],
+            0
+        )
+    }
 
     // THE SEQUENTIAL LOOP (OV-6): one page at a time, ascending order.
     // Each page either answers (text + confidence) or is a named per-page
     // failure — never a fabricated empty, never a retry, never a second
     // request for the same document (one-shot per document, the module
     // header's law).
-    var pages: [[String: Any]] = []
     for index in requested {
         do {
             let image = try rasterizePage(pdfBytes, index: index, dpi: request.dpi)
@@ -281,11 +382,12 @@ func process(requestLine: Data, pdfBytes: Data) async -> (reply: [String: Any], 
                 if let confidence { entry["confidence"] = confidence }
                 pages.append(entry)
             } catch {
+                // The probe is green here — this throw is this page's own.
                 pages.append([
                     "index": index,
                     "ok": false,
-                    "code": visionErrorCode(error),
-                    "message": "\(error)",
+                    "code": "ocr_page_failed",
+                    "message": visionErrorDetail(error),
                 ])
             }
         } catch let error as SidecarError {

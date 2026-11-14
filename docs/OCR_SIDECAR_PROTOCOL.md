@@ -90,7 +90,7 @@ non-zero:
 | `bad_request` | The request line is not valid JSON, `op` is not `"ocr"`, `dpi` is out of band, a page index is out of range, or the stdin carried no request line at all. |
 | `raster_failed` | The bytes after the request line are not a PDF CoreGraphics can open (document-level), or a requested page could not be rendered (document-level refusal — the kernel sees the named code). |
 | `ocr_page_failed` | Per-page only (inside `ok:true`): Vision refused that page's recognition. Never fabricated into an empty. |
-| `ocr_assets_unavailable` | Per-page only (inside `ok:true`): the machine lacks the on-demand recognition model data the page's language needs (`dataUnavailable` / `unsupportedRevision` — fresh CI volumes) — an environment condition, not a recognition failure. The pins may honestly skip on this code and only on this code; the message rides verbatim. |
+| `ocr_assets_unavailable` | Per-page only (inside `ok:true`): the machine itself failed the sidecar's capability probe — one recognition request on a synthetic CoreText-rendered text stimulus, run once per process before any page work (`SHELL_VISION_PROBE_FAIL=1` forces it — the test surface). The probe either throws (fresh CI volumes without the on-demand recognition model are the measured case) or reads nothing on obvious text; either way the machine cannot honestly OCR, every requested page carries this verdict, and the probe's evidence rides verbatim in the message. An environment verdict, not a recognition failure — the pins may honestly skip on this code and only on this code. |
 
 ## Exit codes
 
