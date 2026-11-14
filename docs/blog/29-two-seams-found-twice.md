@@ -20,40 +20,49 @@ When one team ships a design, it might be a taste. When two teams arrive
 independently, and the second one brought experiments, the design has been
 validated by the field.
 
-The pattern itself is older here than the paper. The governance thesis —
-provenance and control fixed at ingestion — was written down on **September
-11**. The write seam and read seam as separate, load-bearing structures —
-screen at write because the payload becomes a resident, shape on read because
-stored-verbatim and emitted-safe are different jobs — were written down on
-**October 4**, along with the four-layer deletion path. The bi-temporal recall
-mechanism behind both is the store's oldest documented mechanism. The paper was
-released five weeks after that. What follows is the complete, accurate mapping
-between the two systems — including the places they are ahead, because a
-mapping that only flatters is not a mapping.
+The pattern itself is older here than the paper, and every date below is a
+commit in this repository's history, not a claim. Tombstones landed **July 21**.
+The per-tenant tamper-evident audit chain landed **July 28**. The bi-temporal
+edges — `valid_at`/`invalid_at`, the Graphiti model — landed **July 30**.
+Calibrated abstention and atomic supersession landed **August 1**. PII masking
+in the gate landed **August 7**. The read seam covering every text field
+landed **August 13**. The injection screen — the one that sees what the model
+sees — landed **September 8**. The two-principal approval quorum landed
+**September 11**. The cite-or-abstain verdict, stored per turn, landed
+**October 28**. DISCERN was released **November 11**. Every mechanism in the
+mapping table below predates the paper by weeks to months, with one exception
+dated honestly below. What follows is the complete, accurate mapping between
+the two systems — including the places they are ahead, because a mapping that
+only flatters is not a mapping.
 
 ## The mapping
 
-| DISCERN | StewardMem | Since | Status |
+| DISCERN | StewardMem | In the tree since (commit) | Status |
 |---|---|---|---|
-| Preserve at write: admit and organize, never collapse | The write seam: injection screen with reject / quarantine / clean verdicts; governance and provenance fixed at ingestion | Sep 11 / Oct 4 | Same principle; ours adds the security verdicts they do not carry |
-| Immutable append-only event log as the sole source of truth | Tamper-evident hash chain over the store; store verbatim, shape on the way out | 2026 | Equivalent |
-| Bi-temporal facts: superseded values soft-invalidated, retained; as-of queries resolve to history | Supersession on revise — old revision expired and *retained*; bi-temporal recall filter (`?at=`) | The store's oldest mechanism | Equivalent — their `check_temporal` is our `?at=` |
-| Never merge confusable entities | Nothing in the store merges entities | — | We hold the invariant trivially; they build the *family* surface around it |
+| Preserve at write: admit and organize, never collapse | The write seam: the injection screen gating ingest, quarantined rows excluded from retrieval; provenance columns at the store | `screen.rs` · Sep 8, `da9e65a8` | Same principle; ours adds the security verdicts they do not carry |
+| Immutable append-only event log as the sole source of truth | Tamper-evident per-tenant audit chain (`prev_hash` columns; the `brain_audit_chain_ok` gauge) | Jul 28, `42947fa0` | Equivalent |
+| Bi-temporal facts: superseded values soft-invalidated, retained; as-of queries resolve to history | Bi-temporal edges (`valid_at`/`invalid_at`); atomic supersession (`resolve_supersession`, held evidence refuses destruction); as-of recall | Jul 30 / Aug 1, `bf854296`, `e1f6e486` | Equivalent — their `check_temporal` is our bi-temporal filter |
+| Never merge confusable entities | No entity-merge function exists in the store | verified by absence | We hold the invariant trivially; they build the *family* surface around it |
 | `SIMILAR_NAME` collision families + read-time contrast (`find_similar_entities`) | None | — | **Theirs-only** — a mechanism gap we should adopt |
-| Four-way terminal contract (answer / update / clarify / abstain), decidable from the graph | Binary zero-hit abstain gate; the citation law governs commit | — | **Theirs formalizes what we half-ship** — adoptable, and it is decidable without any LLM |
-| Citation-or-abstain renderer: uncited answers bounce once, then abstain | The citation law: an answer cites its memory ids or does not ship | The citation law | Equivalent, independently stated |
-| `EarnedAbstainGate`: abstention must be earned by demonstrated absence | The kernel's zero-hit abstain gate (keyed on retrieval emptiness) | — | Theirs is the stricter, better-calibrated form; adoptable |
-| Read-time navigation loop (LLM-driven; 7.6 s/query on hosted backbones) | Reference-faithful deterministic retrieval — no LLM in the loop | 2026 | Deliberate divergence, see below |
+| Four-way terminal contract (answer / update / clarify / abstain), decidable from the graph | Calibrated abstention + the cite-or-abstain verdict stored per turn; no `clarify`, no `update` action | Aug 1, `c189bb8e` · Oct 28, `75daf898` | **Theirs formalizes what we half-ship** — adoptable, and it is decidable without any LLM |
+| Citation-or-abstain renderer: uncited answers bounce once, then abstain | The cite-or-abstain verdict, STORED per turn (`chat_turns.support_decision`); an unsupported claim is shown as unsupported, never silently kept as an answer | Oct 28, `75daf898` | Equivalent, independently stated |
+| `EarnedAbstainGate`: abstention must be earned by demonstrated absence | The calibrated low-confidence abstention gate: an empty hit set with a `low_confidence`/`degraded` recall decision abstains deterministically — the kernel answers from fixed text and never asks the model for prose | Aug 1, `c189bb8e` | Theirs earns absence against a *collision family* — the stricter form; adoptable |
+| Read-time navigation loop (LLM-driven; 7.6 s/query on hosted backbones) | Reference-faithful deterministic retrieval — the grounding query is built in code, "zero model tokens are spent… no LLM query rewriting" | 2026 (`handlers/chat.rs`) | Deliberate divergence, see below |
 
 And the rows the paper cannot have, because they describe problems it never
 frames: write-time injection screening with a quarantine that preserves
-evidence; read-time content shaping and PII masking at the recall boundary;
-tamper-evident audit; two-principal approval quorums; human-in-the-loop
-override; deletion with proof — four layers between deleting a row and deleting
-the bytes. DISCERN's additive graph never deletes anything, which is correct
-for resolution and silent on erasure. Their "governance" gates the *honesty*
-of an answer; ours additionally gates what may enter, what may leave, and who
-may decide. Neither subsumes the other. That is the diff.
+evidence; read-time content shaping and PII masking (`pii_mask` landed August
+7; the read seam over every text field August 13; the recall-outcome-boundary
+extraction landed November 14 — the one piece of this row that postdates the
+paper, and it is an extension of the August seams, not a new one);
+tamper-evident audit; two-principal approval quorums (`BRAIN_APPROVAL_QUORUM=2`
+requires two distinct principals, recorded as hash-chained audit rows);
+human-in-the-loop override; deletion with proof — tombstones carrying content
+digests, purge behind a role gate, DSAR erase proposals. DISCERN's additive
+graph never deletes anything, which is correct for resolution and silent on
+erasure. Their "governance" gates the *honesty* of an answer; ours additionally
+gates what may enter, what may leave, and who may decide. Neither subsumes the
+other. That is the diff.
 
 ## Where they are ahead, stated plainly
 
@@ -64,9 +73,13 @@ requires naming them as the paper's contribution:
 store state: `clarify` when two or more candidate entities survive the
 evidence-gathering, `abstain` on demonstrated absence, `update` when the
 supersession chain is long, `answer` otherwise — with every gate enforced by
-graph predicates rather than model judgment. Our abstain gate is binary and
-keyed on retrieval emptiness; there is no `clarify`, no earned-answer check, no
-near-miss guard. The paper's ablation puts numbers on the gap: removing the
+graph predicates rather than model judgment. Our abstention is real and
+calibrated — an empty hit set with a low-confidence or degraded recall decision
+abstains deterministically, from fixed kernel text, and the tiered cascade
+abstains when zero sentences verify against evidence — but it is a *one-way*
+gate: there is no `clarify`, no `update` action, no earned-answer check, and
+no near-miss guard, because there is no collision family for them to be earned
+against. The paper's ablation puts numbers on the gap: removing the
 collision check collapses abstention calibration (over-commitment 0.21 → 0.28),
 and a commercial memory system built without this discipline refused 87% of
 its answerable questions. Calibration, not volume, is the skill.
@@ -99,10 +112,26 @@ The part that does not transfer is the thing their accuracy is built on.
 The architecture holds. The two-seam division of labor — preserve and never
 collapse at write, resolve and commit at read — now has independent
 confirmation from a team that tested it against eight baselines on two
-corpora. The store's oldest mechanisms (bi-temporal recall, supersession, the
-citation law, the abstain gate) are the paper's mechanisms under different
-names, and the store's security seams remain the parts neither they nor the
-rest of the memory literature frame.
+corpora. The store's mechanisms under the paper's names — bi-temporal recall
+(July 30), supersession (August 1), calibrated abstention (August 1), the
+citation verdict (October 28) — are this paper's mechanisms with different
+names and earlier commit dates, and the store's security seams remain the
+parts neither they nor the rest of the memory literature frame.
+
+**Provenance.** Every date above is a first-appearance commit, verifiable with
+`git log --reverse --format="%ad %h %s" --date=short -S "PATTERN" -- src` on
+the repository: `prev_hash` (Jul 28, `42947fa0`), `valid_at` (Jul 30,
+`bf854296`), `resolve_supersession` (Aug 1, `e1f6e486`), `abstain` (Aug 1,
+`c189bb8e`), `redacted:email` (Aug 7, `306eb16c`), `sanitize_read` (Aug 13,
+`c469671a`), `typoglycemia` (Sep 8, `da9e65a8`), `BRAIN_APPROVAL_QUORUM` (Sep
+11, `a5d411ec`), `cite-or-abstain` (Oct 28, `75daf898`),
+`sanitize_search_result` (Nov 14, `b637a0f1`), and the tombstone schema in the
+initial public tree (Jul 21, `7aace8f8`). The code anchors are named where
+each row needs them: `src/gate.rs` (`sanitize_read`,
+`sanitize_search_result`), `src/pii_mask.rs`, `src/screen.rs`, `src/temporal.rs`,
+`src/consolidate.rs` (`resolve_supersession`),
+`src/service/review.rs` (the quorum), `src/handlers/chat.rs` (the abstain
+gate and the grounding query), `src/storage_layout.rs` (the verdict columns).
 
 The work this sets up is equally concrete: their trap taxonomy — attribute
 swaps, near-miss entities, and the case the paper's own benchmark cannot test,
