@@ -28,6 +28,8 @@ cites, the **deterministic** way brain-server implements it, and the **ceiling**
 - [The Cloud-Agent Convergence, October 2026](./21-cloud-agent-convergence-oct-2026.md), platform sandboxes and human-gated loops verified against primary sources, five provenance papers triaged, the ecosystem measured
 - [The Post-Convergence Watch, October 2026](./22-post-convergence-watch-oct-2026.md), Loopjacking and A2M triaged against the digest law, MCP 2026-07-28 extensions, the two standing watch lanes
 - [The Agent-Memory Research Sweep, November 2026](./23-agent-memory-research-nov-2026-sweep.md), the subfield crystallizes: one attack shipped its counter in three days, the counter-wave answered, five harness fixtures inherited
+- [The Local-Inference Science Round, November 2026](./24-local-inference-science-nov-2026.md), quantized KV, speculative decoding on hybrids, reasoning budgets, and the split that made thinking a channel
+- [DISCERN and the two seams](./25-discern-two-seams.md), the field's independent arrival at preserve-at-write/resolve-at-read — the diff against shipped behavior, both directions, and the four mechanisms worth adopting
 
 Every mechanism is a deterministic implementation of *specific* published
 techniques over a local store, no LLM in the retrieval loop, no data egress.
