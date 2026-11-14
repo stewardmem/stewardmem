@@ -67,9 +67,43 @@
 
 **F1–F4 status:** none fired at S1. F2 (no-fork wiring) was pre-resolved at S0; the others wait on their measurements.
 
-## §S2 · THE GATE TABLE (per fast tier)
+## §S2 · THE GATE TABLE (per fast tier, budgeted vs unbudgeted)
 
-*(lands with the S2 commit — the four clauses per tier: completeness, citation identity, quality arms, latency; ratchet or refuse BY NAME)*
+**The instrument:** the driver's ARM B/D/C + ARM L (the ~2,000-target fence, measured 3,098 tokens) at the 200 clamp, `PROBE_TEXT_ONLY=1`, `caffeinate -is` on every run, one run per row, raw logs `/tmp/round19/*.log` (the run printout carries the posture line). Budget shape `max=120` (the round's first measure) and `max=180` (the 9B's ratchet candidate — chosen because the tier's naturally-correct turn 1 reasons ≈175 tokens while the burners exceed 200).
+
+**THE WITNESS REPRODUCED BYTE-EXACT (the unbudgeted 9B-heretic run):** turn 2 `out=200` EMPTY `reason=645c` and ARM C cold `out=200` EMPTY `reason=877c` — the plan §0.2's witnessed numbers (`645c`/`877c`), deterministically at temperature 0, on today's tree. The class is live, the corpus is real, and the budget's target is on the wire.
+
+### The per-tier gate (plan §1's four clauses)
+
+| Tier | Budget | turn1 | turn2 (the burn) | tool (ARM D) | cold (ARM C) | needle (ARM L, 3098 tok) | Verdict |
+|---|---|---|---|---|---|---|---|
+| **2B** (`Qwen3.5-2B-4bit`) | OFF | `ok` 1 tok 26.9 t/s | `184/97` 6 tok 52.6 t/s 0.11s | tool WORKS `184/97` (cached=288) | honest refusal 53 tok | `LX-4471` 7 tok | baseline |
+| **2B** | max=120 | `ok` 1 tok 57.5 t/s | `184/97` **identical** 55.3 t/s | tool WORKS **identical** | honest refusal **identical** | `LX-4471` **identical** 55.4 t/s | **REFUSE the budget** — nothing to bound (the tier closes its think block naturally; outputs byte-identical, latency within noise +1.7–5%); a knob with zero gain is not a posture |
+| **4B-unc** (`avan-ag/Qwen3.5-4B-Uncensored`) | OFF | `ok` 81 tok, rsn 214c | `184/97` 57 tok, rsn 190c | **BURN**: out=200 EMPTY rsn 489c | honest refusal 90 tok | `LX-4471` 150 tok 3.77s | baseline — **the clamp-burn class reproduced live on the tool turn** |
+| **4B-unc** | max=120 | `ok` **identical** | `184/97` **identical** | out=140, rsn 377c → non-empty `1.8969…` (still not `184/97`) | honest refusal **identical** | `LX-4471` **identical**, 129 tok, **wall 3.40s (−9.8%)** | **RATCHET-ELIGIBLE (all four clauses hold)** — but the one burn it fixes remains wrong-content (model-intrinsic, see below); the gain is the needle turn's −10% wall. The December S0 holds the adoption; OFF at rest this round |
+| **9B-heretic-5bit** (`pipenetwork/…Heretic-MLX-5bit`) | OFF | `ok` 178 tok rsn 583c | **BURN: out=200 EMPTY rsn 645c** (the witness, byte-exact) | decimal `1.8969…454` rsn 274c | **BURN: out=200 EMPTY rsn 877c** (the witness, byte-exact) | **BURN: out=200 EMPTY rsn 759c → needle MISSED** | baseline — the tier answers NOTHING on the burn turns; warm recall verdict NO RECALL |
+| **9B-heretic-5bit** | max=120 | **NEW MISS**: forced close mid-thought → the "answer" is a scratchpad fragment | **FIXED**: `184/97`, out=58, **wall 2.71s (−69%)** | decimal (unchanged — budget never fired, rsn 274c < 120) | `7` (fragment, **no secret leak**) | **FIXED**: `LX-4471`, wall 6.27s (−31%) | the aggressive shape: the burns die, but turn 1 (naturally correct unbudgeted) breaks — **the CALM lesson measured**: the shape must clear the tier's natural reasoning length |
+| **9B-heretic-5bit** | **max=180** | `ok` **natural close, identical to OFF** (rsn 583c ≈175 tok < 180 — budget never fires) | **FIXED**: `184/97`, out=188, wall ≈ burn wall (the burn's 200 tokens buy NOTHING; the same wall now buys the answer) | decimal (unchanged) | `7` (no leak — the compliance separation HOLDS) | **FIXED**: `LX-4471`, out=189 | **RATCHET (all four clauses hold at max=180)**: unbudgeted the witness turns NEVER produce answers (wall-to-answer = ∞); budgeted every burn turn answers; the naturally-correct turns are byte-identical (the budget never fires under 180) |
+
+### The four clauses, read across the table
+
+1. **Answer completeness** — 9B at max=180: every witness-corpus burn turn returns a non-empty answer, **zero new empty-answer events**, and the naturally-correct turns are unchanged (the budget is inert under 180 on this tier). 2B: identical. 4B: identical except the tool turn (empty → non-empty).
+2. **Citation identity** — the needle corpus (ARM L at 3,098 tokens, this round's measured depth): the budgeted runs cite the SAME needle (`LX-4471`) as unbudgeted on all three tiers; the recall value (`184/97`) identical; the CG-11 citation law holds under the budget. (The depth ladder is the matrix instrument — December's; this round's depth is the one ARM L length, recorded as such.)
+3. **Quality arms** — memory works (warm recalls, budgeted), cold control does not leak the secret (the 9B's cold `7` fragment contains no `184/97`; the compliance separation holds), tool continuation unchanged (see the model-intrinsic note).
+4. **Latency** — recorded per turn above. The headline: **9B turn 2 at max=120 wall 2.71s vs the 8.84s burn (−69%), needle turn −31% at max=120**; at max=180 the wall equals the burn wall but buys the answer the burn never delivered (unbudgeted wall-to-answer on those turns is infinite — they never answered). 2B: zero gain (nothing to bound). 4B: −9.8% wall on the needle turn.
+
+### The model-intrinsic tool-turn content failure (NOT a budget miss)
+
+The tool turn answers the decimal `1.8969…` instead of echoing `184/97` on BOTH the 4B and the 9B — and the F1 diagnostic settles causation: at `max=180` (the budget effectively out of the way) the 4B produces the **same decimal**; the heretic produces the same decimal budgeted AND unbudgeted (identical rsn 274c — the turn's reasoning never reaches the budget). The fine-tunes compute the division; the budget did not cause it. **F1 does not fire.** ARM D's `.unreachable` is the tiers' recorded posture, unchanged by this round.
+
+### Falsifier ledger after S2
+
+- **F1** (budget forces a non-empty answer failing citation identity): **does not fire** — the needle identity holds on every tier/shape; the tool-turn content failure is model-intrinsic (proven above), not budget-forced. The max=120 turn-1 fragment on the 9B is a COMPLETENESS/quality miss on a non-needle turn and is recorded by name in the table (the shape lesson, not a falsifier).
+- **F2** (no-fork wiring): did not fire (pre-resolved at S0).
+- **F3** (MTP acceptance < 40%): pending S4.
+- **F4** (prefix cost within the 1.5× framing): pending S3.
+
+**Standing state after S2:** the seam OFF at rest everywhere — no default moved; the ratchet verdicts are the December S0's adoption inputs.
 
 ## §S3 · THE PREFIX-COST LEDGER + THE DRAFT
 
