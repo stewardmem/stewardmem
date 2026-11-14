@@ -130,6 +130,25 @@
 //! strict accuracy, or hold accuracy parity (within 2 points) at ≥20% lower
 //! mean wall-clock per query. Otherwise the round stops and records.
 //!
+//! TRAP ROUND (round 20, the DISCERN adoption — `BRAIN_S0_TRAP=1`): the
+//! bench switches to the entity-trap taxonomy against a DEDICATED seeded
+//! store. The trap fixture (`tests/fixtures/trap_queries.md`, its own sha256
+//! in the run-meta) carries the corpus table the mode ingests verbatim
+//! through `/add` BEFORE measuring — the gold answers are DERIVED from that
+//! corpus by `parse_trap_fixtures` (never hand-written to match output).
+//! The arm is LLM-free by law: deterministic `/recall` plus the store's
+//! zero-token answer bound (empty hits → the preregistered abstain line;
+//! hits → the top hit's content verbatim). Grading reuses the preregistered
+//! helpers: the abstain-probe anti-fabrication shape (an explicit absence
+//! marker AND no corpus span), the near-miss contamination detector (the
+//! twin's marked span in the grounding or the answer, for a neighbor that
+//! was never stored), and the contradiction gold (a NAMED conflict over
+//! real spans — a silent single-value pick is the failure the pair
+//! measures). Output: answer-versus-abstain as classification (precision /
+//! recall / F1 / false-decline) per trap-kind pool, and the near-miss
+//! contamination rate — the round's central verdict, with its named parking
+//! rule (measured-zero → the collision-family mechanism parks by name).
+//!
 //! Env:
 //!   BRAIN_URL          the running brain-server (default http://127.0.0.1:8791)
 //!   BRAIN_S0_MLX       the mlx_lm.server base (default http://127.0.0.1:8792)
@@ -142,6 +161,10 @@
 //!   BRAIN_S0_ARMS      comma list of A,B,C,D (default all)
 //!   BRAIN_S0_QUERY_LIMIT  run only the first N queries (smoke tests; unset =
 //!                      all 106 — the recorded run must leave this unset)
+//!   BRAIN_S0_TRAP      1 = the trap round (round 20): the DISCERN trap
+//!                      taxonomy against a dedicated seeded store — ignores
+//!                      the A–D arms entirely (LLM-free; no mlx, no afm);
+//!                      BRAIN_S0_FIXTURES defaults to trap_queries.md
 //!   BRAIN_S0_NOISE     1 = the noise phase (fresh server; noise ingests
 //!                      first). 0 = base phase (default).
 //!   BRAIN_S0_T1_STABILITY  1 = run the 30-query double classification
@@ -1284,6 +1307,944 @@ fn frontier_svg(stats: &[ArmStats], path: &std::path::Path) -> Result<(), String
     fs::write(path, svg).map_err(|e| format!("svg write: {e}"))
 }
 
+// ── the trap round (round 20: the DISCERN trap taxonomy, LLM-free) ───────────
+
+/// The trap fixture's kind vocabulary (the `### T<n> — [kind]` tags).
+const TRAP_KINDS: [&str; 6] = [
+    "attribute-swap",
+    "attribute-swap-control",
+    "near-miss",
+    "near-miss-control",
+    "contradiction",
+    "contradiction-control",
+];
+
+/// The asserted per-kind counts (fixture drift fails the run before it
+/// measures — the eval fixture's 25/106 law).
+const TRAP_COUNTS: [(&str, usize); 6] = [
+    ("attribute-swap", 3),
+    ("attribute-swap-control", 3),
+    ("near-miss", 4),
+    ("near-miss-control", 3),
+    ("contradiction", 2),
+    ("contradiction-control", 1),
+];
+
+const TRAP_DOC_COUNT: usize = 12;
+
+/// The preregistered conflict-acknowledgment markers (the contradiction
+/// grading's "named conflict" set — the answer must NAME the conflict over
+/// real spans; a silent single-value pick is the failure the pair measures).
+const CONFLICT_MARKERS: [&str; 12] = [
+    "conflict",
+    "conflicting",
+    "contradict",
+    "two different",
+    "two entries",
+    "two versions",
+    "two reports",
+    "differing",
+    "disagree",
+    "inconsistent",
+    "different values",
+    "both values",
+];
+
+/// One trap query (the fixture's Q block): the kind, the query text, the
+/// gold relevant set, and the trap's marked spans.
+struct TrapQuery {
+    idx: usize,
+    kind: &'static str,
+    text: String,
+    relevant: Vec<usize>,
+    entity: Option<String>,
+    attr_key: Option<String>,
+    neighbor_span: Option<String>,
+    twin_span: Option<String>,
+}
+
+/// Strip one layer of quotes from a fixture field value.
+fn unquote(s: &str) -> String {
+    s.trim().trim_matches('"').to_string()
+}
+
+/// A required fixture field, named in the error (the derivation failures
+/// name the rule and the query — falsifier F3's guard).
+fn field_of<'a>(q: &'a TrapQuery, field: &str) -> Result<&'a str, String> {
+    let v = match field {
+        "Entity" => q.entity.as_deref(),
+        "AttrKey" => q.attr_key.as_deref(),
+        "NeighborSpan" => q.neighbor_span.as_deref(),
+        "TwinSpan" => q.twin_span.as_deref(),
+        _ => None,
+    };
+    v.ok_or_else(|| format!("T{} ({}): missing {field} field", q.idx + 1, q.kind))
+}
+
+/// Parse the trap fixture — the SAME parser family as [`parse_fixtures`]
+/// (the corpus table + `### T<n> — [kind]` blocks) with the trap fields
+/// (Entity / AttrKey / NeighborSpan / TwinSpan) and the gold-derivation
+/// checks the fixture header preregisters. Asserted: 12 docs, the per-kind
+/// counts, every gold answer derived from the corpus table this same file
+/// carries — the exact table the trap mode ingests before measuring.
+fn parse_trap_fixtures(path: &str) -> Result<(Vec<String>, Vec<TrapQuery>), String> {
+    let raw = fs::read_to_string(path).map_err(|e| format!("trap fixture read {path}: {e}"))?;
+    let mut docs: Vec<(usize, String)> = Vec::new();
+    let mut queries: Vec<TrapQuery> = Vec::new();
+    let mut in_q = false;
+    let mut cur_kind = String::new();
+    let mut cur_text = String::new();
+    let mut cur_entity: Option<String> = None;
+    let mut cur_attr: Option<String> = None;
+    let mut cur_neighbor: Option<String> = None;
+    let mut cur_twin: Option<String> = None;
+    for line in raw.lines() {
+        let t = line.trim();
+        // corpus table row: `| 0 | sentence. |` (same family as parse_fixtures)
+        if t.starts_with('|') && !t.contains("---") {
+            let cells: Vec<&str> = t.trim_matches('|').split('|').map(str::trim).collect();
+            if cells.len() == 2
+                && let Ok(n) = cells[0].parse::<usize>()
+            {
+                docs.push((n, cells[1].to_string()));
+                continue;
+            }
+        }
+        // trap block headers carry the kind: `### T1 — [attribute-swap]`
+        if let Some(rest) = t.strip_prefix("### T") {
+            cur_kind = rest
+                .split("—")
+                .nth(1)
+                .map(|s| {
+                    s.trim()
+                        .trim_start_matches('[')
+                        .trim_end_matches(']')
+                        .trim()
+                        .to_string()
+                })
+                .unwrap_or_default();
+            in_q = true;
+            cur_text.clear();
+            cur_entity = None;
+            cur_attr = None;
+            cur_neighbor = None;
+            cur_twin = None;
+            continue;
+        }
+        if in_q {
+            if let Some(rest) = t.strip_prefix("Query:") {
+                cur_text = unquote(rest);
+            } else if let Some(rest) = t.strip_prefix("Entity:") {
+                cur_entity = Some(unquote(rest));
+            } else if let Some(rest) = t.strip_prefix("AttrKey:") {
+                cur_attr = Some(unquote(rest));
+            } else if let Some(rest) = t.strip_prefix("NeighborSpan:") {
+                cur_neighbor = Some(unquote(rest));
+            } else if let Some(rest) = t.strip_prefix("TwinSpan:") {
+                cur_twin = Some(unquote(rest));
+            } else if let Some(rest) = t.strip_prefix("Relevant:") {
+                let inner = rest.trim().trim_start_matches('[').trim_end_matches(']');
+                let relevant: Vec<usize> = if inner.trim().is_empty() {
+                    Vec::new()
+                } else {
+                    inner
+                        .split(',')
+                        .filter_map(|s| s.trim().parse::<usize>().ok())
+                        .collect()
+                };
+                let kind = TRAP_KINDS
+                    .iter()
+                    .copied()
+                    .find(|k| *k == cur_kind.as_str())
+                    .ok_or_else(|| {
+                        format!(
+                            "### T{}: unknown trap kind '{cur_kind}'",
+                            queries.len() + 1
+                        )
+                    })?;
+                queries.push(TrapQuery {
+                    idx: queries.len(),
+                    kind,
+                    text: cur_text.clone(),
+                    relevant,
+                    entity: cur_entity.take(),
+                    attr_key: cur_attr.take(),
+                    neighbor_span: cur_neighbor.take(),
+                    twin_span: cur_twin.take(),
+                });
+                in_q = false;
+            }
+        }
+    }
+    docs.sort_by_key(|(n, _)| *n);
+    for (w, (n, _d)) in docs.iter().enumerate() {
+        if *n != w {
+            return Err(format!("trap corpus index gap: expected {w}, found {n}"));
+        }
+    }
+    let doc_texts: Vec<String> = docs.into_iter().map(|(_, d)| d).collect();
+    if doc_texts.len() != TRAP_DOC_COUNT {
+        return Err(format!(
+            "expected {TRAP_DOC_COUNT} trap docs in the corpus table, parsed {}",
+            doc_texts.len()
+        ));
+    }
+    for (kind, want) in TRAP_COUNTS {
+        let got = queries.iter().filter(|q| q.kind == kind).count();
+        if got != want {
+            return Err(format!("expected {want} '{kind}' queries, parsed {got}"));
+        }
+    }
+    for q in &queries {
+        for &r in &q.relevant {
+            if r >= doc_texts.len() {
+                return Err(format!(
+                    "trap query '{}' cites out-of-bounds doc {r}",
+                    q.text
+                ));
+            }
+        }
+    }
+    check_trap_gold(&doc_texts, &queries)?;
+    Ok((doc_texts, queries))
+}
+
+/// The gold-derivation checks (the fixture header's rules, verbatim). Every
+/// gold answer must be DERIVED from the corpus table — a failure names the
+/// rule and the query; the fix is the fixture derivation, never the gold
+/// (falsifier F3).
+fn check_trap_gold(docs: &[String], queries: &[TrapQuery]) -> Result<(), String> {
+    let normed: Vec<String> = docs.iter().map(|d| norm(d)).collect();
+    for q in queries {
+        let name = format!("T{} ({})", q.idx + 1, q.kind);
+        match q.kind {
+            "attribute-swap" => {
+                let entity = norm(field_of(q, "Entity")?);
+                let attr = norm(field_of(q, "AttrKey")?);
+                let on_entity: Vec<usize> = normed
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, d)| d.contains(&entity))
+                    .map(|(i, _)| i)
+                    .collect();
+                if on_entity.is_empty() {
+                    return Err(format!(
+                        "{name}: entity '{entity}' is in no corpus doc — the trap's target must be a real stored memory"
+                    ));
+                }
+                if on_entity.iter().any(|&i| normed[i].contains(&attr)) {
+                    return Err(format!(
+                        "{name}: attr '{attr}' appears in a doc holding the entity — gold-abstain is not derived"
+                    ));
+                }
+                if !normed.iter().any(|d| d.contains(&attr)) {
+                    return Err(format!(
+                        "{name}: attr '{attr}' exists in NO corpus doc — the plausible-junk-hit posture requires it on another entity"
+                    ));
+                }
+            }
+            "attribute-swap-control" | "near-miss-control" => {
+                let entity = norm(field_of(q, "Entity")?);
+                if q.relevant.is_empty() {
+                    return Err(format!(
+                        "{name}: a control with an empty relevant set answers nothing — a control must be answerable"
+                    ));
+                }
+                for &r in &q.relevant {
+                    if !normed[r].contains(&entity) {
+                        return Err(format!(
+                            "{name}: gold doc {r} does not contain the entity '{entity}' — the control's gold is not derived"
+                        ));
+                    }
+                }
+            }
+            "contradiction-control" => {
+                let entity = norm(field_of(q, "Entity")?);
+                let attr = norm(field_of(q, "AttrKey")?);
+                if q.relevant.len() != 1 {
+                    return Err(format!(
+                        "{name}: contradiction-control must cite exactly one gold doc"
+                    ));
+                }
+                if !normed[q.relevant[0]].contains(&entity)
+                    || !normed[q.relevant[0]].contains(&attr)
+                {
+                    return Err(format!(
+                        "{name}: gold doc {} lacks the entity or attr span",
+                        q.relevant[0]
+                    ));
+                }
+                let holders = normed
+                    .iter()
+                    .filter(|d| d.contains(&entity) && d.contains(&attr))
+                    .count();
+                if holders != 1 {
+                    return Err(format!(
+                        "{name}: entity+attr held by {holders} docs — not single-source"
+                    ));
+                }
+            }
+            "near-miss" => {
+                let neighbor = norm(field_of(q, "NeighborSpan")?);
+                let twin = norm(field_of(q, "TwinSpan")?);
+                if !q.relevant.is_empty() {
+                    return Err(format!(
+                        "{name}: near-miss gold is the clean abstain — the relevant set must be empty"
+                    ));
+                }
+                if normed.iter().any(|d| d.contains(&neighbor)) {
+                    return Err(format!(
+                        "{name}: neighbor '{neighbor}' appears in a corpus doc — it must NEVER be stored (the gold is derived, not asserted)"
+                    ));
+                }
+                if !normed.iter().any(|d| d.contains(&twin)) {
+                    return Err(format!(
+                        "{name}: twin '{twin}' is in no corpus doc — no confusable neighbor exists"
+                    ));
+                }
+                let shared = twin
+                    .split(' ')
+                    .filter(|w| !w.is_empty())
+                    .filter(|w| neighbor.split(' ').any(|nw| nw == *w))
+                    .count();
+                if shared < 2 {
+                    return Err(format!(
+                        "{name}: twin and neighbor share {shared} tokens — confusability requires >=2"
+                    ));
+                }
+            }
+            "contradiction" => {
+                let entity = norm(field_of(q, "Entity")?);
+                let attr = norm(field_of(q, "AttrKey")?);
+                if q.relevant.len() != 2 {
+                    return Err(format!(
+                        "{name}: contradiction must cite exactly the two conflicting docs"
+                    ));
+                }
+                let (a, b) = (q.relevant[0], q.relevant[1]);
+                if a == b {
+                    return Err(format!("{name}: the pair cites one doc twice"));
+                }
+                for r in [a, b] {
+                    if !normed[r].contains(&entity) || !normed[r].contains(&attr) {
+                        return Err(format!(
+                            "{name}: conflicting doc {r} lacks the entity or attr span"
+                        ));
+                    }
+                }
+                if normed[a] == normed[b] {
+                    return Err(format!(
+                        "{name}: the pair is identical after normalize — a duplicate, not a conflict"
+                    ));
+                }
+            }
+            other => return Err(format!("unknown trap kind '{other}'")),
+        }
+    }
+    Ok(())
+}
+
+fn has_conflict_marker(answer_norm: &str) -> bool {
+    CONFLICT_MARKERS.iter().any(|m| answer_norm.contains(m))
+}
+
+/// The graded outcome of one trap query against the deterministic posture.
+struct TrapGrade {
+    twin_in_grounding: Option<bool>,
+    twin_in_answer: Option<bool>,
+    neighbor_named: Option<bool>,
+    contamination: Option<bool>,
+    abstain_correct: Option<bool>,
+    conflict_surfaced: Option<bool>,
+    both_surfaced: Option<bool>,
+    gold_answer_strict: Option<bool>,
+    answer_class: &'static str,
+}
+
+/// Grade one trap query. The abstain shape is the preregistered
+/// anti-fabrication grading (an explicit absence marker AND no corpus span —
+/// the abstain-probe pass at `verify`); the contamination detector is the
+/// twin's marked span in the grounding or the answer for a neighbor that was
+/// never stored; the contradiction gold is a NAMED conflict over real spans.
+/// The answer-class vocabulary: correct_abstain | correct_answer |
+/// false_decline | over_commit | wrong_answer | silent_pick | fabrication |
+/// conflict_surfaced.
+fn grade_trap(q: &TrapQuery, recall: &RecallOut, answer: &str, docs: &[String]) -> TrapGrade {
+    let a = norm(answer);
+    let grounding: Vec<String> = recall.hits.iter().map(|h| norm(&h.content)).collect();
+    match q.kind {
+        "attribute-swap" => {
+            let grounded = contains_any_corpus_span(&a, docs);
+            let abstain_correct = has_absence_marker(&a) && !grounded;
+            let class = if abstain_correct {
+                "correct_abstain"
+            } else if grounded {
+                "over_commit"
+            } else {
+                "fabrication"
+            };
+            TrapGrade {
+                twin_in_grounding: None,
+                twin_in_answer: None,
+                neighbor_named: None,
+                contamination: None,
+                abstain_correct: Some(abstain_correct),
+                conflict_surfaced: None,
+                both_surfaced: None,
+                gold_answer_strict: None,
+                answer_class: class,
+            }
+        }
+        "near-miss" => {
+            // The spans are parse-validated for the near-miss kind
+            // (check_trap_gold); the empty fallbacks are unreachable.
+            let twin = norm(q.twin_span.as_deref().unwrap_or(""));
+            let neighbor = norm(q.neighbor_span.as_deref().unwrap_or(""));
+            let twin_in_grounding = grounding.iter().any(|g| g.contains(&twin));
+            let twin_in_answer = a.contains(&twin);
+            let neighbor_named =
+                grounding.iter().any(|g| g.contains(&neighbor)) || a.contains(&neighbor);
+            let contamination = twin_in_grounding || twin_in_answer;
+            let grounded = contains_any_corpus_span(&a, docs);
+            let abstain_correct = has_absence_marker(&a) && !grounded;
+            let class = if contamination || grounded {
+                "over_commit"
+            } else if abstain_correct {
+                "correct_abstain"
+            } else {
+                "fabrication"
+            };
+            TrapGrade {
+                twin_in_grounding: Some(twin_in_grounding),
+                twin_in_answer: Some(twin_in_answer),
+                neighbor_named: Some(neighbor_named),
+                contamination: Some(contamination),
+                abstain_correct: Some(abstain_correct),
+                conflict_surfaced: None,
+                both_surfaced: None,
+                gold_answer_strict: None,
+                answer_class: class,
+            }
+        }
+        "attribute-swap-control" | "near-miss-control" | "contradiction-control" => {
+            let strict = q
+                .relevant
+                .iter()
+                .all(|&r| spans_verified(&a, &norm(&docs[r])));
+            let class = if strict {
+                "correct_answer"
+            } else if has_absence_marker(&a) {
+                "false_decline"
+            } else {
+                "wrong_answer"
+            };
+            TrapGrade {
+                twin_in_grounding: None,
+                twin_in_answer: None,
+                neighbor_named: None,
+                contamination: None,
+                abstain_correct: None,
+                conflict_surfaced: None,
+                both_surfaced: None,
+                gold_answer_strict: Some(strict),
+                answer_class: class,
+            }
+        }
+        "contradiction" => {
+            let any_grounded = q
+                .relevant
+                .iter()
+                .any(|&r| spans_verified(&a, &norm(&docs[r])));
+            let both = q
+                .relevant
+                .iter()
+                .all(|&r| spans_verified(&a, &norm(&docs[r])));
+            let surfaced = has_conflict_marker(&a) && any_grounded;
+            let class = if surfaced {
+                "conflict_surfaced"
+            } else if has_absence_marker(&a) {
+                "false_decline"
+            } else if contains_any_corpus_span(&a, docs) {
+                "silent_pick"
+            } else {
+                "fabrication"
+            };
+            TrapGrade {
+                twin_in_grounding: None,
+                twin_in_answer: None,
+                neighbor_named: None,
+                contamination: None,
+                abstain_correct: None,
+                conflict_surfaced: Some(surfaced),
+                both_surfaced: Some(both),
+                gold_answer_strict: None,
+                answer_class: class,
+            }
+        }
+        other => unreachable!("validated trap kind '{other}'"),
+    }
+}
+
+/// One trap row (the round-19 JSONL shape: one record per line + a run-meta
+/// line, the shared column names carried over, the trap columns additive).
+struct TrapRecord {
+    phase: &'static str,
+    arm: &'static str,
+    qidx: usize,
+    trap_kind: &'static str,
+    query: String,
+    relevant: Vec<usize>,
+    t2_decision: Option<String>,
+    t2_hits: Option<Vec<i64>>,
+    t2_ms: Option<u128>,
+    answer: String,
+    twin_in_grounding: Option<bool>,
+    twin_in_answer: Option<bool>,
+    neighbor_named: Option<bool>,
+    contamination: Option<bool>,
+    abstain_correct: Option<bool>,
+    conflict_surfaced: Option<bool>,
+    both_surfaced: Option<bool>,
+    gold_answer_strict: Option<bool>,
+    answer_class: &'static str,
+    latency_ms: u128,
+    error: Option<String>,
+    qwen_label: String,
+}
+
+impl TrapRecord {
+    fn to_json(&self) -> Value {
+        json!({
+            "phase": self.phase, "arm": self.arm, "qidx": self.qidx,
+            "trap_kind": self.trap_kind, "query": self.query,
+            "relevant": self.relevant,
+            "t2_decision": self.t2_decision, "t2_hits": self.t2_hits,
+            "t2_ms": self.t2_ms, "answer": self.answer,
+            "twin_in_grounding": self.twin_in_grounding,
+            "twin_in_answer": self.twin_in_answer,
+            "neighbor_named": self.neighbor_named,
+            "contamination": self.contamination,
+            "abstain_correct": self.abstain_correct,
+            "conflict_surfaced": self.conflict_surfaced,
+            "both_surfaced": self.both_surfaced,
+            "gold_answer_strict": self.gold_answer_strict,
+            "answer_class": self.answer_class,
+            "latency_ms": self.latency_ms, "error": self.error,
+            "qwen_label": self.qwen_label,
+        })
+    }
+}
+
+/// One classification pool's scores (the DISCERN answer-versus-abstain
+/// framing: the positive class is the abstain decision; false-decline counts
+/// the gold-answer queries the posture refused; contamination and
+/// conflict-surfacing ride their own columns).
+struct PoolStats {
+    name: &'static str,
+    gold_abstain: usize,
+    gold_answer: usize,
+    tp: usize,
+    fp: usize,
+    fn_misses: usize,
+    precision: Option<f64>,
+    recall: Option<f64>,
+    f1: Option<f64>,
+    false_decline: Option<f64>,
+    contamination_gnd: Option<f64>,
+    contamination_ans: Option<f64>,
+    conflict_surfaced: Option<f64>,
+    fabrication: usize,
+}
+
+fn fmt_opt(v: Option<f64>) -> String {
+    v.map(|x| format!("{x:.3}"))
+        .unwrap_or_else(|| "-".to_string())
+}
+
+fn classify_pool(
+    name: &'static str,
+    recs: &[&TrapRecord],
+    abstain_kinds: &[&str],
+    answer_kinds: &[&str],
+) -> PoolStats {
+    let abstain_recs: Vec<&TrapRecord> = recs
+        .iter()
+        .copied()
+        .filter(|r| abstain_kinds.contains(&r.trap_kind))
+        .collect();
+    let answer_recs: Vec<&TrapRecord> = recs
+        .iter()
+        .copied()
+        .filter(|r| answer_kinds.contains(&r.trap_kind))
+        .collect();
+    let tp = abstain_recs
+        .iter()
+        .filter(|r| r.answer_class == "correct_abstain")
+        .count();
+    let fp = answer_recs
+        .iter()
+        .filter(|r| r.answer_class == "false_decline")
+        .count();
+    let fn_misses = abstain_recs
+        .iter()
+        .filter(|r| r.answer_class != "correct_abstain")
+        .count();
+    let precision = (tp + fp > 0).then(|| tp as f64 / (tp + fp) as f64);
+    let recall = (tp + fn_misses > 0).then(|| tp as f64 / (tp + fn_misses) as f64);
+    let f1 = match (precision, recall) {
+        (Some(p), Some(r)) if p + r > 0.0 => Some(2.0 * p * r / (p + r)),
+        _ => None,
+    };
+    let false_decline = (!answer_recs.is_empty()).then(|| fp as f64 / answer_recs.len() as f64);
+    // The trap-specific columns ride the pool's OWN kinds — a pool without
+    // near-miss rows shows no contamination, one without contradiction rows
+    // shows no conflict-surfacing (the pool row measures its own class).
+    let pool_kinds: Vec<&str> = abstain_kinds
+        .iter()
+        .copied()
+        .chain(answer_kinds.iter().copied())
+        .collect();
+    let mine: Vec<&TrapRecord> = recs
+        .iter()
+        .copied()
+        .filter(|r| pool_kinds.contains(&r.trap_kind))
+        .collect();
+    let nm: Vec<&TrapRecord> = mine
+        .iter()
+        .copied()
+        .filter(|r| r.trap_kind == "near-miss")
+        .collect();
+    let (contamination_gnd, contamination_ans) = if nm.is_empty() {
+        (None, None)
+    } else {
+        (
+            Some(
+                nm.iter()
+                    .filter(|r| r.twin_in_grounding == Some(true))
+                    .count() as f64
+                    / nm.len() as f64,
+            ),
+            Some(
+                nm.iter()
+                    .filter(|r| r.twin_in_answer == Some(true))
+                    .count() as f64
+                    / nm.len() as f64,
+            ),
+        )
+    };
+    let cx: Vec<&TrapRecord> = mine
+        .iter()
+        .copied()
+        .filter(|r| r.trap_kind == "contradiction")
+        .collect();
+    let conflict_surfaced = (!cx.is_empty()).then(|| {
+        cx.iter()
+            .filter(|r| r.conflict_surfaced == Some(true))
+            .count() as f64
+            / cx.len() as f64
+    });
+    let fabrication = mine
+        .iter()
+        .filter(|r| r.answer_class == "fabrication")
+        .count();
+    PoolStats {
+        name,
+        gold_abstain: abstain_recs.len(),
+        gold_answer: answer_recs.len(),
+        tp,
+        fp,
+        fn_misses,
+        precision,
+        recall,
+        f1,
+        false_decline,
+        contamination_gnd,
+        contamination_ans,
+        conflict_surfaced,
+        fabrication,
+    }
+}
+
+/// The trap round (`BRAIN_S0_TRAP=1`): parse the trap fixture (gold derived
+/// from the corpus it carries), ingest that corpus through `/add` on a FRESH
+/// store (deterministic seeded content — the corpus table IS the store),
+/// run the LLM-free trap arm, and print the classification rows plus the
+/// round's central verdict.
+fn run_trap_mode(brain: &str, out_dir: &std::path::Path) -> Result<(), String> {
+    let started = Instant::now();
+    let manifest = env!("CARGO_MANIFEST_DIR");
+    let fixtures = std::env::var("BRAIN_S0_FIXTURES")
+        .unwrap_or_else(|_| format!("{manifest}/tests/fixtures/trap_queries.md"));
+    let fixture_bytes = fs::read(&fixtures).map_err(|e| format!("trap fixture read: {e}"))?;
+    let (docs, queries) = parse_trap_fixtures(&fixtures)?;
+    let queries: Vec<TrapQuery> = match std::env::var("BRAIN_S0_QUERY_LIMIT")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+    {
+        Some(n) if n > 0 && n < queries.len() => {
+            eprintln!(
+                "cascade_bench: TRAP SMOKE RUN — query limit {n} (NOT a recorded measurement)"
+            );
+            queries.into_iter().take(n).collect()
+        }
+        _ => queries,
+    };
+    eprintln!(
+        "cascade_bench: trap round — {} trap docs + {} trap queries from {} ({} bytes, sha256 below)",
+        docs.len(),
+        queries.len(),
+        fixtures,
+        fixture_bytes.len()
+    );
+    // health gate: the harness refuses to measure against a dead kernel.
+    let health = http::get(brain, "/health", &[], None)?;
+    if health.status != 200 {
+        return Err(format!("brain-server /health → {}", health.status));
+    }
+    eprintln!(
+        "cascade_bench: trap posture — run against a FRESH store (BRAIN_DB_PATH); the corpus table IS the trap store"
+    );
+    // Seed: the corpus table ingested verbatim in index order (deterministic
+    // seeded content; content-hash dedup makes a re-run idempotent, but a
+    // dirty store would pollute the measurement — the loud line above is the
+    // runbook contract).
+    for (i, d) in docs.iter().enumerate() {
+        brain_add(brain, d, &format!("trap-gold-{i:02}"))?;
+    }
+    eprintln!("cascade_bench: trap corpus ingested ({} docs)", docs.len());
+
+    // The determinism witness (the TC-3 law witnessed on the trap store).
+    let w0 = brain_recall(brain, &queries[0].text, 8)?;
+    let w1 = brain_recall(brain, &queries[0].text, 8)?;
+    let wit = |r: &RecallOut| {
+        json!({
+            "decision": r.decision,
+            "ids": r.hits.iter().map(|h| h.id).collect::<Vec<_>>(),
+            "contents": r.hits.iter().map(|h| h.content.clone()).collect::<Vec<_>>(),
+        })
+    };
+    let witness = wit(&w0) == wit(&w1);
+    eprintln!("cascade_bench: trap determinism witness (same query → same evidence): {witness}");
+
+    let mut records: Vec<TrapRecord> = Vec::new();
+    for q in &queries {
+        let t0 = Instant::now();
+        match brain_recall(brain, &q.text, 8) {
+            Ok(recall) => {
+                let latency = t0.elapsed().as_millis();
+                // The store's zero-token answer bound (the fixture header's
+                // measured posture): empty hits → the preregistered abstain
+                // line; hits → the top hit's content verbatim (the same
+                // evidence-as-answer shape the S0 arms preregister, bounded
+                // by the same per-hit cap).
+                let answer = if recall.hits.is_empty() {
+                    ABSTAIN_LINE.to_string()
+                } else {
+                    let raw = &recall.hits[0].content;
+                    if raw.len() > EVIDENCE_HIT_CAP_CHARS {
+                        format!("{}… [truncated]", &raw[..EVIDENCE_HIT_CAP_CHARS])
+                    } else {
+                        raw.clone()
+                    }
+                };
+                let grade = grade_trap(q, &recall, &answer, &docs);
+                records.push(TrapRecord {
+                    phase: "trap",
+                    arm: "T",
+                    qidx: q.idx,
+                    trap_kind: q.kind,
+                    query: q.text.clone(),
+                    relevant: q.relevant.clone(),
+                    t2_decision: Some(recall.decision.clone()),
+                    t2_hits: Some(recall.hits.iter().map(|h| h.id).collect()),
+                    t2_ms: Some(recall.ms),
+                    answer,
+                    twin_in_grounding: grade.twin_in_grounding,
+                    twin_in_answer: grade.twin_in_answer,
+                    neighbor_named: grade.neighbor_named,
+                    contamination: grade.contamination,
+                    abstain_correct: grade.abstain_correct,
+                    conflict_surfaced: grade.conflict_surfaced,
+                    both_surfaced: grade.both_surfaced,
+                    gold_answer_strict: grade.gold_answer_strict,
+                    answer_class: grade.answer_class,
+                    latency_ms: latency,
+                    error: None,
+                    qwen_label: qwen_label(),
+                });
+            }
+            Err(e) => {
+                eprintln!("cascade_bench: trap query {} FAILED: {e}", q.idx);
+                records.push(TrapRecord {
+                    phase: "trap",
+                    arm: "T",
+                    qidx: q.idx,
+                    trap_kind: q.kind,
+                    query: q.text.clone(),
+                    relevant: q.relevant.clone(),
+                    t2_decision: None,
+                    t2_hits: None,
+                    t2_ms: None,
+                    answer: String::new(),
+                    twin_in_grounding: None,
+                    twin_in_answer: None,
+                    neighbor_named: None,
+                    contamination: None,
+                    abstain_correct: None,
+                    conflict_surfaced: None,
+                    both_surfaced: None,
+                    gold_answer_strict: None,
+                    answer_class: "error",
+                    latency_ms: 0,
+                    error: Some(e),
+                    qwen_label: qwen_label(),
+                });
+            }
+        }
+    }
+
+    // ── the classification (the DISCERN answer-versus-abstain framing) ──
+    let clean: Vec<&TrapRecord> = records.iter().filter(|r| r.error.is_none()).collect();
+    let pools = [
+        classify_pool(
+            "attribute-swap",
+            &clean,
+            &["attribute-swap"],
+            &["attribute-swap-control"],
+        ),
+        classify_pool("near-miss", &clean, &["near-miss"], &["near-miss-control"]),
+        classify_pool(
+            "contradiction",
+            &clean,
+            &[],
+            &["contradiction", "contradiction-control"],
+        ),
+        classify_pool(
+            "pooled",
+            &clean,
+            &["attribute-swap", "near-miss"],
+            &[
+                "attribute-swap-control",
+                "near-miss-control",
+                "contradiction",
+                "contradiction-control",
+            ],
+        ),
+    ];
+
+    // ── THE ROUND'S CENTRAL VERDICT (preregistered) ──
+    let nm = pools
+        .iter()
+        .find(|p| p.name == "near-miss")
+        .expect("near-miss pool exists");
+    let gnd = nm.contamination_gnd.unwrap_or(0.0);
+    let ans = nm.contamination_ans.unwrap_or(0.0);
+    let (verdict_name, verdict_text) = if gnd > 0.0 {
+        (
+            "CONTAMINATION MANIFESTS",
+            format!(
+                "near-miss contamination rate {gnd:.3} (grounding) / {ans:.3} (answer) > 0 — \
+                 the failure class manifests in this retrieval posture; the conditional \
+                 mechanism (S3) opens"
+            ),
+        )
+    } else {
+        (
+            "MEASURED-ZERO",
+            format!(
+                "near-miss contamination rate 0/{} — the collision-family mechanism parks \
+                 BY NAME (falsifier F1): the failure class does not manifest in this \
+                 retrieval posture",
+                nm.gold_abstain
+            ),
+        )
+    };
+
+    // ── artifacts (the round-19 shape: records.jsonl + summary.md) ──
+    let records_path = out_dir.join("records.jsonl");
+    {
+        let mut f = fs::File::create(&records_path).map_err(|e| format!("records file: {e}"))?;
+        for r in &records {
+            writeln!(f, "{}", r.to_json()).map_err(|e| format!("records write: {e}"))?;
+        }
+        let verdict_row = json!({
+            "kind": "trap-verdict",
+            "near_miss_contamination_grounding": gnd,
+            "near_miss_contamination_answer": ans,
+            "verdict": verdict_name,
+            "fixture_sha256": sha256_hex(&fixture_bytes),
+            "started_utc": chrono_utc(),
+        });
+        writeln!(f, "{verdict_row}").map_err(|e| format!("records write: {e}"))?;
+        let meta_row = json!({
+            "kind": "run-meta",
+            "mode": "trap",
+            "queries": queries.len(),
+            "gold_docs": docs.len(),
+            "determinism_witness": witness,
+            "run_wall_s": started.elapsed().as_secs_f64(),
+            "fixture_sha256": sha256_hex(&fixture_bytes),
+            "started_utc": chrono_utc(),
+        });
+        writeln!(f, "{meta_row}").map_err(|e| format!("records write: {e}"))?;
+    }
+
+    let mut md = String::new();
+    let _ = writeln!(
+        md,
+        "# cascade_bench trap summary — the DISCERN trap taxonomy (round 20)\n"
+    );
+    let _ = writeln!(
+        md,
+        "determinism witness (T2 same query → same evidence): **{witness}**"
+    );
+    let _ = writeln!(
+        md,
+        "posture: deterministic /recall + the store's zero-token answer bound (LLM-free by law)\n"
+    );
+    let _ = writeln!(
+        md,
+        "| pool | gold-abstain | gold-answer | TP | FP | FN | abstain P | abstain R | abstain F1 | false-decline | contamination gnd | contamination ans | conflict-surfaced | fabrication |"
+    );
+    let _ = writeln!(
+        md,
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"
+    );
+    for p in &pools {
+        let _ = writeln!(
+            md,
+            "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |",
+            p.name,
+            p.gold_abstain,
+            p.gold_answer,
+            p.tp,
+            p.fp,
+            p.fn_misses,
+            fmt_opt(p.precision),
+            fmt_opt(p.recall),
+            fmt_opt(p.f1),
+            fmt_opt(p.false_decline),
+            fmt_opt(p.contamination_gnd),
+            fmt_opt(p.contamination_ans),
+            fmt_opt(p.conflict_surfaced),
+            p.fabrication,
+        );
+    }
+    let _ = writeln!(md, "\n**THE VERDICT: {verdict_name}** — {verdict_text}\n");
+    let summary_path = out_dir.join("summary.md");
+    fs::write(&summary_path, &md).map_err(|e| format!("summary write: {e}"))?;
+
+    println!("{md}");
+    eprintln!("cascade_bench: TRAP VERDICT — {verdict_name}: {verdict_text}");
+    println!(
+        "cascade_bench: trap round done in {:.1}s — records {} summary {}",
+        started.elapsed().as_secs_f64(),
+        records_path.display(),
+        summary_path.display()
+    );
+    Ok(())
+}
+
 // ── main ─────────────────────────────────────────────────────────────────────
 
 fn main() {
@@ -1293,6 +2254,19 @@ fn main() {
     let out_dir =
         PathBuf::from(std::env::var("BRAIN_S0_OUT").unwrap_or_else(|_| "/tmp/i17-run".into()));
     fs::create_dir_all(&out_dir).expect("out dir");
+    // ── the trap round (round 20): BRAIN_S0_TRAP=1 switches the bench to
+    // the DISCERN trap taxonomy — parse the trap fixture (gold derived
+    // from the corpus it carries), ingest that corpus through /add on a
+    // FRESH store, run the LLM-free trap arm, print the classification and
+    // the round's central verdict. The S0 path below is untouched when the
+    // knob is unset.
+    if std::env::var("BRAIN_S0_TRAP").is_ok_and(|v| v == "1") {
+        if let Err(e) = run_trap_mode(&brain, &out_dir) {
+            eprintln!("cascade_bench: TRAP RUN FAILED: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
     let manifest = env!("CARGO_MANIFEST_DIR");
     let fixtures = std::env::var("BRAIN_S0_FIXTURES")
         .unwrap_or_else(|_| format!("{manifest}/tests/fixtures/eval_queries.md"));
@@ -1688,4 +2662,376 @@ fn chrono_utc() -> String {
         .map(|d| d.as_secs())
         .map(|s| format!("{s} (unix)"))
         .unwrap_or_default()
+}
+
+// ── the trap round's hermetic tests (the gold-derivation laws + grading) ─────
+
+#[cfg(test)]
+mod trap_tests {
+    use super::*;
+
+    fn tq(
+        idx: usize,
+        kind: &'static str,
+        relevant: Vec<usize>,
+        entity: Option<&str>,
+        attr: Option<&str>,
+        neighbor: Option<&str>,
+        twin: Option<&str>,
+    ) -> TrapQuery {
+        TrapQuery {
+            idx,
+            kind,
+            text: format!("trap query {idx}"),
+            relevant,
+            entity: entity.map(str::to_string),
+            attr_key: attr.map(str::to_string),
+            neighbor_span: neighbor.map(str::to_string),
+            twin_span: twin.map(str::to_string),
+        }
+    }
+
+    /// The committed fixture parses, its counts hold, and every gold answer
+    /// derives from the corpus table it carries (the checks run inside
+    /// parse_trap_fixtures — this test IS the hermetic layer).
+    #[test]
+    fn committed_trap_fixture_parses_and_derives_gold() {
+        let (docs, queries) = parse_trap_fixtures(&format!(
+            "{}/tests/fixtures/trap_queries.md",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .expect("the committed trap fixture parses");
+        assert_eq!(docs.len(), TRAP_DOC_COUNT);
+        assert_eq!(queries.len(), 16);
+        for (kind, want) in TRAP_COUNTS {
+            assert_eq!(
+                queries.iter().filter(|q| q.kind == kind).count(),
+                want,
+                "{kind} count drifted"
+            );
+        }
+        // the contamination gold is derived, not asserted: no near-miss
+        // neighbor's marked span appears in any corpus doc
+        for q in queries.iter().filter(|q| q.kind == "near-miss") {
+            let neighbor = norm(q.neighbor_span.as_deref().expect("validated"));
+            assert!(
+                !docs.iter().any(|d| norm(d).contains(&neighbor)),
+                "neighbor '{neighbor}' must be in no corpus doc"
+            );
+        }
+    }
+
+    #[test]
+    fn near_miss_neighbor_in_corpus_refuses_derivation() {
+        let docs = vec![
+            "Zephyron Cloud Systems reported annual revenue of 9 dollars.".to_string(),
+            "Zephyron Cloud Solutions is headquartered in Seattle.".to_string(),
+        ];
+        let q = tq(
+            0,
+            "near-miss",
+            vec![],
+            None,
+            None,
+            Some("Zephyron Cloud Systems"),
+            Some("Zephyron Cloud Solutions"),
+        );
+        let err = check_trap_gold(&docs, &[q]).unwrap_err();
+        assert!(err.contains("NEVER be stored"), "{err}");
+    }
+
+    #[test]
+    fn near_miss_nonconfusable_neighbor_refuses_derivation() {
+        let docs = vec!["Zephyron Cloud Solutions is headquartered in Seattle.".to_string()];
+        let q = tq(
+            0,
+            "near-miss",
+            vec![],
+            None,
+            None,
+            Some("Frobnitz Industries"),
+            Some("Zephyron Cloud Solutions"),
+        );
+        let err = check_trap_gold(&docs, &[q]).unwrap_err();
+        assert!(err.contains("confusability requires >=2"), "{err}");
+    }
+
+    #[test]
+    fn attribute_swap_attr_on_entity_refuses_derivation() {
+        let docs = vec!["Zephyron Cloud Solutions is headquartered in Seattle.".to_string()];
+        // the attr key rides the entity's own doc — gold-abstain is NOT derived
+        let q = tq(
+            0,
+            "attribute-swap",
+            vec![],
+            Some("Zephyron Cloud Solutions"),
+            Some("headquartered"),
+            None,
+            None,
+        );
+        let err = check_trap_gold(&docs, &[q]).unwrap_err();
+        assert!(err.contains("gold-abstain is not derived"), "{err}");
+        // the attr exists NOWHERE — the trap would be trivial
+        let q2 = tq(
+            0,
+            "attribute-swap",
+            vec![],
+            Some("Zephyron Cloud Solutions"),
+            Some("CEO"),
+            None,
+            None,
+        );
+        let err2 = check_trap_gold(&docs, &[q2]).unwrap_err();
+        assert!(err2.contains("plausible-junk-hit posture"), "{err2}");
+    }
+
+    #[test]
+    fn attribute_swap_happy_path_derives() {
+        let docs = vec![
+            "Zephyron Cloud Solutions is headquartered in Seattle.".to_string(),
+            "The CEO of Meridian Robotics is Lena Hartmann.".to_string(),
+        ];
+        let q = tq(
+            0,
+            "attribute-swap",
+            vec![],
+            Some("Zephyron Cloud Solutions"),
+            Some("CEO"),
+            None,
+            None,
+        );
+        check_trap_gold(&docs, &[q]).expect("the trap derives");
+    }
+
+    #[test]
+    fn contradiction_duplicate_pair_refuses_derivation() {
+        let base = "Northwind Analytics reported annual revenue of 42 million dollars.";
+        let docs = vec![base.to_string(), base.to_string()];
+        let q = tq(
+            0,
+            "contradiction",
+            vec![0, 1],
+            Some("Northwind Analytics"),
+            Some("revenue"),
+            None,
+            None,
+        );
+        let err = check_trap_gold(&docs, &[q]).unwrap_err();
+        assert!(err.contains("a duplicate, not a conflict"), "{err}");
+    }
+
+    #[test]
+    fn contradiction_happy_path_derives() {
+        let docs = vec![
+            "Northwind Analytics reported annual revenue of 42 million dollars.".to_string(),
+            "Northwind Analytics reported annual revenue of 87 million dollars.".to_string(),
+        ];
+        let q = tq(
+            0,
+            "contradiction",
+            vec![0, 1],
+            Some("Northwind Analytics"),
+            Some("revenue"),
+            None,
+            None,
+        );
+        check_trap_gold(&docs, &[q]).expect("the conflict pair derives");
+    }
+
+    #[test]
+    fn contradiction_control_single_source_enforced() {
+        let docs = vec![
+            "Meridian Robotics builds assembly robots for factories.".to_string(),
+            "Meridian Robotics builds elevators.".to_string(),
+        ];
+        let q = tq(
+            0,
+            "contradiction-control",
+            vec![0],
+            Some("Meridian Robotics"),
+            Some("build"),
+            None,
+            None,
+        );
+        let err = check_trap_gold(&docs, &[q]).unwrap_err();
+        assert!(err.contains("not single-source"), "{err}");
+    }
+
+    fn recall_with(contents: &[&str]) -> RecallOut {
+        RecallOut {
+            decision: "ok".to_string(),
+            hits: contents
+                .iter()
+                .enumerate()
+                .map(|(i, c)| RecallHit {
+                    id: i as i64,
+                    title: None,
+                    content: (*c).to_string(),
+                    score: 1.0,
+                })
+                .collect(),
+            ms: 1,
+        }
+    }
+
+    #[test]
+    fn grade_trap_attribute_swap_uses_the_antifabrication_shape() {
+        let docs = vec![
+            "Zephyron Cloud Solutions is headquartered in Seattle.".to_string(),
+            "The CEO of Meridian Robotics is Lena Hartmann.".to_string(),
+        ];
+        let q = tq(
+            0,
+            "attribute-swap",
+            vec![],
+            Some("Zephyron Cloud Solutions"),
+            Some("CEO"),
+            None,
+            None,
+        );
+        // the honest abstain: an absence marker, no corpus span
+        let g = grade_trap(&q, &recall_with(&[]), ABSTAIN_LINE, &docs);
+        assert_eq!(g.answer_class, "correct_abstain");
+        assert_eq!(g.abstain_correct, Some(true));
+        // the plausible junk hit served verbatim — the over-commit class
+        let junk = recall_with(&["The CEO of Meridian Robotics is Lena Hartmann."]);
+        let g2 = grade_trap(&q, &junk, &junk.hits[0].content, &docs);
+        assert_eq!(g2.answer_class, "over_commit");
+        assert_eq!(g2.abstain_correct, Some(false));
+    }
+
+    #[test]
+    fn grade_trap_near_miss_detects_contamination() {
+        let docs = vec!["Zephyron Cloud Solutions is headquartered in Seattle.".to_string()];
+        let q = tq(
+            0,
+            "near-miss",
+            vec![],
+            None,
+            None,
+            Some("Zephyron Cloud Systems"),
+            Some("Zephyron Cloud Solutions"),
+        );
+        // the twin's chunk served for the never-stored neighbor — contamination
+        let twin = recall_with(&["Zephyron Cloud Solutions is headquartered in Seattle."]);
+        let g = grade_trap(&q, &twin, &twin.hits[0].content, &docs);
+        assert_eq!(g.contamination, Some(true));
+        assert_eq!(g.twin_in_grounding, Some(true));
+        assert_eq!(g.twin_in_answer, Some(true));
+        assert_eq!(g.answer_class, "over_commit");
+        // the neighbor's own span appears NOWHERE (the anti-fabrication witness)
+        assert_eq!(g.neighbor_named, Some(false));
+        // empty hits → the clean abstain
+        let g2 = grade_trap(&q, &recall_with(&[]), ABSTAIN_LINE, &docs);
+        assert_eq!(g2.contamination, Some(false));
+        assert_eq!(g2.answer_class, "correct_abstain");
+    }
+
+    #[test]
+    fn grade_trap_contradiction_names_the_conflict() {
+        let docs = vec![
+            "Northwind Analytics reported annual revenue of 42 million dollars.".to_string(),
+            "Northwind Analytics reported annual revenue of 87 million dollars.".to_string(),
+        ];
+        let q = tq(
+            0,
+            "contradiction",
+            vec![0, 1],
+            Some("Northwind Analytics"),
+            Some("revenue"),
+            None,
+            None,
+        );
+        // a silent single-value pick — the failure the pair measures
+        let pick = recall_with(&[&docs[0]]);
+        let g = grade_trap(&q, &pick, &pick.hits[0].content, &docs);
+        assert_eq!(g.answer_class, "silent_pick");
+        assert_eq!(g.conflict_surfaced, Some(false));
+        // a named conflict over real spans — the gold
+        let named = "The store holds two different values for Northwind Analytics revenue: \
+                     Northwind Analytics reported annual revenue of 42 million dollars.";
+        let g2 = grade_trap(&q, &pick, named, &docs);
+        assert_eq!(g2.answer_class, "conflict_surfaced");
+        assert_eq!(g2.conflict_surfaced, Some(true));
+        // an abstain on a contradiction query is a false decline, not a pass
+        let g3 = grade_trap(&q, &recall_with(&[]), ABSTAIN_LINE, &docs);
+        assert_eq!(g3.answer_class, "false_decline");
+    }
+
+    #[test]
+    fn grade_trap_control_false_decline_and_correct_answer() {
+        let docs = vec!["Zephyron Cloud Solutions is headquartered in Seattle.".to_string()];
+        let q = tq(
+            0,
+            "near-miss-control",
+            vec![0],
+            Some("Zephyron Cloud Solutions"),
+            None,
+            None,
+            None,
+        );
+        let hit = recall_with(&[&docs[0]]);
+        let g = grade_trap(&q, &hit, &hit.hits[0].content, &docs);
+        assert_eq!(g.answer_class, "correct_answer");
+        assert_eq!(g.gold_answer_strict, Some(true));
+        let g2 = grade_trap(&q, &recall_with(&[]), ABSTAIN_LINE, &docs);
+        assert_eq!(g2.answer_class, "false_decline");
+    }
+
+    #[test]
+    fn classify_pool_computes_the_discern_framing() {
+        let mk = |kind: &'static str, class: &'static str| TrapRecord {
+            phase: "trap",
+            arm: "T",
+            qidx: 0,
+            trap_kind: kind,
+            query: "q".into(),
+            relevant: vec![],
+            t2_decision: None,
+            t2_hits: None,
+            t2_ms: None,
+            answer: String::new(),
+            twin_in_grounding: None,
+            twin_in_answer: None,
+            neighbor_named: None,
+            contamination: None,
+            abstain_correct: None,
+            conflict_surfaced: None,
+            both_surfaced: None,
+            gold_answer_strict: None,
+            answer_class: class,
+            latency_ms: 0,
+            error: None,
+            qwen_label: String::new(),
+        };
+        // near-miss pool: 2 traps (1 correct abstain, 1 over-commit) + 2
+        // controls (1 correct answer, 1 false decline)
+        let recs = vec![
+            mk("near-miss", "correct_abstain"),
+            mk("near-miss", "over_commit"),
+            mk("near-miss-control", "correct_answer"),
+            mk("near-miss-control", "false_decline"),
+        ];
+        let refs: Vec<&TrapRecord> = recs.iter().collect();
+        let p = classify_pool("near-miss", &refs, &["near-miss"], &["near-miss-control"]);
+        assert_eq!((p.gold_abstain, p.gold_answer), (2, 2));
+        assert_eq!((p.tp, p.fp, p.fn_misses), (1, 1, 1));
+        assert_eq!(p.precision, Some(0.5));
+        assert_eq!(p.recall, Some(0.5));
+        assert_eq!(p.f1, Some(0.5));
+        assert_eq!(p.false_decline, Some(0.5));
+        // the pooled row pools the trap kinds and the answer kinds
+        let pooled = classify_pool(
+            "pooled",
+            &refs,
+            &["attribute-swap", "near-miss"],
+            &[
+                "attribute-swap-control",
+                "near-miss-control",
+                "contradiction",
+                "contradiction-control",
+            ],
+        );
+        assert_eq!((pooled.gold_abstain, pooled.gold_answer), (2, 2));
+    }
 }
