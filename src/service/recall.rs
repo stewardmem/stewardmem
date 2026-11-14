@@ -239,7 +239,7 @@ pub(crate) fn chunk_for_verify(
     .optional()
 }
 
-/// The G-1 recall tests' seed: a knowledge row (title=content, the seed
+/// The recall tests' seed: a knowledge row (title=content, the seed
 /// helper shape) with the given `pii` flag, owned by `ana` in the `global`
 /// label — the owner-bound no-role posture (`record_read_gate`:
 /// `owner_in = [sub]`) means the non-admin JWT principal (sub `ana`) can

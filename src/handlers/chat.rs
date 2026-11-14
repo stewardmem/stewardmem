@@ -983,10 +983,20 @@ pub async fn chat_turn(
                                 )
                             }
                             crate::agentloop::cascade::WriterDrain::Refused { code, message } => {
+                                // the child's code/message are request-derived
+                                // bytes — they ride the LogValue seam (the
+                                // sanitised Display) so a crafted control
+                                // character cannot forge log entries
                                 tracing::error!(
                                     "chat cascade: writer turn broke ({}{}), falling through",
-                                    code,
-                                    message.map(|m| format!(" — {m}")).unwrap_or_default()
+                                    crate::server::router::memory::LogValue::new(&code),
+                                    message.map(|m| {
+                                        format!(
+                                            " — {}",
+                                            crate::server::router::memory::LogValue::new(&m)
+                                        )
+                                    })
+                                    .unwrap_or_default()
                                 );
                                 break 'cascade None;
                             }

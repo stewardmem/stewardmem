@@ -276,7 +276,7 @@ pub async fn run_recall(
     )?;
     // Defense-in-depth at the core, BOTH ARMS: every binding of
     // run_recall gets the clamp (the request side, below) AND the read
-    // seam (the output side, at the outcome assembly — G-1) even if a
+    // seam (the output side, at the outcome assembly) even if a
     // handler forgets. The rows that leave this core are sanitized, and
     // the request that enters it is clamped; chat grounding, UMP recall
     // and every future binding consume the outcome as-is.
@@ -876,7 +876,7 @@ pub async fn run_recall(
         span.record("query_hash", crate::otel::query_hash(&trace_query));
     }
 
-    // THE OUTPUT-SIDE READ SEAM (G-1): every row the core emits is
+    // THE OUTPUT-SIDE READ SEAM: every row the core emits is
     // sanitized — the twin of the clamp law above, on the other side of
     // the boundary. Every binding of run_recall (the /recall handler, UMP
     // recall, CHAT GROUNDING — the SSE event's hit.title, fence_hits' hit
@@ -984,7 +984,7 @@ fn results_to_hits(
             // every text field the chunk emits goes through the read
             // seam — PII redaction + invisible-Unicode strip — not just
             // `content`; the per-result seam lives in gate.rs and is
-            // shared with run_recall's outcome boundary (G-1), so this
+            // shared with run_recall's outcome boundary, so this
             // pass is the suspenders over the core's belt (idempotent).
             crate::gate::sanitize_search_result(&mut r, principal);
             let conflict = r.evidence.as_ref().map(|e| {

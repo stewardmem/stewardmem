@@ -8347,8 +8347,14 @@ Final paragraph after the rule.";
             // F-19: proposals carry source_prompt + qa_note (reviewer-facing).
             (gate_src, "list_proposals", "sanitize_read_opt"),
             (gate_src, "edit_proposal", "sanitize_read_opt"),
-            // F-21: recall metadata provenance labels are stored text.
-            (recall_src, "results_to_hits", "sanitize_read_opt"),
+            // F-21: recall metadata provenance labels are stored text. The
+            // seam's call site moved when the sanitize extraction landed in
+            // gate.rs (sanitize_search_result — which itself runs
+            // sanitize_read_opt on every field): results_to_hits now
+            // DELEGATES to the wrapper, and this entry follows the delegating
+            // call the body carries. The law is unchanged: the emission
+            // passes the read seam.
+            (recall_src, "results_to_hits", "sanitize_search_result"),
             // F-10: interactive UMP reads sanitize a clone before emit_record.
             (ump_src, "sanitize_ump_row_for_read", "sanitize_stored"),
             // 2026-09-11 audit: procedure step chains emit caller-written

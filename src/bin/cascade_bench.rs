@@ -145,7 +145,7 @@
 //! was never stored), and the contradiction gold (a NAMED conflict over
 //! real spans — a silent single-value pick is the failure the pair
 //! measures). Output: answer-versus-abstain as classification (precision /
-//! recall / F1 / false-decline) per trap-kind pool, and the near-miss
+//! recall / F-score / false-decline) per trap-kind pool, and the near-miss
 //! contamination rate — the round's central verdict, with its named parking
 //! rule (measured-zero → the collision-family mechanism parks by name).
 //!
@@ -1369,7 +1369,7 @@ fn unquote(s: &str) -> String {
 }
 
 /// A required fixture field, named in the error (the derivation failures
-/// name the rule and the query — falsifier F3's guard).
+/// name the rule and the query — the gold-derivation falsifier's guard).
 fn field_of<'a>(q: &'a TrapQuery, field: &str) -> Result<&'a str, String> {
     let v = match field {
         "Entity" => q.entity.as_deref(),
@@ -1512,7 +1512,7 @@ fn parse_trap_fixtures(path: &str) -> Result<(Vec<String>, Vec<TrapQuery>), Stri
 /// The gold-derivation checks (the fixture header's rules, verbatim). Every
 /// gold answer must be DERIVED from the corpus table — a failure names the
 /// rule and the query; the fix is the fixture derivation, never the gold
-/// (falsifier F3).
+/// (the gold-derivation falsifier).
 fn check_trap_gold(docs: &[String], queries: &[TrapQuery]) -> Result<(), String> {
     let normed: Vec<String> = docs.iter().map(|d| norm(d)).collect();
     for q in queries {
