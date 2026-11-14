@@ -39,3 +39,10 @@ runs:
     - name: Deploy to GitHub Pages
       id: deployment
       uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+      with:
+        # 15 minutes (the action's default is 10): one of the two docs-deploy
+        # infra flakes in the 2026-11-09..14 window was the deploy poller
+        # hitting exactly the default ceiling ("Timeout reached, aborting!"
+        # at 620s) while the mdBook build itself was green. The other flake
+        # (artifact-metadata fetch) is Pages-API-side and stays a re-run.
+        timeout: '900000'
