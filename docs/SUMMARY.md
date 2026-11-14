@@ -168,6 +168,7 @@
 - [The Cloud-Agent Convergence, October 2026](./research/21-cloud-agent-convergence-oct-2026.md)
 - [The Post-Convergence Watch, October 2026](./research/22-post-convergence-watch-oct-2026.md)
 - [The Agent-Memory Research Sweep, November 2026](./research/23-agent-memory-research-nov-2026-sweep.md)
+- [The Local-Inference Science Round, November 2026](./research/24-local-inference-science-nov-2026.md)
 
 # Blog
 
