@@ -239,6 +239,33 @@ pub(crate) fn chunk_for_verify(
     .optional()
 }
 
+/// The G-1 recall tests' seed: a knowledge row (title=content, the seed
+/// helper shape) with the given `pii` flag, owned by `ana` in the `global`
+/// label — the owner-bound no-role posture (`record_read_gate`:
+/// `owner_in = [sub]`) means the non-admin JWT principal (sub `ana`) can
+/// find it — plus its vec row. The SQL lives HERE by the
+/// no-SQL-in-handlers pin's Counter 1 (its keyword counter deliberately
+/// includes test fixtures): handlers are protocol adapters; the core takes
+/// the connection and owns the statements. Test-only.
+#[cfg(test)]
+pub fn g1_test_seed(conn: &rusqlite::Connection, content: &str, pii: bool) -> i64 {
+    use zerocopy::IntoBytes;
+    conn.execute(
+        "INSERT INTO knowledge (title, content, content_hash, source, domain, owner, access_scope, pii)
+         VALUES (?1, ?2, ?3, 'structured', 'global', 'ana', 'private', ?4)",
+        rusqlite::params![content, content, format!("h-{content}"), pii as i64],
+    )
+    .expect("seed knowledge row");
+    let kid = conn.last_insert_rowid();
+    conn.execute(
+        "INSERT INTO vec_knowledge (knowledge_id, embedding_int8, embedding_bit, source, created_at)
+         VALUES (?1, vec_quantize_int8(?2, 'unit'), vec_quantize_binary(?2), 'structured', datetime('now'))",
+        rusqlite::params![kid, vec![0.5f32; 512].as_bytes()],
+    )
+    .expect("seed vec row");
+    kid
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

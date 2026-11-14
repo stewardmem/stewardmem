@@ -1690,24 +1690,13 @@ mod tests {
     /// Seed a knowledge row (title=content, the seed helper shape) with
     /// the given `pii` flag, owned by `ana` in the `global` label — the
     /// owner-bound no-role posture (`record_read_gate`: `owner_in = [sub]`)
-    /// means the non-admin JWT principal (sub `ana`) can find it.
+    /// means the non-admin JWT principal (sub `ana`) can find it. The
+    /// statements live in the recall core (`g1_test_seed`) — the
+    /// no-SQL-in-handlers pin's Counter 1 counts test fixtures too, and
+    /// handlers are protocol adapters.
     fn g1_seed(state: &crate::AppState, content: &str, pii: bool) -> i64 {
-        use zerocopy::IntoBytes;
         let conn = state.pool.get().expect("pool");
-        conn.execute(
-            "INSERT INTO knowledge (title, content, content_hash, source, domain, owner, access_scope, pii)
-             VALUES (?1, ?2, ?3, 'structured', 'global', 'ana', 'private', ?4)",
-            rusqlite::params![content, content, format!("h-{content}"), pii as i64],
-        )
-        .expect("seed knowledge row");
-        let kid = conn.last_insert_rowid();
-        conn.execute(
-            "INSERT INTO vec_knowledge (knowledge_id, embedding_int8, embedding_bit, source, created_at)
-             VALUES (?1, vec_quantize_int8(?2, 'unit'), vec_quantize_binary(?2), 'structured', datetime('now'))",
-            rusqlite::params![kid, vec![0.5f32; 512].as_bytes()],
-        )
-        .expect("seed vec row");
-        kid
+        crate::service::recall::g1_test_seed(&conn, content, pii)
     }
 
     /// The G-1 recall request: forced into the `global` label (the seeded

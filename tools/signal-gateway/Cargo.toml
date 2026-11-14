@@ -5,7 +5,7 @@ name = "signal-gateway"
 # stack-policy note near the bottom of this file) — bump both together.
 version = "0.99.0"
 edition = "2024"
-rust-version = "1.98"
+rust-version = "1.99"
 description = "Lightweight Signal daemon edge for brain-server Switchboard"
 # AGPL-3.0-only, not the workspace's Apache-2.0: the presage →
 # libsignal-service → libsignal stack this binary links is AGPL-3.0-only
