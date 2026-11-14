@@ -112,8 +112,19 @@ fn shim_run_with_engine(
 ) -> (Option<i32>, String) {
     let dir = tempfile::TempDir::new().expect("shim home");
     let shim_copy = dir.path().join("glm-ocr-kernel.sh");
-    std::fs::copy(SHIM, &shim_copy).expect("shim copied");
-    make_executable(&shim_copy);
+    // The shim is staged under a sibling name and RENAMED into place (the
+    // house atomic-write idiom): exec then lands on a dentry that never
+    // carried an open write handle. The ubuntu 26.04 runner image
+    // intermittently answers the direct write-then-exec shape with ETXTBSY
+    // under the suite's parallel load (the poppler CI run on 13b732ee: 4 of
+    // 6 spawns green in the same second, two "Text file busy" at the spawn
+    // below — macOS has never shown it), so the spawn carries a bounded,
+    // named retry on exactly that errno; a file genuinely held busy still
+    // fails, loudly, at the ceiling.
+    let staged = dir.path().join("glm-ocr-kernel.sh.part");
+    std::fs::copy(SHIM, &staged).expect("shim staged");
+    make_executable(&staged);
+    std::fs::rename(&staged, &shim_copy).expect("shim renamed into place");
     std::fs::copy(engine, dir.path().join("glm-ocr-mlx.py")).expect("engine copied");
 
     let mut cmd = Command::new(&shim_copy);
@@ -124,11 +135,34 @@ fn shim_run_with_engine(
     if let Some((var, value)) = fence {
         cmd.env(var, value);
     }
-    let output = cmd.output().expect("spawn the shim");
+    let output = spawn_retrying_text_file_busy(&mut cmd);
     (
         output.status.code(),
         String::from_utf8_lossy(&output.stderr).into_owned(),
     )
+}
+
+/// ETXTBSY is errno 26 on every unix this harness runs on; the ErrorKind
+/// variant is still unstable, so the match is on the raw code.
+fn spawn_retrying_text_file_busy(cmd: &mut Command) -> std::process::Output {
+    const CEILING: usize = 5;
+    const BACKOFF_MS: u64 = 20;
+    let mut last = None;
+    for _ in 0..CEILING {
+        match cmd.output() {
+            Ok(out) => return out,
+            Err(err) if err.raw_os_error() == Some(26) => {
+                last = Some(err);
+                std::thread::sleep(std::time::Duration::from_millis(BACKOFF_MS));
+            }
+            Err(err) => panic!("spawn the shim: {err}"),
+        }
+    }
+    panic!(
+        "spawn the shim: the runner kept the freshly staged script busy \
+         (ETXTBSY) past the {CEILING}-try ceiling: {:?}",
+        last
+    );
 }
 
 /// The two-file contract on the stub engine: exit 0, the marker between the
