@@ -161,6 +161,9 @@ struct TurnMeasure {
         if let rate = acceptanceRate {
             parts.append("accept=\(String(format: "%.0f%%", rate * 100))")
         }
+        if reasoningChars > 0 {
+            parts.append("reason=\(reasoningChunks)ch/\(reasoningChars)c")
+        }
         return parts.joined(separator: " ")
     }
 }
