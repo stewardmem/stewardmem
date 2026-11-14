@@ -263,6 +263,12 @@ async fn sa8_the_flag_survives_a_deduped_re_serve() {
 /// column was absent.
 #[test]
 fn sa8_the_migration_adds_the_scholar_column_and_moves_the_stamp() {
+    // The vec0 module is a process-global registration; this test must not
+    // depend on a sibling test having registered it first — under the suite's
+    // parallel scheduling the migration's vec0 DDL otherwise races the
+    // sibling's registration and refuses `no such module: vec0` (measured
+    // 2026-11-14). Idempotent per register_sqlite_vec's own contract.
+    brain_server::register_sqlite_vec::register_sqlite_vec();
     let mut conn = rusqlite::Connection::open_in_memory().expect("memory db");
     brain_server::migration::run_migration(&mut conn, brain_server::config::DB_MMAP_SIZE_MIB)
         .expect("migration");
