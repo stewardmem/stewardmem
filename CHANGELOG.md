@@ -228,6 +228,8 @@ moved; two dependency majors were measured and refused.
   - d633177c improve01 S2: the cache-key pins — the behavioral half the GDL pin never had
   - ee3fdc06 improve01 S1: the TB-1 forge battery — the fence holds at RELAYED (the fork by measurement: verification pin)
 
+  - 8ca76c77 20 RELEASE WRAP — the release wrap itself: dependency currency, the waiver ratchet's prune, the docs-truth sweep, version lockstep, and this section's provenance
+
 - Lanes at the wrap: kernel lib (bench,migrate) with the badge set green,
   vitest 431 passed / 2 skipped, svelte-check 0 errors / 0 warnings,
   eslint clean, plugin vitest 236 passed, swift 45 green (VisionSidecarTests
