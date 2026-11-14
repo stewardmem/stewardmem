@@ -105,9 +105,37 @@ The tool turn answers the decimal `1.8969…` instead of echoing `184/97` on BOT
 
 **Standing state after S2:** the seam OFF at rest everywhere — no default moved; the ratchet verdicts are the December S0's adoption inputs.
 
-## §S3 · THE PREFIX-COST LEDGER + THE DRAFT
+## §S3 · THE PREFIX-COST LEDGER + THE DRAFT (L2)
 
-*(lands with the S3 commit)*
+**The prefix-cost table** — the re-prefill per assistant turn, two scales:
+
+**The witness scale (short conversations, the S2 runs' t2 legs):**
+
+| Tier | turn-2 prefill | cached | tool-turn cached | the split |
+|---|---|---|---|---|
+| 2B | 55 tok | **0** | **288** | the assistant-turn rebuild vs the tool-shaped cache hit |
+| 4B-unc | 53 tok | **0** | **322** | 〃 |
+| 9B-heretic | 53 tok | **0** | **317** | 〃 — byte-identical to the 2026-11-14 witness's 317 |
+
+Short conversations pay 53–55 re-prefilled tokens (~70–190 ms at the measured per-token rates) — the accepted cost, documented.
+
+**The long-context scale (the matrix-mode rider, fence 3,098–3,107 tokens, nil scheme, budget OFF, `caffeinate -is`; JSONL rows `/tmp/round19/prefix_*.jsonl`):**
+
+| Tier | rebuild tokens (t2 leg) | rebuild ms | rebuild ms/tok | fresh ask1 ms/tok | ratio | the turn's generation ms |
+|---|---|---|---|---|---|---|
+| 2B | 3,189 (cached=0) | 4,159.6 | 1.3043 | 1.3121 | **0.994** | 224–257 |
+| 4B-unc | 3,190 (cached=0) | 10,860.0 | 3.4044 | 3.3072 | **1.029** | — |
+| 9B-heretic | 3,187 (cached=0) | 21,542.8 | 6.7596 | 6.8193 | **0.991** | — |
+
+**The read:** the rebuild's per-token cost equals a fresh prefill (0.99–1.03×, all within the 1.5× framing — no penalty rate); the cost is purely the QUANTITY — the ENTIRE prompt re-prefills every assistant turn (`cached=0`), which at the ~3,100-token context dominates the turn wall (~95%+: the 9B pays 21.5 s prefill for ~0.2–0.5 s of generation), while the tool-shaped continuation keeps `cached=288/317/322` and pays only the new tokens. **The pain class is long contexts, exactly as plan §2 framed; short conversations are accepted-cost.**
+
+**The budget × replay interaction (measured, recorded):** the budget changes the REPLAYED reasoning length, and the replay rides the rebuilt prompt — the 9B's turn-2 prefill was 53 tok at max=180 (the natural close → the natural replay) but 109 tok at max=120 (the forced close's different reasoning → a longer replay). A budgeted posture's prefix cost follows its shape; the December S0's adoption tables carry both columns.
+
+**The 9B rider's fidelity note (honest, December's domain):** the 9B matrix row recorded recall 3/5 (2 misses, ask1 `out_tokens=434` — the unbudgeted long-reasoning shape at the 512 clamp; the burn class's shadow at long context). This is the KV-matrix instrument's fidelity column — the 18 round's December measurement owns it; recorded here because the rider produced it.
+
+**The upstream feature-request draft:** `19_PREFIX_STABILITY_ENGAGEMENT_DRAFT_2026-11-14.md` (brain-steward-ip `plans/improvements/`, beside the 18 drafts' home) — **DRAFT-NOT-FILED**: the `reasoning_content` replay toggle (per-session or per-`ModelConfiguration`, defaulting to today's behavior), with the witness split and this table as the motivation, the explicit not-asking list (no default change, no template patch, no rewind across recurrent layers), and the companion-relationship to 18's draft (a) named. **Filing is the operator's act** — nothing filed without the explicit yes.
+
+**F4 outcome:** the 1.5× framing HOLDS per-token on all three tiers (0.99–1.03) — the accepted-cost branch is satisfied at the per-token reading; the absolute long-context quantity is the documented pain class the draft carries. Both readings recorded; the ledger does not hide the split. The December matrix's own t2 columns will re-read this at the tag era.
 
 ## §S4 · THE MTP VERDICT
 
