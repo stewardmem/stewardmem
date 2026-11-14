@@ -213,3 +213,26 @@ The probe method: the full safetensors header (the u64-length JSON) of every sha
 **The December boundary (restated):** the KV-scheme matrix and the roster amendment wait for the tag-era S0 — this round did NOT touch them (the matrix mode ran only as the prefix-cost rider at nil scheme, its fidelity column noted and left to December's owner). The tag-era re-verification rides December B0 (the L1 seam's behavior at the REAL 3.33.0, the MTP surface's movement, the prefix ledger's re-read).
 
 **The round's one-line verdict:** the fast tiers got their latency lever measured and wired (L1: the 9B-heretic's deterministic silence class is FIXABLE with a budget shape that clears its natural reasoning length — every witness burn turn answers at max=180, the naturally-correct turns untouched; the 2B needs nothing; the 4B gains −10% wall on the needle turn), the prefix ledger is honest at both scales (the accepted cost at the witness scale, the real pain at long contexts — now with numbers and a draft), and the decode lever parks on two independent, named, weight-and-structure facts. Nothing adopted, nothing defaulted, everything measured.
+
+## §S2b · THE CHAT-EXPERIENCE ADDENDUM (the operator-named instrument, 2026-11-14)
+
+**Why:** "rich answer, least hallucination, good chat" was the one axis the standard arms don't instrument (terse by prompt design). The driver gains `PROBE_RICH=1` (grounded rich summary + the invention-temptation turn, at the PRODUCT clamp 1024 — the 200 witness clamp crushes rich answers to ~20 answer tokens) and `PROBE_NOTHINK=1` (upstream's OWN prompt-level knob: `enable_thinking=false` via the session's `additionalContext` — no fork, no template patch). Raw logs `/tmp/round19/rich_*.log` + `oq4e_b180_full.log`.
+
+**The budgetless discovery first:** at the 1024 clamp BOTH the official 9B-4bit AND the oQ4e burn open-ended prompts budgetless — the official reasons **3,476–4,307 chars (~900–1,000+ tok)** and never closes; the oQ4e reasons 3,576c on the grounded turn. **The overthinking scales with task openness** — the burn class is NOT a 200-clamp artifact; no clamp size fixes it. The thinking-ON posture cannot produce a rich answer at ANY budget shape on this machine class (a budget that clears ~900 tok of deliberation leaves ~100 answer tokens — not rich; a tight budget forces the mid-thought close whose continuation pollutes the answer shape — the official's grounded answer at max=180 was scratchpad-continuing-as-answer).
+
+**THE NOTHINK POSTURE — the finding (all three 9B-class tiers, one run each):**
+
+| Tier (nothink @ 1024) | grounded rich | wall | invented numbers | cold rich (temptation) | wall | cold specifics |
+|---|---|---|---|---|---|---|
+| oQ4e-mtp | 1,253 ch, structured, cited | 13.3 s | **0 real** (1 = `2,340`→`$2,340` reformat, the arm's documented noise) | disclaims + hedged real-world alternatives | 8.4 s | **0** |
+| official 9B-4bit | 1,286 ch, structured, cited | 13.1 s | **0 real** (1 noise) | disclaims + confident real-world assertions | 21.8 s | **17** |
+| heretic 5-bit (roster) | 1,315 ch, structured, cited | 15.6 s | **0 real** (1 noise) | disclaims, fully hedged | 7.6 s | **2** |
+
+- The grounded arm: ALL THREE produce clean, structured, memory-cited summaries — vs the thinking-ON burns that produced NOTHING at any clamp. **~3× faster walls** (13–16 s vs the 36–38 s deliberations).
+- The temptation arm: all three refuse the fictional premise; the asymmetry is in HOW — the oQ4e and the heretic hedge (0–2 specifics, "might be thinking of", "perhaps"); the official 9B emits **17 confident real-world specifics** (a "Meridian Bridge in Tacoma… famous for its Art Deco design… major renovation completed recently" lecture). One adversarial probe, one seed, no mechanical tripwire for real-world confabulation — **a data point, not a verdict**; the official alignment's least-hallucination prior did NOT hold on this arm.
+
+**The posture conclusion (named for December and for the product path):**
+1. **Rich chat: thinking OFF at the product clamp** — the direct-answer shape is the fast (3×), rich, structured, cited posture; the tier choice on the honesty axis favors the oQ4e/heretic hedge shapes on this probe.
+2. **Recall/citation work: thinking ON + the budget (max=180)** — the S2 gate's measured shape. **The nothink needle recall is UNMEASURED** — the named gap; the two postures are alternatives (with thinking OFF the budget is moot — no reasoning span exists to bound), never stacked silently.
+3. **The product-path wiring note:** the bridge's `streamTurn` passes `primedThinkBlock: tier.primesThinkBlock` (true for Qwen3.5) — with thinking OFF the template does NOT prime the think block, so the primed flag must follow the session's thinking posture (a small named act for the product path; the driver is unaffected — it reads raw).
+4. The oQ4e row is COMPLETE (needle ✓ `LX-4471` budgeted, clean; cold budgeted = the `7` fragment — the CALM shape; tool ✓; memory ✓). The December S0's admission table now carries: speed 33.6–34.2 tok/s, tool-literal ✓, needle ✓, honesty hedge ✓ on the temptation, battery outstanding.
