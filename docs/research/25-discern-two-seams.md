@@ -109,7 +109,7 @@ read latency is **7.6 s mean, 4.1 turns and 5.7 tool calls per query**.
 | Never-merge entities | trivially true — nothing in the store merges entities; the paper's contribution is the *family* + *contrast* surface, not the never-merge rule |
 | Abstain on absence | the kernel's zero-hit abstain gate — a coarse `EarnedAbstainGate` keyed on retrieval emptiness rather than demonstrated absence |
 
-**The gaps DISCERN names (adoptable, in priority order):**
+**The gaps DISCERN names (adoptable, in priority order — as first written; gaps 1 and 4 have since landed in round 20, and the measured outcome at the end of this note is the record):**
 
 1. **The entity-collision disambiguation surface.** We have never-merge but no
    *family*: no `SIMILAR_NAME`-style collision edges, no read-time contrast
@@ -138,7 +138,10 @@ read latency is **7.6 s mean, 4.1 turns and 5.7 tool calls per query**.
 
 **Audited against the source, 2026-11-14 (the pass after the first write —
 two of the four verdicts above were partially wrong and the blog carries the
-corrected text):** (1) the collision surface is **OPEN** — the one real gap;
+corrected text):** (1) the collision surface was **OPEN** at the audit — the
+one real gap — and has since landed (round 20's deterministic shape: the
+name-edge families + the read-time near-miss contrast, `BRAIN_RECALL_NEARMISS=1`,
+off at rest — the measured outcome at the end of this note);
 (2) the terminal contract is **PARTIAL, not absent** —
 `Recommendation::ClarifyQuery` exists in `src/search/quality.rs` and
 `DeferralOutcome::Clarify` in `src/workflow/confidence.rs`, but the deferral
@@ -189,7 +192,8 @@ is a hosted-posture number, not an on-device one. And the paper's own framing �
 correctness" — concedes that everything downstream inherits the LLM
 extraction's errors.
 
-**The adoptable next step (preregistered):** an ENT-310-shaped probe against
+**The adoptable next step (preregistered — then executed the same day; the
+measured outcome at the end of this note is the record):** an ENT-310-shaped probe against
 *our* store — attribute-swap traps, near-miss entity traps, and a
 contradiction-at-recall pair (two independently-written conflicting facts, no
 explicit revise) — scored answer-vs-abstain as classification. It measures
@@ -251,6 +255,8 @@ reversed by trend.
    the existing cascade bench (which already scores abstain correctness with
    preregistered absence markers and anti-fabrication grading) with
    attribute-swap and near-miss-entity traps, scored as classification.
+   *Executed: round 20 landed the trap mode first (`BRAIN_S0_TRAP=1`, 16
+   queries, six kinds) and measured the failure class before any mechanism.*
 2. **The entity-collision families: ADOPT CONDITIONALLY — and only in the
    deterministic shape.** The ER-vs-staleness distinction proves this fills an
    axis nothing else touches (identity — our supersession is time, our screen
@@ -262,7 +268,9 @@ reversed by trend.
    derived graph (the 0.6·jaccard + 0.4·cos formula — mechanical, no LLM), a
    read-time near-miss contrast in the recall handler, and the trap probes
    first. Gate: the probe must measure the contamination class in our data
-   before an edge is written.
+   before an edge is written — the gate ran and passed (the probe measured
+   near-miss contamination 1.000, 4/4, before an edge was written), and the
+   mechanism landed in exactly this shape (S3, off at rest).
 3. **Machine-emitted clarify: DO NOT ADOPT NOW.** The deferral contract
    deliberately routes ambiguity to a person (`requires_human()` is true for
    every outcome by design; the auto table's reachability note documents the
@@ -280,11 +288,14 @@ reversed by trend.
 adopted; the instrument is worth adopting now; the collision families are worth
 building in the deterministic shape *after* the probe proves the failure class
 here; the machine-clarify and the navigation loop are not — and that is the
-difference between adopting a mechanism and growing a Frankenstein.
+difference between adopting a mechanism and growing a Frankenstein. (The
+instrument and the families are now built — the measured outcome at the end of
+this note is the execution record.)
 
 **THE MEASURED OUTCOME (round 20, 2026-11-14 — the adoption decision executed;
-full rows in `docs/IMPROVE20_EVIDENCE_2026-11-14.md` and
-`docs/TRAP_ROWS_2026-11-14.jsonl`):** the trap taxonomy landed FIRST (the
+full rows in `docs/IMPROVE20_EVIDENCE_2026-11-14.md` and the two
+classification-rows files — the red run's `docs/TRAP_ROWS_2026-11-14.jsonl`,
+the green run's `docs/TRAP_ROWS_S3_GREEN_2026-11-14.jsonl`):** the trap taxonomy landed FIRST (the
 bench's `BRAIN_S0_TRAP=1` mode — 16 queries, six kinds, gold answers
 machine-derived from the seeded corpus, the DISCERN classification framing),
 and the probe MEASURED the failure class before any mechanism was written:
