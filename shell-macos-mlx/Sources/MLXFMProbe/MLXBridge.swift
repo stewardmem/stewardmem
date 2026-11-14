@@ -238,7 +238,7 @@ public enum MLXBridge {
         maxTokens: Int,
         primedThinkBlock: Bool,
         onDelta: @Sendable (String) -> Void
-    ) async throws -> (text: String, inputTokens: Int, outputTokens: Int) {
+    ) async throws -> (text: String, inputTokens: Int, outputTokens: Int, reasoning: String) {
         // The per-turn clamp is constructed HERE for the same reason
         // `makeSession`'s parameters are: one sampling site, one law (see
         // the type doc). It REPLACES the session's maxTokens only — the KV
@@ -262,6 +262,16 @@ public enum MLXBridge {
         var filter = ThinkFilter(primedThinkBlock: primedThinkBlock)
         var inputTokens = 0
         var outputTokens = 0
+        // 18-KV MAIN ADOPTION (2026-11-14): the engine's stream split grew the
+        // reasoning channel (`.reasoning`, Evaluate.swift:3301 at 63529075) —
+        // "delivered separately from the answer and with the protocol's
+        // delimiters already removed". The scratchpad gets its OWN accumulator:
+        // NEVER the ThinkFilter, NEVER `onDelta`. Two laws agree here —
+        // upstream's ("record `chunk` alone as content") and ours (the answer is
+        // the ANSWER) — and feeding delimiter-free reasoning into the filter
+        // would EMIT it as content (the masquerade class: prose that does not
+        // name itself). Visible, separated, never merged.
+        var reasoning = ""
         for try await generation in session.streamDetails(
             to: prompt, images: [], videos: []
         ) {
@@ -273,15 +283,17 @@ public enum MLXBridge {
                 if !clean.isEmpty {
                     onDelta(clean)
                 }
+            case .reasoning(let thought):
+                reasoning += thought
             case .info(let info):
                 inputTokens = info.promptTokenCount + info.cachedPromptTokenCount
                 outputTokens = info.generationTokenCount
-            case .toolCall, .rejectedToolCall:
-                continue
+            case .toolCall, .rejectedToolCall, .steering:
+                continue // no tool calls, no steering in this surface (named no-op)
             }
         }
         let full = filter.finish()
-        return (full, inputTokens, outputTokens)
+        return (text: full, inputTokens: inputTokens, outputTokens: outputTokens, reasoning: reasoning)
     }
 }
 

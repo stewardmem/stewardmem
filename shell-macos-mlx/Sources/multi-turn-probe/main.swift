@@ -139,6 +139,13 @@ struct TurnMeasure {
     var wallSeconds: Double    // wall-clock over the raw stream
     var chunks: Int
     var acceptanceRate: Double? // draft-model spec decode (E2); nil without
+    // 18-KV MAIN ADOPTION: the engine's reasoning channel (`.reasoning`,
+    // Evaluate.swift:3301 at 63529075) delivers the scratchpad SEPARATELY from
+    // chunk — these fields are the row-level witness that the split happened
+    // (on 3.32.3 reasoning rode the chunk stream verbatim; on main the answer
+    // text is answer-only BY CONSTRUCTION and the scratchpad lands here).
+    var reasoningChunks: Int
+    var reasoningChars: Int
 
     /// Decode tok/s: output tokens over the engine's generateTime.
     var tokPerSec: Double {
@@ -178,7 +185,8 @@ func askChat(_ session: ChatSession, _ prompt: String) async -> TurnMeasure {
     var measure = TurnMeasure(
         text: "", promptTokens: 0, cachedTokens: 0, outTokens: 0,
         promptTime: 0, generateTime: 0, wallSeconds: 0, chunks: 0,
-        acceptanceRate: nil)
+        acceptanceRate: nil,
+        reasoningChunks: 0, reasoningChars: 0)
     var out = ""
     let wallStart = ContinuousClock.now
     do {
@@ -195,6 +203,9 @@ func askChat(_ session: ChatSession, _ prompt: String) async -> TurnMeasure {
                 if let tel = info.speculativeDecodingTelemetry {
                     measure.acceptanceRate = tel.acceptanceRate
                 }
+            } else if case .reasoning(let thought) = g {
+                measure.reasoningChunks += 1
+                measure.reasoningChars += thought.count
             }
         }
     } catch {
@@ -363,8 +374,11 @@ func runMatrix(_ container: ModelContainer, kvScheme: String?) async throws {
     let lengthsStr = lengths.map { String($0) }.joined(separator: ",")
     let depthsStr = depths.map { String(Int($0)) }.joined(separator: "/")
     print("matrix: tier=\(tier) scheme=\(scheme) lengths=\(lengthsStr) depths=\(depthsStr) needles=\(needleCount) maxTok=\(maxTok)")
-    let engineTag = "3.32.3"
-    let engineCommit = "3b339ad6e3b3f44c8121ecff5131c7fd55e075e6"
+    // 18-KV MAIN ADOPTION: the stamps name the engine truthfully — a named
+    // main sha standing in for the tag (the operator's named act); January's
+    // re-point stamps the 3.33.0 tag itself.
+    let engineTag = "main-63529075"
+    let engineCommit = "6352907543270ae9c61fcaf59cb3e07b0b989ea1"
     let physAfterLoad = Double(physFootprint()) / 1_048_576
     let physLoadStr = String(format: "%.0f", physAfterLoad)
     let isoTS = ISO8601DateFormatter().string(from: Date())
@@ -423,6 +437,7 @@ func runMatrix(_ container: ModelContainer, kvScheme: String?) async throws {
                 + "\"key\":\"\(keyEsc)\",\"code\":\"\(needle.code)\","
                 + "\"prompt_tokens\":\(m.promptTokens),\"cached_tokens\":\(m.cachedTokens),\"out_tokens\":\(m.outTokens),"
                 + "\"prompt_ms\":\(promptMs),\"gen_ms\":\(genMs),\"wall_s\":\(wallS),\"tok_per_sec\":\(tps),"
+                + "\"reasoning_chunks\":\(m.reasoningChunks),\"reasoning_chars\":\(m.reasoningChars),"
                 + "\"recall\":\(recall),\"citation\":\(citation),"
                 + "\"text\":\"\(textEsc)\"}"
             askRows.append(askRow)

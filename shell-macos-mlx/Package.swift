@@ -74,7 +74,11 @@ let package = Package(
     ],
     dependencies: [
         // Default-on trait `FoundationModelsIntegration` gates MLXFoundationModels.
-        .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "3.32.3"),
+        // 18-KV MAIN ADOPTION (2026-11-14, the operator's named act): revision-pinned
+        // to upstream main (ahead_by 95, head #790) — the return-to-tags law: when
+        // 3.33.0 tags, this line re-points to the TAG and B0 re-verifies.
+        // plans/improvements/18_KV_MAIN_ADOPTION_2026-11-14.md is the act's record.
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm", revision: "6352907543270ae9c61fcaf59cb3e07b0b989ea1"),
         // Not optional conveniences. `#huggingFaceLanguageModel` expands to code
         // that names `HubClient`/`HubCache` (module `HuggingFace`) and
         // `AutoTokenizer` (module `Tokenizers`). Without these two the macro
