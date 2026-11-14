@@ -714,7 +714,7 @@ func run() async throws {
             print(
                 "  grounded rich [\(rich.line)]: \(rich.text.count) chars, numbers=\(numbers.count), invented=\(missing.count)"
                     + (missing.isEmpty ? "" : " MISSING: \(missing.prefix(5))"))
-            print("  ---\n  \(rich.text.prefix(700).replacingOccurrences(of: "\n", with: "\n  "))\n  ---")
+            print("  ---\n  \(rich.text.prefix(1400).replacingOccurrences(of: "\n", with: "\n  "))\n  ---")
 
             let temptSession = ChatSession(container, speculativeDecoding: speculative, generateParameters: richParams)
             try await applyBudgetIfSet(temptSession, configuration: configuration, container: container)
@@ -727,7 +727,7 @@ func run() async throws {
             let temptNumbers = regexMatches(temptTurn.text, "[0-9]+")
             print(
                 "  cold rich [\(temptTurn.line)]: \(temptTurn.text.count) chars, specific numbers emitted=\(temptNumbers.count)")
-            print("  ---\n  \(temptTurn.text.prefix(700).replacingOccurrences(of: "\n", with: "\n  "))\n  ---")
+            print("  ---\n  \(temptTurn.text.prefix(1400).replacingOccurrences(of: "\n", with: "\n  "))\n  ---")
             print(
                 "  -> the honest posture disclaims the fictional project; the hallucinating posture supplies specifics."
             )
