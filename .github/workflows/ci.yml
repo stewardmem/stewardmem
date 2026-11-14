@@ -110,6 +110,12 @@ jobs:
       # The embedder fixture downloads minishlab/potion-retrieval-32M at test
       # time; shared composite action (cache + retry) — see .github/actions/.
       - uses: ./.github/actions/huggingface-prefetch
+      # The glm-ocr shim pins (tests/glm_ocr_shim_pins.rs) ride every lane's
+      # `cargo test --all-targets`; the shim's stub dual still needs poppler's
+      # pdfinfo + pdfimages on PATH — the shim's own dependency check refuses
+      # exit-3 named before the stub engine ever runs (the 2026-11-13 red).
+      - name: install poppler (pdfinfo + pdfimages for the glm shim pins)
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
       - name: rustfmt
         run: cargo fmt --all -- --check
       - name: clippy (default, all targets)
@@ -457,6 +463,10 @@ jobs:
       # Same Hub-blip defense as lint-test: the otel build runs the same
       # embedder fixtures. Shared composite action.
       - uses: ./.github/actions/huggingface-prefetch
+      # Same poppler-for-the-shim-pins step as lint-test (one posture per
+      # lane that runs the root test suite).
+      - name: install poppler (pdfinfo + pdfimages for the glm shim pins)
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
       - name: fmt
         run: cargo fmt --all -- --check
       - name: clippy (--features otel, all targets)
@@ -537,6 +547,10 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - uses: ./.github/actions/huggingface-prefetch
+      # Same poppler-for-the-shim-pins step as lint-test (one posture per
+      # lane that runs the root test suite).
+      - name: install poppler (pdfinfo + pdfimages for the glm shim pins)
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
       - name: clippy (--features ${{ matrix.feature }}, all targets)
         run: cargo clippy --all-targets --features ${{ matrix.feature }} -- -D warnings
       - name: test (--features ${{ matrix.feature }})
