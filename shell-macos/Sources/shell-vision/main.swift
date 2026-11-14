@@ -20,7 +20,9 @@
 //   "improvement" pass exists in this file (arXiv:2611.05539: LLM post-OCR
 //   correction rewrites text that was already correct; the surface does
 //   not exist here by construction). A page Vision refuses is a NAMED
-//   failure (ocr_page_failed), never a fabricated empty, never a retry.
+//   failure — `ocr_page_failed`, or `ocr_assets_unavailable` when the
+//   refusal IS the machine missing the on-demand recognition model — never
+//   a fabricated empty, never a retry.
 // - Sequential recognition (OV-6): ONE Vision request at a time, pages in
 //   ascending order. Parallel RecognizeTextRequest tasks are the measured
 //   hang hazard (Apple Developer Forums; the plan's §0.2.2) — the loop
@@ -206,6 +208,23 @@ func recognizePage(_ image: CGImage) async throws -> (text: String, confidence: 
     return (text, text.isEmpty ? nil : minConfidence)
 }
 
+/// The per-page failure code for a thrown Vision error. The ASSET class is
+/// its own named verdict — `ocr_assets_unavailable`: the on-demand
+/// recognition model data this page's language needs is not present on this
+/// machine (fresh CI volumes; `dataUnavailable` / `unsupportedRevision` are
+/// how the framework reports it) — an environment condition, not a
+/// recognition failure. Everything else stays `ocr_page_failed`: a genuine
+/// refusal this build must see, never smoothed into an empty. The
+/// underlying message rides verbatim either way.
+func visionErrorCode(_ error: any Error) -> String {
+    switch error {
+    case VisionError.dataUnavailable, VisionError.unsupportedRevision:
+        "ocr_assets_unavailable"
+    default:
+        "ocr_page_failed"
+    }
+}
+
 // ── the pipeline ─────────────────────────────────────────────────────────────
 
 /// One document through the sidecar: parse → open/rasterize → recognize
@@ -265,7 +284,7 @@ func process(requestLine: Data, pdfBytes: Data) async -> (reply: [String: Any], 
                 pages.append([
                     "index": index,
                     "ok": false,
-                    "code": "ocr_page_failed",
+                    "code": visionErrorCode(error),
                     "message": "\(error)",
                 ])
             }

@@ -141,6 +141,13 @@ jobs:
           DEVICE is not model-eligible, so window / schema-cost / latency were \
           not taken here. Those numbers come from eligible hardware. A green run \
           is a toolchain result, not a measurement."
+          elif grep -q 'on-device vision recognition assets unavailable' "$log"; then
+            echo "::notice title=This run did not measure Vision OCR::\
+          The runner's Vision stack reports the on-demand recognition model \
+          this corpus needs as unavailable (the sidecar names it \
+          ocr_assets_unavailable — the message rides verbatim in the skip), \
+          so the real-Vision pins skipped honestly. A green run is a \
+          toolchain result, not a measurement."
           else
             echo "::notice title=Measured::This runner produced model numbers; \
           they are in the log above and they re-derive on every run."

@@ -73,9 +73,9 @@ Vision recognized nothing carries `"text":""` with `confidence` **absent**
 there is nothing to distrust, and a fabricated number would be exactly the
 smoothing this protocol forbids).
 
-A failed page entry: `{"index":N,"ok":false,"code":"ocr_page_failed",
+A failed page entry: `{"index":N,"ok":false,"code":"ocr_page_failed"|"ocr_assets_unavailable",
 "message":"…"}` — a page Vision refused is a NAMED failure, never a fabricated
-empty, never a retry.
+empty, never a retry. The message is the framework's error, verbatim.
 
 Top-level failures — the reply line is still written, then the process exits
 non-zero:
@@ -90,6 +90,7 @@ non-zero:
 | `bad_request` | The request line is not valid JSON, `op` is not `"ocr"`, `dpi` is out of band, a page index is out of range, or the stdin carried no request line at all. |
 | `raster_failed` | The bytes after the request line are not a PDF CoreGraphics can open (document-level), or a requested page could not be rendered (document-level refusal — the kernel sees the named code). |
 | `ocr_page_failed` | Per-page only (inside `ok:true`): Vision refused that page's recognition. Never fabricated into an empty. |
+| `ocr_assets_unavailable` | Per-page only (inside `ok:true`): the machine lacks the on-demand recognition model data the page's language needs (`dataUnavailable` / `unsupportedRevision` — fresh CI volumes) — an environment condition, not a recognition failure. The pins may honestly skip on this code and only on this code; the message rides verbatim. |
 
 ## Exit codes
 

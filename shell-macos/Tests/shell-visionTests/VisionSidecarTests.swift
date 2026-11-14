@@ -95,6 +95,23 @@ final class VisionSidecarTests: XCTestCase {
         return Reply(exitCode: process.terminationStatus, object: object)
     }
 
+    /// The honest boundary for a page entry that carries a CODE instead of
+    /// text: `ocr_assets_unavailable` is the machine missing the on-demand
+    /// recognition model (an environment condition — skip with the GREPPABLE
+    /// notice the workflow's report step looks for, the AppleFMProbeTests
+    /// precedent); any other code is a genuine recognition failure — the
+    /// message surfaces in the failure and the lane reds. Returns nil when
+    /// the test should stop (skip or fail).
+    private func assetBoundary(_ page: [String: Any]) throws -> Bool {
+        guard let code = page["code"] as? String else { return true }
+        let message = (page["message"] as? String) ?? ""
+        if code == "ocr_assets_unavailable" {
+            throw XCTSkip("on-device vision recognition assets unavailable: \(message)")
+        }
+        XCTFail("the page genuinely failed recognition: \(code) — \(message)")
+        return false
+    }
+
     // ── the framing pins ────────────────────────────────────────────────────
 
     /// The REAL Vision round-trip on the committed corpus: per-page text +
@@ -115,6 +132,7 @@ final class VisionSidecarTests: XCTestCase {
         )
         let pages = try XCTUnwrap(reply.object["pages"] as? [[String: Any]])
         XCTAssertEqual(pages.count, 1)
+        guard try assetBoundary(pages[0]) else { return }
         let text = try XCTUnwrap(pages[0]["text"] as? String)
         XCTAssertFalse(text.isEmpty, "the clean scan recognizes text")
         XCTAssertTrue(
@@ -139,6 +157,7 @@ final class VisionSidecarTests: XCTestCase {
         let pages = try XCTUnwrap(reply.object["pages"] as? [[String: Any]])
         XCTAssertEqual(pages.count, 1, "exactly the requested page, got \(pages.count)")
         XCTAssertEqual(pages[0]["index"] as? Int, 2)
+        guard try assetBoundary(pages[0]) else { return }
         XCTAssertEqual(pages[0]["text"] as? String, "", "the 4x4 XObject recognizes nothing — honest emptiness")
         XCTAssertNil(pages[0]["confidence"], "no text → no confidence claim")
     }
@@ -198,7 +217,7 @@ final class VisionSidecarTests: XCTestCase {
     /// the protocol doc — the doc and the wire cannot drift silently.
     func testProtocolDocNamesEveryCode() {
         let doc = protocolDoc
-        for code in ["bad_request", "raster_failed", "ocr_page_failed"] {
+        for code in ["bad_request", "raster_failed", "ocr_page_failed", "ocr_assets_unavailable"] {
             XCTAssertTrue(doc.contains("`\(code)`"), "the protocol doc names \(code)")
         }
         XCTAssertTrue(
