@@ -274,8 +274,12 @@ pub async fn run_recall(
         "",
         forced_domain.as_deref().unwrap_or("global"),
     )?;
-    // Defense-in-depth at the core: every binding of run_recall gets the
-    // clamp even if a handler forgets it.
+    // Defense-in-depth at the core, BOTH ARMS: every binding of
+    // run_recall gets the clamp (the request side, below) AND the read
+    // seam (the output side, at the outcome assembly — G-1) even if a
+    // handler forgets. The rows that leave this core are sanitized, and
+    // the request that enters it is clamped; chat grounding, UMP recall
+    // and every future binding consume the outcome as-is.
     let mut req = req;
     if !super::review_flags_allowed(principal) && (req.include_flagged || req.include_decayed) {
         warn!("review flags requested by a non-operator principal; clamped to false");
