@@ -168,4 +168,22 @@ The probe method: the full safetensors header (the u64-length JSON) of every sha
 
 ## §S5 · THE ROUND RECORD
 
-*(lands with the S5 commit — the standing state, the falsifiers' outcomes by name, the December boundary restated)*
+**The commit ledger (brain-server, one commit per step):** `b000ddd0` (S0 the design note) → `b1e256af` (S1 the seam + 13 pins) → `df64026d` (S2 the gate table) → `88eda02a` (S3 the prefix ledger) → `902c5b56` (S4 the MTP verdict) → this commit (S5 the record). Plans repo: `8a3bb6a` (the L2 draft, DRAFT-NOT-FILED) + the plan §7 record row.
+
+**The standing state (everything env-gated OFF at rest):**
+- `BRAIN_MLX_THINKING_BUDGET` — unset in every posture; the seam is inert without it (the OFF-at-rest pin); NO default moved in `MLXChatTier` (no budget posture field added — the ratchet verdicts are the December S0's adoption inputs, recorded in the S2 table).
+- `MLXChatTier.kvScheme` — still nil everywhere (untouched); `MLXChatTier.specDecode` — still false everywhere (untouched). The decode lever parks BY NAME (S4).
+- The wire: NO wire shape moved; the Rust kernel untouched; **the census stays 4282** (a Swift-side round; any drift would be a misread, not this round's doing).
+- No fork, no template patch, no new dependencies, no upstream toggle beyond the DRAFT-NOT-FILED.
+
+**The falsifiers' final ledger (all four named):**
+- **F1** (budget forces a non-empty answer failing citation identity): **did not fire.** The needle identity holds on every tier/shape (LX-4471, 3,098 tok); the tool-turn content miss is MODEL-INTRINSIC — proven twice (the 4B at max=180 produces the same decimal; the heretic produces it budgeted AND unbudgeted with identical rsn 274c).
+- **F2** (`applyingThinkingBudget` unwireable without forking): **did not fire — pre-resolved at S0.** The path existed: `session.components` is the engine's public extension seam and `applyingThinkingBudget` chains (never replaces) the existing factory.
+- **F3** (MTP acceptance < 40% everywhere): **fires in spirit, stronger than its letter.** No acceptance was obtainable: the MTP head is ABSENT in the shipped weights (0 mtp keys across all shards; configs still declare the layer) AND the classic drafter is structurally refused on the hybrid cache (named `KVCacheError` on all three tiers); the 8B control (where the path runs) measures 28–38% — below the gate — at 11.7 tok/s, slower than unassisted. **Parked BY NAME until a model/weights change.**
+- **F4** (prefix re-prefill within the 1.5× framing): **the split verdict, both readings recorded.** Per-token the rebuild pays the fresh rate everywhere (0.994/1.029/0.991 — within framing, the accepted-cost branch holds at the per-token reading); the absolute long-context quantity (the whole-prompt rebuild, 4.2/10.9/21.5 s per assistant turn at ~3,100 tokens, `cached=0`) is the documented pain class the S3 draft carries. The December matrix re-reads at the tag era.
+
+**The verify-after checklist (plan §6):** the budget's gate table exists (quality + latency, per tier, S2) · the prefix cost table exists (two scales, the ledger's split verdict recorded, the draft DRAFT-NOT-FILED beside the 18 home, S3) · the MTP verdict exists (head-absent per tier + the structural refusal + the below-gate control, S4) · everything env-gated OFF at rest · the falsifiers' outcomes recorded by name · the plans repo carries the draft + the record row · both repos pushed.
+
+**The December boundary (restated):** the KV-scheme matrix and the roster amendment wait for the tag-era S0 — this round did NOT touch them (the matrix mode ran only as the prefix-cost rider at nil scheme, its fidelity column noted and left to December's owner). The tag-era re-verification rides December B0 (the L1 seam's behavior at the REAL 3.33.0, the MTP surface's movement, the prefix ledger's re-read).
+
+**The round's one-line verdict:** the fast tiers got their latency lever measured and wired (L1: the 9B-heretic's deterministic silence class is FIXABLE with a budget shape that clears its natural reasoning length — every witness burn turn answers at max=180, the naturally-correct turns untouched; the 2B needs nothing; the 4B gains −10% wall on the needle turn), the prefix ledger is honest at both scales (the accepted cost at the witness scale, the real pain at long contexts — now with numbers and a draft), and the decode lever parks on two independent, named, weight-and-structure facts. Nothing adopted, nothing defaulted, everything measured.
