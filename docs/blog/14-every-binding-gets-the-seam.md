@@ -49,8 +49,8 @@ leak classes ride the same seam, and each was already armed in the corpus:
   invisible). The strip runs on the emitted form, not the raw bytes.
 - **Markdown-image exfiltration** (the EchoLeak class) — `![alt](url)`
   renders as an outbound fetch carrying context; the seam neutralizes it to
-  a link before it reaches the model, because a model that echoes its
-  grounding can carry the construct outward.
+  its bare alt text before it reaches the model, because a model that echoes
+  its grounding can carry the construct outward.
 
 Sequencing note we recorded for ourselves: the fast-chat work (Act II)
 *unlocks more chat volume on this exact path*. The seam covers the path
