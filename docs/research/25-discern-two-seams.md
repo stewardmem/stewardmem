@@ -199,3 +199,85 @@ preregistered. The paper earns a mechanism review, not a fork: the never-merge
 family, the earned gates, and the terminal contract are the parts worth
 building; the navigation loop is the part our on-device posture replaces with
 deterministic recall plus the gates.
+
+## The adoption decision (researched 2026-11-14: Context7 on the production implementations, web verification of standing and reception)
+
+**Standing, verified:** DISCERN is a **NeurIPS 2026 workshop poster** (workshop
+"Continual Learning in the Era of Foundation Models and Embodied Agents" — not
+a main-conference paper), under OpenReview review, released November 11 — three
+days before detection, **zero public reviews, critiques, or replications** as of
+this writing. Its most striking result (Mem0 at 0.112 macro, false-declining
+87% of answerable queries) is a baseline-integration red flag: a production
+system failing that catastrophically smells like harness artifact, and Mem0's
+actual design (extraction-first, a lighter current-state store) was likely
+profiled against a benchmark shaped for a different contract. The trustworthy
+parts of the paper are the architecture argument, the ablation, and the trap
+taxonomy. The headline numbers are unreplicated.
+
+**The principle is now multi-source, which is what makes it science rather
+than a preprint:** the same two-seam posture is argued independently by
+Hindsight's consolidation-problem analysis (May 2026 — "retrieving five
+contradictory facts breaks coherence even for strong models"), by the
+multi-agent shared-memory guidance (semantic conflicts must not be resolved by
+overwriting; keep both, reconcile at read), and by LongMemEval's abstention
+abilities (ICLR 2025). The field's 2026 direction explicitly favors "preserve
+conflicts, resolve at read" over eager overwriting. And the field draws the
+distinction our tree needs: **identity collision is a separate bug from
+staleness** — "the wrong Apple problem" is not fixed by any temporal mechanism.
+That distinction is the adoption argument's spine.
+
+**The production landscape, verified from the implementations:** Graphiti
+resolves identity at WRITE by LLM decision (the n6 node-dedupe prompt; edge
+duplicates at ≥0.7 probability, contradictions at ≥0.8 — `resolve_extracted_nodes`
+/ `resolve_extracted_edge`), trading sub-second reads for an LLM merge decision
+inside its ingest. Mem0 is extraction-first with a lighter current-state store.
+Letta hands memory management to the agent's own self-editing. StewardMem's
+synthesis — deterministic hybrid retrieval + PPR over a provenance store with
+Graphiti's *temporal* model, write-time supersession, the citation gate, and
+human-routed ambiguity — already sits on the 2026 best-practice line, and its
+deterministic-ingest posture is precisely what Graphiti's LLM resolution and
+DISCERN's 7.6 s navigation loop both violate.
+
+**The verdict, per mechanism — with the Frankenstein guard made explicit:**
+
+Adoption is coherent iff (a) a probe measures the failure class in *our* data
+first; (b) the implementation is additive and deterministic inside the existing
+graph + recall pipeline — no new LLM surface, no new store shape; (c) the
+mechanism fills an axis nothing else touches; (d) no deliberate posture is
+reversed by trend.
+
+1. **The trap-taxonomy evaluation: ADOPT UNCONDITIONALLY.** Pure instrument,
+   zero architectural risk, and it is the gate for everything else. It extends
+   the existing cascade bench (which already scores abstain correctness with
+   preregistered absence markers and anti-fabrication grading) with
+   attribute-swap and near-miss-entity traps, scored as classification.
+2. **The entity-collision families: ADOPT CONDITIONALLY — and only in the
+   deterministic shape.** The ER-vs-staleness distinction proves this fills an
+   axis nothing else touches (identity — our supersession is time, our screen
+   is security). The Frankenstein risk is real and located: DISCERN's
+   implementation presupposes its LLM-extracted EAV fact graph (1,091
+   LLM-extracted entities, 916 S-A-V facts); bolting that extraction layer onto
+   a deterministic provenance store is the Frankenstein move. The coherent
+   shape keeps our store and adds *deterministic* name-similarity edges in the
+   derived graph (the 0.6·jaccard + 0.4·cos formula — mechanical, no LLM), a
+   read-time near-miss contrast in the recall handler, and the trap probes
+   first. Gate: the probe must measure the contamination class in our data
+   before an edge is written.
+3. **Machine-emitted clarify: DO NOT ADOPT NOW.** The deferral contract
+   deliberately routes ambiguity to a person (`requires_human()` is true for
+   every outcome by design; the auto table's reachability note documents the
+   choice). DISCERN machine-emits clarify because its product is a chat loop
+   with a hosted backbone; activating it here changes the product's conversational
+   behavior — a December S0 decision, not a gap fill. The contract already
+   anticipated activation; nothing needs building first.
+4. **The navigation loop: STAYS OUT.** 7.6 s/query, backbone-fragile
+   (0.887→0.610), incompatible with the on-device posture and the
+   deterministic-ingest law. Already refused; the research adds the production
+   landscape's confirmation (Graphiti's sub-second reads are the standing
+   counter-example to loop-shaped resolution on latency budgets).
+
+**The one-sentence verdict:** the principle was worth adopting and is already
+adopted; the instrument is worth adopting now; the collision families are worth
+building in the deterministic shape *after* the probe proves the failure class
+here; the machine-clarify and the navigation loop are not — and that is the
+difference between adopting a mechanism and growing a Frankenstein.
