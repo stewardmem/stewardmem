@@ -318,9 +318,22 @@ test('the_unarmed_turn_renders_the_plain_on_device_answer', async ({ page }) => 
 		).toBe(false);
 	}
 
-	// Leave no rows behind (the same drill the first test runs).
-	const cleanup = await fetch(`${kernelUrl}/chat/sessions/default`, { method: 'DELETE' });
-	expect(cleanup.ok, 'the drill erases the session it created').toBe(true);
+	// Leave no rows behind — the drill runs where a session COULD have been
+	// created. Bridge-less: every turn refuses at handler entry and persists
+	// NOTHING (chat.rs's persistence law — a Failed turn has no path), so the
+	// drill's premise ("the session it created") does not exist there; the
+	// honest pin instead: the default session was never written, and the
+	// DELETE answers 404 by name.
+	if (BRIDGE_PRESENT) {
+		const cleanup = await fetch(`${kernelUrl}/chat/sessions/default`, { method: 'DELETE' });
+		expect(cleanup.ok, 'the drill erases the session it created').toBe(true);
+	} else {
+		const cleanup = await fetch(`${kernelUrl}/chat/sessions/default`, { method: 'DELETE' });
+		expect(
+			cleanup.status,
+			'a bridge-less machine persists nothing: the default session was never created'
+		).toBe(404);
+	}
 });
 
 test('the_armed_cascade_turn_renders_with_its_route_witnessed', async ({ page }) => {
@@ -395,9 +408,20 @@ test('the_armed_cascade_turn_renders_with_its_route_witnessed', async ({ page })
 		expect(probe.code).toBe('recall_unavailable');
 	}
 
-	// Leave no rows behind — in the ARMED kernel's session.
-	const cleanup = await fetch(`${cascadeUrl}/chat/sessions/default`, { method: 'DELETE' });
-	expect(cleanup.ok, 'the drill erases the session it created').toBe(true);
+	// Leave no rows behind — in the ARMED kernel's session, under the same
+	// law as the unarmed drill: the erase runs where a session could have
+	// been created; a bridge-less machine pins the 404 instead (a refused
+	// turn persists nothing).
+	if (BRIDGE_PRESENT) {
+		const cleanup = await fetch(`${cascadeUrl}/chat/sessions/default`, { method: 'DELETE' });
+		expect(cleanup.ok, 'the drill erases the session it created').toBe(true);
+	} else {
+		const cleanup = await fetch(`${cascadeUrl}/chat/sessions/default`, { method: 'DELETE' });
+		expect(
+			cleanup.status,
+			'a bridge-less machine persists nothing: the default session was never created'
+		).toBe(404);
+	}
 });
 
 test('the_cascade_answer_renders_as_a_document_with_citations', async ({ page }) => {
@@ -460,6 +484,16 @@ test('the_cascade_answer_renders_as_a_document_with_citations', async ({ page })
 		expect(probe.code).toBe('recall_unavailable');
 	}
 
-	const cleanup = await fetch(`${cascadeUrl}/chat/sessions/default`, { method: 'DELETE' });
-	expect(cleanup.ok, 'the drill erases the session it created').toBe(true);
+	// The same drill law as its two siblings: erase where a session could
+	// have been created; pin the 404 where nothing could persist.
+	if (BRIDGE_PRESENT) {
+		const cleanup = await fetch(`${cascadeUrl}/chat/sessions/default`, { method: 'DELETE' });
+		expect(cleanup.ok, 'the drill erases the session it created').toBe(true);
+	} else {
+		const cleanup = await fetch(`${cascadeUrl}/chat/sessions/default`, { method: 'DELETE' });
+		expect(
+			cleanup.status,
+			'a bridge-less machine persists nothing: the default session was never created'
+		).toBe(404);
+	}
 });
