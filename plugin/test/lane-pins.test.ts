@@ -215,12 +215,6 @@ const consumers: FixtureConsumer[] = [
 		reads: 'fixtures/invisible-classes.json'
 	},
 	{
-		path: 'client/src/main.rs',
-		tree: 'this repo',
-		lane: { workflow: '.github/workflows/ci.yml', command: 'cargo test --manifest-path client/Cargo.toml' },
-		reads: 'include_str!("../../plugin/fixtures/invisible-classes.json")'
-	},
-	{
 		path: 'src/infra/unicode-visibility.fixture.test.ts',
 		tree: 'another repository',
 		lane: null,

@@ -54,7 +54,6 @@
       "initialization_options": {
         "linkedProjects": [
           "./Cargo.toml",
-          "./client/Cargo.toml",
           "./crates/brain-consensus-core/Cargo.toml",
           "./crates/brain-executor-core/Cargo.toml",
           "./crates/brain-interview-core/Cargo.toml",

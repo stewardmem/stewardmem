@@ -1,5 +1,5 @@
 {
-  "comment": "Canonical hostile-element set — the read-seam element drift alarm (v1.28.85). Truth source: brain-server src/gate.rs HOSTILE_ELEMENTS. Consumers: (1) server Rust lib test (every listed tag through sanitize_read: opening, closing, uppercase, hostile-attribute shapes), (2) plugin vitest plugin/src/format.test.ts (every tag through stripHostileElements), (3) client cargo test client/src/main.rs (vendored mirror vs this file), (4) fork host fixture test via the parity-synced extension tree. Changing the server set without this file fails lane 1; changing any consumer without the server fails its lane. Version 1 pins the 26-name set that closes R-01.",
+  "comment": "Canonical hostile-element set — the read-seam element drift alarm (v1.28.85). Truth source: brain-server src/gate.rs HOSTILE_ELEMENTS. Consumers: (1) server Rust lib test (every listed tag through sanitize_read: opening, closing, uppercase, hostile-attribute shapes), (2) plugin vitest plugin/src/format.test.ts (every tag through stripHostileElements), (3) fork host fixture test via the parity-synced extension tree. Changing the server set without this file fails lane 1; changing any consumer without the server fails its lane. Version 1 pins the 26-name set that closes R-01.",
   "elements": [
     {
       "name": "script",
