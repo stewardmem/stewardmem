@@ -183,19 +183,26 @@ fn tc3_the_reader_is_model_absent_by_construction() {
     // turn) — the reader adds NO async surface at all, so it cannot call a
     // model; and the module names no model-serving wire anywhere.
     let src = production_src();
-    // The module carries exactly THREE async fns
-    // — one per tier turn. (The cfg(test) modules — the pins and the S5
-    // witness — are excluded: the scan stops at the first cfg(test) mod.)
+    // The module carries exactly FOUR async fns
+    // — one per tier turn plus the writer drain. (The cfg(test) modules —
+    // the pins and the S5 witness — are excluded: the scan stops at the
+    // first cfg(test) mod.)
     let src = src
         .split("#[cfg(test)]")
         .next()
         .expect("a production section exists")
         .to_string();
-    // The module carries exactly THREE async fns — one per tier turn
-    // (T1's classify_route, T3's writer_turn, T4's escalate_frontier),
-    // each the ONLY async surface of its tier. The READER (T2) adds none:
-    // it is pure functions over fetched results, structurally unable to
-    // call a model.
+    // The module carries the tier turns' async surface — T1's classify_route,
+    // T3's writer_turn, T4's escalate_frontier, each the ONLY async surface
+    // of its tier — plus round 18 §2's `drain_writer_turn` (the
+    // writer-refusal law): a channel consumer mapping the writer turn's OWN
+    // events into named outcomes, model-absent like the reader. THE LAW'S
+    // SUBSTANCE IS UNCHANGED: the READER (T2) adds none — it is pure
+    // functions over fetched results, structurally unable to call a model —
+    // and the drain adds no model surface either (it consumes the writer's
+    // already-opened channel; it never constructs a request). (The roster
+    // gained the drain when round 18 §2 landed it; the pin was left red by
+    // that commit and the roster is repaired here, ownership named.)
     let async_fns: Vec<String> = src
         .lines()
         .filter(|l| l.contains("async fn"))
@@ -211,6 +218,7 @@ fn tc3_the_reader_is_model_absent_by_construction() {
             "classify_route".to_string(),
             "writer_turn".to_string(),
             "escalate_frontier".to_string(),
+            "drain_writer_turn".to_string(),
         ],
         "the cascade's async surface is exactly the three named tier turns \
          by name — the reader stays model-absent"
