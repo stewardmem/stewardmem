@@ -21,9 +21,12 @@
 //!         tier-scoped length ladders, the memory arithmetic, the
 //!         refusal ledger, and the ENGINE PIN line — and a future
 //!         re-preregistration WITHOUT an engine pin re-reds by name.
-//!   This round's engine is pinned too: `3.32.3` = `3b339ad6` (a bump
-//!   round updates the doc AND this pin consciously — the EngineFloorPins
-//!   pattern; the plan-09 bump re-runs the matrix as a named act).
+//!   This round's engine is pinned too. As of the 2026-11-14 MAIN ADOPTION
+//!   (the operator's named act, plans repo `c228f15`): `main-63529075` =
+//!   `6352907543270ae9c61fcaf59cb3e07b0b989ea1` (upstream main, ahead_by 95,
+//!   head #790 — the TAG GATE remains unmet; the named act stands in for the
+//!   tag, and January's 3.33.0 doc supersedes it consciously — the
+//!   EngineFloorPins pattern).
 //!   The full roster (all seven MLX wire tiers) must be named — a
 //!   ladders section that silently drops a tier hides a refusal.
 
@@ -159,16 +162,17 @@ fn the_engine_pin_line_names_the_engine() {
     let (tag, commit) = engine_pin_line(&text).expect("the ENGINE PIN line must parse (KR-4)");
     assert_eq!(
         tag,
-        "3.32.3",
-        "the preregistration at {} pins engine tag `{}` — this round's matrix runs on 3.32.3; \
-         a bump round updates the doc AND this pin consciously (the EngineFloorPins pattern)",
+        "main-63529075",
+        "the preregistration at {} pins engine tag `{}` — this round's engine state is the \
+         MAIN ADOPTION main@63529075 (the operator's named act, 2026-11-14); the 3.33.0 tag \
+         supersedes it consciously when it lands (the EngineFloorPins pattern)",
         path.display(),
         tag
     );
     assert!(
-        commit.starts_with("3b339ad6"),
-        "the preregistration pins commit `{}` — expected the 3.32.3 checkout 3b339ad6 (the \
-         engine the tables name)",
+        commit.starts_with("63529075"),
+        "the preregistration pins commit `{}` — expected the main-adoption checkout \
+         6352907543270ae9c61fcaf59cb3e07b0b989ea1 (the engine the tables name)",
         commit
     );
 }

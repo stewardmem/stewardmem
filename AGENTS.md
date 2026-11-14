@@ -3165,3 +3165,33 @@ is kept here.
 > mid-run — this machine cleans /tmp aggressively; the re-run worktree
 > goes in the home dir, the exact sequence is in the next round's
 > prompt §0.2).
+>
+> **THE 18-KV MAIN ADOPTION (2026-11-14, the operator's named act):** the pin
+> moved `from: "3.32.3"` → `revision: "6352907543270ae9c61fcaf59cb3e07b0b989ea1"`
+> (upstream main, ahead_by 95, head #790 — the TAG GATE stays unmet; the named
+> act stands in for the tag; January's 3.33.0 re-points to the TAG and B0 runs
+> per the unchanged prompt). The rehearsal's known break was the ONLY break:
+> `MLXBridge.streamTurn`'s switch gained the `.reasoning` arm (own accumulator —
+> NEVER the ThinkFilter, NEVER `onDelta`: delimiter-free reasoning fed to the
+> filter would EMIT as content, the masquerade class) and `.steering` (named
+> no-op); upstream SPLIT the reasoning channel out of chunk ("delimiters
+> already removed") — the driver's fidelity goldens are answer-only BY
+> CONSTRUCTION now, the rows gained `reasoning_chunks`/`reasoning_chars` as the
+> C-6 witness, the stamps name `main-63529075`. S0 landed same-day
+> (`docs/REKRA_PLAN_PREREGISTRATION_2026-11-14.md` — the newest preregistration:
+> engine pin = the named main sha, the WEIGHTS PIN section = the four full-sha
+> revisions, the arithmetic re-derived from the live configs with every number
+> and ceiling re-confirmed) and `the_engine_pin_line_names_the_engine` moved
+> consciously with it (the EngineFloorPins pattern). Gates: swift build zero
+> errors all targets (58 s), swift test 38/38 hermetic, kv_ratchet_pins 8/8,
+> census re-derives, badges selfcheck green, fmt green (clippy: the
+> pre-existing `sqlite_vec_rs` manifest warning only). The sibling resolved
+> 0.33.0/7ede4fd6 + swift-huggingface 0.13.0 exactly as the readiness plan
+> predicted. The ThinkFilter is NOT touched — OPEN QUESTION for the live
+> witness BEFORE any bridge-path chat on this pin: if the primed-think render
+> persists AND reasoning splits out of chunk, the primed filter may never see
+> `</think>` in chunk (it could suppress the whole answer). The KV matrix does
+> NOT run on the main pin by default (the measure-twice law; January's
+> tag-era matrix is the measurement of record). Plans-repo record:
+> `18_KV_MAIN_ADOPTION_2026-11-14.md` + the rehearsal inventory
+> `18_KV_BUMP_REHEARSAL_INVENTORY_2026-11-14.md`.
