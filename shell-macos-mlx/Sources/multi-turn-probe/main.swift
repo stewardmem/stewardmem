@@ -183,6 +183,23 @@ func physFootprint() -> UInt64 {
     return kr == KERN_SUCCESS ? info.phys_footprint : 0
 }
 
+/// L1 (IMPROVE19): the budget seam for the driver's own sessions — the
+/// SAME `MLXBridge.applyThinkingBudget` the wire child uses (one seam, two
+/// consumers, no duplicated apply logic). The reasoning config comes from
+/// the run's own `probeConfiguration` (non-nil for the Qwen3.5 ids in
+/// "full" mode; the CI 0.6B's bare config refuses BY NAME when the knob is
+/// set — the declared-protocol law). OFF (env unset): returns untouched —
+/// byte-identical to the unbudgeted session.
+@available(macOS 27.0, *)
+func applyBudgetIfSet(
+    _ session: ChatSession, configuration: ModelConfiguration,
+    container: ModelContainer
+) async throws {
+    try await MLXBridge.applyThinkingBudget(
+        session: session, reasoning: configuration.reasoningConfig,
+        container: container)
+}
+
 @available(macOS 27.0, *)
 func askChat(_ session: ChatSession, _ prompt: String) async -> TurnMeasure {
     var measure = TurnMeasure(
@@ -568,6 +585,15 @@ func run() async throws {
     } else {
         print("spec decode: off")
     }
+    // L1 (IMPROVE19): the budget knob's state, named on every run — the
+    // instrument records its own posture.
+    if let budget = MLXBridge.thinkingBudgetOverride {
+        print(
+            "thinking budget: ON (max=\(budget.maximumTokenCount), minAnswer=\(budget.minimumAnswerTokenCount), transition .immediate) via BRAIN_MLX_THINKING_BUDGET"
+        )
+    } else {
+        print("thinking budget: off (BRAIN_MLX_THINKING_BUDGET unset)")
+    }
     // ── MATRIX MODE (IMPROVE10 S1): the KV ratchet's tier-scoped matrix ────
     // PROBE_MATRIX=1 replaces the standard arms with the preregistered
     // measurement rows (docs/REKRA_PLAN_PREREGISTRATION_2026-11-09.md — the
@@ -587,6 +613,14 @@ func run() async throws {
     // nil run of a tier × length is the FIDELITY GOLDEN — orchestration runs
     // it FIRST; verdict-time comparison reads the recorded rows.
     if ProcessInfo.processInfo.environment["PROBE_MATRIX"] == "1" {
+        // L1 (IMPROVE19): matrix mode measures the KV schemes (December's
+        // round) — the budget knob is deliberately NOT applied here (a
+        // budgeted think-block would confound the KV rows' fidelity gates).
+        // Named, not silent: if the knob is set alongside PROBE_MATRIX the
+        // run labels the exclusion on the record.
+        if MLXBridge.thinkingBudgetOverride != nil {
+            print("thinking budget: BRAIN_MLX_THINKING_BUDGET set but NOT applied in matrix mode (the KV matrix measures schemes, not budgets)")
+        }
         try await runMatrix(container, kvScheme: kvScheme)
         return
     }
@@ -597,6 +631,7 @@ func run() async throws {
     var warmAnswer = ""
     do {
         let session = ChatSession(container, speculativeDecoding: speculative, generateParameters: params)
+        try await applyBudgetIfSet(session, configuration: configuration, container: container)
         let t1 = await askChat(session, "Remember this number for later: \(secret). Reply only 'ok'.")
         print("  turn 1 [\(t1.line)]: \(t1.text.prefix(60))")
         if t1.text.hasPrefix("THREW") { print("  turn 1 THREW — the session shape itself is wrong") }
@@ -613,6 +648,7 @@ func run() async throws {
     print("\n=== ARM D: tool-result continuation ===")
     do {
         let toolSession = ChatSession(container, speculativeDecoding: speculative, generateParameters: params)
+        try await applyBudgetIfSet(toolSession, configuration: configuration, container: container)
         toolSession.tools = [[
             "type": "function",
             "function": [
@@ -640,6 +676,7 @@ func run() async throws {
     // ── ARM C: memory or compliance ────────────────────────────────────────
     print("\n=== ARM C: memory vs compliance ===")
     let coldSession = ChatSession(container, speculativeDecoding: speculative, generateParameters: params)
+    try await applyBudgetIfSet(coldSession, configuration: configuration, container: container)
     let cold = await askChat(coldSession, "What was the number I asked you to remember? Numbers only.")
     let coldHas = cold.text.contains(secret)
     let warmHas = warmAnswer.contains(secret)
@@ -689,6 +726,7 @@ func run() async throws {
         let tokens = await container.encode(question).count
         print("  fence tokens: \(tokens)")
         let longSession = ChatSession(container, speculativeDecoding: speculative, generateParameters: params)
+        try await applyBudgetIfSet(longSession, configuration: configuration, container: container)
         let longTurn = await askChat(longSession, question)
         let hit = longTurn.text.contains("LX-4471")
         print("  long [\(longTurn.line)]: \(longTurn.text.prefix(160).replacingOccurrences(of: "\n", with: " "))")

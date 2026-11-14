@@ -105,6 +105,131 @@ public enum MLXBridge {
         return SpeculativeDecodingConfig(draftModel: draft, numDraftTokens: 5)
     }
 
+    // ── L1 (IMPROVE19): the thinking-budget override — the latency lever's
+    // seam, the same shape as the KV and spec-decode overrides: an env knob
+    // read ONCE per process, OFF by default, the rollback a config flip +
+    // restart (the KR-3 shape). `BRAIN_MLX_THINKING_BUDGET="max=N[,
+    // minAnswer=M]"` builds a `ThinkingBudgetConfiguration` with the
+    // `.immediate` transition override — the engine's documented
+    // conservative opt-in (upstream declines to guess a safe forced
+    // early-stop for a protocol that merely shares Qwen3's delimiters, so
+    // opting in is the application's act and the round's S2 gate is the
+    // required validation for these exact weights and tokenizer). A
+    // malformed string degrades to OFF with a named stderr line — a
+    // mis-typed knob is never a guessed budget. The application is
+    // `applyThinkingBudget` (below): session-local behavior; no wire shape
+    // moves, the Rust census is untouched.
+
+    /// Parse `max=N[,minAnswer=M]` — the knob's grammar. Malformed input
+    /// returns nil (the OFF posture); the read-once static prints the
+    /// reason once. `max` is required and first; `minAnswer` defaults to 1
+    /// (the engine's own default: at least one answer token). Extra
+    /// components are malformed, not ignorable — silent field-dropping
+    /// hides typos.
+    static func parseThinkingBudget(
+        _ raw: String?
+    ) -> ThinkingBudgetConfiguration? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let parts = raw.split(separator: ",").map {
+            $0.trimmingCharacters(in: .whitespaces)
+        }
+        guard let maxPart = parts.first, maxPart.hasPrefix("max="),
+            let maximum = Int(maxPart.dropFirst("max=".count)), maximum >= 0
+        else { return nil }
+        var minimumAnswer = 1
+        if parts.count > 1 {
+            guard let parsed = parts[1].hasPrefix("minAnswer=")
+                ? Int(parts[1].dropFirst("minAnswer=".count)) : nil,
+                parsed >= 0
+            else { return nil }
+            minimumAnswer = parsed
+        }
+        guard parts.count <= 2 else { return nil }
+        return try? ThinkingBudgetConfiguration(
+            maximumTokenCount: maximum,
+            minimumAnswerTokenCount: minimumAnswer,
+            transitionOverride: .immediate)
+    }
+
+    /// L1: the thinking-budget override, read once per process (the KR-3
+    /// shape; the KV override's law). Unset/malformed = OFF — the sessions
+    /// are byte-identical to the unbudgeted ones.
+    public static let thinkingBudgetOverride: ThinkingBudgetConfiguration? = {
+        let raw = ProcessInfo.processInfo.environment["BRAIN_MLX_THINKING_BUDGET"]
+        let parsed = parseThinkingBudget(raw)
+        if let raw, !raw.isEmpty, parsed == nil {
+            FileHandle.standardError.write(Data(
+                "brain-mlx: BRAIN_MLX_THINKING_BUDGET='\(raw)' is malformed — the knob is OFF (grammar: max=N[,minAnswer=M])\n"
+                    .utf8))
+        }
+        return parsed
+    }()
+
+    /// A tier with no declared reasoning protocol refuses the budget BY
+    /// NAME — the budget's delimiters must come from a declared protocol,
+    /// never a guess (the upstream design's own refusal, surfaced here).
+    public struct ThinkingBudgetRefusal: LocalizedError, Sendable {
+        public let reason: String
+        public init(_ reason: String) { self.reason = reason }
+        public var errorDescription: String? {
+            "thinking budget refused: \(reason)"
+        }
+    }
+
+    /// L1 (IMPROVE19): apply the thinking budget to a session — the
+    /// SESSION-WRAPPER apply shape from the S0 design note. The engine's
+    /// own extension seam (`session.components`, a public var; the factory
+    /// is invoked FRESH per generation, so no budget state leaks across
+    /// turns) and `applyingThinkingBudget` APPENDS — an existing
+    /// logit-processor factory (guided decoding) is chained, never
+    /// replaced. THE CALLER'S ORDERING LAW: apply AFTER
+    /// `applyGuidedDecoding`, which ASSIGNS `logitProcessorFactory` and
+    /// would clobber a budget applied first.
+    ///
+    /// OFF by default: `thinkingBudgetOverride` nil returns untouched.
+    /// The appended parameter validator enforces the headroom law at EVERY
+    /// generation start (`.insufficientGenerationTokenLimit` when the
+    /// turn's clamp cannot fit budget + Unicode completion + protocol
+    /// transition + answer reserve) — fail-closed per turn, the P-1 shape.
+    /// The diagnostic handler surfaces the engine's own fail-safe (a stand-
+    /// down keeps generation valid rather than corrupt it) on stderr —
+    /// recorded, never swallowed.
+    public static func applyThinkingBudget(
+        session: ChatSession,
+        reasoning: ReasoningConfig?,
+        container: ModelContainer
+    ) async throws {
+        guard let budget = thinkingBudgetOverride else { return }
+        try await applyThinkingBudget(
+            session: session, budget: budget, reasoning: reasoning,
+            container: container)
+    }
+
+    /// L1: the explicit apply core — the env wrapper above delegates here
+    /// (one seam, one law), and the pins exercise this shape deterministically
+    /// without a process-wide env mutation. A nil reasoning config refuses
+    /// BY NAME (the declared-protocol law).
+    public static func applyThinkingBudget(
+        session: ChatSession,
+        budget: ThinkingBudgetConfiguration,
+        reasoning: ReasoningConfig?,
+        container: ModelContainer
+    ) async throws {
+        guard let reasoning else {
+            throw ThinkingBudgetRefusal(
+                "the tier declares no reasoning protocol — the budget's delimiters must come from a declared protocol, never a guess")
+        }
+        let tokenizer = await container.tokenizer
+        session.components = try session.components.applyingThinkingBudget(
+            budget,
+            reasoning: reasoning,
+            tokenizer: tokenizer,
+            diagnosticHandler: { diagnostic in
+                FileHandle.standardError.write(Data(
+                    "brain-mlx: thinking budget stood down: \(diagnostic)\n".utf8))
+            })
+    }
+
     /// The E2 drafter: Qwen3-0.6B-4bit, the CG-10 probe's CI model — cached
     /// locally, proven multi-turn, and the only drafter this lane admits
     /// (MTP sidecars are refused: unverified double-recurrence, upstream

@@ -49,7 +49,23 @@
 
 ## §S1 · THE SEAM (the implementation record)
 
-*(lands with the S1 commit)*
+**The env surface (the KR-3 shape):** `BRAIN_MLX_THINKING_BUDGET="max=N[,minAnswer=M]"` — parsed by `MLXBridge.parseThinkingBudget` (total, fail-closed: malformed → nil, the reason named on stderr once; extra fields/negatives/non-numbers are malformed, NOT ignorable), read once per process into `MLXBridge.thinkingBudgetOverride` beside `kvSchemeOverride`/`specDecodeOverride` (MLXBridge.swift, the override family). `.immediate` transition baked into every parsed config (the S0 decision). OFF by default; the rollback is a config flip + restart.
+
+**The apply seam (one core, two consumers):**
+
+- `MLXBridge.applyThinkingBudget(session:reasoning:container:)` — the env wrapper: nil override → returns untouched (byte-identical sessions); else delegates to the explicit core.
+- `MLXBridge.applyThinkingBudget(session:budget:reasoning:container:)` — the explicit core (the pins' deterministic shape): nil reasoning config → `ThinkingBudgetRefusal` (named); else fetches the container's tokenizer, appends via the upstream `applyingThinkingBudget` (which CHAINS any existing factory — guided decoding survives), wires the diagnostic handler (the engine's stand-down failsafe → named stderr line, never swallowed).
+- **Consumer 1 — the wire child** (shell-macos `brain-afm/main.swift`, `seededMLXSession`): applied AFTER the guided-decoding block — the S0 ordering law (that step ASSIGNS `logitProcessorFactory`; the budget appends to what it left). Session-stable like the KV posture: the knob rides the session's construction.
+- **Consumer 2 — the driver** (multi-turn-probe/main.swift, `applyBudgetIfSet` over `probeConfiguration`'s reasoningConfig): applied in ARMs B/D/C/L for the measurement runs. Matrix mode deliberately does NOT apply the budget (it measures KV schemes, December's round — a budgeted think block would confound the KV rows' fidelity gates) and NAMES that exclusion on the record when the knob is set alongside `PROBE_MATRIX`. Every run prints its budget posture (ON with the parsed values / off) — the instrument records its own state.
+
+**The pins (`Tests/MLXFMProbeTests/ThinkingBudgetPins.swift`, 13 tests):**
+
+- Hermetic (10): the parser (max-only default, max+minAnswer, whitespace tolerance, the legal zero budget, NINE malformed forms → nil, nil input) · the static-consistency pin (the read-once static IS the parser on the live env value — the wiring shape, so no future edit forks the static from the grammar) · the OFF-at-rest pin (unset env → nil override) · the tier gate (all six Qwen3.5 tiers declare a reasoning protocol; the plain Qwen3-8B declares none and refuses BY NAME).
+- Live under `BRAIN_FM_MEASURE=1`, CI 0.6B with a declared think-tags protocol (3): the apply core composes (`session.components.logitProcessorFactory` non-nil after) · **the headroom law witnessed through OUR seam** (budget max=40 + clamp 1 → `.insufficientGenerationTokenLimit` at generation start, BEFORE prefill — the P-1 shape on the budget path) · the declared-protocol refusal (nil reasoning → `ThinkingBudgetRefusal` naming the law).
+
+**The gates:** `swift build --build-tests` green (both packages: shell-macos-mlx AND the wire child shell-macos/brain-afm) · `scripts/setup.sh` · `swift test` **51 tests in 14 suites, all passed** (the 38 originals untouched + 13 new pins; the 3 live pins additionally ran green under `caffeinate -is`) · the seam OFF at rest (env unset) — no default moved.
+
+**F1–F4 status:** none fired at S1. F2 (no-fork wiring) was pre-resolved at S0; the others wait on their measurements.
 
 ## §S2 · THE GATE TABLE (per fast tier)
 

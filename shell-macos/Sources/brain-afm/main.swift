@@ -1186,6 +1186,18 @@ struct BrainAfmBridge {
                 session: built.session, container: container, wire: wire
             )
         }
+        // L1 (IMPROVE19): the thinking budget — env-gated, OFF by default,
+        // applied AFTER guided decoding (that step ASSIGNS
+        // `logitProcessorFactory`; the budget must append to what it left,
+        // the S0 ordering law). Session-stable like the KV posture: the
+        // knob rides the session's construction, never a per-turn flip.
+        // Unset env returns untouched — byte-identical to the unbudgeted
+        // session.
+        try await MLXBridge.applyThinkingBudget(
+            session: built.session,
+            reasoning: tier.configuration.reasoningConfig,
+            container: container
+        )
         let live = MLXLive(session: built.session, store: built.store)
         return sessions.materializeMLX(slot, live: live)
     }
