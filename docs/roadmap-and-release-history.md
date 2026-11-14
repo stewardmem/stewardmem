@@ -16,7 +16,7 @@ StewardMem ships on a strict linear release chain. This page is the roadmap summ
   splits, eval hygiene, hand-down, chat follow-ups, the tuned native tiers,
   the armed rerank tier). The per-version record is
   [CHANGELOG.md](./CHANGELOG.md); the per-release security register is
-  [SECURITY.md](./SECURITY.md).
+  [SECURITY.md](./security.md).
 - **Client:** the Dioxus client line ended at 1.28.23 and its tree left the
   repository on 2026-11-13 (the parity gates it pinned had long passed). The
   operator GUI is the **SvelteKit + Tauri shell** (`shell/`), whose own

@@ -21,7 +21,7 @@ file moves this stamp in the same commit — staleness is self-declaring by the
 version gap (do not trust a stamp N releases behind HEAD).
 
 This document is the engineering-side threat model. For per-release progress
-against the controls below, see [`SECURITY.md`](./SECURITY.md).
+against the controls below, see [`SECURITY.md`](./security.md).
 
 **Agentic-AI coverage:** the LLM/agent-specific threat classes (prompt
 injection, memory poisoning, tool misuse, agentic supply chain, lies-in-the-
