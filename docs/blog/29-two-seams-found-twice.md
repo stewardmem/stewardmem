@@ -125,6 +125,57 @@ parts of DISCERN that transfer to this architecture are exactly the parts
 that are graph-decidable: the gates, the contract, the collision families.
 The part that does not transfer is the thing their accuracy is built on.
 
+## Why the deterministic shape wins on this product: the four ledgers
+
+The comparison above is about mechanism presence. This is the comparison about
+cost, and it is where the store's posture stops looking like a limitation and
+starts looking like the point.
+
+**The token ledger.** DISCERN's resolution is an LLM loop on every query: 4.1
+navigation turns, 5.7 tool calls, 7.6 seconds, on a hosted backbone whose
+tokens are billed for the life of the product — plus a four-judge LLM council
+to score the answers. The store's resolution costs **zero model tokens**: the
+grounding query is built in code ("zero model tokens are spent… no LLM query
+rewriting", `handlers/chat.rs`), retrieval is deterministic hybrid search plus
+PageRank, the citation indices are derived by span-matching code, and the
+abstain notice is fixed kernel text. The writer is the only token consumer,
+and the thinking budget bounds it. On local tiers decoding at 22–40 tokens per
+second, a 5.7-call loop per query is not a cost — it is a different product.
+Resolution by governance is resolution at zero marginal token cost.
+
+**The locality ledger.** Every tier in the roster runs on the machine; the
+store's law is no data egress. DISCERN's loop requires a hosted backbone —
+its own backbone table shows the open-weight model collapsing to 0.610 — and
+its evaluation required four hosted judges. An on-device memory that resolves
+locally is not a compromise; it is the only shape in which the memory never
+leaves the machine, which for an enterprise memory product is the requirement
+everything else serves.
+
+**The privacy ledger.** The store-verbatim law plus the read seam shape every
+text field leaving the process; PII masking runs in the gate; quarantined rows
+are excluded from retrieval; the recall boundary masks grounding by principal.
+DISCERN's read path shapes nothing — its navigation loop ships raw store
+content to whatever backbone answers, and its gates judge an answer's honesty,
+never its exposure. For a memory store, that is not a missing feature; it is
+the missing product.
+
+**The governance ledger.** The tamper-evident chain, the two-principal quorum,
+the human-in-the-loop override, role-scoped purge and DSAR erase, tombstones
+carrying content digests, four layers between deleting a row and deleting the
+bytes. DISCERN governs an answer's honesty and nothing else — no screening at
+ingest (and an unscreened ingest is the resident-payload risk), no erasure
+path, no audit chain, no quorum. The security seams are not additions to a
+memory system; they are what makes a memory system deployable for anyone who
+has to answer for it later.
+
+Under those ledgers, the adoption decision is narrow and already made: the
+adoption round (`20_DISCERN_ADOPTION_ROUND.md` in the plans repository) adopts
+the trap-taxonomy instrument unconditionally and the deterministic collision
+families only if the probe measures the failure class in this store — the
+mechanical, no-LLM shape that fits the graph and recall pipeline exactly as
+they stand. The paper's EAV extraction layer, its navigation loop, and its
+machine-emitted clarify stay out: each violates a ledger above.
+
 ## What this means
 
 The architecture holds. The two-seam division of labor — preserve and never
