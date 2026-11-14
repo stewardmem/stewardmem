@@ -285,6 +285,9 @@ public enum MLXBridge {
                 }
             case .reasoning(let thought):
                 reasoning += thought
+                // The engine told us it owns the scratchpad — release a
+                // primed suppression before it can eat the answer.
+                filter.noteEngineReasoningSplit()
             case .info(let info):
                 inputTokens = info.promptTokenCount + info.cachedPromptTokenCount
                 outputTokens = info.generationTokenCount
@@ -347,6 +350,23 @@ public struct ThinkFilter: Sendable {
     ///   phase. See the type doc.
     public init(primedThinkBlock: Bool = false) {
         phase = primedThinkBlock ? .thinking : .answer
+    }
+
+    /// THE 2026-11-14 LIVE WITNESS (18_KV_FINAL_CLOSURE_PLAN §1, outcome a):
+    /// the engine split the reasoning channel natively — `.reasoning` events
+    /// are arriving, so this is a framed-protocol model on the adopted main
+    /// pin ("delimiters already removed"). The chunk stream is the ANSWER by
+    /// the engine's own contract, and a primed suppression would wait for a
+    /// `</think>` that never arrives in chunk and eat the whole answer
+    /// (the witness: heretic 9B, reason=141ch/583c via `.reasoning`, the
+    /// answer clean in chunk, no `</think>` in chunk). Transition to the
+    /// answer phase; the scratchpad is the engine's to carry, never ours to
+    /// re-filter. Unframed models (no `.reasoning` events) are untouched —
+    /// the delimiter state machine keeps its documented job there.
+    public mutating func noteEngineReasoningSplit() {
+        if phase == .thinking {
+            phase = .answer
+        }
     }
 
     /// Ingest one raw fragment; return the clean text it makes visible.
