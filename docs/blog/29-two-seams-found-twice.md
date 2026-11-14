@@ -64,46 +64,64 @@ erasure. Their "governance" gates the *honesty* of an answer; ours additionally
 gates what may enter, what may leave, and who may decide. Neither subsumes the
 other. That is the diff.
 
-## Where they are ahead, stated plainly
+## Where they are ahead — audited against the source, not assumed
 
-Three mechanisms in the paper formalize what we only half-built, and honesty
-requires naming them as the paper's contribution:
+The store is not built on one paper. It is a synthesis of the pre-DISCERN
+literature, implemented in Rust: Graphiti's bi-temporal model (the filter is
+"exactly the Graphiti" one — research note 01), HippoRAG-2-style
+Personalized-PageRank retrieval (`src/search/graph_ppr.rs` — note 04), TRACE
+typed edges, submodular evidence packing. Those are the same papers DISCERN
+builds on and benchmarks against — HippoRAG2 is its strongest baseline, and
+the Zep lineage is its write-time-resolution foil. DISCERN's genuine delta is
+narrower than its title: the read-time navigation contract and the abstention
+evaluation. We audited each piece of that delta against the source code rather
+than assuming it, because "we lack X" is a claim that can be wrong in both
+directions. The verdicts:
 
-**The terminal contract.** Their committed action is a decidable function of
-store state: `clarify` when two or more candidate entities survive the
-evidence-gathering, `abstain` on demonstrated absence, `update` when the
-supersession chain is long, `answer` otherwise — with every gate enforced by
-graph predicates rather than model judgment. Our abstention is real and
-calibrated — an empty hit set with a low-confidence or degraded recall decision
-abstains deterministically, from fixed kernel text, and the tiered cascade
-abstains when zero sentences verify against evidence — but it is a *one-way*
-gate: there is no `clarify`, no `update` action, no earned-answer check, and
-no near-miss guard, because there is no collision family for them to be earned
-against. The paper's ablation puts numbers on the gap: removing the
-collision check collapses abstention calibration (over-commitment 0.21 → 0.28),
-and a commercial memory system built without this discipline refused 87% of
-its answerable questions. Calibration, not volume, is the skill.
+**The entity-collision surface: OPEN — the one real gap.** Nothing in the tree
+links confusable entities into contrastable families, and a near-match query
+retrieves whichever chunk ranks highest. Adjacent machinery exists (the
+write-side duplicate guard, the junk-hit abstain signal the cascade bench
+measured), but the family surface, the contrast tool, and the near-miss guard
+do not. This is the paper's contamination pillar, and it is our gap.
 
-**The entity-collision surface.** Confusable entities linked into families,
-never merged, contrasted at read time — with the contamination failure class
-they measure it against (answering about the target without leaking a
-confusable twin's fact). We hold the never-merge invariant but offer no
-disambiguation surface; a near-match query retrieves whichever chunk ranks
-highest.
+**The terminal contract: PARTIAL — the mechanism exists; the machine-emitted
+half is missing.** `Recommendation::ClarifyQuery` sits in the retrieval quality
+estimator ("very low confidence; ask caller to clarify or reformulate"), and
+`DeferralOutcome::Clarify` is a defined outcome in the workflow deferral
+contract — with measured-feature governance that admits no override. But the
+deferral table routes every class to a human today ("clarify/stop are not yet
+reachable" in the auto path, by documented decision), and `update` exists as a
+write-time revise, not a read-time terminal action. What DISCERN adds is the
+machine-emitted half: clarify fired automatically when candidates survive.
+Whether that half *should* fire automatically here is a product question —
+this store's deferral contract deliberately hands ambiguity to a person.
 
-**The abstention evaluation axis.** They score the answer-versus-abstain
-decision as a classification problem — precision, recall, F1, false-decline —
-against attribute-swap and near-miss traps, so that reflexive declining cannot
-score well. Our probe battery measures recall, citation, and honest refusal
-anecdotally; it has no calibrated abstention axis. Their trap shape is
-directly reusable against our store.
+**Earned commitment: SPLIT — one half closed, and stricter than the paper's.**
+The answer side is closed by the kernel's citation gate: the writer's prose is
+sentence-split and span-matched against the evidence by deterministic code,
+the citation indices are *derived, never model-reported* ("a model cannot
+fabricate an index it does not produce"), and **zero verified sentences → the
+answer abstains**. That is earned-answer by mechanical verification — stricter
+than DISCERN's citation-or-abstain renderer, which gates an LLM's own citation.
+The abstain side is the open half: our absence is keyed on the hit set plus a
+calibrated low-confidence decision, not demonstrated against a collision
+family, because the family does not exist. This is the same root as the first
+gap.
+
+**The abstention evaluation axis: PARTIAL.** The cascade bench already scores
+abstain *correctness* — preregistered absence markers, no-corpus-span
+anti-fabrication grading, a preregistered abstain line. What is missing is
+DISCERN's trap taxonomy (attribute swaps, near-miss *entities*) and the
+precision/recall framing over a multi-system comparison. The instrument exists;
+the adversarial shape does not.
 
 One more number deserves its own sentence: their read-time loop costs **7.6
 seconds per query** and degrades from 0.887 to 0.610 as the backbone weakens.
-That is a hosted-model posture. Our retrieval is deterministic and
-LLM-free — not because we could not build the loop, but because the on-device
-tiers cannot afford it, and the paper's own backbone table is the evidence.
-The parts of DISCERN that transfer to this architecture are exactly the parts
+That is a hosted-model posture. Our retrieval is deterministic and LLM-free —
+not because we could not build the loop, but because the on-device tiers
+cannot afford it, and the paper's own backbone table is the evidence. The
+parts of DISCERN that transfer to this architecture are exactly the parts
 that are graph-decidable: the gates, the contract, the collision families.
 The part that does not transfer is the thing their accuracy is built on.
 
@@ -137,10 +155,13 @@ The work this sets up is equally concrete: their trap taxonomy — attribute
 swaps, near-miss entities, and the case the paper's own benchmark cannot test,
 two independently-written contradictory facts with no explicit revise — turned
 into a probe against *our* store, scored as classification, run before any
-mechanism is adopted. Four mechanisms are candidates: the collision families,
-the terminal contract, the earned-abstention gate, the evaluation axis. The
-paper earns a mechanism review, not a fork, and the probe decides which of the
-four are real gaps in this tree rather than gaps in a different one.
+mechanism is adopted. The audited verdicts shrink the adoption list to what
+the source actually showed: one open gap (the collision families, which the
+earned-abstention half hangs on), one deliberate human-routing decision to
+revisit (machine-emitted clarify), and one instrument to extend (the bench's
+abstain grading, toward the entity-trap taxonomy). The paper earns a mechanism
+review, not a fork, and the probe decides which of the candidates are real
+gaps in this tree rather than gaps in a different one.
 
 Full analysis, with the equations and the honest structure of their results
 table — including the part where the simple baseline beats them on three of
