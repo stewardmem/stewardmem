@@ -109,32 +109,68 @@ read latency is **7.6 s mean, 4.1 turns and 5.7 tool calls per query**.
 | Never-merge entities | trivially true — nothing in the store merges entities; the paper's contribution is the *family* + *contrast* surface, not the never-merge rule |
 | Abstain on absence | the kernel's zero-hit abstain gate — a coarse `EarnedAbstainGate` keyed on retrieval emptiness rather than demonstrated absence |
 
-**The gaps DISCERN names (adoptable, in priority order — as first written; gaps 1 and 4 have since landed in round 20, and the measured outcome at the end of this note is the record):**
+**The gaps DISCERN names — the adoption record (each gap as first read, then
+what shipped; every claim below triple-verified against the implementation,
+the pins, and the committed run rows):**
 
-1. **The entity-collision disambiguation surface.** We have never-merge but no
-   *family*: no `SIMILAR_NAME`-style collision edges, no read-time contrast
-   tool, no near-miss guard. A query that names a near-match today retrieves
-   whichever chunk ranks highest — the exact contamination failure their
-   contamination pillar (n=71) measures, and our ingest path's entity names are
-   client-declared with no collision surface at all.
-2. **The four-way terminal contract.** Our abstain gate is binary and
-   retrieval-keyed; there is no `clarify` (surviving ambiguity → ask), no
-   `update` action, and no earned-answer gate forcing an ambiguity check
-   before commit. The paper's point is that these are **decidable functions of
-   the store** — implementable without any LLM judgment, which is precisely the
-   on-device-friendly shape.
-3. **Demonstrated-absence abstention.** Zero-hit abstention fires on retrieval
-   emptiness; DISCERN requires the absence to be *demonstrated* (searched for).
-   Their ablation quantifies the failure mode of the coarse version from the
-   other side (over-commit when the collision check is absent), and Mem0's
-   collapse (false-decline 0.867 — refusing 87% of answerable queries) shows
-   the reflexive-decline version failing from the opposite direction.
-4. **The terminal-decision evaluation axis.** Nothing in our probe battery
-   scores answer-vs-abstain as classification. The ENT-310 trap shape
-   (attribute-swap + near-miss, gold answers derived from the seeded state) is
-   directly adoptable as a probe against our store — the same shape
-   LongMemEval (ICLR 2025) pioneered as knowledge-update and abstention
-   abilities, which DISCERN then industrialized.
+1. **The entity-collision disambiguation surface — ADOPTED.** As first read:
+   never-merge but no *family* — no `SIMILAR_NAME`-style collision edges, no
+   read-time contrast tool, no near-miss guard, so a query naming a near-match
+   retrieved whichever chunk ranked highest (the contamination pillar's exact
+   failure, n=71). Landed in round 20 as the deterministic shape
+   (`src/nearmiss.rs`, wired at the recall seam `src/handlers/recall.rs`,
+   `BRAIN_RECALL_NEARMISS=1`, OFF at rest — no default moved): the name-edge
+   families at the paper's own formula (`0.6·jaccard_lex(names) +
+   0.4·cos(embeddings)`, threshold 0.70 — mechanical, no LLM, no entity layer;
+   the name surfaces are capitalized-token runs), and the read-time near-miss
+   contrast in the recall handler, four-gated: the distinguishing token absent
+   from every served row, ≥2 shared tokens with the top row, a real
+   above-threshold collision family, and the store-grounded FTS presence check
+   as the false-decline guard. The probe measured the failure class first
+   (contamination 1.000, 4/4) and flipped red → green in one attempt (0.000;
+   abstain P/R/F1 1.000), surgically — the attribute-swap arm, the
+   contradiction arm, and the controls untouched.
+2. **The four-way terminal contract — the vocabulary ADOPTED; the
+   machine-emitted half a recorded product decision AGAINST.** The decidable
+   pieces exist in the store: `Recommendation::ClarifyQuery`
+   (`src/search/quality.rs`), the `DeferralOutcome` clarify/stop vocabulary
+   (`src/workflow/confidence.rs`), and — since round 20 — the recall seam
+   routes collision queries through the store's clarify-or-abstain envelope
+   (the empty `low_confidence` decision on the wire). The machine-emitted
+   clarify and the update action were then DECLINED by the documented
+   contract, not left unbuilt: `requires_human()` is true for every outcome
+   (the pin iterates `DeferralOutcome::ALL` and asserts it), the auto table is
+   empty (`clarify`/`stop` are not yet reachable — the reachability note is
+   the decision's own record), and `update` exists only as write-time revise.
+   This store deliberately hands ambiguity to a person; activating
+   machine-clarify changes the product's conversational behavior and stays a
+   named December S0 decision. The paper's insight — these are decidable
+   functions of the store, no LLM judgment — is exactly the shape the
+   near-miss route took where the store can decide.
+3. **Demonstrated-absence abstention — the collision-class half ADOPTED; the
+   general half open, named.** Zero-hit abstention still fires on retrieval
+   emptiness; what round 20 added is the demonstrated-absence shape for the
+   collision class: the near-miss refusal SEARCHES before refusing — the FTS
+   leg checks the whole domain for the distinguishing token (present anywhere,
+   the contrast stands down and the store serves; absent everywhere, the
+   refusal is earned). Earned-abstain against a collision family — the audit's
+   open half — is closed, with zero false-declines measured across the
+   gold-answer rows. The general demonstrated-absence mechanism beyond the
+   collision shape is not built: the attribute-swap class still over-commits
+   3/3 (the answer-side attribute check is a different mechanism, named for
+   its own round). Mem0's collapse (false-decline 0.867 — refusing 87% of
+   answerable queries) remains the reflexive-decline counter-example the FTS
+   guard is built against.
+4. **The terminal-decision evaluation axis — ADOPTED.** The trap taxonomy is
+   the bench's own mode (`BRAIN_S0_TRAP=1`): 16 queries, six kinds
+   (attribute-swap, near-miss, contradiction, plus their three controls), gold
+   answers machine-derived from the seeded corpus and checked by the parser's
+   derivation refusals, answer-vs-abstain scored as classification with the
+   anti-fabrication witness — the ENT-310 shape, including the
+   contradiction-at-recall pair DISCERN's own benchmark cannot test. Both
+   classification-rows tables are committed (red and green), and the trap
+   probes ran BEFORE any mechanism was written — the instrument-first order
+   the adoption decision preregistered.
 
 **Audited against the source, 2026-11-14 (the pass after the first write —
 two of the four verdicts above were partially wrong and the blog carries the
@@ -155,12 +191,14 @@ paper's* (the kernel's citation gate sentence-splits and span-matches the
 writer's prose against evidence by deterministic code, citation indices
 derived never model-reported — "a model cannot fabricate an index it does not
 produce" — and zero verified sentences → abstain; `src/agentloop/cascade.rs`),
-while earned-abstain against a collision family is open (absence is keyed on
-hit set + calibrated low-confidence — the same root as gap 1); (4) the
-evaluation axis is **PARTIAL** — the cascade bench already scores abstain
-correctness with preregistered absence markers and anti-fabrication grading;
-the missing pieces are the entity-trap taxonomy and the precision/recall
-framing. The multi-source frame this audit sharpened: the store is a synthesis
+while earned-abstain against a collision family was open at the audit
+(absence is keyed on hit set + calibrated low-confidence — the same root as
+gap 1) and has since closed with it (the near-miss route's demonstrated-absence
+leg — the FTS search before refusing); (4) the evaluation axis was **PARTIAL**
+at the audit — the cascade bench already scores abstain correctness with
+preregistered absence markers and anti-fabrication grading; the missing pieces
+were the entity-trap taxonomy and the precision/recall framing, and both have
+since landed (the trap mode scores answer-vs-abstain as classification). The multi-source frame this audit sharpened: the store is a synthesis
 of the pre-DISCERN literature — the bi-temporal filter is "exactly the
 Graphiti" one (note 01), the PPR retrieval is HippoRAG-2-style
 (`src/search/graph_ppr.rs`, note 04), TRACE typed edges (note 03), submodular
