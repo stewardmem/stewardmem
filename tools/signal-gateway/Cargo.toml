@@ -75,6 +75,23 @@ futures-util = "0.3.34"
 [dev-dependencies]
 tempfile = "3"
 
+# ── THE RUSTSEC-2026-0459 VENDOR PATCH (the C SQLite CVE-2026-119375 fix) ───
+# libsqlite3-sys must reach >=0.39.0 (patched); two crates cap it below that
+# and NEITHER can move upstream: sqlx-sqlite 0.9.0 (the newest of its line)
+# caps <0.38, and presage-store-sqlite pins "0.36.0" explicitly — upstream
+# presage MAIN still pins 0.36.0 (verified 2026-11-14), so moving the rev
+# does not lift the cap. Both crates are therefore vendored under vendor/
+# as byte-identical upstream source with exactly ONE manifest line changed
+# each (the libsqlite3-sys req; presage-store-sqlite's sibling path dep
+# redirected to this same rev). Read vendor/README.md before touching:
+# the deltas, the re-diff drift guard, and the delete-when-upstream-moves
+# rule. This is the fix, not a documented ceiling.
+[patch.crates-io]
+sqlx-sqlite = { path = "vendor/sqlx-sqlite" }
+
+[patch."https://github.com/whisperfish/presage"]
+presage-store-sqlite = { path = "vendor/presage-store-sqlite" }
+
 # ── Switchboard stack policy (libsignal v0.99.0 → v0.101.0) ─────────────────
 # STATUS: blocked by cargo's rule that a [patch] must point to a DIFFERENT
 # source URL than the manifest being patched. presage pins libsignal crates
