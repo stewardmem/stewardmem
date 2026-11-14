@@ -23,6 +23,13 @@
 //!    on any requirement shape it does not recognise, so it can never silently
 //!    skip a dependency it failed to parse.
 //!
+//!    THE ONE SANCTIONED MOVEMENT: a `[patch]` table may redirect a pinned
+//!    dependency to committed vendored source (`vendor/` beside the
+//!    manifest) — the reviewable act, every piece of it committed. The pin
+//!    verifies the redirect three ways (the vendored directory exists; the
+//!    lock resolves the patched name as a path; the pinned-rev resolution is
+//!    gone) and fails closed on any patch-entry shape it cannot read.
+//!
 //! 2. [`the_tools_ci_lanes_pin_resolution_with_locked`] — the two gate lanes
 //!    run clippy and test with `--locked`. `cargo fmt` cannot carry the flag
 //!    (it rejects `--locked` as an unexpected argument) and resolves via
@@ -164,6 +171,55 @@ fn version_parts(v: &str) -> (u64, u64, u64) {
     (nums[0], nums[1], nums[2])
 }
 
+/// The `[patch]` redirects a tools manifest declares: `(name, path)` rows.
+///
+/// THE ONE SANCTIONED FORM OF MOVEMENT: a `[patch]` entry redirecting a
+/// pinned dependency to a vendored path commits the movement in the manifest
+/// itself — the vendored source is committed in the tree beside it, and the
+/// lock must resolve the patched name as that path. The check below verifies
+/// all three. Fail-closed on any patch-entry shape other than the inline
+/// `{ path = "..." }` form: a patch this pin cannot read is a movement it
+/// cannot verify, and an unverifiable movement is refused, not skipped.
+fn patch_redirects(manifest: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut in_patch = false;
+    for line in manifest.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_patch = trimmed.starts_with("[patch");
+            continue;
+        }
+        if !in_patch || trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let Some((name, rest)) = trimmed.split_once(" = ") else {
+            panic!("unparseable patch entry (fail-closed, not skipped): {trimmed:?}");
+        };
+        let Some(body) = rest.strip_prefix('{') else {
+            panic!(
+                "patch entry {name} is not the inline-table path form — fail-closed: {trimmed:?}"
+            );
+        };
+        let needle = "path = \"";
+        let Some(i) = body.find(needle) else {
+            panic!(
+                "patch entry {name} carries no path — a [patch] this pin cannot trace to \
+                 committed vendored source is refused, not skipped: {trimmed:?}"
+            );
+        };
+        let path = body[i + needle.len()..]
+            .split('"')
+            .next()
+            .unwrap_or("")
+            .to_string();
+        if path.is_empty() {
+            panic!("patch entry {name} carries an empty path (fail-closed)");
+        }
+        out.push((name.trim().to_string(), path));
+    }
+    out
+}
+
 /// Does `have` satisfy the bare-caret requirement `req`?
 ///
 /// A bare requirement is caret semantics over the components actually
@@ -226,6 +282,7 @@ fn the_tools_locks_satisfy_their_manifests() {
              and a freshness check that sees nothing passes while proving nothing",
             deps.len()
         );
+        let patches = patch_redirects(&read(manifest_rel));
         let pkgs = locked_packages(&read(lock_rel));
         // ── anti-vacuity: the lock parser must see a real dependency graph.
         assert!(
@@ -250,17 +307,55 @@ fn the_tools_locks_satisfy_their_manifests() {
                     );
                 }
                 DepReq::GitRev { rev } => {
-                    let needle = format!("#{rev}");
-                    let ok = pkgs.iter().any(|p| {
-                        &p.name == name && p.source.as_deref().is_some_and(|s| s.ends_with(&needle))
-                    });
-                    assert!(
-                        ok,
-                        "{manifest_rel} pins git dependency {name} at rev {rev} but the \
-                         committed lock does not resolve it there — the lock and the pin \
-                         disagree, which is exactly the unreviewed movement this law exists \
-                         to refuse. Re-lock against the pinned rev and commit both files.",
-                    );
+                    // THE SANCTIONED REDIRECT: a `[patch]` table may move a
+                    // pinned git dependency to committed vendored source.
+                    // The movement is then verified three ways — the
+                    // vendored directory exists in the tree, the lock
+                    // resolves the name as a path (no git source), and the
+                    // pinned-rev resolution is GONE — the redirect is the
+                    // reviewed act, not a silent one.
+                    let redirect = patches.iter().find(|(n, _)| n == name);
+                    if let Some((_, vendored)) = redirect {
+                        let mut vendored_dir = repo(manifest_rel);
+                        vendored_dir.pop();
+                        vendored_dir.push(vendored);
+                        assert!(
+                            vendored_dir.is_dir(),
+                            "{manifest_rel} redirects {name} to vendored path '{vendored}' but \
+                             the directory does not exist in the tree — the redirect names \
+                             nothing, which is exactly the unreviewed movement this law \
+                             exists to refuse.",
+                        );
+                        let resolved_as_path =
+                            pkgs.iter().any(|p| &p.name == name && p.source.is_none());
+                        let needle = format!("#{rev}");
+                        let still_at_rev = pkgs.iter().any(|p| {
+                            &p.name == name
+                                && p.source.as_deref().is_some_and(|s| s.ends_with(&needle))
+                        });
+                        assert!(
+                            resolved_as_path && !still_at_rev,
+                            "{manifest_rel} redirects {name} to vendored path '{vendored}' but \
+                             the committed lock does not resolve it as that path — the lock \
+                             and the redirect disagree, which is exactly the unreviewed \
+                             movement this law exists to refuse. Re-lock and commit both \
+                             files.",
+                        );
+                    } else {
+                        let needle = format!("#{rev}");
+                        let ok = pkgs.iter().any(|p| {
+                            &p.name == name
+                                && p.source.as_deref().is_some_and(|s| s.ends_with(&needle))
+                        });
+                        assert!(
+                            ok,
+                            "{manifest_rel} pins git dependency {name} at rev {rev} but the \
+                             committed lock does not resolve it there — the lock and the pin \
+                             disagree, which is exactly the unreviewed movement this law \
+                             exists to refuse. Re-lock against the pinned rev and commit \
+                             both files.",
+                        );
+                    }
                 }
             }
         }
@@ -995,4 +1090,35 @@ fn the_two_compiler_arrangement_is_held_apart_and_stays_held() {
         "the check script must invoke the native compiler, or the 7.x dependency is \
          installed and never run"
     );
+}
+
+#[test]
+fn patch_redirects_parses_the_sanctioned_shape() {
+    let manifest = r#"
+[dependencies]
+presage = { git = "https://github.com/whisperfish/presage", rev = "6f630791" }
+
+[patch.crates-io]
+sqlx-sqlite = { path = "vendor/sqlx-sqlite" }
+
+[patch."https://github.com/whisperfish/presage"]
+presage-store-sqlite = { path = "vendor/presage-store-sqlite" }
+"#;
+    let patches = patch_redirects(manifest);
+    assert_eq!(patches.len(), 2, "both patch entries parsed");
+    assert!(patches.contains(&("sqlx-sqlite".to_string(), "vendor/sqlx-sqlite".to_string())));
+    assert!(patches.contains(&(
+        "presage-store-sqlite".to_string(),
+        "vendor/presage-store-sqlite".to_string()
+    )));
+    // a manifest without a [patch] table redirects nothing
+    assert!(patch_redirects("[dependencies]\nserde = \"1.0\"\n").is_empty());
+}
+
+#[test]
+#[should_panic(expected = "carries no path")]
+fn patch_redirects_refuses_untraceable_patch_shapes() {
+    // a [patch] this pin cannot trace to committed vendored source is
+    // refused, not skipped — the fail-closed direction
+    patch_redirects("[patch.crates-io]\nsome-crate = { git = \"https://example.com/x\" }");
 }
