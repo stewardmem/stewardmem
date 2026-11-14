@@ -43,7 +43,7 @@ only flatters is not a mapping.
 | Immutable append-only event log as the sole source of truth | Tamper-evident per-tenant audit chain (`prev_hash` columns; the `brain_audit_chain_ok` gauge) | Jul 28, `42947fa0` | Equivalent |
 | Bi-temporal facts: superseded values soft-invalidated, retained; as-of queries resolve to history | Bi-temporal edges (`valid_at`/`invalid_at`); atomic supersession (`resolve_supersession`, held evidence refuses destruction); as-of recall | Jul 30 / Aug 1, `bf854296`, `e1f6e486` | Equivalent — their `check_temporal` is our bi-temporal filter |
 | Never merge confusable entities | No entity-merge function exists in the store | verified by absence | We hold the invariant trivially; they build the *family* surface around it |
-| `SIMILAR_NAME` collision families + read-time contrast (`find_similar_entities`) | None | — | **Theirs-only** — a mechanism gap we should adopt |
+| `SIMILAR_NAME` collision families + read-time contrast (`find_similar_entities`) | `src/nearmiss.rs` — the deterministic shape: the name-edge formula (`0.6·jaccard_lex + 0.4·cos`, threshold 0.70, capitalized-run name surfaces — no LLM, no EAV layer), the recall seam's near-miss contrast routing to the store's own clarify-or-abstain vocabulary, the FTS presence check as the false-decline guard | round 20, 2026-11-14 (`BRAIN_RECALL_NEARMISS=1`, off at rest) | **Landed, deterministic, probe-gated** — the trap probe measured the failure class first (contamination 1.000, 4/4) and flipped red → green under the mechanism; the near-miss hit routes to clarify-or-abstain, the rows stay linked, never merged |
 | Four-way terminal contract (answer / update / clarify / abstain), decidable from the graph | Calibrated abstention + the cite-or-abstain verdict stored per turn; no `clarify`, no `update` action | Aug 1, `c189bb8e` · Oct 28, `75daf898` | **Theirs formalizes what we half-ship** — adoptable, and it is decidable without any LLM |
 | Citation-or-abstain renderer: uncited answers bounce once, then abstain | The cite-or-abstain verdict, STORED per turn (`chat_turns.support_decision`); an unsupported claim is shown as unsupported, never silently kept as an answer | Oct 28, `75daf898` | Equivalent, independently stated |
 | `EarnedAbstainGate`: abstention must be earned by demonstrated absence | The calibrated low-confidence abstention gate: an empty hit set with a `low_confidence`/`degraded` recall decision abstains deterministically — the kernel answers from fixed text and never asks the model for prose | Aug 1, `c189bb8e` | Theirs earns absence against a *collision family* — the stricter form; adoptable |
@@ -84,6 +84,25 @@ retrieves whichever chunk ranks highest. Adjacent machinery exists (the
 write-side duplicate guard, the junk-hit abstain signal the cascade bench
 measured), but the family surface, the contrast tool, and the near-miss guard
 do not. This is the paper's contamination pillar, and it is our gap.
+
+**Measured and closed the same day (round 20 — the probe decided, then the
+mechanism):** the trap probe (the bench's `BRAIN_S0_TRAP=1` mode) encoded the
+taxonomy against a seeded store whose gold answers are machine-derived from
+the corpus it ingests, and measured the gap REAL — near-miss contamination
+**1.000 (4/4)**, including the pillar's sharpest shape: "Who is the CEO of
+Meridian Robotics Limited?" answered with the twin's CEO verbatim. The
+deterministic mechanism landed the same day (`src/nearmiss.rs` — the formula,
+threshold 0.70, no LLM, no EAV layer; the recall seam's four-gated contrast
+with the FTS presence check standing it down whenever the token exists
+anywhere; the empty `low_confidence` envelope, so the kernel's own abstain
+gate composes unchanged) and the probe flipped **red → green in one attempt**:
+contamination 0.000, abstain P/R/F1 1.000/1.000/1.000, surgical (the
+attribute-swap and contradiction arms are untouched — they are named,
+measured, and left for their own mechanisms). Off at rest
+(`BRAIN_RECALL_NEARMISS=1`); the OFF control reproduces the red table
+byte-for-byte. The full rows: `docs/TRAP_ROWS_2026-11-14.jsonl` (red) and
+`docs/TRAP_ROWS_S3_GREEN_2026-11-14.jsonl` (green); the round's evidence:
+`docs/IMPROVE20_EVIDENCE_2026-11-14.md`.
 
 **The terminal contract: PARTIAL — the mechanism exists; the machine-emitted
 half is missing.** `Recommendation::ClarifyQuery` sits in the retrieval quality

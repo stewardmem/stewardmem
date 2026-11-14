@@ -281,3 +281,39 @@ adopted; the instrument is worth adopting now; the collision families are worth
 building in the deterministic shape *after* the probe proves the failure class
 here; the machine-clarify and the navigation loop are not — and that is the
 difference between adopting a mechanism and growing a Frankenstein.
+
+**THE MEASURED OUTCOME (round 20, 2026-11-14 — the adoption decision executed;
+full rows in `docs/IMPROVE20_EVIDENCE_2026-11-14.md` and
+`docs/TRAP_ROWS_2026-11-14.jsonl`):** the trap taxonomy landed FIRST (the
+bench's `BRAIN_S0_TRAP=1` mode — 16 queries, six kinds, gold answers
+machine-derived from the seeded corpus, the DISCERN classification framing),
+and the probe MEASURED the failure class before any mechanism was written:
+**near-miss contamination 1.000 (4/4)** — every never-stored near-name
+neighbor's query served the confusable twin's chunk, the sharpest being "Who
+is the CEO of Meridian Robotics Limited?" answered with "The CEO of Meridian
+Robotics is Lena Hartmann." verbatim. The gap the audit named OPEN is real IN
+THIS TREE, not just in the paper. The conditional mechanism then landed in
+exactly the audited deterministic shape: the name-edge formula
+(`0.6·jaccard_lex + 0.4·cos`, threshold 0.70, mechanical, no LLM, the name
+surfaces extracted as capitalized-token runs — no EAV layer, refused by
+name), the read-time near-miss contrast in the recall handler (four-gated:
+the distinguishing token absent from every served row, ≥2 shared tokens with
+the top row, a real above-threshold collision family, and a store-grounded
+FTS presence check that stands the contrast down whenever the token exists
+anywhere — the false-decline guard), routing to the store's OWN
+clarify-or-abstain vocabulary (the empty `low_confidence` envelope — the
+kernel's zero-hit abstain gate composes unchanged; nothing machine-emits
+clarify, the deferral contract untouched). **The probe flipped red → green
+in one attempt: contamination 1.000 → 0.000, abstain P/R/F1 0.000 →
+1.000/1.000/1.000, surgical** — the attribute-swap arm, the contradiction
+arm, and the controls are untouched by the mechanism. OFF at rest
+(`BRAIN_RECALL_NEARMISS=1`; the OFF control reproduced the red table
+byte-for-byte — no default moved). The round also measured what the
+mechanism does NOT fix, named: the attribute-swap class (3/3 over-commit —
+the answer-side attribute check is a different mechanism), the contradiction
+class (2/2 silent pick, AND the two phrasings picked opposite sides of the
+same conflict — 87M vs 42M — the silent pick is not stable across
+paraphrase), and the attribute-insensitive ranking inside one entity's doc
+family (near-twin single-fact docs flip at a 0.02 fused-score margin). The
+paper's own benchmark could not test the contradiction case; our probe now
+does.
