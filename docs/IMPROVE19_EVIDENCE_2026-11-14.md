@@ -137,9 +137,34 @@ Short conversations pay 53–55 re-prefilled tokens (~70–190 ms at the measure
 
 **F4 outcome:** the 1.5× framing HOLDS per-token on all three tiers (0.99–1.03) — the accepted-cost branch is satisfied at the per-token reading; the absolute long-context quantity is the documented pain class the draft carries. Both readings recorded; the ledger does not hide the split. The December matrix's own t2 columns will re-read this at the tag era.
 
-## §S4 · THE MTP VERDICT
+## §S4 · THE MTP VERDICT (L3)
 
-*(lands with the S4 commit)*
+**The head probe per tier (the plan's load-and-probe discipline, executed at the weights level):**
+
+| Tier | config declares | safetensors carry | probe verdict |
+|---|---|---|---|
+| 2B (`mlx-community/Qwen3.5-2B-4bit`) | `mtp_num_hidden_layers: 1`, `mtp_use_dedicated_embeddings: false` | **0 mtp keys of 991** (1 shard) | **HEAD ABSENT in the shipped weights** |
+| 4B-unc (`avan-ag/Qwen3.5-4B-Uncensored-MLX-4bit`) | same declaration | **0 mtp keys of 924** (1 shard) | **HEAD ABSENT** |
+| 9B-heretic-5bit (`pipenetwork/…5bit`) | same declaration | **0 mtp keys of 1,260** (2 shards) | **HEAD ABSENT** |
+
+The probe method: the full safetensors header (the u64-length JSON) of every shard of every tier repo, read locally (`/tmp/round19/scripts/st_keys.py`, path-argument, `-I`). The upstream machinery is PRESENT and REGISTERED at the pin (`Qwen35TextMTPRegistration` registers `qwen3_5_text`/`qwen3_5` → `Qwen35MTPDraftModel`; `MTPDrafterModelFactory` loads from a checkpoint directory; `SpeculativeDecodingConfig(mtpDrafter:blockSize:)` ≥ 2) — so the absence is NOT an engine gap: **the quantizers dropped the MTP layer weights while the configs still declare the layer** — the plan's anticipated re-quantization fact, pinned like any weights fact. A drafter load from these checkpoints cannot succeed (no `mtp.*` parameters exist to load).
+
+**The classic drafter fallback (E2's existing knob, `PROBE_SPEC_DECODE=1`, the Qwen3-0.6B-4bit drafter, numDraftTokens=5) — REFUSED on all three fast tiers, BY NAME:**
+
+`KVCacheError(message: "Speculative decoding requires a trimmable or stageable main KV cache.")` — turn 1, every Qwen3.5 tier (2B / 4B-unc / 9B-heretic), the same named engine error at the full-precision default posture. The hybrid cache (standard KV + the GDN recurrent class) is not trimmable/stageable for the classic spec-decode path — a STRUCTURAL refusal of the engine, not a harness artifact:
+
+**The control proves it:** the standard-attention Qwen3-8B **runs** the same knob on the same harness — and delivers the second half of the verdict: acceptance **37% / 38% / 28%** (turn 1 / turn 2 / cold) — **below the preregistered 40% gate** (`specDecodeEvidenced`, MLXBridge.swift:90) — at **11.7 tok/s** (vs the 8B's unassisted ~26–28 tok/s in the CG-11 tables): below the gate, the drafter is pure overhead, the P-3 law's own shape, measured. (The 8B also re-showed the burn class on turn 1/cold — out=200, empty.)
+
+**The verdict table:**
+
+| Path | 2B | 4B-unc | 9B-heretic | 8B control |
+|---|---|---|---|---|
+| MTP (self-drafter shape) | weights ABSENT | weights ABSENT | weights ABSENT | n/a (not this round's tier) |
+| Classic drafter (0.6B) | **refused by name** (hybrid cache) | **refused by name** | **refused by name** | runs; accept 28–38% < 40%; 11.7 tok/s (slower) |
+
+**F3 verdict (recorded BY NAME, stronger than the preregistered threshold):** the falsifier's letter was "acceptance < 40% on every measured tier" — the measured reality is stronger: **no acceptance was obtainable at all** (the MTP head is absent in the shipped weights AND the classic drafter is structurally refused on the hybrid cache), and the one tier where the path RUNS (the 8B control) measures BELOW the gate AND slower than unassisted. **The decode lever parks until a model/weights change** — MTP weights shipped in the quants, or the hybrid cache gaining trimmable/stageable speculation support (either is upstream/weights work) — never adopted by documentation. The tag-era re-verification rides December B0 as planned (the #351/#506/#516 surface may move; the quant ecosystem may start shipping the MTP layer).
+
+**The scheme-interaction note (December's domain):** the classic refusal fired at the full-precision default posture; whether a quantized KV scheme makes the hybrid cache "stageable" is the KV matrix's question — out of this round's scope by law (§4), named here so December's S0 reads the refusal with this note.
 
 ## §S5 · THE ROUND RECORD
 
