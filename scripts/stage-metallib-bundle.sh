@@ -81,7 +81,16 @@ if [ -n "$SIGN" ]; then
     fi
     codesign "${SIGN_ARGS[@]}" "$MACOS_DIR/$BUNDLE_NAME" \
         || fail "$BUNDLE_NAME could not be signed — the parent's seal would refuse it"
-    codesign --force --sign "$SIGN" "$APP" \
+    # The re-seal PRESERVES the parent's hardened-runtime flag: a --force
+    # replaces the signature, and dropping the runtime bit would weaken the
+    # app's posture (witnessed: the bundler's own seal carries it when the
+    # conf sets hardenedRuntime).
+    RESEAL_ARGS=(--force --sign "$SIGN")
+    if codesign -d --entitlements - "$APP" >/dev/null 2>&1 \
+        && codesign -dv "$APP" 2>&1 | grep -q 'runtime'; then
+        RESEAL_ARGS+=(--options runtime)
+    fi
+    codesign "${RESEAL_ARGS[@]}" "$APP" \
         || fail "the parent app could not be re-sealed after the bundle placement"
     echo "metallib bundle placed: $MACOS_DIR/$BUNDLE_NAME (metallib present, signed, parent re-sealed)"
 else
