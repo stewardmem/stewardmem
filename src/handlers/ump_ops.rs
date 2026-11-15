@@ -472,6 +472,12 @@ pub async fn recall(
         query: req.query,
         limit,
         domain: None,
+        // THE COMPILE REPAIR (round 21, ownership named): the concurrent
+        // 'Debugging Memory Retrieval and Reranker' session's half-landed
+        // all_domains field (recall.rs, uncommitted) left this initializer
+        // behind — the field's serde default (false, the routed status quo)
+        // is this call site's semantics, written out explicitly.
+        all_domains: false,
         strict: false,
         provenance: false,
         source: None,

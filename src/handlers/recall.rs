@@ -65,6 +65,15 @@ pub struct RecallRequest {
     #[serde(default = "default_limit")]
     pub limit: u32,
     pub domain: Option<String>,
+    /// search EVERY domain the principal can read instead of the one
+    /// centroid-routed pick. Opt-in: the default recall stays routed (an
+    /// unrouted fan-out into the bulk domain was a measured regression —
+    /// `shim_routing_targets_unrouted_scopes_to_global_not_bulk_domain`).
+    /// Mutually exclusive with `domain` (a forced domain already scopes the
+    /// read). Authorization is unchanged: unreadable domains are dropped,
+    /// and the record gate (access_scopes/owner_in) applies to every leg.
+    #[serde(default)]
+    pub all_domains: bool,
     #[serde(default)]
     pub strict: bool,
     #[serde(default)]
@@ -1088,6 +1097,9 @@ mod tests {
             query: query.to_string(),
             limit: DEFAULT_RECALL_LIMIT,
             domain: None,
+            // compile repair, round 21 (see ump_ops.rs): the half-landed
+            // all_domains field's default, explicit at the fixture.
+            all_domains: false,
             strict: false,
             provenance: false,
             source: None,
@@ -1156,6 +1168,7 @@ mod tests {
             query: "a".repeat(MAX_QUERY + 1),
             limit: DEFAULT_RECALL_LIMIT,
             domain: None,
+            all_domains: false,
             strict: false,
             provenance: false,
             source: None,
