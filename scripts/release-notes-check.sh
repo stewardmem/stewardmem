@@ -136,7 +136,14 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
     # the subject sits AFTER the sha on each line — the exclusion anchors
     # must name that gap, or they exclude nothing and every range commit
     # becomes a candidate (the first live run found exactly that).
-    grep -vE '^[0-9a-f]{7,40} (chore|ci|deps|docs|doc|test|tests|style|refactor|fmt|lint|badge|release|build|Merge|merge|revert|Revert|CHANGELOG|comments?|pins|register|evidence|plans|repo|AGENTS|fuzz)([:(]|\b)' /tmp/release-notes-range.$$ \
+    # The `plans` exemption is the plans-REPO mirror form only (`plans:` or
+    # `plans(` at the subject's start), anchored in its own grep below. A
+    # `plans/<series>` subject is a round ledger that SHIPS: the v1.29.44
+    # cut published a release whose section carried one slice because the
+    # whole improvement series renamed its prefix into the bare token — so
+    # the token is gone from this list and the ledger shape is a candidate.
+    grep -vE '^[0-9a-f]{7,40} (chore|ci|deps|docs|doc|test|tests|style|refactor|fmt|lint|badge|release|build|Merge|merge|revert|Revert|CHANGELOG|comments?|pins|register|evidence|repo|AGENTS|fuzz)([:(]|\b)' /tmp/release-notes-range.$$ \
+      | grep -vE '^[0-9a-f]{7,40} plans([:(])' \
       | grep -vE '^[0-9a-f]{7,40} (fix|feat)\((ci|docs|doc|test|tests|lint|fmt|changelog|deps|sbom|badge)\)' \
       > /tmp/release-notes-candidates.$$ || true
     missing=0

@@ -461,6 +461,114 @@ fn the_completeness_arm_refuses_unnamed_commits_and_out_of_range_citations() {
     );
 }
 
+/// The `plans` exemption is the plans-REPO mirror form only (`plans:` or
+/// `plans(` at the subject's start) — a `plans/<series>` subject is a round
+/// ledger that SHIPS and must be named in the released section. The
+/// v1.29.44 completeness repair's lesson, red-first: the improvement series
+/// renamed its subject prefix from `improveNN` (never exempted, always
+/// listed) to `plans/improvements NN`, the bare `plans` token exempted the
+/// whole series, and the gate ran green over a released section that
+/// carried one slice of the release — the exact "carrying rounds while
+/// describing one" shape the completeness arm exists to refuse, passing its
+/// own gate. This pin failed against the bare-token script.
+#[test]
+fn the_plans_exemption_covers_the_plans_repo_form_not_a_plans_series() {
+    let (dir, _prev_sha, feat_sha) = git_repo_scratch("plans-exemption");
+    let feat8 = &feat_sha[..8.min(feat_sha.len())];
+
+    // The round-ledger shape rides the range, then the mirror form rides
+    // beside it, and the cut tag moves to include both.
+    std::fs::write(dir.join("round.txt"), "the improvement round lands\n").expect("write round");
+    git(&dir, &["add", "round.txt"]);
+    git(
+        &dir,
+        &[
+            "commit",
+            "--quiet",
+            "-m",
+            "plans/improvements 21 S1: the widget round lands end to end",
+        ],
+    );
+    let round_sha = git(&dir, &["rev-parse", "HEAD"]);
+    let round8 = &round_sha[..8.min(round_sha.len())];
+    std::fs::write(dir.join("mirror.txt"), "the plans pointer moves\n").expect("write mirror");
+    git(&dir, &["add", "mirror.txt"]);
+    git(
+        &dir,
+        &[
+            "commit",
+            "--quiet",
+            "-m",
+            "plans: sync the plans-repo pointer",
+        ],
+    );
+    git(&dir, &["tag", "-f", "v9.9.9"]);
+
+    let changelog = |body: &str| {
+        format!(
+            "# Changelog\n\n## [9.9.8] — prev\n\nPrev prose.\n\n### Release notes\n\n\
+             **Improvements**\n\n- prev bullet.\n\n\
+             ## [9.9.9] — cut\n\nCut prose about the widget.\n\n### Release notes\n\n\
+             **New**\n\n{body}\n\n### Engineering record\n\n- named work.\n"
+        )
+    };
+
+    // (a) RED — the round ledger is named nowhere: the gate must refuse and
+    // the refusal must name the uncovered round commit itself, while the
+    // mirror form stays exempt (the refusal names ONLY the round commit).
+    std::fs::write(
+        dir.join("CHANGELOG.md"),
+        changelog(&format!("- The widget refuses hostile input ({feat8}).")),
+    )
+    .expect("write CHANGELOG");
+    let out = run_gate(&dir, "9.9.9");
+    assert!(
+        !out.status.success(),
+        "a shipped plans/<series> round commit named nowhere in the section \
+         must be refused — the bare plans token exempted exactly this shape \
+         and published an incomplete release"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("COMPLETENESS"),
+        "the refusal must name the completeness rule: {stderr}"
+    );
+    assert!(
+        stderr.contains("plans/improvements 21 S1: the widget round lands end to end"),
+        "the refusal must name the uncovered round commit itself: {stderr}"
+    );
+    assert!(
+        !stderr.contains("plans: sync the plans-repo pointer"),
+        "the plans-REPO mirror form stays exempt — the refusal must not \
+         demand a bullet for it: {stderr}"
+    );
+
+    // (b) GREEN — the round ledger named in the engineering record beside
+    // the user-facing commit; the mirror commit needs no name.
+    std::fs::write(
+        dir.join("CHANGELOG.md"),
+        changelog(&format!(
+            "- The widget refuses hostile input ({feat8}).\n\n\
+             ### Engineering record\n\n\
+             - Candidate commits, one line each:\n\n  \
+               - {round8} plans/improvements 21 S1: the widget round lands end to end"
+        )),
+    )
+    .expect("write CHANGELOG");
+    let out = run_gate(&dir, "9.9.9");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "a section that names its shipped round must pass: {}{}",
+        stdout,
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        stdout.contains("2 candidate commit(s) named"),
+        "the OK line must count the round ledger among the candidates: {stdout}"
+    );
+}
+
 fn cargo_version(root: &Path) -> String {
     let manifest = std::fs::read_to_string(root.join("Cargo.toml")).expect("read Cargo.toml");
     manifest
