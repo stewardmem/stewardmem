@@ -68,6 +68,7 @@ import {
 	chmodSync,
 	constants as fsConstants,
 	copyFileSync,
+	cpSync,
 	existsSync,
 	mkdirSync,
 	readFileSync,
@@ -85,6 +86,16 @@ const STAGED_DIR = join(REPO_ROOT, 'shell', 'src-tauri', 'binaries');
 const PROVENANCE_NAME = 'SIDECAR_PROVENANCE.json';
 const PROVENANCE_RESOURCE = ['Contents', 'Resources', 'binaries', PROVENANCE_NAME];
 const SIDECAR_IN_BUNDLE = ['Contents', 'MacOS', 'brain-server'];
+// THE METALLIB BUNDLE (round 21, witnessed live 2026-11-15): brain-afm's MLX
+// compile path loads `mlx-swift_Cmlx.bundle` from the directory of the
+// INVOKED path (measured: a symlink-invoked child ignores the bundle beside
+// the real file; a symlinked bundle beside the link satisfies the loader).
+// A brain-afm without it dies at first MLX use — `Failed to load the default
+// metallib … library not found`, exit 255 — which killed both serving-kernel
+// writer turns on 2026-11-15. The bundle travels WITH the sidecar: staged
+// beside it, bundled beside it (both tauri lanes), installed beside it.
+const MLX_BUNDLE_NAME = 'mlx-swift_Cmlx.bundle';
+const MLX_METALLIB_IN_BUNDLE = ['Contents', 'Resources', 'default.metallib'];
 const UNIVERSAL_TRIPLE = 'universal-apple-darwin';
 const TARGETS = [
 	{ triple: 'aarch64-apple-darwin', arch: 'arm64' },
@@ -582,6 +593,20 @@ function verifyBundle(bundleArgument, stagedArgument, expectedIdentity = null) {
 		}
 	}
 
+	// THE METALLIB BUNDLE LAW (round 21): a brain-afm in the bundle without
+	// mlx-swift_Cmlx.bundle beside it dies at first MLX use — the exact
+	// recurrence the deployment layout shipped on 2026-11-15 (both writer
+	// turns, exit 255). Structural, named, on every release run.
+	const afmInBundle = entries.some((entry) => entry.path === 'Contents/MacOS/brain-afm');
+	if (afmInBundle) {
+		const bundledMetallib = join(bundle, 'Contents', 'MacOS', MLX_BUNDLE_NAME, ...MLX_METALLIB_IN_BUNDLE);
+		if (!existsSync(bundledMetallib)) {
+			failures.push(
+				`metallib bundle: Contents/MacOS/brain-afm has no ${MLX_BUNDLE_NAME}/Contents/Resources/default.metallib beside it — the writer tier crashes at first MLX use (exit 255)`
+			);
+		}
+	}
+
 	if (failures.length > 0) {
 		for (const failure of failures) console.error(`FAIL ${failure}`);
 		process.exit(1);
@@ -793,6 +818,39 @@ function stage() {
 			artifacts.push({ name: thinName, target: target.triple, path: thinPath });
 		}
 	}
+
+	// The metallib bundle rides the SAME SwiftPM build (same-build-pass law:
+	// the resource bundle SwiftPM emits beside the executables, never a
+	// hand-copied stranger). The record covers Mach-O sidecars only; the
+	// bundle's integrity here is STRUCTURAL — the stage refuses a bundle
+	// whose default.metallib is absent, the exact broken shape the
+	// deployment layout shipped on 2026-11-15 — and the verify walk below
+	// re-checks the bundled copy on every release run.
+	const bundleCandidates = [
+		join(swiftDir, '.build', 'apple', 'Products', 'Release', MLX_BUNDLE_NAME),
+		join(swiftDir, '.build', 'out', 'Products', 'Release', MLX_BUNDLE_NAME),
+		join(swiftDir, '.build', 'release', MLX_BUNDLE_NAME)
+	];
+	const bundleSource = bundleCandidates.find(
+		(candidate) => existsSync(candidate) && statSync(candidate).isDirectory()
+	);
+	if (!bundleSource) {
+		console.error(
+			`[stage] ${MLX_BUNDLE_NAME} build output absent — brain-afm without it dies at first MLX use (exit 255); probed:\n  ${bundleCandidates.join('\n  ')}`
+		);
+		process.exit(1);
+	}
+	const stagedBundle = join(STAGED_DIR, MLX_BUNDLE_NAME);
+	rmSync(stagedBundle, { recursive: true, force: true });
+	cpSync(bundleSource, stagedBundle, { recursive: true });
+	const stagedMetallib = join(stagedBundle, ...MLX_METALLIB_IN_BUNDLE);
+	if (!existsSync(stagedMetallib)) {
+		console.error(
+			`[stage] staged ${MLX_BUNDLE_NAME} carries no ${MLX_METALLIB_IN_BUNDLE.join('/')} — the resource bundle without its metallib is the broken shape; refusing to stage`
+		);
+		process.exit(1);
+	}
+	console.log(`[stage] staged ${MLX_BUNDLE_NAME} (metallib present) from ${bundleSource}`);
 
 	// The record is written LAST, after every artifact exists. A reader that
 	// finds a record can therefore trust every entry it names.

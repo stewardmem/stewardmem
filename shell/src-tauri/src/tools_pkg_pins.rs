@@ -152,6 +152,25 @@ impl FakeHome {
         .expect("the migrated stub detector");
     }
 
+    /// The brain-afm PAIR in the anchor payload (round 21): the binary,
+    /// and — when `with_bundle` — the mlx-swift_Cmlx.bundle resource bundle
+    /// beside it (the pair the metallib law requires; a bundle-less
+    /// brain-afm is the broken shape the deployment shipped 2026-11-15).
+    fn add_afm_payload(&self, with_bundle: bool) {
+        let versioned = self
+            .root
+            .join("Library/Application Support/StewardMem/tools")
+            .join(VERSION);
+        fs::write(versioned.join("brain-afm"), b"new-brain-afm-bytes").expect("afm payload");
+        if with_bundle {
+            let metallib = versioned
+                .join("mlx-swift_Cmlx.bundle")
+                .join("Contents/Resources/default.metallib");
+            fs::create_dir_all(metallib.parent().expect("bundle fixture")).expect("bundle dirs");
+            fs::write(&metallib, b"THE DEFAULT METALLIB BYTES").expect("metallib fixture");
+        }
+    }
+
     fn run_core_postinstall(&self) -> String {
         let output = Command::new("/bin/bash")
             .arg(self.root.join("scripts/postinstall"))
@@ -311,6 +330,150 @@ fn an_occupied_path_is_never_replaced_only_beside() {
     assert!(
         output.contains("HAND-OFF"),
         "the occupied path is named in the hand-off: {output}"
+    );
+}
+
+// ── the metallib bundle law, round 21 ───────────────────────────────────────
+
+/// The STATIC law: the builder demands the pair in the staged dir and packs
+/// both into the core payload; the postinstall skips directory entries and
+/// carries the named refusal; both tauri lanes bundle the resource beside
+/// the sidecars. A build that could ship a bundle-less brain-afm must not
+/// exist.
+#[test]
+fn the_builder_carries_the_metallib_bundle_law() {
+    let builder = read_pkg_file("build-tools-pkg.sh");
+    assert!(
+        builder.contains("for tool in brain-server brain mcp brain-afm"),
+        "the builder's payload list carries brain-afm"
+    );
+    assert!(
+        builder.contains("the staged dir is missing mlx-swift_Cmlx.bundle"),
+        "the builder refuses a staged dir without the bundle — fail-closed"
+    );
+    assert!(
+        builder.contains("carries no Contents/Resources/default.metallib"),
+        "the builder refuses a bundle without its metallib — the broken shape by name"
+    );
+    assert!(
+        builder.contains("cp \"$STAGED_DIR/brain-afm-darwin-$ARCH\" \"$WORK/core/brain-afm\"")
+            && builder.contains(
+                "cp -R \"$STAGED_DIR/mlx-swift_Cmlx.bundle\" \"$WORK/core/mlx-swift_Cmlx.bundle\""
+            ),
+        "the core payload packs the PAIR — the binary and its resource bundle"
+    );
+    let postinstall = read_pkg_file("core-postinstall.sh");
+    assert!(
+        postinstall.contains("REFUSED: brain-afm staged without mlx-swift_Cmlx.bundle"),
+        "the postinstall's refusal is named"
+    );
+    assert!(
+        postinstall.contains("[ -f \"$tool_path\" ] || continue"),
+        "the link loop skips directory entries (the bundle is not a tool)"
+    );
+}
+
+/// The GREEN pair: an anchor carrying brain-afm WITH mlx-swift_Cmlx.bundle
+/// beside it links the tool AND places the bundle beside the link — the
+/// invoked-path law the child's loader measures (a symlink-invoked child
+/// looks beside the link, never beside the real file). The bundle link is a
+/// symlink into OUR anchor: one bundle, two paths, no copy.
+#[test]
+fn the_metallib_bundle_rides_beside_the_brain_afm_link() {
+    let fixture = FakeHome::build(false); // no existing service
+    fixture.add_afm_payload(true);
+
+    let output = fixture.run_core_postinstall();
+
+    let bin = fixture.root.join(".local/bin");
+    let link = fs::read_link(bin.join("brain-afm")).expect("the brain-afm link exists");
+    assert!(
+        link.ends_with(format!("tools/{VERSION}/brain-afm")),
+        "the brain-afm link points into the anchor: {link:?}"
+    );
+    let bundle = fs::read_link(bin.join("mlx-swift_Cmlx.bundle")).expect("the bundle link exists");
+    assert!(
+        bundle.ends_with(format!("tools/{VERSION}/mlx-swift_Cmlx.bundle")),
+        "the bundle link points into the anchor: {bundle:?}"
+    );
+    // The loader's contract, drilled structurally: the metallib is reachable
+    // through the link's own path.
+    assert!(
+        bin.join("mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib")
+            .exists(),
+        "default.metallib is reachable beside the link"
+    );
+    assert!(
+        output.contains("mlx-swift_Cmlx.bundle(beside-brain-afm)"),
+        "the hand-off names the bundle placement: {output}"
+    );
+}
+
+/// The RED pair refused LOUDLY: brain-afm staged WITHOUT the bundle beside
+/// it gets NO link (a link would create a writer tier that dies at first MLX
+/// use — "Failed to load the default metallib", exit 255, the exact
+/// recurrence the deployment shipped 2026-11-15), the refusal is NAMED, and
+/// the rest of the payload still installs.
+#[test]
+fn a_bundle_less_brain_afm_is_refused_loudly() {
+    let fixture = FakeHome::build(false);
+    fixture.add_afm_payload(false); // the binary alone — the broken shape
+
+    let output = fixture.run_core_postinstall();
+
+    let bin = fixture.root.join(".local/bin");
+    assert!(
+        !bin.join("brain-afm").exists(),
+        "a bundle-less brain-afm takes NO link"
+    );
+    assert!(
+        !bin.join("mlx-swift_Cmlx.bundle").exists(),
+        "no bundle link without a bundle"
+    );
+    assert!(
+        output.contains("REFUSED: brain-afm staged without mlx-swift_Cmlx.bundle"),
+        "the refusal names the broken pair: {output}"
+    );
+    // The rest of the payload is untouched by the refusal (the fixture's
+    // brain-server is the operator's occupied real file — it takes the
+    // versioned beside-link per the preserve law; brain and mcp are free).
+    assert!(
+        fs::read_link(bin.join(format!("brain-server-{VERSION}"))).is_ok(),
+        "brain-server still installs beside"
+    );
+    assert!(
+        fs::read_link(bin.join("brain")).is_ok(),
+        "brain still links"
+    );
+    assert!(fs::read_link(bin.join("mcp")).is_ok(), "mcp still links");
+}
+
+/// The preserve law extended to the bundle: an OCCUPIED
+/// `~/.local/bin/mlx-swift_Cmlx.bundle` is never replaced — the hand-copy
+/// this very machine carries is preserved and named.
+#[test]
+fn an_occupied_bundle_path_is_preserved_and_named() {
+    let fixture = FakeHome::build(false);
+    fixture.add_afm_payload(true);
+    let occupied = fixture.root.join(".local/bin/mlx-swift_Cmlx.bundle");
+    fs::create_dir_all(occupied.join("Contents/Resources")).expect("occupied bundle fixture");
+    fs::write(
+        occupied.join("Contents/Resources/default.metallib"),
+        b"THE OPERATOR'S OWN METALLIB BYTES",
+    )
+    .expect("occupied metallib");
+
+    let output = fixture.run_core_postinstall();
+
+    assert_eq!(
+        fs::read(occupied.join("Contents/Resources/default.metallib"))
+            .expect("the operator's metallib"),
+        b"THE OPERATOR'S OWN METALLIB BYTES",
+        "an occupied bundle path is never replaced"
+    );
+    assert!(
+        output.contains("PRESERVED") || output.contains("mlx-swift_Cmlx.bundle(existing)"),
+        "the preserved bundle is named: {output}"
     );
 }
 

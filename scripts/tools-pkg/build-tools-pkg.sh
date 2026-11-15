@@ -69,13 +69,22 @@ fi
 # pkg carries the TOOL names. The arch is the app's own floor (arm64) — an
 # x86_64 variant is a mechanical later addition, recorded in the round doc.
 echo "== assembling payloads from $STAGED_DIR (arch $ARCH) =="
-for tool in brain-server brain mcp bench brain-connector-stub brain-connector-gh brain-connector-crm; do
+for tool in brain-server brain mcp brain-afm bench brain-connector-stub brain-connector-gh brain-connector-crm; do
     [ -f "$STAGED_DIR/$tool-darwin-$ARCH" ] || { echo "the staged dir is missing $tool-darwin-$ARCH — refusing to rebuild beside the release" >&2; exit 1; }
 done
+# THE METALLIB BUNDLE LAW (round 21): brain-afm loads mlx-swift_Cmlx.bundle
+# from the directory of the INVOKED path; without it the child dies at first
+# MLX use (`Failed to load the default metallib … library not found`, exit
+# 255) — the exact failure that killed both serving-kernel writer turns on
+# 2026-11-15. The pkg payload carries the pair, never the binary alone.
+[ -d "$STAGED_DIR/mlx-swift_Cmlx.bundle" ] || { echo "the staged dir is missing mlx-swift_Cmlx.bundle — brain-afm without it dies at first MLX use; refusing a broken writer tier" >&2; exit 1; }
+[ -f "$STAGED_DIR/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib" ] || { echo "the staged mlx-swift_Cmlx.bundle carries no Contents/Resources/default.metallib — the resource bundle without its metallib is the broken shape; refusing" >&2; exit 1; }
 mkdir -p "$WORK/core" "$WORK/bench" "$WORK/connectors"
 cp "$STAGED_DIR/brain-server-darwin-$ARCH" "$WORK/core/brain-server"
 cp "$STAGED_DIR/brain-darwin-$ARCH" "$WORK/core/brain"
 cp "$STAGED_DIR/mcp-darwin-$ARCH" "$WORK/core/mcp"
+cp "$STAGED_DIR/brain-afm-darwin-$ARCH" "$WORK/core/brain-afm"
+cp -R "$STAGED_DIR/mlx-swift_Cmlx.bundle" "$WORK/core/mlx-swift_Cmlx.bundle"
 cp "$DETECT_BIN" "$WORK/core/stewardmem-detect"
 cp "$STAGED_DIR/bench-darwin-$ARCH" "$WORK/bench/bench"
 cp "$STAGED_DIR/brain-connector-stub-darwin-$ARCH" "$WORK/connectors/brain-connector-stub"

@@ -593,6 +593,7 @@ test('the_sidecar_is_wired_macos_only_and_its_artifacts_are_ignored', () => {
 				hardenedRuntime: boolean;
 				signingIdentity: string;
 				infoPlist: string;
+				files: Record<string, string>;
 			};
 		};
 	};
@@ -616,6 +617,31 @@ test('the_sidecar_is_wired_macos_only_and_its_artifacts_are_ignored', () => {
 		// Apple Silicon (arch_arm) instead of the iOS-kind fall-through.
 		infoPlist: './macos-info.plist'
 	});
+	// THE METALLIB BUNDLE LAW (round 21) — measured, Posture L 2026-11-15:
+	// the placement must NOT ride the tauri conf's macOS.files map. The
+	// bundler's own seal refuses an unsigned nested bundle in Contents/
+	// MacOS (`In subcomponent: mlx-swift_Cmlx.bundle … failed to sign app`)
+	// and offers no hook to sign one; the placement lives in
+	// scripts/stage-metallib-bundle.sh, called by the release lane (CI),
+	// the Developer-ID lane, and the MAS lane (whose nested-exec sweep
+	// signs the bundle with the reduced entitlements). The pin keeps the
+	// conf clean; a future files-mapping attempt would re-break the seal.
+	expect(overlay.bundle.macOS.files).toBeUndefined();
+	// The placement's wired legs: the helper exists, and the release lane
+	// calls it BEFORE the verify walk (whose metallib check is the law's
+	// CI-level proof). The MAS and Developer-ID lanes carry the same call
+	// in their own scripts (release-app-store.sh / release-app-sign.sh).
+	const helper = readFileSync(
+		join(kernelRoot, 'scripts', 'stage-metallib-bundle.sh'),
+		'utf8'
+	);
+	expect(helper).toContain('mlx-swift_Cmlx.bundle');
+	expect(helper).toContain('default.metallib');
+	const releaseWorkflow = readFileSync(
+		join(kernelRoot, '.github', 'workflows', 'release.yml'),
+		'utf8'
+	);
+	expect(releaseWorkflow).toContain('scripts/stage-metallib-bundle.sh');
 	expect(overlay.app.windows[0]?.windowEffects?.effects).toContain('sidebar');
 
 	expect(() =>

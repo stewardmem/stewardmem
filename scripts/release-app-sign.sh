@@ -659,6 +659,19 @@ else
 	[[ -d "$BUNDLE" ]] || die "the bundle is absent: $BUNDLE"
 fi
 
+# ── THE METALLIB BUNDLE LAW (round 21, 2026-11-15) ────────────────────────
+# The placement step, signed with the SAME identity the bundler used (the
+# overlay pins it): the staged bundle lands beside brain-afm in
+# Contents/MacOS, is signed inside-out, and the parent re-sealed — before
+# the identity walk below proves every Mach-O (the bundle is a resource
+# bundle, not a Mach-O; its presence is what the walker's metallib check
+# demands). The tauri conf carries NO MacOS files mapping: the bundler's
+# own seal refuses an unsigned nested bundle there (measured, Posture L).
+echo ">> placing the metallib bundle beside brain-afm (the metallib law)…"
+"$REPO_ROOT/scripts/stage-metallib-bundle.sh" "$BUNDLE" \
+	--staged "$SHELL_DIR/src-tauri/binaries" \
+	--sign "$SIGNING_IDENTITY"
+
 # ── THE APPLE IDENTITY GATE (III-5) ────────────────────────────────────────
 #
 # The bundler signed with the real identity (the overlay pins it, and the

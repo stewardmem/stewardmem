@@ -63,6 +63,29 @@ install_tool_link() {
     ln -sfn "$ANCHOR/$name" "$link"
 }
 
+# THE METALLIB BUNDLE LAW (round 21): brain-afm loads mlx-swift_Cmlx.bundle
+# from the directory of the INVOKED path (measured 2026-11-15: a
+# symlink-invoked child ignores the bundle beside the real file; a symlinked
+# bundle beside the link satisfies the loader). The anchor payload carries
+# the pair — brain-afm and the bundle side by side — so the anchor path
+# works; the ~/.local/bin side needs the bundle beside the LINK. The
+# preserve law extended: a free bundle path takes a symlink to OUR anchor
+# bundle; an occupied path is never replaced (it is named and left).
+install_bundle_beside_link() {
+    bundle="$ANCHOR/mlx-swift_Cmlx.bundle"
+    target="$BIN_DIR/mlx-swift_Cmlx.bundle"
+    if [ ! -d "$bundle" ]; then
+        echo "BUNDLE: $ANCHOR carries no mlx-swift_Cmlx.bundle — brain-afm will die at first MLX use (Failed to load the default metallib, exit 255)"
+        return 1
+    fi
+    if [ -e "$target" ] || [ -L "$target" ]; then
+        PRESERVED="$PRESERVED mlx-swift_Cmlx.bundle(existing)"
+        return 0
+    fi
+    ln -s "$bundle" "$target"
+    INSTALLED="$INSTALLED mlx-swift_Cmlx.bundle(beside-brain-afm)"
+}
+
 # The mode laws, applied to OUR own artifacts only: 0700 on dirs we create
 # (an existing dir is not ours to re-mode), 0755 on our binaries.
 install_modes() {

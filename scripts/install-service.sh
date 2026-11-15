@@ -216,12 +216,38 @@ done
 #     the skip is LOUD — the operator must know the chat writer keeps its
 #     old protocol.
 AFM_SRC="$REPO/shell/src-tauri/binaries/brain-afm-aarch64-apple-darwin"
+AFM_BUNDLE_SRC="$REPO/shell/src-tauri/binaries/mlx-swift_Cmlx.bundle"
 SIDECAR_PROV="$REPO/shell/src-tauri/binaries/SIDECAR_PROVENANCE.json"
 if [[ -x "$AFM_SRC" && -f "$SIDECAR_PROV" ]]; then
 	SRC_KERNEL_VERSION="$(plutil -extract kernel_version raw "$SIDECAR_PROV" 2>/dev/null || true)"
 	if [[ -n "$SRC_KERNEL_VERSION" && "$SRC_KERNEL_VERSION" == "$BUILD_VERSION" ]]; then
 		install_bin "$AFM_SRC" "$DEST_DIR/brain-afm"
 		ok "installed brain-afm beside the kernel (sealed provenance, kernel $SRC_KERNEL_VERSION)"
+		# THE METALLIB BUNDLE LAW (round 21): brain-afm loads
+		# mlx-swift_Cmlx.bundle from the directory of the INVOKED path; the
+		# binary alone dies at first MLX use ("Failed to load the default
+		# metallib", exit 255 — killed both serving-kernel writer turns on
+		# 2026-11-15). The bundle lands beside it from the SAME staged sidecar
+		# output. An existing bundle is refreshed only when its metallib
+		# differs (the pair must move together — a stale bundle against a new
+		# binary is a new failure class); identical bytes stay untouched.
+		if [[ -d "$AFM_BUNDLE_SRC" && -f "$AFM_BUNDLE_SRC/Contents/Resources/default.metallib" ]]; then
+			if [[ ! -d "$DEST_DIR/mlx-swift_Cmlx.bundle" ]]; then
+				cp -R "$AFM_BUNDLE_SRC" "$DEST_DIR/mlx-swift_Cmlx.bundle"
+				ok "installed mlx-swift_Cmlx.bundle beside brain-afm (metallib present)"
+			elif ! cmp -s "$AFM_BUNDLE_SRC/Contents/Resources/default.metallib" "$DEST_DIR/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib"; then
+				tmp_bundle="$DEST_DIR/.mlx-swift_Cmlx.bundle.new.$$"
+				rm -rf "$tmp_bundle"
+				cp -R "$AFM_BUNDLE_SRC" "$tmp_bundle"
+				rm -rf "$DEST_DIR/mlx-swift_Cmlx.bundle"
+				mv "$tmp_bundle" "$DEST_DIR/mlx-swift_Cmlx.bundle"
+				ok "refreshed mlx-swift_Cmlx.bundle beside brain-afm (metallib changed with the build)"
+			else
+				log "mlx-swift_Cmlx.bundle unchanged beside brain-afm (metallib identical)"
+			fi
+		else
+			log "mlx-swift_Cmlx.bundle NOT installed: no staged bundle (stage first: node shell/scripts/sidecar.mjs stage) — brain-afm without it dies at first MLX use (exit 255)"
+		fi
 	else
 		log "brain-afm NOT updated: staged provenance names kernel ${SRC_KERNEL_VERSION:-none}, installing kernel $BUILD_VERSION — the bridge must move WITH the kernel (an old bridge breaks the chat writer: unknown op prewarm)"
 	fi

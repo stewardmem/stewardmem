@@ -191,6 +191,21 @@ done
 [[ -f "$APP/Contents/Resources/binaries/SIDECAR_PROVENANCE.json" ]] \
   || fail "SIDECAR_PROVENANCE.json did not bundle — the kernel gate's sealed provenance would refuse at launch."
 
+# ── THE METALLIB BUNDLE LAW (round 21, 2026-11-15) ─────────────────────
+# brain-afm loads mlx-swift_Cmlx.bundle from the directory of the INVOKED
+# path; without it the child dies at first MLX use ("Failed to load the
+# default metallib … library not found", exit 255) — the exact failure that
+# killed both serving-kernel writer turns on 2026-11-15. The placement is
+# the helper's copy (the tauri conf carries NO MacOS files mapping — the
+# bundler's own seal refuses an unsigned nested bundle there, measured,
+# Posture L 2026-11-15); the nested-exec sweep below signs the bundle with
+# the reduced entitlements and re-seals the parent.
+scripts/stage-metallib-bundle.sh "$APP" --staged shell/src-tauri/binaries
+[[ -d "$APP/Contents/MacOS/mlx-swift_Cmlx.bundle" ]] \
+  || fail "mlx-swift_Cmlx.bundle is NOT beside brain-afm in Contents/MacOS — the writer tier would die at first MLX use (exit 255); the metallib law refuses."
+[[ -f "$APP/Contents/MacOS/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib" ]] \
+  || fail "the bundled mlx-swift_Cmlx.bundle carries no default.metallib — the resource bundle without its metallib is the broken shape; refusing."
+
 # ── THE NESTED-EXECUTABLE LAW (ITMS-90885, 2026-10-31) ─────────────────
 # Tauri signed EVERY Mach-O with the FULL entitlements — including
 # com.apple.application-identifier on the nested sidecars. A nested
@@ -218,6 +233,11 @@ for f in "${NESTED_BINS[@]}"; do
   b="$(basename "$f")"
   [[ "$b" == "$MAIN_BIN" ]] && continue
   [[ -x "$f" ]] || continue
+  # NO directory skip here: mlx-swift_Cmlx.bundle (the metallib law, round
+  # 21) is a nested CODE bundle in MacOS — the parent's seal refuses it
+  # unsigned (measured, Posture L 2026-11-15), so the sweep signs it with
+  # the same reduced entitlements as the sidecars (codesign accepts
+  # entitlements on a resource bundle: measured exit 0).
   codesign --force --options runtime --timestamp \
     --entitlements shell/src-tauri/Entitlements-sidecar.plist \
     --sign "$IDENTITY_NAME" "$f" \

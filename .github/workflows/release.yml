@@ -339,6 +339,18 @@ jobs:
           APPLE_SIGNING_IDENTITY: "-"
         run: pnpm tauri build --bundles app --target aarch64-apple-darwin
 
+      # THE METALLIB BUNDLE LAW (round 21): the staged bundle rides beside
+      # brain-afm in Contents/MacOS, ad-hoc signed (the public lane's own
+      # posture), the parent re-sealed — then the verify walk below proves
+      # the pair on the bytes. The tauri conf carries NO MacOS files
+      # mapping: the bundler's own seal refuses an unsigned nested bundle
+      # there (measured, Posture L 2026-11-15).
+      - name: Place the metallib bundle beside brain-afm
+        run: |
+          scripts/stage-metallib-bundle.sh \
+            "shell/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/StewardMem.app" \
+            --staged shell/src-tauri/binaries --sign -
+
       - name: Verify every Mach-O in the real bundle
         run: |
           node shell/scripts/sidecar.mjs verify \
@@ -364,6 +376,16 @@ jobs:
           name: app-universal
           path: shell/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/StewardMem.app
           include-hidden-files: true
+
+      # THE METALLIB BUNDLE LAW's CI leg (round 21): the staged sidecar dir
+      # travels as its own artifact — brain-afm and mlx-swift_Cmlx.bundle
+      # are built ONLY here (the macOS 27 SDK), and the Tools pass's
+      # build-tools-pkg.sh refuses a staged dir without the pair. Without
+      # this upload the operator's staged dir can never satisfy the builder.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sidecar-staged
+          path: shell/src-tauri/binaries/
 
   docs-deploy:
     # Rebuild + redeploy the mdBook site from the TAGGED revision. docs.yml
