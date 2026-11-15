@@ -145,3 +145,9 @@ The generated turn's answer no longer re-prints every claim sentence-by-sentence
 5. **The settings-surface feasibility** (recorded per the prompt): the roster is `CaseIterable`; `prewarm` exists; per-conversation `model` ids are wire-native — a settings round is buildable on existing primitives.
 
 **The December boundary restated:** the KV matrix, the roster amendment, and any default moves wait for the tag-era S0.
+
+## §S6.1 · THE FINAL SWEEP + THE PIN-COMPLIANCE PASS (commit `6bee61d4`, the round's own code met the standing gates)
+
+**The pins on the round's own additions:** the comments gate flagged four label-bearing lines (the S4/F4/F5/F3 references in the guard's and filter's doc comments) — the labels dropped, the invariant sentences kept (the round-20 house form; the gold-derivation line now states the shape it guards); the log-injection pin flagged the media-filter's dropped-count interpolation — the count rides the `LogValue` sanitised seam. main_suite green 354/0 after.
+
+**The sweep record:** 20/21 lanes green; the `all-targets` lane's reds across the sweep runs were contention flakes at TWO DIFFERENT memory-sensitive tests (`docling_goldens_round_trip_on_the_recorded_versions` ×1, `the_default_pipeline_has_no_correction_surface` ×1 — the docling/doc-correction suites load torch models; the sweep's parallel lanes contend for RAM) — **each green on immediate standalone rerun, and the lane green TWICE back-to-back standalone (37 suites, zero failures, 2×)**. The lanes: clippy-otel, the six feature lanes, test-crates, test-harness, audit, lock-freshness, docs-truth, env-truth, secrets-truth, badges, lipstyk — ALL PASS.
