@@ -11,8 +11,21 @@ private plans archive on 2026-10-04 — this page is the in-repo roadmap.)
 
 ## Current status
 
-**v1.29.x — the current server line (1.29.44 — the standing-state repair
-release: every CI red since 2026-11-09 closed at its mechanism, the
+**v1.29.x — the current server line (1.29.45 — the served-chat repair
+release: the chat writer's MLX resource bundle ships scripted in the Tools
+installer, both app lanes, and the dev installer with a packaging pin
+refusing a bundle-less writer; the evidence-as-answer arm refuses a single
+document for a multi-part question or a low-confidence route and falls to
+the writer; the route classifier's confidence calibrated by instruction
+after the bench measured it flat-wrong; the writer budget at its own
+ceiling; the chat turn route carries its own five-minute HTTP window; the
+citation surface names its sources compactly with the unsupported claim
+never collapsed; the grounding pool drops the media-attachment stub shape
+at read time — and the known debt stated plainly: on the stock on-device
+writer tier the reasoning can consume the whole budget, the kernel answers
+that with the honest no-answer line, and the posture decision is the next
+round's measured work; beneath it, 1.29.44's standing-state repair:
+every CI red since 2026-11-09 closed at its mechanism, the
 RUSTSEC-2026-0459/0502 close through the vendored `[patch]` override, both
 remaining CodeQL alerts fixed at the transport sink, an OCR capability probe
 that names a machine unable to recognize, and the dependency tree re-derived

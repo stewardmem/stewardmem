@@ -1,5 +1,29 @@
 # Agent Execution Log — StewardMem
 
+> **RELEASE v1.29.45 (2026-11-15): the served-chat repair release — the
+> first live-traffic cascade session's four witnessed failure classes
+> closed at their mechanisms (the brain-afm + metallib pair scripted into
+> the Tools installer, both app lanes, and the dev installer with the
+> packaging pin refusing a bundle-less writer; the evidence-as-answer arm
+> refusing a single document for a multi-part question or a low-confidence
+> route — the witnessed misroute shape refused TWICE live on the serving
+> kernel the day the fix landed; the route classifier's confidence
+> calibrated by instruction after the bench measured it flat-wrong — 30%
+> flat-low, the 0.95 wall, no signal — with the anchored scale in the
+> schema's own description and NO numeric transform; the grounding pool
+> dropping the media-attachment stub shape at read time with the count on
+> every event), plus the fifth failure the release re-runs themselves
+> found (the shared 30-second HTTP wall 408'd every cold-tier writer turn
+> with zero bytes on the wire — the chat turn route now carries its own
+> five-minute budget by the IMPROVE06 merge-order precedent), the writer
+> budget at its own 1024 ceiling, and the citation surface compacted (the
+> deterministic tier names its source on one line, the unsupported claim
+> never collapses). The known debt stated in the notes: the stock
+> on-device writer tier's reasoning can consume the whole budget — the
+> kernel abstains honestly, and the posture decision is the next round's
+> measured work. This note sits above the v1.29.44 note — the release
+> wrap per docs/release-checklist.md step 6, continuing the drift's end.**
+
 > **RELEASE v1.29.44 (2026-11-14): the standing-state repair release —
 > every CI red from 2026-11-09 closed at its mechanism (the no-SQL handler
 > pin's seed moved to the recall core; `cargo deny` licenses `blessing`/
@@ -3273,3 +3297,43 @@ is kept here.
 > held (`git log -S sanitize_search_result` names `b637a0f1` alone; the §0
 > hard-stop never fired). Sequencing note honored: the seam covered the
 > grounding path BEFORE plan 19 grows its volume.
+
+> **RELEASE v1.29.45 — THE SERVED-CHAT REPAIR (2026-11-15, the release wrap
+> per docs/release-checklist.md):** the round is 21 (the execution prompt in
+> the plans repo, `EXECUTION_PROMPT_21_SERVED_CHAT_REPAIR_2026-11-15.md`; the
+> evidence file `docs/IMPROVE21_EVIDENCE_2026-11-15.md`; the plan ledger in
+> the same prompt's §7). THE RELEASE WRAP, the checklist's six artifacts:
+> (1) `Cargo.toml` 1.29.44 → 1.29.45 with the Cargo.lock lockstep (the
+> lock's omission caught by the stage's clean-tree refusal, landed with the
+> missed route-guard pin — 4a68a342); (2) `openapi.yaml` version +
+> `x-api-version` in lockstep (the drift gate byte-identical — no wire shape
+> moved: the grounding event's `filtered` field was already additive at
+> 1.29.44's tail and the route-prompt change carries no schema); (3)
+> `CHANGELOG.md`'s `## [1.29.45]` section (8 categorized bullets + the
+> Engineering record naming all 13 range commits — release-notes-check OK:
+> completeness 13/13, citations verified); (4) `docs/roadmap.md`'s
+> current-status paragraph names 1.29.45; (5) the README badges (version
+> regenerated; the test count from the REAL full `cargo test
+> --features bench,migrate` run — 2,860 passed; the T5-01 law's full
+> invocation, one flake red in the run, green on immediate standalone
+> rerun — the docling goldens round-trip under RAM contention, the same
+> recorded flake class as the sweep's all-targets lane); (6) `AGENTS.md`
+> header + this entry. THE RELEASE-PROCESS FINDS, recorded for the next
+> wrap: the stage's clean-tree refusal caught two real omissions before
+> the tag (the lock, the pin) — the clean-tree law doing its job; the
+> SwiftPM Metal toolchain cryptex dropped mid-build (the OS asset mount
+> refreshed under the build plan) — clearing the cached XCBuildData +
+> dependency .dat files that name the stale mount path re-provisioned it,
+> the shape to recognize next time; the `stage-metallib-bundle.sh` re-seal
+> now preserves the parent's hardened-runtime flag (4b00f2fe). THE CI REDS
+> AT THE BUMP, all one class: the two docs_truth pins (the README version
+> badge, the census) rode the bump commit — the badges regen and census
+> re-derive land with this wrap, the class being "a version bump moves a
+> DERIVED artifact's input without regenerating it"; and `shell.yml`'s
+> Cargo.lock `--locked` failure is the 1.100-vs-1.99 toolchain pin split —
+> the lockfile written by local 1.100 needs an amend CI's 1.99 refuses;
+> the decision recorded: the lockfile is the local toolchain's artifact and
+> the shell lane's pin follows it (the 1.99 pins leave in the release's
+> own follow-up). The tag v1.29.45 pushed to public by `scripts/release.sh`
+> after the local gates; the CI witness runs; the signing lane and the
+> Tools DMG follow the matrix.
