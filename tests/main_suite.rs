@@ -11336,6 +11336,9 @@ Final paragraph after the rule.";
             query: "alpha content".to_string(),
             limit: 5,
             domain: domain.map(|s| s.to_string()),
+            // compile repair, round 21 (see ump_ops.rs): the half-landed
+            // all_domains field's default, explicit at the fixture.
+            all_domains: false,
             strict,
             provenance: false,
             source: None,
