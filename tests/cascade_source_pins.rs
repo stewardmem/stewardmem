@@ -356,3 +356,64 @@ fn s2_the_writer_budget_is_the_ceiling_not_the_request_default() {
         "the law's comment names the witness that demanded it"
     );
 }
+
+/// S4 — THE ROUTE GUARD: the verbatim evidence-as-answer arm fires ONLY when
+/// the route IS answer_from_memory AND the query is not synthesis-shaped AND
+/// the confidence stands at or above the preregistered ROUTE_ANSWER_FLOOR
+/// (0.5 — the same constant family as ESCALATE_CONFIDENCE_THRESHOLD). The
+/// misroute witness (2026-11-15): a synthesis-shaped query routed
+/// answer_from_memory at 0.02 served the top hit VERBATIM. The escalation
+/// law is UNTOUCHED — escalation_due reads the same confidence as before;
+/// only the executor's route choice gains the guard. Falsifier F4's
+/// discipline: the guard is lexical and deterministic — NO numeric transform
+/// of the reported confidence exists anywhere in the parse path.
+#[test]
+fn s4_the_verbatim_arm_is_gated_by_shape_and_floor() {
+    let cascade = read(MODULE);
+    assert!(
+        cascade.contains("pub(crate) const ROUTE_ANSWER_FLOOR: f64 = 0.5;"),
+        "the floor is the preregistered 0.5, the escalation threshold's family"
+    );
+    assert!(
+        cascade.contains("pub(crate) fn synthesis_shaped(query: &str) -> bool"),
+        "the predicate is a pure lexical function in the coordinator"
+    );
+    for marker in [
+        " and what ",
+        "compare",
+        " vs ",
+        " with it ",
+        "difference between",
+    ] {
+        assert!(
+            cascade.contains(&format!("\"{marker}\"")),
+            "the preregistered marker {marker:?} rides the predicate"
+        );
+    }
+    let chat = read("src/handlers/chat.rs");
+    assert!(
+        chat.contains("&& !crate::agentloop::cascade::synthesis_shaped(&message)")
+            && chat.contains(
+                "&& route_call.confidence >= crate::agentloop::cascade::ROUTE_ANSWER_FLOOR"
+            ),
+        "the executor gates the verbatim arm on BOTH the shape and the floor"
+    );
+    assert!(
+        chat.contains("route guard refused the verbatim path"),
+        "the refusal is LOUD and named"
+    );
+    // F4's hard line: the reported confidence is never transformed.
+    assert!(
+        !cascade.contains("confidence / 100")
+            && !cascade.contains("confidence * 100")
+            && !cascade.contains("rescale"),
+        "no numeric transform of the model's reported confidence — the F4 law"
+    );
+    // The escalation law untouched: the pure trigger, unchanged in place.
+    assert!(
+        cascade.contains(
+            "pub(crate) fn escalation_due(t1_confidence: f64, threshold: f64, t3_abstained: bool) -> bool {\n    t1_confidence < threshold && t3_abstained\n}"
+        ),
+        "escalation_due keeps its exact preregistered conjunctive shape"
+    );
+}
