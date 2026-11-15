@@ -55,7 +55,7 @@ const walk = (args: PriorWalk) =>
 		fetchImpl?: typeof fetch;
 	});
 
-test('the_prior_walk_collects_kernel_versions_skips_pre-chain_releases_and_refuses_a_failed_fetch', async () => {
+test('the_prior_walk_collects_kernel_versions_skips_pre-chain_releases_skips_a_missing_manifest_and_refuses_a_failed_fetch', async () => {
 	const ok = (body: unknown) => ({
 		ok: true,
 		status: 200,
@@ -80,15 +80,33 @@ test('the_prior_walk_collects_kernel_versions_skips_pre-chain_releases_and_refus
 	});
 	expect(skipped).toEqual([]);
 
-	// A fetch that FAILS is the caller's refusal — a table guessed at is a
-	// table that lies. Both shapes: an HTTP refusal and a dead transport.
+	// A prior release whose manifest DOES NOT EXIST (404) teaches nothing:
+	// the table vouches for what exists and is not entitled to invent a
+	// kernel for a page that carries none — the same epistemic state as the
+	// pre-chain skip, named, never silent. (MEASURED 2026-11-15: the
+	// v1.29.44 cut stalled here — v1.29.43 shipped before its signing lane
+	// ran, so its latest.json 404s, and the refusal stalled a green release
+	// one step before publication.)
+	const missing = await walk({
+		tags: ['v1.29.43', 'v1.29.42'],
+		urlFor: (tag) => tag,
+		fetchImpl: async (url) => {
+			if (url.includes('v1.29.43')) return { ok: false, status: 404, json: async () => ({}) };
+			return ok({ kernel_version: '1.29.42' });
+		}
+	});
+	expect(missing).toEqual(['1.29.42']);
+
+	// Every OTHER non-ok answer is still the caller's refusal — the table
+	// is not allowed to shrink because a server is limping. Both shapes: an
+	// HTTP refusal that is not a missing file, and a dead transport.
 	await expect(
 		walk({
 			tags: ['v1.29.40'],
 			urlFor: (tag) => tag,
-			fetchImpl: async () => ({ ok: false, status: 404, json: async () => ({}) })
+			fetchImpl: async () => ({ ok: false, status: 503, json: async () => ({}) })
 		})
-	).rejects.toThrow(/answered 404/);
+	).rejects.toThrow(/answered 503/);
 	await expect(
 		walk({
 			tags: ['v1.29.40'],

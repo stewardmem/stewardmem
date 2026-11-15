@@ -191,6 +191,17 @@ export async function collectPriors({ tags, urlFor, fetchImpl = fetch }) {
 				{ cause: error }
 			);
 		}
+		if (response.status === 404) {
+			// A prior release whose manifest DOES NOT EXIST teaches nothing:
+			// the table vouches for what exists, and is not entitled to invent
+			// a kernel for a page that carries none. The same epistemic state
+			// as the no-kernel-version skip below — named, never silent.
+			// (MEASURED 2026-11-15: v1.29.43 shipped before its signing lane
+			// ran, so its latest.json 404s, and the refusal stalled the
+			// v1.29.44 cut — a green release, one step before publication.)
+			console.error(`[updater] note: ${tag} serves no update chain (404); skipped — the table vouches for what exists`);
+			continue;
+		}
 		if (!response.ok) {
 			throw new Error(`the prior release's manifest answered ${response.status} (${url})`);
 		}
@@ -248,7 +259,15 @@ export async function runPriorKernels(options) {
 	if (options.window !== undefined && !/^\d+$/.test(options.window)) {
 		throw new Error('--window must be a non-negative integer');
 	}
-	const window = options.window === undefined ? 5 : Number(options.window);
+	// 7 (widened from 5, the v1.29.44 cut's measured need): the walk must
+	// reach past a chain-less prior release to the oldest kernel the LIVE
+	// manifest still vouches for. MEASURED: v1.29.43 shipped no chain (its
+	// 404 slot eats one window step) and v1.29.42's table reached 1.29.37 —
+	// a walk that stopped at 5 would have vouched only to 1.29.39 and
+	// STRANDED the 1.29.37/1.29.38 carriers at this very update. December
+	// S0 owns the principled redesign (carry the last live table forward);
+	// the bound is the measured depth of the base that exists today.
+	const window = options.window === undefined ? 7 : Number(options.window);
 	const record = readProvenance(staged);
 	const current = record?.kernel_version;
 	if (typeof current !== 'string' || current.trim().length === 0) {
