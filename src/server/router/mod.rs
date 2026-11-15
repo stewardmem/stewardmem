@@ -242,6 +242,15 @@ pub fn app(state: Arc<AppState>) -> Router {
     // it — `.layer()` applies to routes registered so far, and this merge
     // sits before them.
     .merge(memory::document_ingest_router())
+    // The chat turn route merges AFTER the shared timeout too (the
+    // document_ingest_router merge-order precedent, round 21): the cascade's
+    // writer turn is minutes-scale when honest and the handler awaits the
+    // writer before the SSE returns — the shared 30 s wall 408'd every
+    // cold-tier writer turn (the live witness, three 408s at exactly 30 s).
+    // The route carries its own budget (config::CHAT_TURN_TIMEOUT_SECS);
+    // everything layered BELOW this point in source (CatchPanic, the RBAC
+    // route_layer, auth) still covers it.
+    .merge(chat::turn_router())
     .layer(CatchPanicLayer::new())
     // the RBAC evaluation middleware.
     //

@@ -18,6 +18,21 @@ pub const MAX_QUERY_LENGTH: usize = 2000;
 /// exactly how they diverge silently.
 pub const REQUEST_TIMEOUT_SECS: u64 = 30;
 
+/// The chat turn route's own HTTP budget (round 21, the served-chat repair):
+/// the cascade's writer turn is minutes-scale when honest — a cold MLX tier
+/// loads the writer model (witnessed ~60-90 s for the 9B) and then generates
+/// at its measured tok/s — and the handler awaits the writer BEFORE the SSE
+/// response returns, so the shared 30 s wall 408'd EVERY cold-tier writer
+/// turn before its answer could travel (the live witness, 2026-11-15: three
+/// writer turns, three 408s at exactly 30 s, zero bytes on the wire, the
+/// child working the whole time). The IMPROVE06 document-ingest precedent is
+/// the shape: the route merges OUTSIDE the shared `REQUEST_TIMEOUT_SECS`
+/// TimeoutLayer (see `server::router::chat::turn_router`) and carries its own
+/// named budget — 300 s = a cold load + a full 1024-token generation with
+/// headroom. The kernel-side writer budget is unchanged (S2's
+/// WRITER_RESPONSE_TOKENS; the child's clamp owns the ceiling).
+pub const CHAT_TURN_TIMEOUT_SECS: u64 = 300;
+
 /// The document-ingest route's own HTTP budget (IMPROVE06): the converter
 /// bound + the shared budget. The route is merged OUTSIDE the shared
 /// `REQUEST_TIMEOUT_SECS` TimeoutLayer (see `memory::document_ingest_router`)
