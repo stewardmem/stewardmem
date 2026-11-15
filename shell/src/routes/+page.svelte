@@ -692,6 +692,42 @@
 		evidenceOpen = { ...evidenceOpen, [turnId]: !evidenceIsOpen(turnId) };
 	}
 
+	// ── S5 (round 21): the citation RECORD compacts ───────────────────────
+	//
+	// The same disclosure law as M3-b, for the claim record: collapsed is
+	// the DEFAULT; the list renders INSIDE the opened disclosure with its
+	// testids intact. An UNCITED claim never collapses — it renders below
+	// the answer, dimmed with the `unsupported` chip (the honest disclosure
+	// is never compacted away).
+	let claimsOpen = $state<Record<number, boolean>>({});
+
+	function claimsRecordIsOpen(turnId: number): boolean {
+		return claimsOpen[turnId] ?? false;
+	}
+
+	function toggleClaimsRecord(turnId: number): void {
+		claimsOpen = { ...claimsOpen, [turnId]: !claimsRecordIsOpen(turnId) };
+	}
+
+	/** The unique cited titles of a turn, in first-hit order — the compact
+	 * provenance line's `{titles}` (S5). A cite is an index into the hits;
+	 * an index past the hits resolves to nothing (the kernel's universe). */
+	function citedTitleSet(turnId: number): string[] {
+		const turn = turns.find((t) => t.id === turnId);
+		const claims =
+			turn !== undefined && turn.rendering.kind === 'generated'
+				? turn.rendering.claims
+				: null;
+		const wanted = new Set((claims ?? []).flatMap((c) => c.cites));
+		const titles: string[] = [];
+		hitsOf(turnId).forEach((hit, i) => {
+			if (wanted.has(i) && hit.title !== null && !titles.includes(hit.title)) {
+				titles.push(hit.title);
+			}
+		});
+		return titles;
+	}
+
 	function onKeydown(event: KeyboardEvent): void {
 		// ⌘⏎ sends; a bare Enter inserts a newline. Plan 02 §3's gesture set, and
 		// the one a user has to be able to discover — so it is on the element's
@@ -1015,33 +1051,94 @@
 						</div>
 					{:else if turn.rendering.claims !== null && turn.rendering.claims.length > 0}
 						<!-- Round 18: the answer renders as a MARKDOWN DOCUMENT (the
-						     structured-content law) and the model's claims render as
-						     the citation RECORD below it — each claim with its cite
-						     chips, an uncited claim dimmed with the `unsupported`
-						     chip. The old inline per-sentence mapping went: mapping
-						     model-reported claims onto prose sentences was the
-						     fragile class the live-traffic finding exposed (a
-						     1-based cite read `unsupported` on a grounded turn);
-						     the chips keep their testids and the kernel's verdict
-						     label stays THE label (the shell never re-derives it). -->
+						     structured-content law). S5 (round 21): the citation
+						     RECORD COMPACTS — the witnessed "second text" (the
+						     served document re-printed sentence-by-sentence in
+						     small gray text) is gone. The cited claims collapse
+						     into the M3-b disclosure pattern (collapsed by
+						     default, the testids intact INSIDE the opened list);
+						     a `deterministic`-tier turn names its source on ONE
+						     line (`claims_record_collapsed`); an UNCITED claim
+						     NEVER collapses — it renders below the answer, dimmed
+						     with the `unsupported` chip (falsifier F6: the record
+						     compacts its PRESENTATION, never its EXISTENCE). -->
 						<div data-testid="chat-answer" data-support={turn.rendering.support ?? ''}>
 							<Markdown md={turn.rendering.answer} />
 						</div>
-						<ul class="grid gap-1 text-xs text-muted-foreground" data-testid="chat-claims">
-							{#each turn.rendering.claims as claim, i (i)}
-								<li data-testid="chat-claim" data-cited={claim.cites.join(',')}>
-									<span class="opacity-80">{claim.text}</span>
-									{#each citeTitles(claim.cites, hitsOf(turn.id)) as chip, j (j)}
-										<span class="ml-1 text-brand" data-testid="chat-cited-chip">{chip}</span>
+						{@const citedClaims = turn.rendering.claims.filter((c) => c.cites.length > 0)}
+						{@const uncitedClaims = turn.rendering.claims.filter((c) => c.cites.length === 0)}
+						{#if turn.rendering.tier === 'deterministic'}
+							<p
+								class="text-xs text-muted-foreground"
+								data-testid="claims_record_collapsed"
+							>
+								{m['chat.claims.verbatim_from']({
+									titles: citedTitleSet(turn.id).join(', ')
+								})}
+							</p>
+						{/if}
+						{#if citedClaims.length > 0}
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								class="w-fit"
+								data-testid="chat-claims-record"
+								aria-expanded={claimsRecordIsOpen(turn.id)}
+								aria-controls="chat-claims-list-{turn.id}"
+								onclick={() => toggleClaimsRecord(turn.id)}
+							>
+								{#if claimsRecordIsOpen(turn.id)}
+									{m['chat.claims.collapse']()}
+								{:else}
+									{m['chat.claims.record_count']({
+										count: citedClaims.length,
+										titles: citedTitleSet(turn.id).join(', ')
+									})}
+									<span class="sr-only"> — {m['chat.claims.expand']()}</span>
+								{/if}
+							</Button>
+							{#if claimsRecordIsOpen(turn.id)}
+								<ul
+									class="grid gap-1 text-xs text-muted-foreground"
+									id="chat-claims-list-{turn.id}"
+									data-testid="chat-claims"
+								>
+									{#each citedClaims as claim, i (i)}
+										<li data-testid="chat-claim" data-cited={claim.cites.join(',')}>
+											<span class="opacity-80">{claim.text}</span>
+											{#each citeTitles(claim.cites, hitsOf(turn.id)) as chip, j (j)}
+												<span class="ml-1 text-brand" data-testid="chat-cited-chip"
+													>{chip}</span
+												>
+											{/each}
+										</li>
 									{/each}
-									{#if claim.cites.length === 0}
-										<span class="ml-1 text-destructive" data-testid="chat-unsupported-chip">
+								</ul>
+							{/if}
+						{/if}
+						{#if uncitedClaims.length > 0}
+							<ul
+								class="grid gap-1 text-xs text-muted-foreground"
+								data-testid="chat-claims-uncited"
+							>
+								{#each uncitedClaims as claim, i (i)}
+									<li
+										data-testid="chat-claim"
+										data-cited=""
+										class="opacity-60"
+									>
+										<span class="opacity-80">{claim.text}</span>
+										<span
+											class="ml-1 text-destructive"
+											data-testid="chat-unsupported-chip"
+										>
 											{m['chat.answer.unsupported_chip']()}
 										</span>
-									{/if}
-								</li>
-							{/each}
-						</ul>
+									</li>
+								{/each}
+							</ul>
+						{/if}
 					{:else}
 						<Markdown md={turn.rendering.answer} />
 					{/if}

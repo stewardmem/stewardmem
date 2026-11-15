@@ -1087,7 +1087,12 @@ describe('the envelope law', () => {
 		// gzipped (+1,563,236 — the round's explicit mandate: markdown as
 		// structured content, mermaid as an actual graph visualisation):
 		// named act, midpoint moves, register carries it.
-		const R0_BASELINE = 1_806_313;
+		// S5 (round 21) re-base, the named act: 1_806_313 → 1_807_430
+		// (+1,117 gzipped — the citation-record compaction: the M3-b
+		// disclosure pattern for the claim record, the deterministic tier's
+		// one-line source naming (`claims_record_collapsed`), the uncited
+		// arm that never collapses, and 4 keys ×5 locales).
+		const R0_BASELINE = 1_807_430;
 		const BAND = 512;
 		expect(
 			Math.abs(total - R0_BASELINE),
