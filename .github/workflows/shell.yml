@@ -283,6 +283,18 @@ jobs:
           APPLE_SIGNING_IDENTITY: "-"
         run: pnpm tauri build --bundles app --target aarch64-apple-darwin
 
+      # THE METALLIB BUNDLE LAW (round 21): the placement BEFORE the verify
+      # walk, exactly as release.yml's bundle job carries it — this lane runs
+      # the same verify (whose metallib check demands the bundle beside
+      # brain-afm), so it needs the same placement. The tauri conf carries NO
+      # MacOS files mapping: the bundler's own seal refuses an unsigned
+      # nested bundle there (measured, Posture L 2026-11-15).
+      - name: Place the metallib bundle beside brain-afm
+        run: |
+          scripts/stage-metallib-bundle.sh \
+            "shell/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/StewardMem.app" \
+            --staged shell/src-tauri/binaries --sign -
+
       - name: Verify every Mach-O in the real bundle
         run: |
           node shell/scripts/sidecar.mjs verify \
