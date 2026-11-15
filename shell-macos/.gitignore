@@ -7,7 +7,16 @@
 *.swiftmodule
 *.swiftdoc
 *.swiftsourceinfo
-Package.resolved
+
+# Package.resolved is NOT here on purpose (the 1.29.45 release's finding,
+# 2026-11-15): it is SwiftPM's Cargo.lock — the dependency pins the tree was
+# VERIFIED with. Untracked, every runner resolved the graph fresh from the
+# floating `from:` ranges, and an upstream release landing between two runs
+# changed the Cmlx resource-bundle emission under a green lane (the
+# shell-macos assertion red 13:13Z→15:07Z with identical toolchains, the
+# only mover being the fresh resolve). The pins file is COMMITTED and moves
+# only as a named act (a dependency bump re-verifies first), the same
+# discipline the Cargo.lock files and pnpm-lock.yaml already carry.
 
 # The macOS lane's own log, if a local reproduction writes one.
 shell-macos-ci.log
