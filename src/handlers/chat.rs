@@ -92,15 +92,55 @@ answer with abstain true and no claims.";
 const PROMPT_VERSION: &str = "chat-27v2";
 
 /// The grounding event for a turn: the recall decision, the packed hits
-/// (carried hits labeled by their source turn), and the prompt version
-/// that grounded it — the audit payload persisted verbatim on the
-/// assistant row. Pure, pinned.
-fn build_grounding_event(decision: &str, hits: Vec<serde_json::Value>) -> serde_json::Value {
+/// (carried hits labeled by their source turn), the prompt version that
+/// grounded it, and the media-filter count (S3, round 21 — every key
+/// present on every event; 0 when nothing fell). The audit payload
+/// persisted verbatim on the assistant row. Pure, pinned.
+fn build_grounding_event(
+    decision: &str,
+    hits: Vec<serde_json::Value>,
+    media_filtered: usize,
+) -> serde_json::Value {
     json!({
         "decision": decision,
         "hits": hits,
         "promptVersion": PROMPT_VERSION,
+        "filtered": media_filtered,
     })
+}
+
+/// S3 — THE GROUNDING POOL'S READ-TIME MEDIA FILTER (round 21, the misroute
+/// witness): `[media attached:` titles are the store's import-stub shape
+/// (`knowledge.source='structured'`, `origin='imported'`, 24 live rows
+/// witnessed 2026-11-15 — ids 11723-11850, the `[media attached: 2 files]`
+/// variant included). The chat grounding's READ posture drops them at
+/// recall intake — BEFORE the hits map, the fence, the hit count, and the
+/// cascade evidence — and the event names how many fell. READ-TIME ONLY:
+/// no row is rewritten, flagged, or deleted (the erasure laws untouched);
+/// `/recall` and every other reader unchanged. An all-media pool → zero
+/// hits → the existing zero-hit abstain envelope takes the turn (correct
+/// by design, never a failure — falsifier F3).
+const MEDIA_ATTACHED_TITLE_PREFIX: &str = "[media attached:";
+
+fn is_media_attached_title(title: &Option<String>) -> bool {
+    title
+        .as_deref()
+        .is_some_and(|t| t.trim_start().starts_with(MEDIA_ATTACHED_TITLE_PREFIX))
+}
+
+fn filter_media_stubs(
+    tagged: Vec<(crate::SearchResult, String)>,
+) -> (Vec<(crate::SearchResult, String)>, usize) {
+    let before = tagged.len();
+    let kept: Vec<_> = tagged
+        .into_iter()
+        .filter(|(hit, _)| !is_media_attached_title(&hit.title))
+        .collect();
+    let dropped = before - kept.len();
+    if dropped > 0 {
+        tracing::info!("chat grounding: media-stub filter dropped {dropped} hit(s)");
+    }
+    (kept, dropped)
 }
 
 /// Bounds mirroring `/recall`'s own law: a query ≤ 2,000 bytes, a session
@@ -516,8 +556,10 @@ pub async fn chat_turn(
         mut grounding_tagged,
     ) = match grounding {
         Ok(outcome) => {
-            let hits: Vec<serde_json::Value> = outcome
-                .tagged
+            // S3: the pool's read posture — media stubs fall at intake,
+            // before the hits map, the fence, the count, the evidence.
+            let (tagged, media_filtered) = filter_media_stubs(outcome.tagged);
+            let hits: Vec<serde_json::Value> = tagged
                 .iter()
                 .map(|(hit, domain)| {
                     json!({
@@ -531,27 +573,21 @@ pub async fn chat_turn(
                 })
                 .collect();
             let decision = format!("{:?}", outcome.decision).to_lowercase();
-            let event = build_grounding_event(&decision, hits);
+            let event = build_grounding_event(&decision, hits, media_filtered);
             // Every hit crosses the untrusted fence — the SAME fence the
             // context projector uses, so a chat turn and a loop turn wrap
             // retrieved memory identically.
-            let fenced = fence_hits(&outcome.tagged);
+            let fenced = fence_hits(&tagged);
             // The packed set's SIZE is the verdict's whole universe: a cite
             // is honest iff it indexes one of THESE.
-            (
-                event,
-                fenced,
-                outcome.tagged.len(),
-                false,
-                outcome.tagged.clone(),
-            )
+            (event, fenced, tagged.len(), false, tagged)
         }
         Err(e) => {
             // Degraded grounding is STATED to the model, never hidden: the
             // answer must know its evidence is missing.
             tracing::warn!("chat grounding recall failed: {e:?}");
             (
-                build_grounding_event("degraded", Vec::new()),
+                build_grounding_event("degraded", Vec::new(), 0),
                 "(recall is degraded — no memory evidence could be retrieved for this turn.)"
                     .to_owned(),
                 0,
@@ -605,7 +641,11 @@ pub async fn chat_turn(
         if let Some(outcome) = carried
             && !outcome.tagged.is_empty()
         {
-            let merged = merge_carried(Vec::new(), outcome.tagged, prior.assistant_seq);
+            // S3: the carried intake passes the same read posture — a media
+            // stub re-entering through the prior turn's query is the same
+            // junk shape.
+            let (carried_tagged_raw, carried_filtered) = filter_media_stubs(outcome.tagged);
+            let merged = merge_carried(Vec::new(), carried_tagged_raw, prior.assistant_seq);
             let hits: Vec<serde_json::Value> = merged
                 .iter()
                 .map(|((hit, domain), source_turn)| {
@@ -633,7 +673,11 @@ pub async fn chat_turn(
                 .as_str()
                 .unwrap_or_default()
                 .to_owned();
-            grounding_event = build_grounding_event(&fresh_decision, hits);
+            grounding_event = build_grounding_event(
+                &fresh_decision,
+                hits,
+                grounding_event["filtered"].as_u64().unwrap_or(0) as usize + carried_filtered,
+            );
             let carried_tagged: Vec<(crate::SearchResult, String)> = merged
                 .iter()
                 .map(|((r, d), _)| (r.clone(), d.clone()))
@@ -900,8 +944,11 @@ pub async fn chat_turn(
                 .await
                 && !outcome.tagged.is_empty()
             {
-                let deep_hits: Vec<serde_json::Value> = outcome
-                    .tagged
+                // S3: the deep intake passes the same read posture — the
+                // deeper pool replaces the turn's universe, so its media
+                // stubs fall at intake too (the count is cumulative).
+                let (deep_tagged, deep_filtered) = filter_media_stubs(outcome.tagged);
+                let deep_hits: Vec<serde_json::Value> = deep_tagged
                     .iter()
                     .map(|(hit, domain)| {
                         json!({
@@ -914,10 +961,13 @@ pub async fn chat_turn(
                         })
                     })
                     .collect();
-                grounding_event = build_grounding_event(&cascade_decision, deep_hits);
-                grounding_hit_count = outcome.tagged.len();
-                cascade_evidence =
-                    crate::agentloop::cascade::evidence_from_results(&outcome.tagged);
+                grounding_event = build_grounding_event(
+                    &cascade_decision,
+                    deep_hits,
+                    grounding_event["filtered"].as_u64().unwrap_or(0) as usize + deep_filtered,
+                );
+                grounding_hit_count = deep_tagged.len();
+                cascade_evidence = crate::agentloop::cascade::evidence_from_results(&deep_tagged);
             }
         }
 
@@ -2144,10 +2194,52 @@ mod tests {
     /// payload the AFM-4 protocol diffs.
     #[test]
     fn grounding_events_carry_the_prompt_version() {
-        let event = build_grounding_event("ok", Vec::new());
+        let event = build_grounding_event("ok", Vec::new(), 0);
         assert_eq!(event["promptVersion"], PROMPT_VERSION);
         assert_eq!(event["decision"], "ok");
         assert_eq!(event["hits"], serde_json::json!([]));
+        // THE EVERY-KEY-PRESENT LAW (S3): the media-filter count rides every
+        // event — 0 when nothing fell.
+        assert_eq!(event["filtered"], serde_json::json!(0));
+    }
+
+    /// S3 — THE READ-TIME MEDIA FILTER (round 21, the misroute witness): the
+    /// `[media attached:` stub shape falls at intake; every other title
+    /// passes; the count names what fell; the variant `[media attached:
+    /// 2 files]` (witnessed id 11850) falls with the same prefix law; a
+    /// leading space does not save a stub.
+    #[test]
+    fn the_media_stub_filter_drops_the_witnessed_shape_at_intake() {
+        use crate::SearchResult;
+        let mk = |id: i64, title: &str| {
+            (
+                SearchResult {
+                    id,
+                    title: Some(title.to_owned()),
+                    ..Default::default()
+                },
+                "d".to_owned(),
+            )
+        };
+        let (kept, dropped) = filter_media_stubs(vec![
+            mk(
+                1,
+                "[media attached: media://inbound/pasted-text-1784539882045---x]",
+            ),
+            mk(2, "[media attached: 2 files]"),
+            mk(3, " [media attached: padded]"),
+            mk(4, "Unlocking the Power of Vitamin D — in Ireland"),
+            mk(5, "The EGCG history article"),
+        ]);
+        assert_eq!(dropped, 3, "the stub shape falls, whatever its suffix");
+        assert_eq!(kept.len(), 2);
+        assert_eq!(kept[0].0.id, 4);
+        assert_eq!(kept[1].0.id, 5);
+        // The empty pool stays empty (F3's all-media shape → the abstain
+        // envelope downstream).
+        let (kept, dropped) = filter_media_stubs(vec![mk(9, "[media attached: one]")]);
+        assert_eq!(dropped, 1);
+        assert!(kept.is_empty());
     }
 
     /// GOLDENS MATCH THE PROMPT VERSION (docs pin): every golden fixture
