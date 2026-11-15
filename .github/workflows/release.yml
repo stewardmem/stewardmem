@@ -297,7 +297,12 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable, signed 2026-09-03
         with:
-          toolchain: 1.99
+          # 1.100, the toolchain the committed Cargo.lock was written by —
+          # the 1.29.45 cut red the old 1.99 pin at `cargo build --locked`
+          # ("cannot update the lock file … because --locked was passed");
+          # the lockfile is the LOCAL toolchain's artifact and the pins
+          # follow it (the same recorded decision as shell.yml's lane).
+          toolchain: 1.100
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2

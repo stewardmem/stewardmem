@@ -54,9 +54,12 @@ test('shell_ci_contract_is_fail_closed_clean_runner_and_e2e_gated', () => {
 	expect(workflow).toContain('pnpm exec openapi-typescript ../openapi.yaml -o "$generated"');
 	expect(workflow).toContain('cmp src/lib/api/schema.d.ts "$generated"');
 	expect(workflow).toContain('pnpm exec playwright install --with-deps chromium webkit');
-	// 1.99, matching the toolchain the server binaries build with. The pin
-	// itself is still required — the lane must not float to `stable`.
-	expect(workflow).toContain('toolchain: 1.99');
+	// 1.100, matching the toolchain the server binaries build with AND the
+	// one the committed Cargo.lock was written by (the 1.29.45 decision:
+	// the lockfile is the local toolchain's artifact; an old pin against a
+	// new lock reds the lane at `cargo fetch --locked`). The pin itself is
+	// still required — the lane must not float to `stable`.
+	expect(workflow).toContain('toolchain: 1.100');
 	expect(workflow).not.toContain('toolchain: stable');
 	expect(workflow).toContain('E2E_KERNEL_PORT: 8799');
 	expect(workflow).toContain('pnpm test:e2e --workers=1');

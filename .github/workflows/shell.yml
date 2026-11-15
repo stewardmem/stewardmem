@@ -69,9 +69,18 @@ jobs:
       - name: Install pinned stable Rust
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable, signed 2026-09-03
         with:
-          # 1.99, matching what the SERVER binaries build with (ci.yml tracks
-          # `stable`, which resolves to 1.99.0). This lane was pinned to 1.98.1
-          # while `shell/src-tauri/Cargo.toml` declared `rust-version = "1.99"`
+          # 1.100, matching what the SERVER binaries build with (ci.yml
+          # tracks `stable`, which resolves to 1.100) AND what the committed
+          # Cargo.lock was written by — a lock/amend mismatch red this lane at
+          # `cargo fetch --locked` during the 1.29.45 cut ("cannot update the
+          # lock file … because --locked was passed"), the local toolchain
+          # having moved one minor past the pin. The recorded 1.29.45
+          # decision: the lockfile is the LOCAL toolchain's artifact and the
+          # lane pins follow it, re-checked at every wrap (an old pin against
+          # a new lock is the failure shape; the manifest floor
+          # `rust-version = "1.99"` stays satisfied by any newer pin).
+          # This lane was pinned to 1.98.1 while
+          # `shell/src-tauri/Cargo.toml` declared `rust-version = "1.99"`
           # — a manifest/CI contradiction inside a single commit, which red the
           # lane at `Tauri clippy` with "rustc 1.98.1 is not supported by the
           # following packages: brain-shell@0.1.0 requires rustc 1.99".
@@ -83,7 +92,7 @@ jobs:
           # compiler than the one it was verified on. (This sentence was
           # rewritten once because the first draft named the forbidden literal
           # in its own explanation and the contract refused the file.)
-          toolchain: 1.99
+          toolchain: 1.100
           components: rustfmt, clippy
 
       - name: Rust cache (kernel root)
@@ -240,7 +249,7 @@ jobs:
       - name: Install pinned stable Rust (both Apple targets)
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable, signed 2026-09-03
         with:
-          toolchain: 1.99
+          toolchain: 1.100
           components: rustfmt, clippy
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
