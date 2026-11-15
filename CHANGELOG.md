@@ -13,6 +13,135 @@ measured. Those records are kept as they were written (this file is
 append-only), and their heading says `Unreleased` because that is what they
 were when the round landed — not because the work is still unreleased.
 
+## [1.29.45] — 2026-11-15 — the served-chat repair: the writer pair ships scripted everywhere, the junk serve is dead by construction, the route confidence is calibrated by instruction, the chat turn carries its own honest budget, and the answer names its sources compactly
+
+The first live-traffic session on the armed chat cascade witnessed four
+failure classes on the serving kernel in one morning — both writer turns
+killed by a missing MLX resource bundle, an Apple safety refusal closing
+the on-device tier mid-answer, a synthesis answer truncated mid-sentence,
+and a multi-part question served a single history article verbatim as "the
+answer" — and this release closes every one of them at its mechanism, plus
+a fifth the release re-runs themselves found. The writer's deployment
+becomes scripted end to end: the resource bundle now travels with the
+on-device sidecar in the Tools installer, both app lanes, and the dev
+installer, and a packaging pin refuses a staged writer without it. The
+chat's evidence-as-answer arm refuses to serve one document for a
+multi-part question or on a low-confidence route — the writer answers from
+the evidence or the kernel abstains honestly. The route classifier's
+confidence was measured flat and wrong and is now calibrated by
+instruction, never by a numeric transform. The writer's token budget moves
+to the ceiling it is allowed, and the chat turn route carries its own
+five-minute HTTP window so a cold-tier writer can finish at all. The shell
+stops printing the answer twice: the citation record collapses into a
+disclosure, a verbatim turn names its source on one line, and an
+unsupported claim stays visible with its chip. The known debt is stated
+plainly: on the current on-device writer tier the model's visible answer
+can still come back empty while its reasoning consumes the token budget —
+the kernel answers that with the honest no-answer line, never a fabricated
+sentence, and deciding that posture is the next round's measured work.
+
+### Release notes
+
+**Improvements**
+
+- the chat writer's deployment is scripted end to end: the MLX resource
+  bundle (`mlx-swift_Cmlx.bundle`) now travels WITH the `brain-afm`
+  sidecar in the Tools installer, both app lanes, and the dev installer —
+  a staged writer without its bundle is refused at build time and at
+  install time with a named message, and an app update installs the fresh
+  pair beside an occupied path without ever overwriting it (the measured
+  law: the child loads the bundle from the directory of the invoked path,
+  so every invoked path needs it beside it). (a4ad66c9)
+- the chat's evidence-as-answer arm no longer serves a single document
+  verbatim for a question that joins distinct asks ("the benefits AND what
+  should I take with it") or when the route's confidence stands below the
+  same threshold family the escalation trigger uses — the turn falls to
+  the writer, which answers from the evidence or abstains honestly, and
+  the refusal is logged by name; the escalation trigger itself is
+  untouched. Live-verified: the witnessed misroute shape was refused twice
+  on the serving kernel the day the fix landed. (0858b4e5)
+- the route classifier's confidence is CALIBRATED by instruction: the
+  schema's own description now names the anchored scale — high only when a
+  top hit's snippet contains the answer, mid when the route is right but
+  the answer needs composing, low when the hits merely share topic words —
+  after the bench measured the old shape flat-wrong (30% of grounded
+  routes reporting near-zero confidence, a 0.95 wall elsewhere, no signal
+  between them). The measured route rows ship beside the fixture, and no
+  numeric transform of the reported value exists anywhere in the parse
+  path. (0858b4e5)
+- the chat writer's token budget moves to its own ceiling (1,024 — what
+  the on-device child clamps anyway) instead of the chat request's
+  default, so a long synthesis cannot starve on the asker's budget; the
+  request path's own default is unchanged, and the escalation law is
+  untouched. (84b9cc2c)
+- the chat turn route carries its own five-minute HTTP budget instead of
+  the shared 30-second wall: a cold on-device writer loads its model
+  (witnessed 60–90 seconds) and then generates, and the old wall killed
+  every such turn with an empty timeout response before a single byte
+  reached the app — the witnessed shape was three writer turns answering
+  408 with zero bytes on the wire while the model worked. The
+  session-store routes keep the shared wall. (1c2af8a5)
+- the chat's answer names its sources compactly: the citation record
+  collapses into the same disclosure the evidence card uses (collapsed by
+  default, keyboard-operable, the citation chips intact inside it), a
+  verbatim turn names its source on ONE line ("served verbatim from: …"),
+  and an unsupported claim is NEVER compacted away — it renders below the
+  answer, dimmed, with the unsupported chip. The interface text ships in
+  all five languages. (2d5b9eb9)
+
+**Bug fixes**
+
+- the chat's grounding pool drops import-stub rows at read time: titles
+  beginning with the media-attachment marker (the pasted-text capture
+  shape) no longer reach the evidence the writer sees or the claims the
+  citation gate judges; no stored row is rewritten or deleted, every other
+  reader is unchanged, and the grounding event names how many fell. A
+  question whose whole pool is stubs takes the honest no-answer line
+  instead of an answer assembled from capture stubs. (73840a42)
+- the release-notes gate's coverage exemption no longer swallows a whole
+  round-ledger naming form: the plans-repo mirror shape stays exempt and
+  the bare-token hole that once published an incomplete release page is
+  closed, with both shapes pinned. (8dca05df)
+
+### Engineering record
+
+- Proof commits for the user-facing bullets: the metallib pair scripted in
+  the three homes + the packaging pin + the recurrence drill (a4ad66c9,
+  with the CI legs and the staged-bundle staging in the same commit), the
+  route guard + the calibration + the measured route rows (0858b4e5), the
+  writer budget (84b9cc2c), the chat turn budget (1c2af8a5), the citation
+  surface (2d5b9eb9), the grounding filter (73840a42), and the
+  release-notes gate exemption (8dca05df).
+- The round's red baseline and the complete evidence file: the four
+  before-rows each traceable to a log quote or a command (69aa4159), the
+  S1–S6 after-rows with the six falsifier outcomes (e0c0b28c), and the
+  final sweep + pin-compliance record (ed34b2ff).
+- Two standing-state repairs, ownership named: a concurrently-running
+  session's half-landed recall field (`all_domains`, uncommitted) left
+  four struct-literal initializers behind and broke every compile lane —
+  repaired at the field's own serde default, the field's own work left
+  intact for its session (8f75ddfb, 2ea450c3).
+- The round's own code met the standing gates: the comments gate flagged
+  four label-bearing lines (labels dropped, invariant sentences kept) and
+  the log-injection pin flagged the dropped-count interpolation (now on
+  the sanitised seam) — main_suite green after (6bee61d4).
+- The known debt, by name: on the stock on-device writer tier the model's
+  reasoning consumes the entire token budget and the visible answer comes
+  back empty — the kernel abstains honestly, and the posture decision (a
+  no-think writer instruction or the primed-think seam, measured on the
+  bench first) is the next round's named work; the deployment-side
+  budget moves of this release are correct regardless.
+- A structural finding for the next round: the bench reproduced the
+  Apple-safety-refusal class inside the cascade's own route leg (9 of 106
+  classification turns) — those turns fall through to the pre-cascade
+  flow today; a route tier on the non-Apple engine is the candidate fix,
+  deliberately not built this round.
+- The sweep at the release tree: 20 of 21 lanes green, the one red lane
+  green twice back-to-back standalone (two contention flakes at
+  torch-loading suites, each green on immediate rerun); docs-truth,
+  badges, the secrets/env lanes, the audit chain, and the lockfile
+  freshness all PASS.
+
 ## [1.29.44] — 2026-11-14 — the improvement rounds land with the standing-state repair: the document pipeline with its tier ladder and correction lane, the scholar and the watch, the customer journey and appeals, the cascade gate and the near-miss guard, the /app seat and the client decommission — and every CI red since 2026-11-09 closed at its mechanism, both RUSTSEC graphs closed, the last two CodeQL alerts closed at the sink, and the tree is dependency-current
 
 This release carries two trains at once. The improvement rounds land end to
