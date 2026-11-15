@@ -229,6 +229,7 @@ moved; two dependency majors were measured and refused.
   - ee3fdc06 improve01 S1: the TB-1 forge battery — the fence holds at RELAYED (the fork by measurement: verification pin)
 
   - 8ca76c77 20 RELEASE WRAP — the release wrap itself: dependency currency, the waiver ratchet's prune, the docs-truth sweep, version lockstep, and this section's provenance
+  - 54c83c4b pins: the migration walk skips a prior release's missing chain (404 — v1.29.43 shipped before its signing lane ran) and widens the walk 5 -> 7 to the installed base's measured depth (the live table reached 1.29.37) — the v1.29.44 cut's signing lane stalled here; red-first pins
   - 13b732ee 20 POPPLER LANE — the standing CI red fixed at its environment: the lanes that run the root test suite (lint-test, otel-gate, the six feature lanes) install poppler-utils (pdfinfo + pdfimages) for the glm shim pins' stub dual — CI-infra only, ships no user-facing note
 
 - Lanes at the wrap: kernel lib (bench,migrate) with the badge set green,
