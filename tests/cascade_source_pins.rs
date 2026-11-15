@@ -317,3 +317,42 @@ fn tc5_the_provider_rides_the_screened_door() {
         "no raw sockets in the cascade module"
     );
 }
+
+// ── round 21 · the served-chat repair ───────────────────────────────────────
+
+/// S2 — THE WRITER'S BUDGET IS THE CEILING, NEVER THE REQUEST DEFAULT. The
+/// truncation witness (2026-11-15, the serving kernel): a synthesis turn at
+/// the chat request's 512 default died mid-sentence at 223 chars with an
+/// `abstained` verdict — the visible answer competes with the MLX think
+/// block for the same budget. The writer call site carries
+/// `WRITER_RESPONSE_TOKENS` (= MAX_RESPONSE_TOKENS, the child's own clamp
+/// ceiling — the `provider_afm.rs` mirror pin owns that string; the kernel
+/// may never exceed it), and the REQUEST path's 512 default stays untouched
+/// (the AFM tier keeps its ceiling).
+#[test]
+fn s2_the_writer_budget_is_the_ceiling_not_the_request_default() {
+    let chat = read("src/handlers/chat.rs");
+    assert!(
+        chat.contains("const WRITER_RESPONSE_TOKENS: i64 = MAX_RESPONSE_TOKENS;"),
+        "the writer budget is the ceiling constant, derived from the child's clamp bound"
+    );
+    assert!(
+        chat.contains("max_response_tokens: Some(WRITER_RESPONSE_TOKENS),"),
+        "the writer call site carries the writer budget, never the request default"
+    );
+    // The single call-site law: the AFM-tier bridge turn (:1282) keeps the
+    // request's own budget — exactly ONE Some(WRITER_RESPONSE_TOKENS) site.
+    assert_eq!(
+        chat.matches("Some(WRITER_RESPONSE_TOKENS)").count(),
+        1,
+        "exactly one writer-budget call site — the request path is untouched"
+    );
+    assert!(
+        chat.contains("Some(max_response_tokens)"),
+        "the request path's own budget still flows to the AFM tier"
+    );
+    assert!(
+        chat.contains("the truncation witness"),
+        "the law's comment names the witness that demanded it"
+    );
+}

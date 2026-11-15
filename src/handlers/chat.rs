@@ -108,6 +108,16 @@ fn build_grounding_event(decision: &str, hits: Vec<serde_json::Value>) -> serde_
 const MAX_MESSAGE_BYTES: usize = 2_000;
 const MAX_SESSION_BYTES: usize = 64;
 const MAX_RESPONSE_TOKENS: i64 = 1_024;
+/// THE WRITER'S BUDGET (round 21, the truncation witness): the cascade's
+/// writer turn gets the CEILING, never the chat request's own 512 default —
+/// the visible answer competes with the MLX think block for the same token
+/// budget (`MLXChatTier.swift` runs `thinkTagsWithEnableThinking`, the
+/// primed-`<think>` law), and the witnessed synthesis turn died mid-sentence
+/// at 223 chars under the request default. The kernel may never exceed what
+/// the child clamps (`min(max(maxResponse ?? 512, 16), 1024)` — the
+/// `provider_afm.rs` mirror pin owns that string), so 1_024 IS the ceiling,
+/// not a new one.
+const WRITER_RESPONSE_TOKENS: i64 = MAX_RESPONSE_TOKENS;
 /// The grounding budget: submodular evidence packing under this many tokens.
 /// The bridge's planner makes the FINAL fit decision against the measured
 /// on-device budget — this only shapes how much evidence is offered.
@@ -947,7 +957,10 @@ pub async fn chat_turn(
                         session: writer_session,
                         prompt: format!("{cascade_block}\n\n{message}"),
                         instructions: Some(crate::agentloop::cascade::WRITER_CONTRACT.to_owned()),
-                        max_response_tokens: Some(max_response_tokens),
+                        // THE WRITER'S BUDGET (round 21): the ceiling, not the
+                        // chat request's own default — the truncation witness
+                        // rode the 512 default into a mid-sentence death.
+                        max_response_tokens: Some(WRITER_RESPONSE_TOKENS),
                         history: None,
                         model: writer_model,
                         schema: None,
