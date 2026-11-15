@@ -119,7 +119,8 @@ fn build_grounding_event(
 /// no row is rewritten, flagged, or deleted (the erasure laws untouched);
 /// `/recall` and every other reader unchanged. An all-media pool → zero
 /// hits → the existing zero-hit abstain envelope takes the turn (correct
-/// by design, never a failure — falsifier F3).
+/// by design, never a failure — an answer assembled from the stubs is the
+/// unverified-evidence shape the citation gate exists to close).
 const MEDIA_ATTACHED_TITLE_PREFIX: &str = "[media attached:";
 
 fn is_media_attached_title(title: &Option<String>) -> bool {
@@ -138,7 +139,12 @@ fn filter_media_stubs(
         .collect();
     let dropped = before - kept.len();
     if dropped > 0 {
-        tracing::info!("chat grounding: media-stub filter dropped {dropped} hit(s)");
+        // the count rides the sanitised log seam: an interpolated value
+        // without it is a forged-entry shape, whatever its type
+        tracing::info!(
+            "chat grounding: media-stub filter dropped {} hit(s)",
+            crate::server::router::memory::LogValue::new(&dropped.to_string())
+        );
     }
     (kept, dropped)
 }

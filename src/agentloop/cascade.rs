@@ -98,13 +98,12 @@ pub(crate) fn oracle_route(relevant_is_empty: bool, top1_verifies_all_gold: bool
 /// with a route string and a confidence number. The description names the
 /// roster AND forbids the echo classes S0 recorded (memory titles, hit
 /// text) — the description is guidance; the VALUE is kernel-validated.
-/// S4 (round 21, the F4 tabulation): the confidence description now names
-/// the CALIBRATION — the bench measured the model's reported values
-/// miscalibrated (30% of grounded answer_from_memory routes flat-low at
-/// 0.0-0.49, 75% of them strict-correct; a 0.95 wall on 41 rows regardless
-/// of correctness), so the schema teaches the anchored scale. Falsifier
-/// F4's hard line holds: the PROMPT is the fix, never a numeric transform
-/// of the reported value.
+/// The confidence description now names the CALIBRATION — the bench
+/// measured the model's reported values miscalibrated (30% of grounded
+/// answer_from_memory routes flat-low at 0.0-0.49, 75% of them
+/// strict-correct; a 0.95 wall on 41 rows regardless of correctness), so
+/// the schema teaches the anchored scale. The hard line holds: the PROMPT
+/// is the fix, never a numeric transform of the reported value.
 pub(crate) const ROUTE_SCHEMA: &str = r#"{"type":"object","properties":{"route":{"type":"string","description":"The route value: exactly one of the four literal strings answer_from_memory, read_more, synthesize, escalate_frontier — never a memory title, a hit text, or any other word"},"confidence":{"type":"number","description":"0.0 to 1.0, CALIBRATED to the recall summary, never a constant: report 0.9+ only when a top hit's snippet literally contains the answer; report 0.5-0.8 when the evidence clearly supports the route but the answer needs composing; report 0.0-0.4 when the hits merely share topic words with the query"}},"required":["route","confidence"]}"#;
 
 /// The router contract — the AFM tier's instructions for a classification
@@ -649,7 +648,7 @@ pub(crate) fn escalation_due(t1_confidence: f64, threshold: f64, t3_abstained: b
     t1_confidence < threshold && t3_abstained
 }
 
-/// S4 — THE ROUTE GUARD's floor (round 21, the misroute witness: a
+/// The route guard's floor (the misroute witness: a
 /// synthesis-shaped query routed `answer_from_memory` at confidence 0.02
 /// and the top hit was served VERBATIM). A route confidence below this
 /// floor may not serve evidence verbatim — the executor falls to the
@@ -659,12 +658,12 @@ pub(crate) fn escalation_due(t1_confidence: f64, threshold: f64, t3_abstained: b
 /// guard).
 pub(crate) const ROUTE_ANSWER_FLOOR: f64 = 0.5;
 
-/// S4 — THE ROUTE GUARD's synthesis predicate (round 21, the misroute
-/// witness): a query joining DISTINCT asks — "and what", "compare", "vs",
+/// The route guard's synthesis predicate (the misroute witness): a query
+/// joining DISTINCT asks — "and what", "compare", "vs",
 /// "with it", "difference between", or more than one question — must not
 /// serve a single document verbatim, however confidently the router named
 /// the answer route. Lexical and deterministic: no model surface (falsifier
-/// F5). The predicate errs toward the WRITER — a false positive costs
+/// The predicate errs toward the WRITER — a false positive costs
 /// writer tokens, never a junk serve.
 pub(crate) fn synthesis_shaped(query: &str) -> bool {
     let q = query.to_lowercase();
