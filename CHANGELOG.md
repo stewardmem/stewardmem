@@ -13,21 +13,31 @@ measured. Those records are kept as they were written (this file is
 append-only), and their heading says `Unreleased` because that is what they
 were when the round landed — not because the work is still unreleased.
 
-## [1.29.44] — 2026-11-14 — the standing-state repair release: every CI red since 2026-11-09 closed at its mechanism, the two RUSTSEC advisories closed through the vendored override, the last two CodeQL alerts closed at the sink, and the tree is dependency-current
+## [1.29.44] — 2026-11-14 — the improvement rounds land with the standing-state repair: the document pipeline with its tier ladder and correction lane, the scholar and the watch, the customer journey and appeals, the cascade gate and the near-miss guard, the /app seat and the client decommission — and every CI red since 2026-11-09 closed at its mechanism, both RUSTSEC graphs closed, the last two CodeQL alerts closed at the sink, and the tree is dependency-current
 
-This release restores the CI standing state and re-derives the dependency
-tree. Every red that accumulated since 2026-11-09 was closed at its own
-mechanism rather than waived: the seed SQL behind the no-SQL handler pin
-moved into the recall core, the `cargo deny` license allowlist gained two
-evaluated entries, `cargo machete` gained a marker for a dependency whose
-pin IS its purpose, the plugin's drift guard caught up with the client
-removal it had been correctly refusing, the shell e2e cleanup drill learned
-which posture creates sessions, and the OCR sidecar now MEASURES whether the
-machine can recognize at all. The two RUSTSEC advisories that made the audit
-lane red for six days closed through a vendored `[patch]` override with a
-named delta ledger, and the last two CodeQL alerts closed by building the
-transports' requests from the scheme-enforced URL. No deliberate posture
-moved; two dependency majors were measured and refused.
+This release carries two trains at once. The improvement rounds land end to
+end: the governed document pipeline (`POST /ingest/document`) with its tier
+ladder — the text layer, the native Vision OCR tier, the live docling tool
+tier, and the measured VLM tier — the correction lane beside it, the
+scholarly fetch and override surfaces with the research watch and synthesis
+behind them, the customer journey, appeals and DSAR requests projected from
+the audit chain, the armed-OFF cascade gate and near-miss guard, the /app
+seat with the Dioxus client decommissioned, and five schema acts
+(1.32.31–1.32.35). And it restores the CI standing state and re-derives the
+dependency tree: every red that accumulated since 2026-11-09 was closed at
+its own mechanism rather than waived — the seed SQL behind the no-SQL
+handler pin moved into the recall core, the `cargo deny` license allowlist
+gained two evaluated entries, `cargo machete` gained a marker for a
+dependency whose pin IS its purpose, the plugin's drift guard caught up with
+the client removal it had been correctly refusing, the shell e2e cleanup
+drill learned which posture creates sessions, and the OCR sidecar now
+MEASURES whether the machine can recognize at all. The two RUSTSEC
+advisories that made the audit lane red for six days closed on both graphs —
+the kernel's own pool by the pinned-target lockstep bump, the cap-pinned
+crates through the vendored `[patch]` override with a named delta ledger —
+and the last two CodeQL alerts closed by building the transports' requests
+from the scheme-enforced URL. No deliberate dependency posture moved; two
+dependency majors were measured and refused.
 
 ### Release notes
 
@@ -39,29 +49,131 @@ moved; two dependency majors were measured and refused.
   with the framework's own error carried verbatim) from a genuine per-page
   refusal — extract-document on a fresh CI volume or an asset-less Mac
   names its condition instead of failing opaquely.
+- the governed document pipeline: `POST /ingest/document` turns a PDF into
+  a page-anchored, machine-checkable document row (the annotated-markdown
+  contract, deterministic zero-token extraction, no LLM anywhere) — and the
+  tier ladder lands behind it this release: the native Vision OCR tier (the
+  brain-afm sidecar's extract-document lifecycle, `BRAIN_VISION_BRIDGE`),
+  the docling tool tier live (the 501 boundary removed — any
+  protocol-conforming tool through the FILE contract), and the VLM tier
+  (`vlm`, generative extraction on the operator's own MLX stack, adopted BY
+  MEASUREMENT at 5.66%/12.15% against the 17.12% docling bar, stamped
+  `<model>@mlx-vlm-<ver>` per run, OFF unless configured).
+- the document-correction lane: `correct: true` on the ingest route
+  produces a governed SECOND artifact, never a rewrite — the verbatim row
+  stays byte-untouched, the corrected row is stamped `<model>@<served>` and
+  must re-pass the same deterministic anchor contract (the structure is the
+  cage; no model in the gate; a correction that breaks it refuses
+  `correction_contract_violation` and the verbatim row survives whole). The
+  provider profile is all-or-nothing (`BRAIN_DOC_CORRECTOR_*`; none = the
+  lane is off).
+- the scholarly surfaces: `POST /scholar/fetch` ingests one publisher
+  record through the markdown door (Europe PMC primary, Crossref witness,
+  PubMed fallback; OFF unless configured — `scholar_unconfigured`), and
+  `POST /scholar/override` is the audited HITL retraction lift, the only
+  act that raises the trust floor. The retraction signal is PUBLISHED
+  metadata, never ML; scholarly provenance rides `knowledge.scholar_meta`
+  (schema 1.32.31).
+- the research watch: deterministic lanes over feeds and arXiv with their
+  own tables (schema 1.32.32), hand-rolled std-side feed parsers, and
+  `POST /watch/tick` — freshness floors hold before any fetch, every filing
+  goes through the ONE proposal seam with the injection screen riding, and
+  the CHECKED accounting row lands in the tick's own transaction.
+  `POST /research/synthesize` is the kernel's only provider-invocation
+  site: explicit, Admin-gated, per-task, output lands as a proposal
+  (`BRAIN_RESEARCH_PROVIDER_*`; none = unconfigured, 503).
+- the customer-transparency doors: `GET /clients/{name}/journey` (+`?case=`)
+  projects the audit chain into closed customer sentences (a pure
+  projection — same chain state, byte-identical journey; actors render as
+  roles, never roster names), `/clients/{name}/appeals` files digest-bound
+  appeals as proposals (you appeal the bytes that were shown; the
+  `customer` marker is stamped PATH-SIDE, the wire cannot set it — schema
+  1.32.35), and `/clients/{name}/requests` takes DSAR/erase requests that
+  nothing auto-runs — disposal is the operator's separate, digest-bound
+  act. All three ride the journey's own authz law: the client's own
+  principal plus the operator; everyone else answers the existence-blind
+  404.
+- the cascade route gate, armed OFF: `BRAIN_CHAT_CASCADE=1` lets the
+  turn's OWN grounding classify a typed route (out-of-roster falls back to
+  the preregistered synthesize-and-read; no model in the gate) — the reader
+  is deterministic over the recall substrate, the writer rides the bridge's
+  MLX tier behind the fenced evidence (a writer refusal maps to the named
+  vocabulary, never empty prose stamped as a tier), and frontier escalation
+  fires only as an audited per-task proposal: no standing permission, no
+  session cache. The `cascade-bench` harness carries the battery.
+- the near-miss guard, dormant by measurement: the DISCERN collision edge
+  (0.6·jaccard + 0.4·cos, threshold 0.70) fires at the recall boundary
+  behind `BRAIN_RECALL_NEARMISS=1` — off at rest — because the trap bench
+  (`BRAIN_S0_TRAP=1`, 16 queries, six kinds) measured the contamination
+  class first: red 4/4 contaminated before the edge, green TP=4 / FP=0
+  after, the red and green run rows committed beside the fixture.
 
 **Improvements**
 
-- the dependency tree is current: in-range bumps across every tracked Rust
-  lockfile, and the shell takes SvelteKit 3.2, tailwind-variants 4, jsdom 31
-  (with its documented canvas companion), plus the plugin's vitest 5.1 and
-  typebox 1.4.7; `cargo audit`, `pnpm audit` and `npm audit` are all clean.
+- chat answers render as markdown documents — headings, lists, fenced
+  code, mermaid — with raw HTML rendered as ESCAPED TEXT by construction
+  (no `{@html}` anywhere; the security pin proves `<script>` becomes
+  visible text on screen).
+- the served shell has its seat: the app lives at `/app` under the
+  kernel's strict API CSP, with the build-injected meta CSP carried by the
+  seat's HTML documents only — and the blank-render defect is fixed at its
+  cause: the old Dioxus-era CLIENT_CSP intersected the shell's meta CSP and
+  killed the shell's inline payload scripts.
+- the Dioxus client leaves the tree — 9.5 GB with target/ and
+  node_modules — and every live pointer goes with it: the drift-guard
+  fixtures, the route census's Dioxus half, the e2e base law, and the
+  installer's dist law.
+- the on-device engine moves to the preregistered upstream main under the
+  named-act law (the preregistration committed before any run, the live
+  witness run recorded); the MLX thinking budget is wired and parked
+  (`BRAIN_MLX_THINKING_BUDGET="max=N[,minAnswer=M]"`, off unless set), and
+  the reasoning counters join the witness line.
+- the KT-tier cure matrix ran to its preregistered verdict on the frozen
+  corpus: NO WINNER — the ceiling declared and dated; the deterministic
+  scaffold + confirm/edit, the wire schema, and the guided-generation arm
+  land armed OFF, per the rule as written.
+- the HITL and compliance surfaces: the decision-event ledger writes one
+  append-only row per act in the act's own transaction (schema 1.32.33);
+  the report cells carry the preregistered kappa + Gwet's AC1 suite, the
+  sign body the conjunction triple; the AI-Act scoping register and
+  corrected calendar land as code with the obligation→evidence register
+  asserting zero uncited rows; the Art 50(1) plain-language disclosure
+  lands; and the MemForm provenance markers are path-assigned (schema
+  1.32.34) with shared-provenance grouping — a batch refuses to look
+  innocent.
+- the tree compiles clean on rustc 1.100.0: every gate lane re-run green,
+  the six new-lint findings fixed.
 - the docs told the truth again (the second docs-truth release in a row):
   the roadmap's current status now names the release, the release-history
   page's "latest versions" block — frozen at 1.28.65 since September — was
   rewritten, the security summary's coverage stamp moved to 2026-11-14, the
-  security release register gained its missing 1.29.43 row, and the threat
-  model's supply-chain row now counts the six committed lockfiles and
-  carries the vendored-override posture.
+  security release register gained its missing 1.29.43 row, the threat
+  model re-maps to ATLAS v6.1.0 with the 2026 incident classes, research
+  25's DISCERN adoption record was rewritten triple-sourced against the
+  tree, and the mdBook renders every linked page (seven dead pages and one
+  dead asset fixed at the source, plus the link-case and symlink classes CI
+  caught).
+- the dependency tree is current: in-range bumps across every tracked Rust
+  lockfile, and the shell takes SvelteKit 3.2, tailwind-variants 4, jsdom 31
+  (with its documented canvas companion), plus the plugin's vitest 5.1 and
+  typebox 1.4.7; `cargo audit`, `pnpm audit` and `npm audit` are all clean.
 
 **Security fixes**
 
+- recalled evidence enters the model sanitized: markdown-image references
+  in recall hits neutralize to their bare alt text at the outcome boundary
+  — the EchoLeak exfiltration class closed in the recall core with
+  red-first pins; the clamp on the request side and the read seam on the
+  output side are the module's whole law.
 - RUSTSEC-2026-0459 (`libsqlite3-sys` 0.36.x, C SQLite CVE-2026-119375) and
-  its SQLCipher sibling RUSTSEC-2026-0502 are CLOSED: the two cap-pinned
-  crates are vendored as byte-identical upstream source with named manifest
-  deltas only, lifting the graph to `libsqlite3-sys` 0.40.0 /
-  `sqlcipher-src` 420.0.0 under fail-closed `[patch]` wiring the
-  tools-locks pin machine-checks.
+  its SQLCipher sibling RUSTSEC-2026-0502 are CLOSED on both graphs: the
+  kernel's own pool moved first by the pinned-target lockstep bump
+  (rusqlite 0.41.1 + libsqlite3-sys 0.39.1, bundled SQLite 3.54.1 proven
+  in-build — `sqlite_version()` = 3.54.1, the `secure_delete` readback = 1),
+  and the two cap-pinned crates are vendored as byte-identical upstream
+  source with named manifest deltas only, lifting the signal-gateway graph
+  to `libsqlite3-sys` 0.40.0 / `sqlcipher-src` 420.0.0 under fail-closed
+  `[patch]` wiring the tools-locks pin machine-checks.
 - both open CodeQL alerts (`rust/non-https-url`, high) are closed at the
   sink: the scholar and watch transports now build their requests from the
   parsed, scheme-enforced URL — the analyzer-visible shape of the https
@@ -76,18 +188,48 @@ moved; two dependency majors were measured and refused.
   plugin-lane reds (the drift guard correctly refusing the client removal's
   leftover pointers), the shell e2e cleanup drill failing on runners where
   no session could exist (the drill now runs where a session could have
-  been created, and pins the honest 404 where none could), and eleven
+  been created, and pins the honest 404 where none could), eleven
   shell-macos reds (the pins skip with a greppable notice exactly when the
   capability probe names the machine unable to recognize — full-strength
-  everywhere Vision works).
+  everywhere Vision works), the migration-walk's 404 class (v1.29.43
+  shipped before its signing lane ran), the poppler lane on the root test
+  lanes, the shim `Text-file-busy` and parallel-race classes (atomic rename
+  with bounded retry; the per-call fixture root), the docs-link case and
+  symlink classes, and the badge-drift derivation.
+- the updater's migration table walks the installed base's depth: a prior
+  release's missing chain (v1.29.43's 404) now skips with a named note
+  instead of refusing, and the walk widens 5 → 7 so the 1.29.37/1.29.38
+  carriers are not stranded at this update — every other non-ok answer and
+  every dead transport still refuses.
+- install-service.sh stages the chat bridge beside the kernel: the
+  kernel-only update left brain-afm at its October build behind a newer
+  kernel (the 500 class the operator hit live mid-session), and the
+  stale-bundle refusal's own advice now names the ARM64-only bundle shape
+  it actually reads.
+- the app reads as Apple Silicon: System Information's Kind said 'iOS' for
+  every StewardMem install — the reporter's dispatcher now reads
+  `CFBundleSupportedPlatforms` first.
 
 ### Engineering record
 
-- Proof commits: the SQL-pin + deny-license standing-state repair
-  (c4ccdbdd), the CodeQL sink hardening (8105ec9d), the plugin drift-guard
-  catch-up (e6682833), the e2e drill law (a508201b), the vision named code
-  (78359629) and the capability probe (457a79df), the machete marker
-  (e0680b19), and this release wrap.
+- Proof commits for the user-facing bullets: the document route + tiers
+  (77a86813, a793d015, 3c63ffd9, 3c8a4780), the correction lane (da0c5e12,
+  da78c2a7), the scholar (a43d7b4f, ed416ee3, 16d26699, 8c8bda2d), the
+  watch + synthesis (c77c6874, 39861a69, 54025ba1, 7a748865), the customer
+  doors (e17c038e, 028fb6df, f90f9b78, 2810897c), the cascade (18e0d948,
+  9f5b4ddc, a12cad11, 3ab92af6, 1820336a, 7d5960ee), the markdown render
+  (97178012), the /app seat + decommission (9a565010, f7705fb5, 60d7ca43,
+  d03bacbb), the near-miss guard + trap bench (b9e8c430, 6e9461ed, c3a790c8,
+  6a4520c2), the recall sanitize law (acdd8876, e581c41a, d8a4876a), the
+  engine adoption + thinking budget (30e11ecd, 75f1185d, b1e256af,
+  8bf7cb56), the KT ceiling (f19cce0a, 0d0e3e24), the HITL + AI-Act +
+  MemForm surfaces (3d7ea09c, c766efa3, 18ead707, 48c00d1f, 00945fc2,
+  ea4678a0), the root SQLite bump (dd1d526e), the installer bridge + Apple
+  Silicon + migration walk (111c7bb9, c39d5c8e, 54c83c4b), the SQL-pin +
+  deny-license standing-state repair (c4ccdbdd), the CodeQL sink hardening
+  (8105ec9d), the plugin drift-guard catch-up (e6682833), the e2e drill law
+  (a508201b), the vision named code (78359629) and the capability probe
+  (457a79df), the machete marker (e0680b19), and this release wrap.
 - Two dependency majors were measured and REFUSED, by name: paraglide-js 3
   (the envelope law holds — the i18n runtime grows the built JS by ~7 KB
   gzipped past the R0 band and changes message-resolution semantics the
@@ -231,6 +373,73 @@ moved; two dependency majors were measured and refused.
   - 8ca76c77 20 RELEASE WRAP — the release wrap itself: dependency currency, the waiver ratchet's prune, the docs-truth sweep, version lockstep, and this section's provenance
   - 54c83c4b pins: the migration walk skips a prior release's missing chain (404 — v1.29.43 shipped before its signing lane ran) and widens the walk 5 -> 7 to the installed base's measured depth (the live table reached 1.29.37) — the v1.29.44 cut's signing lane stalled here; red-first pins
   - 13b732ee 20 POPPLER LANE — the standing CI red fixed at its environment: the lanes that run the root test suite (lint-test, otel-gate, the six feature lanes) install poppler-utils (pdfinfo + pdfimages) for the glm shim pins' stub dual — CI-infra only, ships no user-facing note
+
+- The completeness repair (2026-11-15): the improvement rounds' candidate
+  lines below were missing from this record as first written — the series'
+  subject prefix (`plans/improvements …`) matched the release-notes gate's
+  `plans` exemption, so the gate ran green over a section that carried only
+  the standing-state slice. The rounds land here as provenance, one line
+  each, with the docs and test repairs the same window carried; the gate's
+  exemption is anchored to the `plans:`/`plans(` form by this same repair's
+  red-first pin.
+
+  - 0277b9d0 plans/improvements 15 C-c: the curation pin battery — the leak, the scans, the read-only witness in the matrix, every pin with its planted-miss control
+  - 028fb6df plans/improvements 15 C-b: the journey endpoint — /clients/{name}/journey (+ ?case=), the OWN authz law, the regen lockstep, and the shell page joins the routes
+  - 046e908a plans/improvements 19 S2-side: THE S-F DRIFT CATCH — three pre-existing pin failures the never-run round-18 verify-after would have caught — the full shell suite (S2's own gate) red on three tests, NONE touched by S2: (1) recall.test.t […
+  - 04fc2a27 plans/improvements 18 S-E: THE INSTALLER'S OWN ERROR LED TO A DEAD COMMAND — the stale-bundle refusal (the R140 gate that reads the staged bundle's seal BEFORE touching /Applications) recommended 'pnpm tauri build --bundles app --targe […
+  - 10c20471 docs: the book renders every linked page and the live site loses its 404s — the crawl of stewardmem.github.io/stewardmem found seven dead same-origin pages and one dead asset link, each fixed at the source. (1) Five pages 404ed because […
+  - 111c7bb9 plans/improvements 19 S4-amendment: THE INSTALLER CARRIES THE CHAT BRIDGE — the 500 class the operator hit live, fixed at its cause — THE INCIDENT, measured on the operator's machine mid-session: install-service.sh updated ~/.local/bin […
+  - 1376d67e plans/improvements 17 S5: the e2e witness + the records — the in-crate live witness (cascade.rs cfg(test) witness module, the chat_mlx_tier convention: skips by name when the bridge child is absent, the acceptance owned by the macOS la […
+  - 1820336a plans/improvements 18 S-A: THE CASCADE-INTO-CHAT WIRING — the chat spine's turn flow gains the operator-armed routing gate (BRAIN_CHAT_CASCADE=1, the BIND_PUBLIC armed-values law: set-but-unrecognised is NOT armed, default OFF byte-ide […
+  - 18e0d948 plans/improvements 17 S1: T1 the coordinator, red-first — src/agentloop/cascade.rs (in-crate per the §0.1.3 law: the coordinator lives where the bridge trait is visible), the route decision a TYPED VALUE (TC-2: four-case enum, from_wir […
+  - 1a8dc693 plans/improvements 15 verify-after: the last ceiling-following pin moved (the agreement path's stamp pin, per its own law — each schema round re-pins the CURRENT stamp)
+  - 1e79a6b8 plans/improvements 19 S6: THE BATTERY'S FOUR FINDINGS — the first full 1.100 battery ran (2847 passed / 4 failed) and each failure is classified, three fixed where they stood, one recorded — (1) r42sh lipstyk_gate_scan_paths_match_the_ […
+  - 215eed81 plans/improvements 15 verify-after: the full battery green — the badge 4082→4130 derived from the real run (--verify-count exit 0), the remaining ceiling-following pins moved per their own law, HT-2's reader set widened as a named act
+  - 24d76b54 plans/improvements 16 S4: the docs — docs/DOC_CORRECTION_LANE.md (the lane's protocol: the one sentence, the eleven laws — two artifacts one lineage with the field-by-field row table, the cage with no model in the gate, the GDL provide […
+  - 2810897c plans/improvements 15 C-f: the gate-law register row — the DepEd appeal gap CLOSED, the transparency posture recorded, the auth decision's alternatives standing
+  - 3ab92af6 plans/improvements 17 S4: T4 the frontier escalation, explicit audited proposal-shaped — escalation_due the pure trigger law (T1 confidence below threshold AND T3 abstained — either alone never fires, the arXiv:2608.17711 lesson at the […
+  - 3c8a4780 plans/improvements 16.1 S3: the route seam, RED-FIRST — the vlm tier is a named TEXT value in the closed vocabulary (TIER_VLM beside TIER_DOCLING, NO migration, the schema lockstep stays 1.32.35): DocumentProvenance gains the Vlm varia […
+  - 42c7100c plans/improvements 16.1 verify-after: the README test badge 4,154 → 4,172 derived from the real run (+18: the six shim pins + the twelve route pins, the ignored real-engine golden excluded by the platform-normalized derivation) — the g […
+  - 4713b766 plans/improvements 18 records: THE REGISTER ROW — the writer-refusal law + the browser lane (the masquerade killed, the agreement law, the mutant-form red-proof set, the e2e base-drift catch recorded) — one row, the standing guards tab […
+  - 54b22298 plans/improvements 16 S3: the DepEd witness runner — examples/deped_witness.rs drives the REAL /ingest/document route (the real migrated schema, the real doors, the real local corrector endpoint) over the DepEd Order No. 003, s. 2026 p […
+  - 5d28f355 plans/improvements 18 S-F-partial: THE RUST 1.100.0 TOOLCHAIN RE-DERIVATION — the tree compiles clean on the new stable (rustc 1.100.0, 0ef1bc386), every gate lane re-run green: root clippy --all-targets --features bench -D warnings EX […
+  - 60a8941c plans/improvements 16.1 S4: the witness runner gains --tier (the --url precedent's shape) — the composed vlm witness drives the route's vlm lane from the SAME scripted live witness (the shim reads BRAIN_VLM_OCR_PATH/BRAIN_VLM_PYTHON fr […
+  - 60d7ca43 plans/improvements 19 S3: THE REMOVAL — client/ leaves the tree, and every live pointer to it goes with it — THE ORDER: the operator's COMPLETE removal (no panel ledger, no reachable-by-config — gone), executed as git rm -r --cached cl […
+  - 6cc37f6e plans/improvements 17 verify-after: the gate caught the round's drift by name — (1) every_declared_feature_has_a_ci_lane: the cascade-bench feature had NO CI lane (the injection-classifier/neural-embed rot the pin names); the bench lan […
+  - 739dbbca plans/improvements 19 S6: the test census re-derived — one drifted line number (session_log.rs:1161→1181, the 1.100 re-derivation's own moved test, drift the 5d28f355 commit's gate run never re-derived) plus this session's pin addition […
+  - 7d5960ee plans/improvements 18 §2: THE WRITER-REFUSAL LAW — the bridge-500's kernel-side half, the 111c7bb9 owed — the cascade writer drain now maps the writer turn's OWN refusal to the named vocabulary instead of stamping the empty prose mlx_n […
+  - 7fc6bb51 plans/improvements 15 verify-after: the architecture gates caught the round and were answered in-kind — the journey SQL moved to the service core, the portal fenced, the lipstyk warns answered
+  - 87cfe343 plans/improvements 17 verify-after 2: the pre-push lipstyk hook blocks on findings (hook mode: findings fail — my earlier manual run piped the exit through tail and read the wrong code) — the four findings fixed in the round's own file […
+  - 9003d029 docs: research 25's four DISCERN gaps rewritten as the triple-verified adoption record — the note still read 'not built' about mechanisms that shipped, and the user's own reading of the live page proved the point. EVERY claim triple-so […
+  - 92dbb944 plans/improvements 16 verify-after: the architecture gates caught the round and were answered IN-KIND, then the full battery green — (1) write_paths_are_immediate's frozen deferred ceiling caught the corrected-row write (6 vs 5): the b […
+  - 96e04af6 plans/improvements 18 §4-side: THE E2E BASE-DRIFT CATCH — the S-C base law's e2e half, the 046e908a class — decision.spec (/decisions → /app/decisions + the rendered href carries the base), import-inert.spec (/settings → /app/settings) […
+  - 97178012 plans/improvements 18 S-B: THE MARKDOWN + MERMAID RENDER PIPELINE — the chat's answers render as MARKDOWN DOCUMENTS, not pre-wrap text: svelte-exmarkdown 5 (unified/remark parsing → HAST → Svelte COMPONENTS — the {@html} ban (Plan 04 § […
+  - 9a565010 plans/improvements 18 S-C: THE /app SEAT — the blank-render root cause and the two fixes — (1) THE CSP INTERSECTION: the kernel's CLIENT_CSP header (the Dioxus-era posture: script-src 'self' + wasm/unsafe-eval, no inline hashes) INTERS […
+  - 9f5b4ddc plans/improvements 17 S2: T2 the reader, deterministic and model-absent — the reader section of src/agentloop/cascade.rs rides the EXISTING substrate (run_recall's results; the deeper lane is the caller's limit-32 recall under the BRAI […
+  - a12cad11 plans/improvements 17 S3: T3 the writer, red-first — the writer section of src/agentloop/cascade.rs rides the bridge's MLX tier (the CG-10 session-kind door: the turn carries the configured writer id, the child runs the native ChatSess […
+  - a1aab5ba docs: THREAT_MODEL's security link returns to the exact root name the symlinked resolution demands — the fifth class from the b92d9cc4 run, the same gate, MY OWN previous fix half-wrong. The mechanism the first repair missed: docs/THRE […
+  - a2b20c53 tests: the glm shim pins survive the runner's Text-file-busy class, and the engineering record names the poppler CI commit — TWO repairs from the 13b732ee run. (1) The harness no longer hands exec a dentry that just carried a write han […
+  - a762179a plans/improvements 16.1 S2: the vlm shim — scripts/glm-ocr-kernel.sh honors the docling tool protocol's FILE contract (doc.md + <!-- page-break --> markers, meta.json pages derived INDEPENDENTLY from the PDF's own count via pdfinfo — n […
+  - aef9f3e8 plans/improvements 16 verify-after: the pre-push lipstyk hook scanned the WHOLE round's diff (base = origin/main — the per-commit gates each scanned only their working diff) and found ONE hint: the needless type annotation at doc_corre […
+  - b2e8b980 tests: the scholar sa8 pin registers its vec0 module itself, and the test-count badge re-derives to 4228 — the third CI class from the a2b20c53 run, the badge drift gate. TWO repairs. (1) The badge was stale, not drifted: the wrap's 42 […
+  - b3941797 plans/improvements 18 §1: THE BROWSER LANE — R18-9/10/12 LANDED as Playwright pins in shell/e2e/chat-spine.spec.ts (the manual S5 observation converted into regression gates; the lane now FIVE tests, none ever skips). THE HARNESS (glob […
+  - b573fd0a docs: the mdBook renders every linked page — no 404 in the book
+  - b92d9cc4 docs: the two SECURITY.md links resolve by exact name — the fourth CI class from the b2e8b980 run, the docs-truth link check on the Linux runner. The tracked file is docs/security.md (lowercase); the wrap's roadmap link ([SECURITY.md]( […
+  - c39d5c8e plans/improvements 18 S-D: THE APP READS AS APPLE SILICON — System Information's Kind said 'iOS' for every StewardMem install (01/11, 04/11, today's builds alike), and the machine said why: SPApplicationsReporter's own strings carry th […
+  - cbae6d91 plans/improvements 19 S6: THE SECOND S-C DRIFT CATCH — the base law's missing type, the never-run round-18 verify-after's second finding — svelte-check red on vite.config.ts:33 (Type 'string' is not assignable to type '"" | `/${string} […
+  - cd84d15d plans/improvements 16 follow-up: the witness runner gains --url — the endpoint was hardcoded to ollama's 11434 (the model was already a parameter); the first MLX-mlx_lm.server run 503'd on a connection refused to nothing, the gap fixed […
+  - ce760af6 plans/improvements 16.1 S5: the docs — docs/VLM_OCR_TIER.md (the tier's law: the one sentence, the measurement gate AS THE ADOPTION TABLE — 5.66%/12.15% vs the 17.12% bar with the same-subsets composition-proof and the ollama lane reco […
+  - d03bacbb plans/improvements 19 S2: THE SHELL CENSUS GOES CENSUS-FORM — the Dioxus half of the route-parity file retires with the workspace — THE CONVERSION: the rows keep route + because + authz; the parity cells (verdict/dioxus/nearest), the P […
+  - da0c5e12 plans/improvements 16 S1: the doc-corrector provider posture — the GDL all-or-nothing profile (BRAIN_DOC_CORRECTOR_BASE_URL/_MODEL/_SECRET_FILE/_SECRET_ROOT; none = the lane OFF per CA-1, any strict subset the named fatal 'document cor […
+  - da78c2a7 plans/improvements 16 S2: the route extension, red-first — correct:true on /ingest/document lands TWO ARTIFACTS, one lineage: the verbatim row byte-untouched (CA-2: its markdown_sha256 read back unchanged after a corrected insert; the […
+  - db3e66b1 plans/improvements 15 C-e: the thin portal skeleton — the axum+askama binary, the per-client roster credential, the propose door, the minimal auth, the offline law
+  - dd1d526e plans/improvements 16 S0: the SQLite security act — RUSTSEC-2026-0459 closed by the pinned-target lockstep bump: rusqlite 0.40.2 → 0.41.1 + r2d2_sqlite 0.35.0 → 0.36.0 + libsqlite3-sys 0.38.2 → 0.39.1 (bundled SQLite 3.53.2 → 3.54.1 PR […
+  - e17c038e plans/improvements 15 C-a: the journey projection — the pure fn over the chain + its red-first pins (the projection law's kernel half)
+  - e1bda08b plans/improvements 17 S0: the measurement gate — the cascade_bench harness (feature cascade-bench, the battery's shape: loopback-only shared HTTP client + the kernel's own wrap_fenced + the documented brain-afm JSONL protocol + the Ope […
+  - e7005920 docs: research 25 corrected against the tree — the adoption record now reads true after round 20. The note's earlier sections still spoke present-tense 'not built' about mechanisms that LANDED the same day: the audit verdict said 'the […
+  - f4c33c6b tests: the doc-corrector fixture root is per-call — the compliance-pack lane's 'write secret: NotFound' red (run 43627356511, job 132546218533) was a parallel-test race, not a regression. fixture_client keyed its temp root on the proce […
+  - f7705fb5 plans/improvements 19 S1: THE KERNEL HALF OF THE DECOMMISSION — the seat's CSP end-state and the installer's dist law — (1) THE CSP END-STATE: CLIENT_CSP and is_client_path are REMOVED; the strict API_CSP now rides EVERY response excep […
+  - f90f9b78 plans/improvements 15 C-d: the appeal — the CustomerProvenance schema act 1.32.35 FIRST, the digest-bound appeal-proposal, the queue integration, the review clock
 
 - Lanes at the wrap: kernel lib (bench,migrate) with the badge set green,
   vitest 431 passed / 2 skipped, svelte-check 0 errors / 0 warnings,
