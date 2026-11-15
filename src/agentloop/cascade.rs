@@ -98,11 +98,19 @@ pub(crate) fn oracle_route(relevant_is_empty: bool, top1_verifies_all_gold: bool
 /// with a route string and a confidence number. The description names the
 /// roster AND forbids the echo classes S0 recorded (memory titles, hit
 /// text) — the description is guidance; the VALUE is kernel-validated.
-pub(crate) const ROUTE_SCHEMA: &str = r#"{"type":"object","properties":{"route":{"type":"string","description":"The route value: exactly one of the four literal strings answer_from_memory, read_more, synthesize, escalate_frontier — never a memory title, a hit text, or any other word"},"confidence":{"type":"number","description":"0.0 to 1.0"}},"required":["route","confidence"]}"#;
+/// S4 (round 21, the F4 tabulation): the confidence description now names
+/// the CALIBRATION — the bench measured the model's reported values
+/// miscalibrated (30% of grounded answer_from_memory routes flat-low at
+/// 0.0-0.49, 75% of them strict-correct; a 0.95 wall on 41 rows regardless
+/// of correctness), so the schema teaches the anchored scale. Falsifier
+/// F4's hard line holds: the PROMPT is the fix, never a numeric transform
+/// of the reported value.
+pub(crate) const ROUTE_SCHEMA: &str = r#"{"type":"object","properties":{"route":{"type":"string","description":"The route value: exactly one of the four literal strings answer_from_memory, read_more, synthesize, escalate_frontier — never a memory title, a hit text, or any other word"},"confidence":{"type":"number","description":"0.0 to 1.0, CALIBRATED to the recall summary, never a constant: report 0.9+ only when a top hit's snippet literally contains the answer; report 0.5-0.8 when the evidence clearly supports the route but the answer needs composing; report 0.0-0.4 when the hits merely share topic words with the query"}},"required":["route","confidence"]}"#;
 
 /// The router contract — the AFM tier's instructions for a classification
 /// turn. Short, roster-explicit, and echo-hostile by the same recorded
-/// classes.
+/// classes. S4 (round 21): the calibration instruction rides beside the
+/// roster — the confidence is a MEASUREMENT of the evidence, not a mood.
 pub(crate) const ROUTER_CONTRACT: &str = "You are a routing classifier for a memory \
 assistant. You see a query and a summary of what deterministic recall found. \
 Classify the query into EXACTLY one route value. Allowed route values are \
@@ -112,7 +120,11 @@ directly from it, no big model). read_more: the summary suggests the memory \
 has more that should be retrieved before answering. synthesize: the answer \
 must be composed from the retrieved evidence by a writer model. \
 escalate_frontier: the query needs more intelligence than a local writer. \
-No other value is legal.";
+No other value is legal. Report confidence CALIBRATED to the summary: 0.9+ \
+only when a top hit's snippet contains the answer itself; 0.5-0.8 when the \
+route is clearly right but the answer needs composing; 0.0-0.4 when the \
+hits only share topic words. Vary it with the evidence — a constant value \
+is a wrong answer.";
 
 /// One top hit as the summary sees it: its score and its content (already
 /// sanitized by the recall path — the coordinator never re-reads raw rows).
@@ -635,6 +647,38 @@ pub(crate) const ESCALATE_CONFIDENCE_THRESHOLD: f64 = 0.5;
 
 pub(crate) fn escalation_due(t1_confidence: f64, threshold: f64, t3_abstained: bool) -> bool {
     t1_confidence < threshold && t3_abstained
+}
+
+/// S4 — THE ROUTE GUARD's floor (round 21, the misroute witness: a
+/// synthesis-shaped query routed `answer_from_memory` at confidence 0.02
+/// and the top hit was served VERBATIM). A route confidence below this
+/// floor may not serve evidence verbatim — the executor falls to the
+/// writer. The same constant family as [`ESCALATE_CONFIDENCE_THRESHOLD`];
+/// the escalation law itself is UNTOUCHED (`escalation_due` reads the same
+/// confidence as before — only the executor's route choice gains the
+/// guard).
+pub(crate) const ROUTE_ANSWER_FLOOR: f64 = 0.5;
+
+/// S4 — THE ROUTE GUARD's synthesis predicate (round 21, the misroute
+/// witness): a query joining DISTINCT asks — "and what", "compare", "vs",
+/// "with it", "difference between", or more than one question — must not
+/// serve a single document verbatim, however confidently the router named
+/// the answer route. Lexical and deterministic: no model surface (falsifier
+/// F5). The predicate errs toward the WRITER — a false positive costs
+/// writer tokens, never a junk serve.
+pub(crate) fn synthesis_shaped(query: &str) -> bool {
+    let q = query.to_lowercase();
+    const MARKERS: [&str; 8] = [
+        " and what ",
+        " and how ",
+        " and why ",
+        "compare",
+        " vs ",
+        " versus ",
+        " with it ",
+        "difference between",
+    ];
+    MARKERS.iter().any(|m| q.contains(m)) || q.matches('?').count() > 1
 }
 
 /// The per-task grant: constructed by the caller WITH a reason that rides
@@ -1815,4 +1859,28 @@ pub(crate) mod witness {
             "the cascade audit row must be in the chain"
         );
     }
+}
+
+// ── round 21 · the route guard ──────────────────────────────────────────────
+
+#[test]
+fn s4_synthesis_shaped_catches_the_witnessed_misroute_shape() {
+    // THE WITNESS (2026-11-15): "full benefits of green tea AND what should
+    // I take with it" routed answer_from_memory at 0.02 and the top hit was
+    // served verbatim.
+    assert!(synthesis_shaped(
+        "What are the full benefits of green tea and what should I take with it?"
+    ));
+    assert!(synthesis_shaped("Compare the two dosage protocols."));
+    assert!(synthesis_shaped("Vitamin D3 vs K2 — which first?"));
+    assert!(synthesis_shaped(
+        "What is the difference between EGCG and catechins?"
+    ));
+    assert!(synthesis_shaped("Who founded it? And when?"));
+    // The single-fact questions the verbatim arm exists for stay allowed.
+    assert!(!synthesis_shaped("Who is the CEO of Meridian Robotics?"));
+    assert!(!synthesis_shaped(
+        "Where is Zephyron Cloud Solutions headquartered?"
+    ));
+    assert!(!synthesis_shaped("What is EGCG?"));
 }

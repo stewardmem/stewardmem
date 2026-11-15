@@ -974,104 +974,121 @@ pub async fn chat_turn(
         let cascade_block = crate::agentloop::cascade::fenced_evidence_block(&cascade_evidence, 6);
 
         // ── route execution ──
+        // S4 — THE ROUTE GUARD (round 21, the misroute witness): the
+        // verbatim evidence-as-answer arm only fires when the route IS
+        // answer_from_memory AND the query is not synthesis-shaped AND the
+        // route confidence stands at or above ROUTE_ANSWER_FLOOR. A refused
+        // verbatim path falls to the WRITER arm (the existing synthesize
+        // execution — no new machinery, the two bodies share the same
+        // tuple). The escalation law is untouched: escalation_due reads the
+        // same confidence as before; only the executor's route choice gains
+        // the guard.
+        let verbatim_allowed = route_call.decision
+            == crate::agentloop::cascade::RouteDecision::AnswerFromMemory
+            && !crate::agentloop::cascade::synthesis_shaped(&message)
+            && route_call.confidence >= crate::agentloop::cascade::ROUTE_ANSWER_FLOOR;
+        if route_call.decision == crate::agentloop::cascade::RouteDecision::AnswerFromMemory
+            && !verbatim_allowed
+        {
+            tracing::info!(
+                "chat cascade: route guard refused the verbatim path (synthesis_shaped {}, confidence {:.2} vs floor {:.2}) — falls to the writer",
+                crate::agentloop::cascade::synthesis_shaped(&message),
+                route_call.confidence,
+                crate::agentloop::cascade::ROUTE_ANSWER_FLOOR
+            );
+        }
         let (answer, cascade_tier, cascade_tokens, judged): (
             String,
             String,
             (i64, i64),
             crate::agentloop::cascade::JudgedAnswer,
-        ) = match route_call.decision {
-            crate::agentloop::cascade::RouteDecision::AnswerFromMemory => {
-                // The evidence-as-answer: the top hit's content IS the
-                // answer — zero generative tokens (the S0 frontier's
-                // workhorse, 100% strict when routed right).
-                let answer = cascade_evidence[0].content.clone();
-                let judged = crate::agentloop::cascade::judge_answer(&answer, &cascade_evidence);
-                (
-                    answer,
-                    "deterministic".to_owned(),
-                    (route_call.input_tokens, route_call.output_tokens),
-                    judged,
-                )
-            }
-            _ => {
-                // synthesize / read_more / escalate_frontier(fallback): the
-                // writer turn on the MLX tier. The writer's session rides
-                // the chat session's id under the cascade namespace — one
-                // session = one tier (TC-6): the AFM coordinator and the MLX
-                // writer never share a ledger. A refused writer turn is
-                // loud and falls through to the existing flow.
-                let writer_session = format!("cascade-chat-{session}");
-                let writer_model = crate::config::cascade_writer_model();
-                let turn = bridge
-                    .turn(BridgeTurn {
-                        session: writer_session,
-                        prompt: format!("{cascade_block}\n\n{message}"),
-                        instructions: Some(crate::agentloop::cascade::WRITER_CONTRACT.to_owned()),
-                        // THE WRITER'S BUDGET (round 21): the ceiling, not the
-                        // chat request's own default — the truncation witness
-                        // rode the 512 default into a mid-sentence death.
-                        max_response_tokens: Some(WRITER_RESPONSE_TOKENS),
-                        history: None,
-                        model: writer_model,
-                        schema: None,
-                    })
-                    .await;
-                match turn {
-                    Ok((_id, rx)) => {
-                        // THE WRITER'S REFUSAL NAMES ITSELF (plan 18 §2): the
-                        // drain maps a `Failed` terminal (the child's own code
-                        // — `generation_failed`, `model_locked`, the reader's
-                        // `bridge_exited`) and a bare channel close to the
-                        // named refusal. The OLD shape swallowed both and
-                        // stamped the EMPTY prose `mlx_native` — an answer
-                        // that was never written, with an abstention's copy
-                        // for a refusal that never named itself (the
-                        // chat_writer_refusal pins' masquerade, born red
-                        // against exactly this arm).
-                        match crate::agentloop::cascade::drain_writer_turn(rx).await {
-                            crate::agentloop::cascade::WriterDrain::Answer {
+        ) = if verbatim_allowed {
+            // The evidence-as-answer: the top hit's content IS the
+            // answer — zero generative tokens (the S0 frontier's
+            // workhorse, 100% strict when routed right).
+            let answer = cascade_evidence[0].content.clone();
+            let judged = crate::agentloop::cascade::judge_answer(&answer, &cascade_evidence);
+            (
+                answer,
+                "deterministic".to_owned(),
+                (route_call.input_tokens, route_call.output_tokens),
+                judged,
+            )
+        } else {
+            // The writer arm — synthesize / read_more / escalate_frontier
+            // (fallback) AND every route-guard refusal: the writer turn
+            // on the MLX tier. The writer's session rides the chat
+            // session's id under the cascade namespace — one session =
+            // one tier (TC-6): the AFM coordinator and the MLX writer
+            // never share a ledger. A refused writer turn is loud and
+            // falls through to the existing flow.
+            let writer_session = format!("cascade-chat-{session}");
+            let writer_model = crate::config::cascade_writer_model();
+            let turn = bridge
+                .turn(BridgeTurn {
+                    session: writer_session,
+                    prompt: format!("{cascade_block}\n\n{message}"),
+                    instructions: Some(crate::agentloop::cascade::WRITER_CONTRACT.to_owned()),
+                    // THE WRITER'S BUDGET (round 21): the ceiling, not the
+                    // chat request's own default — the truncation witness
+                    // rode the 512 default into a mid-sentence death.
+                    max_response_tokens: Some(WRITER_RESPONSE_TOKENS),
+                    history: None,
+                    model: writer_model,
+                    schema: None,
+                })
+                .await;
+            match turn {
+                Ok((_id, rx)) => {
+                    // THE WRITER'S REFUSAL NAMES ITSELF (plan 18 §2): the
+                    // drain maps a `Failed` terminal (the child's own code
+                    // — `generation_failed`, `model_locked`, the reader's
+                    // `bridge_exited`) and a bare channel close to the
+                    // named refusal. The OLD shape swallowed both and
+                    // stamped the EMPTY prose `mlx_native` — an answer
+                    // that was never written, with an abstention's copy
+                    // for a refusal that never named itself (the
+                    // chat_writer_refusal pins' masquerade, born red
+                    // against exactly this arm).
+                    match crate::agentloop::cascade::drain_writer_turn(rx).await {
+                        crate::agentloop::cascade::WriterDrain::Answer {
+                            prose,
+                            input_tokens,
+                            output_tokens,
+                        } => {
+                            let judged =
+                                crate::agentloop::cascade::judge_answer(&prose, &cascade_evidence);
+                            (
                                 prose,
-                                input_tokens,
-                                output_tokens,
-                            } => {
-                                let judged = crate::agentloop::cascade::judge_answer(
-                                    &prose,
-                                    &cascade_evidence,
-                                );
-                                (
-                                    prose,
-                                    "mlx_native".to_owned(),
-                                    (input_tokens, output_tokens),
-                                    judged,
-                                )
-                            }
-                            crate::agentloop::cascade::WriterDrain::Refused { code, message } => {
-                                // the child's code/message are request-derived
-                                // bytes — they ride the LogValue seam (the
-                                // sanitised Display) so a crafted control
-                                // character cannot forge log entries
-                                tracing::error!(
-                                    "chat cascade: writer turn broke ({}{}), falling through",
-                                    crate::server::router::memory::LogValue::new(&code),
-                                    message
-                                        .map(|m| {
-                                            format!(
-                                                " — {}",
-                                                crate::server::router::memory::LogValue::new(&m)
-                                            )
-                                        })
-                                        .unwrap_or_default()
-                                );
-                                break 'cascade None;
-                            }
+                                "mlx_native".to_owned(),
+                                (input_tokens, output_tokens),
+                                judged,
+                            )
+                        }
+                        crate::agentloop::cascade::WriterDrain::Refused { code, message } => {
+                            // the child's code/message are request-derived
+                            // bytes — they ride the LogValue seam (the
+                            // sanitised Display) so a crafted control
+                            // character cannot forge log entries
+                            tracing::error!(
+                                "chat cascade: writer turn broke ({}{}), falling through",
+                                crate::server::router::memory::LogValue::new(&code),
+                                message
+                                    .map(|m| {
+                                        format!(
+                                            " — {}",
+                                            crate::server::router::memory::LogValue::new(&m)
+                                        )
+                                    })
+                                    .unwrap_or_default()
+                            );
+                            break 'cascade None;
                         }
                     }
-                    Err(e) => {
-                        tracing::error!(
-                            "chat cascade: writer turn refused, falling through: {e:?}"
-                        );
-                        break 'cascade None;
-                    }
+                }
+                Err(e) => {
+                    tracing::error!("chat cascade: writer turn refused, falling through: {e:?}");
+                    break 'cascade None;
                 }
             }
         };
