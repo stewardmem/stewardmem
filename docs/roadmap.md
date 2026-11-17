@@ -11,9 +11,10 @@ private plans archive on 2026-10-04 — this page is the in-repo roadmap.)
 
 ## Current status
 
-**v1.29.x — the current server line (1.29.46 — the cite-truth verdict
-release: a citation that names an in-range hit is now TOLD whether the
-hit's text actually contains the claim — `supported` means verified-
+**v1.29.x — the current server line (1.29.45 recut — the served-chat
+repair JOINED by the cite-truth verdict and the writer-posture round:
+a citation that names an in-range hit is now TOLD whether the hit's
+text actually contains the claim — `supported` means verified-
 quoted, `partial` is the honest label for cited-but-paraphrased, the
 matcher is pure text arithmetic with no model in the gate, one shared
 normalizer and one shared span law serve both the verdict and the
@@ -22,13 +23,12 @@ arm, the decision vocabulary and the stored verdict are untouched, and
 the live receipt caught a real misattributed citation the old law
 passed as supported; beside it the writer-posture round lands as the
 measured default — the locally-cached writer tier with its hidden
-reasoning disabled so answer tokens own the budget, the grounding
+reasoning disabled so answer tokens own the budget, CLOSING the known
+debt the first cut named as its next round's work — the grounding
 budget doubled with a deeper recall pool, rerank-aware packing
 relevance, follow-up grounding only for elliptical follow-ups, and both
-empty-answer shapes refused honestly — and the release standing state
-is repaired: the test-count badge carries the measured healthy
-derivation again after CI's drift gate had refused the truncated paste
-since the previous wrap; beneath it, 1.29.45's served-chat repair: the
+empty-answer shapes refused honestly; the served-chat repair itself:
+the
 chat writer's MLX resource bundle ships scripted in the Tools
 installer, both app lanes, and the dev installer with a packaging pin
 refusing a bundle-less writer; the evidence-as-answer arm refuses a single
@@ -38,10 +38,10 @@ after the bench measured it flat-wrong; the writer budget at its own
 ceiling; the chat turn route carries its own five-minute HTTP window; the
 citation surface names its sources compactly with the unsupported claim
 never collapsed; the grounding pool drops the media-attachment stub shape
-at read time — and the known debt stated plainly: on the stock on-device
-writer tier the reasoning can consume the whole budget, the kernel answers
-that with the honest no-answer line, and the posture decision is the next
-round's measured work; beneath it, 1.29.44's standing-state repair:
+at read time — and the release standing state repaired: the test-count
+badge carries the measured healthy derivation again after the first
+cut's truncated paste kept CI's drift gate red; beneath it, 1.29.44's
+standing-state repair:
 every CI red since 2026-11-09 closed at its mechanism, the
 RUSTSEC-2026-0459/0502 close through the vendored `[patch]` override, both
 remaining CodeQL alerts fixed at the transport sink, an OCR capability probe

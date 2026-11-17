@@ -1,6 +1,9 @@
 # Agent Execution Log — StewardMem
 
-> **RELEASE v1.29.46 (2026-11-17): the cite-truth verdict release — a
+> **RELEASE v1.29.45 REcut (2026-11-17, the tag first cut 2026-11-15 never
+> published — its matrix refused the truncated test-count badge and the
+> shell lane's toolchain pin, both repaired in-tree since): the recut
+> joins the served-chat repair with the CITE-TRUTH VERDICT — a
 > citation that names an in-range hit is now TOLD whether the hit's text
 > actually contains the claim: `supported` means verified-quoted, `partial`
 > is the honest label for cited-but-paraphrased, the matcher is pure text
@@ -16,11 +19,12 @@
 > UNCOMMITTED on the tree, never run by its author — its tier-selection
 > pin self-deadlocked; verified, four repairs, landed with the operator's
 > named yes: the locally-cached writer tier with hidden reasoning disabled
-> so answer tokens own the budget, the grounding budget doubled with a
+> so answer tokens own the budget — closing the known debt the first cut
+> named as its next round's work — the grounding budget doubled with a
 > deeper recall pool, rerank-aware packing relevance, follow-up grounding
 > only for elliptical follow-ups, both empty-answer shapes refused
 > honestly), and the release standing state is repaired — the test-count
-> badge had carried a TRUNCATED derivation since the 1.29.45 wrap (CI's
+> badge had carried a TRUNCATED derivation since the first cut (CI's
 > drift gate red since), and the number is now the measured healthy
 > derivation (4243, local and CI reconciling exactly). The round's guards
 > earned their keep: the duplicate-helper guard caught the matcher move
@@ -31,8 +35,9 @@
 > (off by two — the corrected number reconciles the cross-platform
 > parity claim). The dry-run: 34 lanes green, the remaining reds the
 > recorded docling RAM-contention flake (green standalone every time) and
-> the badge drift the correction closed. This note sits above the v1.29.45
-> note — the release wrap per docs/release-checklist.md step 6.**
+> the badge drift the correction closed. This note REPLACES the first
+> cut's entry below it in the record — the release wrap per
+> docs/release-checklist.md step 6.**
 
 > **RELEASE v1.29.45 (2026-11-15): the served-chat repair release — the
 > first live-traffic cascade session's four witnessed failure classes
