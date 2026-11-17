@@ -135,6 +135,53 @@ the label dropped, the invariant sentence kept ("delegation must be a
 no-op").
 
 ## 5 · The S6 live wire receipt (the G-1 two-arm pattern; the operator's
-8765 untouched — scratch port, scratch DB)
+8765 untouched — scratch port 8799, scratch DB, the tree's own debug kernel)
 
-*(captured in the S6 commit immediately following this file's landing)*
+Setup: `target/debug/brain-server` (1.29.45 + this round) under
+`BRAIN_DB_PATH/BRAIN_DATA_ROOT/AUTH_TOKEN_FILE` in `~/round-scripts/22a-s6/`,
+`BRAIN_AFM_BRIDGE` = the built Swift bridge, `BIND_PORT=8799`. Two memories
+ingested (chunk 1: the green-tea/matcha note; chunk 2: an Eiffel Tower
+sentence as the decoy). The verbatim frames live in
+`~/round-scripts/22a-s6/{arm1,arm2}-raw.sse`.
+
+### ARM 2 — the verbatim-quoted turn (cascade armed, the evidence-as-answer
+route): `supported` with `quoted ≥ 1`
+
+Question: *"What does the note say happens to green tea leaves soon after
+picking?"* → the route served the memory itself (`tier: "deterministic"`),
+the judge derived both sentences' claims, and the support event on the wire:
+
+```
+data: {"cited":2,"decision":"supported","paraphrase":0,"quoted":2,"uncited":0,"unknown_refs":0}
+```
+
+### ARM 1 — the paraphrased-citation turn (cascade OFF, the AFM tier's own
+words): `partial` with `quoted: 0` — AND THE ROUND'S LAW CAUGHT A REAL
+MISATTRIBUTION LIVE
+
+Question: *"In your own words, why do producers steam green tea leaves
+after they are picked?"* → the AFM tier answered in its own words
+(`"To preserve their green color and their catechins including EGCG."`,
+`tier: "on_device"`), and its ONE claim — whose text is the green-tea
+sentence VERBATIM — cited **[1]: the Eiffel Tower chunk** (the grounding
+sent [0]=green-tea, [1]=Eiffel). The support event on the wire:
+
+```
+data: {"cited":1,"decision":"partial","paraphrase":1,"quoted":0,"uncited":0,"unknown_refs":0}
+```
+
+The verdict's reading: the cite is IN RANGE (`cited: 1`) but the cited
+hit's text does not carry the claim (`quoted: 0`) — so the label is
+`partial`, disclosed as `paraphrase`. **Under the pre-round law this turn
+was `supported`** — an in-range cite was the whole test, and a model
+citing the WRONG hit passed. The receipt is stronger than the planned
+shape: not a constructed paraphrase but a live misattribution the
+cite-truth verdict caught on the first question asked of the real
+FoundationModels tier. The F1 falsifier did not fire: the normalizer
+needed no fixes, and quote-rate is measurable on this machinery (E1's
+instrument, owed).
+
+Cleanup: the scratch kernel and its bridge child killed, port 8799 freed,
+the scratch data rooted in `~/round-scripts/22a-s6/` (not /tmp — the
+machine's cleaner), and the operator's 8765 kernel answered healthy
+before and after (untouched, read-only probes only).
