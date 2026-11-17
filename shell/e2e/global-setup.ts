@@ -389,10 +389,20 @@ export default async function (): Promise<() => Promise<void>> {
 		delete childEnv['AUTH_TOKEN_FILE'];
 		delete childEnv['BRAIN_TOKEN'];
 		delete childEnv['BRAIN_TOKEN_FILE'];
+		// THE TIER POSTURE (the writer-posture round's law, applied here): an
+		// unset BRAIN_CHAT_MODEL now selects the default MLX writer tier, but
+		// this harness's chat contract was built around the AFM tier — the
+		// explicit EMPTY value omits the model field from the bridge wire
+		// (Foundation Models, `on_device`), the same documented AFM escape the
+		// vitest pins ride via `set_chat_model(Some(""))`. The harness env is
+		// pinned so a machine's ambient default can never change what the
+		// specs assert (the tier is part of the contract under test).
+		delete childEnv['BRAIN_CHAT_MODEL'];
 		kernel = spawn(join(kernelRoot, 'target/debug/brain-server'), [], {
 			cwd: kernelRoot,
 			env: {
 				...childEnv,
+				BRAIN_CHAT_MODEL: '',
 				BIND_HOST: '127.0.0.1',
 				BIND_PORT: String(KERNEL_PORT),
 				BRAIN_DB_PATH: join(dataDir, 'brain.db'),
@@ -434,6 +444,11 @@ export default async function (): Promise<() => Promise<void>> {
 			cwd: kernelRoot,
 			env: {
 				...childEnv,
+				// The same AFM-tier pin as the main kernel: this harness's chat
+				// contract is the on_device posture on every kernel it boots (the
+				// cascade lane's own writer tier is BRAIN_CASCADE_WRITER_MODEL,
+				// untouched by this pin).
+				BRAIN_CHAT_MODEL: '',
 				BIND_HOST: '127.0.0.1',
 				BIND_PORT: String(CASCADE_PORT),
 				BRAIN_DB_PATH: join(cascadeDataDir, 'brain.db'),

@@ -111,23 +111,27 @@ plus exactly the 8 new Rust tests this tree adds over it (the writer-posture
 round's 2: the packing cross-encoder pin and the tier-selection defaults
 pin; 22A's 6: the five S0 battery pins + the no-op theorem pin).
 
-**THE LOCAL DERIVATION IS FLAKY AND PLATFORM-SKEWED — two findings for the
-price of one badge.** (1) `scripts/badges.sh`'s count command runs `cargo
+**THE LOCAL DERIVATION IS FLAKY — and the badge lane caught this round's
+own miscount.** (1) `scripts/badges.sh`'s count command runs `cargo
 test` WITHOUT `--no-fail-fast`, so a single mid-suite flake (the docling
-goldens' recorded RAM-contention class, 3/3 failures under full-suite load
-on this machine, green solo) truncates the sum at the failure point — the
-same class as the b2e8b980 repair, and this round measured it three times
-(3310 = everything before docling_pins). The script's pipeline also masks
+goldens' recorded RAM-contention class — 4 failures this session under
+full-suite load, green solo every time) truncates the sum at the failure
+point: the same class as the b2e8b980 repair, measured three times at 3310
+(everything before docling_pins). The script's pipeline also masks
 cargo's non-zero exit (the awk tail owns the status), so a truncated count
-prints as though it were healthy. (2) A healthy local derivation (green
-diagnostic run with `--skip docling`, 4240, + the 12 docling-named tests the
-substring skip removed: 9 lib + 3 docling_pins) gives **4252 local vs 4241
-CI-expected** — an 11-test platform skew (no `cfg(target_os)` in tests/; the
-source is unmeasured this round), meaning the b2e8b980 cross-platform
-parity claim no longer holds and a local paste can produce a badge CI
-refuses. Both findings are recorded in the register row; the fixes (a
-`--no-fail-fast` + exit-status law in badges.sh, and the skew's source)
-are their own round.
+prints as though it were healthy — the badges.sh `--no-fail-fast` +
+exit-status law is named as its own round. (2) The first badge paste
+(4241) was THIS ROUND's arithmetic error, caught by the dryrun's
+badge-verify-count lane: a healthy derivation gives **4243** — CI's 4233
+at the pre-round HEAD plus exactly TEN new Rust tests (the writer-posture
+round's 4: the packing cross-encoder pin, the tier-selection defaults pin,
+and two in-file build_grounding_query pins the first count missed; 22A's
+6: the five S0 battery pins + the no-op theorem pin). **Local and CI
+derivations AGREE — the b2e8b980 cross-platform parity claim HOLDS**; the
+earlier "11-test platform skew" reading was the miscount (the diagnostic
+run's `--skip docling` analysis double-counted the lib's landlock skips as
+docling skips). The badge now carries 4243, the measured healthy
+derivation.
 
 **THE COMMENTS GATE caught the round's own prose** — `chat_support.rs:150
 "…(the F2 law)"` red under `comments_never_reference_versions_plans_audit_ids`;
@@ -185,3 +189,26 @@ Cleanup: the scratch kernel and its bridge child killed, port 8799 freed,
 the scratch data rooted in `~/round-scripts/22a-s6/` (not /tmp — the
 machine's cleaner), and the operator's 8765 kernel answered healthy
 before and after (untouched, read-only probes only).
+
+## 6 · The round's one-sentence law, for the CHANGELOG (held for the
+1.29.46 wrap — plan 22's Phase F composes the entry)
+
+> A citation that names an in-range hit is now TOLD whether the hit's text
+> actually contains the claim — `supported` is earned by the quote,
+> `partial` is the honest label for cited-but-paraphrased, and the kernel's
+> verdict stays pure text arithmetic with no model in the gate.
+
+## 7 · S7 — the full gate run
+
+fmt ✓ · clippy ×10 lanes (default, bench, bench,migrate, otel, six feature
+lanes) ✓ · mas CHECK ✓ (the recorded gate; --all-targets-under-mas is a
+named pre-existing red, out of surface) · deny ✓ (chrono RUSTSEC-2026-0543
+triaged as a dated waiver — a brand-new unmaintained advisory against a
+direct dep) · audit ✓ · lipstyk ✓ (base c06cddaf, after the posture round's
+packing match was simplified per the tool's own suggestion) · targeted
+suites ✓ (chat_support+cascade 34, pen_test 8/8, chat handler unit 27,
+packing 13) · shell ✓ (vitest 432/2 skipped, svelte-check 0/0, eslint
+clean) · the 37-lane ci-dryrun running as the closing witness
+(~/round-scripts/logs/dryrun-summary.txt — fmt, clippy-default,
+test-default all PASS at the time of this writing; the balance recorded
+in the wrap commit).
