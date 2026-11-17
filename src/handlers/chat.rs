@@ -840,6 +840,8 @@ pub async fn chat_turn(
                         "cited": support.cited,
                         "uncited": support.uncited,
                         "unknown_refs": support.unknown_refs,
+                        "quoted": support.quoted,
+                        "paraphrase": support.paraphrase,
                         "decision": support.decision.as_str(),
                     }))
                     .unwrap_or_default(),
@@ -1281,15 +1283,14 @@ pub async fn chat_turn(
                         "cited": support.cited,
                         "uncited": support.uncited,
                         "unknown_refs": support.unknown_refs,
+                        "quoted": support.quoted,
+                        "paraphrase": support.paraphrase,
                         "decision": support.decision.as_str(),
                     }))
                     .unwrap_or_default(),
             )
             .await;
             if grounding_ok && final_ok {
-                // The cascade turn persists through the SAME service tx as
-                // any final — the transcript is the session loop's input,
-                // whatever tier served it.
                 let persisted = tokio::task::spawn_blocking(move || -> Result<i64, String> {
                     let mut conn = cascade_pool.get().map_err(|e| e.to_string())?;
                     crate::service::chat_sessions::persist_turn_pair(
@@ -1405,6 +1406,8 @@ pub async fn chat_turn(
                         "cited": support.cited,
                         "uncited": support.uncited,
                         "unknown_refs": support.unknown_refs,
+                        "quoted": support.quoted,
+                        "paraphrase": support.paraphrase,
                         "decision": support.decision.as_str(),
                     }))
                     .unwrap_or_default(),
@@ -1631,6 +1634,8 @@ pub async fn chat_turn(
                                 "cited": support.cited,
                                 "uncited": support.uncited,
                                 "unknown_refs": support.unknown_refs,
+                                "quoted": support.quoted,
+                                "paraphrase": support.paraphrase,
                                 "decision": support.decision.as_str(),
                             }))
                             .unwrap_or_default(),

@@ -160,6 +160,10 @@ const ALLOWED_DUPES: &[(&str, &str)] = &[
         "[bin] cascade_bench's S0 metric device is DELIBERATELY self-contained: the recorded run's semantics (the ONE declared normalizer + the span law) live in the harness file the evidence cites, so the gate's metrics cannot drift with the production code they measure — the kernel's own copy (agentloop/cascade.rs, the T3 citation law) is the shipped behavior; [reasoned, IMPROVE17]",
     ),
     (
+        "spans_verified",
+        "[bin] cascade_bench's span predicate — the same DELIBERATE self-containment as SPAN_NGRAM above (the recorded run's semantics live in the harness, IMPROVE17). The production copy moved agentloop/cascade.rs → service/chat_support.rs (22A: one matcher, two callers — the support verdict and the judge share the law); the pair only became VISIBLE to this guard when the moved copy went `pub fn` (the old `pub(crate)` form sat past the visibility strip's `pub `-with-space prefix — a named parser blindness, recorded in the 22A register row, not widened here); [reasoned, IMPROVE17+22A]",
+    ),
+    (
         "verify",
         "[bin] cascade_bench's per-query verification is the benchmark arm of the span law (self-contained for the same recorded-semantics reason as SPAN_NGRAM); backup.rs's is the restore verifier — same name, different law, different homes; [reasoned, IMPROVE17]",
     ),
