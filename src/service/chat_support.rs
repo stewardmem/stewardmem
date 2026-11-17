@@ -246,4 +246,112 @@ mod tests {
             "the vocabulary is lowercase snake_case"
         );
     }
+
+    /// S0e (22A) — ONE MATCHER, TWO CALLERS (the `cors_layer_from_config`
+    /// precedent). cascade's `judge_answer` must DELEGATE its span law to
+    /// this module — the ONE normalizer and the ONE span predicate — and
+    /// must host no second matcher of its own. Two span laws drift, and
+    /// the drift is silent: the verdict would say `quoted` while the judge
+    /// said `cited` over differently-normalized text. Red on the pre-round
+    /// tree (cascade.rs carried its own `normalize` + `spans_verified`);
+    /// a planted second matcher in cascade re-reds it.
+    #[test]
+    fn cascade_and_support_share_one_matcher() {
+        let cascade_src = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/agentloop/cascade.rs");
+        let src = std::fs::read_to_string(&cascade_src)
+            .expect("cascade.rs must be readable from the crate root");
+        assert!(
+            src.contains("chat_support::normalize_claim_span")
+                && src.contains("chat_support::spans_verified"),
+            "cascade.rs must delegate the matcher to service::chat_support \
+             (the ONE normalizer and the ONE span law) — found no delegation"
+        );
+        assert!(
+            !src.contains("fn normalize(") && !src.contains("fn spans_verified("),
+            "cascade.rs hosts a SECOND matcher — the span law lives in \
+             service::chat_support and cascade delegates (one matcher, \
+             two callers)"
+        );
+    }
+
+    /// S0a (22A) — THE ROUND'S LAW: a citation that names an in-range hit
+    /// is TOLD whether the hit's text actually contains the claim. One
+    /// claim, cited in-range, whose words the evidence does NOT carry →
+    /// Partial, never Supported: `supported` is earned by the quote.
+    #[test]
+    fn paraphrase_only_answer_is_partial_not_supported() {
+        let support = support_verdict(
+            false,
+            &[claim("Green tea is processed by steaming.", &[0])],
+            &["green tea leaves are steamed"],
+            false,
+        );
+        assert_eq!(support.decision, SupportDecision::Partial);
+        assert_eq!(support.cited, 1, "the claim names an in-range hit");
+        assert_eq!(
+            support.quoted, 0,
+            "the evidence does not carry the claim's words"
+        );
+        assert_eq!(support.paraphrase, 1, "cited, not verbatim — disclosed");
+        assert_eq!(support.uncited, 0);
+        assert_eq!(support.unknown_refs, 0);
+    }
+
+    /// S0b (22A) — one verbatim quote UPLIFTS the answer: a mix of quoted
+    /// and paraphrased claims with zero uncited is Supported (quoted >= 1),
+    /// with both counts disclosed on the verdict.
+    #[test]
+    fn quoted_and_paraphrase_mix_with_no_uncited_is_supported() {
+        let support = support_verdict(
+            false,
+            &[
+                claim("Green tea leaves are steamed [0].", &[0]),
+                claim("Matcha is whisked into a bright green drink [1].", &[1]),
+            ],
+            &[
+                "green tea leaves are steamed after picking",
+                "matcha is shaded before harvest",
+            ],
+            false,
+        );
+        assert_eq!(support.decision, SupportDecision::Supported);
+        assert_eq!(support.quoted, 1, "the first claim is carried verbatim");
+        assert_eq!(support.paraphrase, 1, "the second is the model's own words");
+        assert_eq!(support.cited, 2);
+        assert_eq!(support.uncited, 0);
+    }
+
+    /// S0c (22A) — span judging ignores out-of-range cites: a cite past
+    /// the evidence's length is an unknown ref even when the claim's text
+    /// is verbatim evidence — the quote cannot rescue a fabricated index.
+    #[test]
+    fn span_judging_ignores_out_of_range_cites() {
+        let support = support_verdict(
+            false,
+            &[claim("Green tea leaves are steamed after picking.", &[7])],
+            &[
+                "green tea leaves are steamed after picking",
+                "matcha is shaded before harvest",
+            ],
+            false,
+        );
+        assert_eq!(support.decision, SupportDecision::Unsupported);
+        assert_eq!(support.unknown_refs, 1);
+        assert_eq!(support.quoted, 0, "an out-of-range cite is never a quote");
+        assert_eq!(support.cited, 0);
+    }
+
+    /// S0d (22A) — THE REGRESSION LAW: the zero-claim case (no claims, no
+    /// abstain, sound grounding) stays Supported. The Partial disjunct
+    /// requires claims non-empty — an answer with nothing to judge is not
+    /// "cited, not verbatim"; it is the shape the grounding posture
+    /// labels.
+    #[test]
+    fn the_zero_claim_case_stays_supported() {
+        let support = support_verdict(false, &[], &["evidence that exists"], false);
+        assert_eq!(support.decision, SupportDecision::Supported);
+        assert_eq!(support.quoted, 0);
+        assert_eq!(support.paraphrase, 0);
+    }
 }
