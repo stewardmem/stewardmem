@@ -34,6 +34,7 @@ struct ChatSessionRoutingPins {
             ChatModelId.qwen3_5_2b.sessionKind == .mlx,
             "the E1c-verified Qwen3.5 2B text tower must ride the native ChatSession path"
         )
+        #expect(ChatModelId.qwen3_5_4b_4bit.sessionKind == .mlx)
         #expect(
             ChatModelId.qwen3_5_9b_heretic.sessionKind == .mlx,
             "the operator's named 9B tier must ride the native ChatSession path"
@@ -64,7 +65,7 @@ struct ChatSessionRoutingPins {
     @Test("the measured-green MLX tiers are admitted through forChat")
     func verifiedMLXTiersServeChat() {
         for id in [ChatModelId.qwen3_8b_4bit, .qwen3_5_2b, .qwen3_5_9b_heretic,
-                   .qwen3_5_9b_4bit, .qwen3_5_4b_uncensored,
+                   .qwen3_5_9b_4bit, .qwen3_5_4b_4bit, .qwen3_5_4b_uncensored,
                    .qwen3_5_9b_heretic_4bit, .qwen3_5_4b_huihui] {
             #expect(
                 id.mayServeChat,

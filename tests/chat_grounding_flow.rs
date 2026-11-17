@@ -32,6 +32,9 @@ use brain_server::server::router::app;
 use brain_server::server::router::auth::JwtMiddlewareState;
 use tower::ServiceExt;
 
+#[allow(dead_code)] // bridge_binary is inert here; the tier seam is what we use
+mod common;
+
 const OP_TOKEN: &str = "chat-green-tea-operator-token";
 
 /// The user's question, verbatim — the same words the whole session drilled.
@@ -81,6 +84,14 @@ async fn the_green_tea_chat_turn_is_grounded_fenced_and_streamed() {
         return;
     };
     unsafe { std::env::set_var("BRAIN_AFM_BRIDGE", bridge_binary) };
+    // THE TIER POSTURE, held for the whole body: this pin asserts an
+    // `on_device` final (the AFM 3 Core contract this e2e was built around),
+    // so the chat tier is pinned to the AFM tier explicitly — `Some("")`
+    // omits the model field from the bridge wire (Foundation Models), the
+    // documented AFM escape now that an unset env selects the default MLX
+    // writer tier — under the shared lock (tests/common — the
+    // scheduling-flake guard).
+    let (_tier_lock, _tier_env) = common::chat_tier::set_chat_model(Some(""));
 
     // ── the server over its own database (the loopback fixture shape) ──
     let dir = tempfile::TempDir::new().expect("temp dir");

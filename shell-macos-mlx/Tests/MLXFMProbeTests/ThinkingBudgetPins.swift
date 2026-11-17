@@ -140,6 +140,15 @@ struct ThinkingBudgetPins {
         }
     }
 
+    @Test("standard Qwen3.5 4B disables template thinking and does not prime the filter")
+    func standard4BThinkingOffMatchesTemplate() {
+        guard #available(macOS 27.0, *) else { return }
+        let tier = MLXChatTier.qwen3_5_4b_4bit
+        #expect(!tier.primesThinkBlock)
+        #expect(tier.configuration.reasoningConfig?.promptStrategy ==
+            .templateFlag(key: "enable_thinking", defaultOn: true))
+    }
+
     /// The plain Qwen3-8B tier declares none (no reasoningConfig argument
     /// in its configuration) — the named-refusal arm's data condition.
     @Test("the plain Qwen3-8B tier declares no protocol (refuses BY NAME)")

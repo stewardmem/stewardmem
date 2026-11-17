@@ -212,14 +212,44 @@ pub fn pack(
         };
     }
 
-    // Precompute per-candidate static signals.
-    // relevance: normalized score (already [0,1] from RRF/vec0 cosine).
-    let max_score = candidates
+    // Relevance uses the cross-encoder when it actually scored these hits.
+    // Raw SearchResult scores mix incomparable scales across vector, FTS,
+    // and graph retrieval; using them after reranking let high-magnitude
+    // graph scores displace a textually exact vector hit during packing.
+    // Normalize the rerank logits over this candidate set; otherwise retain
+    // the legacy normalized fused score for profiles without a reranker.
+    let rerank_scores: Vec<Option<f32>> = candidates
         .iter()
-        .map(|c| c.score)
-        .fold(0.0f32, |a, b| a.max(b))
-        .max(1e-9);
-    let relevance: Vec<f32> = candidates.iter().map(|c| c.score / max_score).collect();
+        .map(|c| c.provenance.rerank_score.filter(|s| s.is_finite()))
+        .collect();
+    let rerank_bounds =
+        rerank_scores
+            .iter()
+            .flatten()
+            .fold(None, |bounds: Option<(f32, f32)>, score| {
+                Some(match bounds {
+                    Some((min, max)) => (min.min(*score), max.max(*score)),
+                    None => (*score, *score),
+                })
+            });
+    let relevance: Vec<f32> = if let Some((min_score, max_score)) = rerank_bounds {
+        let span = max_score - min_score;
+        rerank_scores
+            .iter()
+            .map(|score| match score {
+                Some(score) if span > f32::EPSILON => (score - min_score) / span,
+                Some(_) => 1.0,
+                None => 0.0,
+            })
+            .collect()
+    } else {
+        let max_score = candidates
+            .iter()
+            .map(|c| c.score)
+            .fold(0.0f32, |a, b| a.max(b))
+            .max(1e-9);
+        candidates.iter().map(|c| c.score / max_score).collect()
+    };
 
     // representativeness: how typical is this candidate of the pool? Use its
     // average lexical overlap with all others (centrality). O(n²) but n≤64.
@@ -432,6 +462,35 @@ mod tests {
         // Redundant pair: at most one of {1,2} should make it.
         let dup_count = ids.iter().filter(|i| **i == 1 || **i == 2).count();
         assert!(dup_count <= 1, "redundant pair should be de-duplicated");
+    }
+
+    #[test]
+    fn packing_uses_cross_encoder_relevance_over_incomparable_raw_scores() {
+        let mut graph = hit(
+            1,
+            0.27,
+            "Durian fruit has vitamin C and antioxidant properties.",
+        );
+        graph.provenance.rerank_score = Some(-1.79);
+        let mut article = hit(
+            2,
+            0.015,
+            "Vitamin C supports collagen synthesis, skin health, wound healing, and immune function.",
+        );
+        article.provenance.rerank_score = Some(1.44);
+        let packed = pack(
+            vec![graph, article],
+            "What are the health benefits of Vitamin C?",
+            100,
+            Weights {
+                relevance: 1.0,
+                coverage: 0.0,
+                representativeness: 0.0,
+                diversity: 0.0,
+            },
+            None,
+        );
+        assert_eq!(packed.results.first().map(|hit| hit.id), Some(2));
     }
 
     #[test]

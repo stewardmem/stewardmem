@@ -167,7 +167,7 @@ const WRITER_RESPONSE_TOKENS: i64 = MAX_RESPONSE_TOKENS;
 /// The grounding budget: submodular evidence packing under this many tokens.
 /// The bridge's planner makes the FINAL fit decision against the measured
 /// on-device budget — this only shapes how much evidence is offered.
-const GROUNDING_TOKEN_BUDGET: usize = 1_024;
+const GROUNDING_TOKEN_BUDGET: usize = 2_048;
 
 /// The deterministic abstain notice (LL-04 §1.3): the kernel's OWN answer
 /// when grounding found nothing usable — "say plainly when it is not" as a
@@ -193,15 +193,79 @@ fn abstains_without_bridge(decision: &str, hit_count: usize) -> bool {
 /// always rides in full.
 const PRIOR_TOPIC_MAX_BYTES: usize = 200;
 
-/// The grounding query for a turn (follow-up grounding): the previous
-/// user turn's message (capped at [`PRIOR_TOPIC_MAX_BYTES`] bytes) followed
-/// by the current message. The prior turn is evidence actually used, with
-/// provenance — never a model summary, and zero model tokens are spent
-/// (memory is governed state, not retrieved text; no LLM query rewriting).
-/// No prior turn (a first turn, or an unreadable session) → the current
-/// message EXACTLY: first-turn behavior is byte-identical to pre-fix.
-/// Pure, pinned.
+/// A short list of follow-up forms that need the prior user turn to supply
+/// their topic. A new self-contained question must search on its own: always
+/// prepending the prior topic contaminates queries when the user changes
+/// subjects (e.g. green tea → Vitamin C), even when both subjects are in the
+/// same store.
+fn needs_prior_grounding(current: &str) -> bool {
+    let words: Vec<String> = current
+        .split(|c: char| !c.is_alphanumeric() && c != '\'')
+        .filter(|word| !word.is_empty())
+        .map(str::to_lowercase)
+        .collect();
+    let Some(first) = words.first().map(String::as_str) else {
+        return false;
+    };
+    if matches!(first, "and" | "also" | "then" | "so") {
+        return true;
+    }
+    // Elliptical "what about X?" turns often omit the subject established
+    // immediately before them (notably dosage, timing, and preparation).
+    // Restrict this to dosage phrasing here; a named subject in a new
+    // "what about Vitamin C?" question remains a fresh retrieval query.
+    if words.as_slice() == ["what", "about", "dosage"]
+        || words.as_slice() == ["what", "about", "the", "dosage"]
+    {
+        return true;
+    }
+    // A complete benefits question names its own subject after "of". A
+    // later pronoun in a second clause ("...and how should I prepare it?")
+    // refers back to that subject, not to the previous chat turn.
+    if matches!(first, "what")
+        && words
+            .iter()
+            .any(|word| word == "benefit" || word == "benefits")
+        && words
+            .iter()
+            .position(|word| word == "of")
+            .is_some_and(|of| of + 1 < words.len())
+    {
+        return false;
+    }
+    if words.iter().any(|word| {
+        matches!(
+            word.as_str(),
+            "it" | "its" | "they" | "them" | "their" | "this" | "that" | "these" | "those"
+        )
+    }) {
+        return true;
+    }
+    matches!(
+        words
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .as_slice(),
+        ["why"]
+            | ["how"]
+            | ["what", "next"]
+            | ["next"]
+            | ["what", "are", "the", "benefits"]
+            | ["what", "are", "benefits"]
+            | ["what", "is", "the", "benefit"]
+            | ["what", "is", "benefit"]
+    )
+}
+
+/// The grounding query for a turn: carry the previous user message only for
+/// an elliptical follow-up; otherwise use the current, self-contained query
+/// verbatim. The prior turn is user-provided context with provenance, never
+/// a model summary, and costs zero model tokens.
 fn build_grounding_query(prior_user_message: Option<&str>, current: &str) -> String {
+    if !needs_prior_grounding(current) {
+        return current.to_owned();
+    }
     let Some(prior) = prior_user_message.map(str::trim).filter(|p| !p.is_empty()) else {
         return current.to_owned();
     };
@@ -535,7 +599,7 @@ pub async fn chat_turn(
     // same drift the `/recall` validation matrix exists to prevent.
     let grounding_request: RecallRequest = match serde_json::from_value(json!({
         "query": grounding_query,
-        "limit": 5,
+        "limit": 12,
         "provenance": true,
         "max_context_tokens": GROUNDING_TOKEN_BUDGET,
     })) {
@@ -1028,7 +1092,12 @@ pub async fn chat_turn(
             // one tier (TC-6): the AFM coordinator and the MLX writer
             // never share a ledger. A refused writer turn is loud and
             // falls through to the existing flow.
-            let writer_session = format!("cascade-chat-{session}");
+            // Keep this turn's model ledger bounded, but seed it with the
+            // durable chat transcript snapshot. The snapshot preserves
+            // conversation continuity without replaying every old retrieval
+            // block; only this turn's fenced evidence is authoritative for
+            // factual claims.
+            let writer_session = format!("cascade-chat-{session}-{}", uuid::Uuid::new_v4());
             let writer_model = crate::config::cascade_writer_model();
             let turn = bridge
                 .turn(BridgeTurn {
@@ -1039,7 +1108,7 @@ pub async fn chat_turn(
                     // chat request's own default — the truncation witness
                     // rode the 512 default into a mid-sentence death.
                     max_response_tokens: Some(WRITER_RESPONSE_TOKENS),
-                    history: None,
+                    history: seed_history.clone(),
                     model: writer_model,
                     schema: None,
                 })
@@ -1062,6 +1131,19 @@ pub async fn chat_turn(
                             input_tokens,
                             output_tokens,
                         } => {
+                            // The local writer can spend its entire token
+                            // ceiling in its hidden reasoning block and emit
+                            // an empty final. Treat that as a failed cascade
+                            // attempt so the established chat path can still
+                            // answer; never persist/render an empty "answer"
+                            // as a successful mlx_native turn.
+                            if prose.trim().is_empty() {
+                                tracing::warn!(
+                                    "chat cascade: writer returned empty prose ({} output tokens), falling through",
+                                    output_tokens
+                                );
+                                break 'cascade None;
+                            }
                             let judged =
                                 crate::agentloop::cascade::judge_answer(&prose, &cascade_evidence);
                             (
@@ -1428,6 +1510,23 @@ pub async fn chat_turn(
                     abstain,
                     claims,
                 } => {
+                    // A model can exhaust its generation window inside a
+                    // hidden reasoning block and send an empty final. Never
+                    // label an empty string as a successful, grounded answer.
+                    let (text, tier, abstain, claims) = if text.trim().is_empty() {
+                        tracing::warn!(
+                            "chat bridge returned empty final ({} output tokens); recording an abstention",
+                            output_tokens
+                        );
+                        (
+                            DETERMINISTIC_ABSTAIN_NOTICE.to_owned(),
+                            "deterministic".to_owned(),
+                            true,
+                            Vec::new(),
+                        )
+                    } else {
+                        (text, tier, abstain, claims)
+                    };
                     // the answer is stored for the NEXT identical
                     // (model, prompt) — this arm only runs on a MISS (the
                     // hit path returns before the bridge is asked), and the
@@ -1655,6 +1754,33 @@ mod tests {
         assert!(
             query.contains("benefits"),
             "the current message must ride the query: {query}"
+        );
+    }
+
+    #[test]
+    fn a_multi_part_question_with_its_own_subject_does_not_inherit_old_topic() {
+        let current = "What are the benefits of green tea and how should I prepare it?";
+        assert_eq!(
+            build_grounding_query(Some("What are the benefits of Vitamin C?"), current),
+            current
+        );
+    }
+
+    #[test]
+    fn dosage_followup_carries_topic_but_named_what_about_stands_alone() {
+        assert_eq!(
+            build_grounding_query(
+                Some("What are the health benefits of Vitamin C?"),
+                "What about dosage?"
+            ),
+            "What are the health benefits of Vitamin C? What about dosage?"
+        );
+        assert_eq!(
+            build_grounding_query(
+                Some("What are the health benefits of green tea?"),
+                "What about Vitamin C?"
+            ),
+            "What about Vitamin C?"
         );
     }
 

@@ -2708,15 +2708,14 @@ pub fn ocr_bridge_path() -> Option<std::path::PathBuf> {
 }
 
 /// The chat tier the spine requests, verbatim, as the bridge wire's
-/// additive-optional `model` field. `BRAIN_CHAT_MODEL` names it;
-/// unset/empty is `None` — the field is OMITTED from the wire, which every
-/// bridge revision parses as the AFM tier, so the default changes nothing
-/// byte-for-byte. The kernel does NOT validate the value: the child owns
+/// additive-optional `model` field. Unset selects standard Qwen3.5 4B 4-bit;
+/// an explicit empty value omits the field and selects Foundation Models.
+/// The kernel does NOT validate the value: the child owns
 /// the vocabulary (`ChatModelId` + `forChat`), and a typo refuses loudly at
 /// the first turn with the child's own named error — transport here,
 /// decision there.
 pub fn chat_model_id() -> Option<String> {
-    let value = std::env::var("BRAIN_CHAT_MODEL").ok()?;
+    let value = std::env::var("BRAIN_CHAT_MODEL").unwrap_or_else(|_| "qwen3.5-4b-4bit".to_owned());
     let trimmed = value.trim();
     if trimmed.is_empty() {
         return None;
@@ -2727,10 +2726,8 @@ pub fn chat_model_id() -> Option<String> {
 /// The tiered cascade's writer tier (T3, round 17): the MLX id the
 /// synthesis turn carries (the bridge resolves it through `ChatModelId`
 /// and runs the native `ChatSession` path — the CG-10 session-kind law).
-/// The DEFAULT is the S0-measured tier — `qwen3.5-9b-4bit`, the frontier's
-/// writer in `IMPROVE17_EVIDENCE_2026-11-13.md` — overridable by env for
-/// the fastest-measured alternative (`qwen3.5-4b-uncensored-4bit`, 41.8
-/// tok/s). The kernel does NOT validate the value: the child owns the
+/// The default is standard `qwen3.5-4b-4bit`, overridable by env. The
+/// kernel does NOT validate the value: the child owns the
 /// vocabulary (`ChatModelId` + `forChat`), and a typo refuses loudly at
 /// the first turn with the child's own named error — transport here,
 /// decision there (the `chat_model_id` precedent verbatim).
@@ -2750,7 +2747,7 @@ pub fn chat_cascade_enabled() -> bool {
 
 pub fn cascade_writer_model() -> Option<String> {
     let value =
-        std::env::var("BRAIN_CASCADE_WRITER_MODEL").unwrap_or_else(|_| "qwen3.5-9b-4bit".into());
+        std::env::var("BRAIN_CASCADE_WRITER_MODEL").unwrap_or_else(|_| "qwen3.5-4b-4bit".into());
     let trimmed = value.trim();
     if trimmed.is_empty() {
         return None;

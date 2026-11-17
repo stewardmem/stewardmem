@@ -56,6 +56,9 @@ public enum MLXChatTier: Sendable, Equatable {
     /// control declines honestly).
     case qwen3_5_2b_4bit
 
+    /// Official mlx-community Qwen3.5 4B 4-bit model.
+    case qwen3_5_4b_4bit
+
     /// `pipenetwork/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-MLX-5bit`
     /// — the OPERATOR'S named pick for the agentic tier (7.07 GB, 5-bit,
     /// 3-link provenance Qwen → nightmedia DS9 → pipenetwork). E1c green:
@@ -134,6 +137,7 @@ public enum MLXChatTier: Sendable, Equatable {
         switch modelId {
         case "qwen3-8b-4bit": .qwen3_8b_4bit
         case "qwen3.5-2b-4bit": .qwen3_5_2b_4bit
+        case "qwen3.5-4b-4bit": .qwen3_5_4b_4bit
         case "qwen3.5-9b-heretic-5bit": .qwen3_5_9b_heretic_5bit
         case "qwen3.5-9b-4bit": .qwen3_5_9b_4bit
         case "qwen3.5-4b-uncensored-4bit": .qwen3_5_4b_uncensored_4bit
@@ -153,6 +157,12 @@ public enum MLXChatTier: Sendable, Equatable {
             ModelConfiguration(
                 id: "mlx-community/Qwen3.5-2B-4bit",
                 tokenizerSource: .id("Qwen/Qwen3.5-2B"),
+                extraEOSTokens: [""],
+                reasoningConfig: .thinkTagsWithEnableThinking)
+        case .qwen3_5_4b_4bit:
+            ModelConfiguration(
+                id: "mlx-community/Qwen3.5-4B-MLX-4bit",
+                tokenizerSource: .id("Qwen/Qwen3.5-4B"),
                 extraEOSTokens: [""],
                 reasoningConfig: .thinkTagsWithEnableThinking)
         case .qwen3_5_9b_heretic_5bit:
@@ -194,7 +204,7 @@ public enum MLXChatTier: Sendable, Equatable {
     public var contextTokens: Int {
         switch self {
         case .qwen3_8b_4bit: 40_960
-        case .qwen3_5_2b_4bit, .qwen3_5_9b_heretic_5bit, .qwen3_5_9b_4bit,
+        case .qwen3_5_2b_4bit, .qwen3_5_4b_4bit, .qwen3_5_9b_heretic_5bit, .qwen3_5_9b_4bit,
             .qwen3_5_4b_uncensored_4bit, .qwen3_5_9b_heretic_4bit,
             .qwen3_5_4b_huihui_4bit:
             262_144
@@ -211,6 +221,8 @@ public enum MLXChatTier: Sendable, Equatable {
     public var primesThinkBlock: Bool {
         switch self {
         case .qwen3_8b_4bit: false
+        case .qwen3_5_4b_4bit:
+            false // bridge passes enable_thinking=false for this tier
         case .qwen3_5_2b_4bit, .qwen3_5_9b_heretic_5bit, .qwen3_5_9b_4bit,
             .qwen3_5_4b_uncensored_4bit, .qwen3_5_9b_heretic_4bit,
             .qwen3_5_4b_huihui_4bit:

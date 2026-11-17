@@ -102,6 +102,9 @@ public enum ChatModelId: String, Sendable, Equatable, CaseIterable {
     /// `TokenizersBackend` in the quant's own config).
     case qwen3_5_2b = "qwen3.5-2b-4bit"
 
+    /// Official mlx-community Qwen3.5 4B 4-bit text model.
+    case qwen3_5_4b_4bit = "qwen3.5-4b-4bit"
+
     /// `pipenetwork/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-MLX-5bit`
     /// — the OPERATOR'S named pick for the agentic tier (7.07 GB, 5-bit,
     /// 3-link provenance Qwen → nightmedia DS9 → pipenetwork). E1c green:
@@ -160,7 +163,7 @@ public enum ChatModelId: String, Sendable, Equatable, CaseIterable {
     /// nor explained), per this file's own header law.
     public var mayServeChat: Bool {
         switch self {
-        case .onDeviceAFM, .qwen3_8b_4bit, .qwen3_5_2b, .qwen3_5_9b_heretic,
+        case .onDeviceAFM, .qwen3_8b_4bit, .qwen3_5_2b, .qwen3_5_4b_4bit, .qwen3_5_9b_heretic,
             .qwen3_5_9b_4bit, .qwen3_5_4b_uncensored, .qwen3_5_9b_heretic_4bit,
             .qwen3_5_4b_huihui:
             true
@@ -172,7 +175,7 @@ public enum ChatModelId: String, Sendable, Equatable, CaseIterable {
     /// populate — see the header.
     public var chatRefusalReason: String? {
         switch self {
-        case .onDeviceAFM, .qwen3_8b_4bit, .qwen3_5_2b, .qwen3_5_9b_heretic,
+        case .onDeviceAFM, .qwen3_8b_4bit, .qwen3_5_2b, .qwen3_5_4b_4bit, .qwen3_5_9b_heretic,
             .qwen3_5_9b_4bit, .qwen3_5_4b_uncensored, .qwen3_5_9b_heretic_4bit,
             .qwen3_5_4b_huihui:
             nil
@@ -207,7 +210,7 @@ public enum ChatModelId: String, Sendable, Equatable, CaseIterable {
         switch self {
         case .onDeviceAFM: .afm
         case .qwen3_8b_4bit, .qwen3_5_2b, .qwen3_5_9b_heretic, .qwen3_5_9b_4bit,
-            .qwen3_5_4b_uncensored, .qwen3_5_9b_heretic_4bit, .qwen3_5_4b_huihui:
+            .qwen3_5_4b_4bit, .qwen3_5_4b_uncensored, .qwen3_5_9b_heretic_4bit, .qwen3_5_4b_huihui:
             .mlx
         }
     }

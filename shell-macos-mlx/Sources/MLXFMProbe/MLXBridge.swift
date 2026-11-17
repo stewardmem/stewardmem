@@ -268,6 +268,13 @@ public enum MLXBridge {
         speculative: SpeculativeDecodingConfig? = nil
     ) -> (session: ChatSession, store: ConversationStore) {
         let store = ConversationStore(entries: seed)
+        // `max=0` constrains the reasoning-token processor, but does not
+        // disable the selected Qwen3.5 4B template branch. The template
+        // itself opens a think block unless `enable_thinking=false` is
+        // passed as context. Set that prompt-level switch explicitly for
+        // this tier so answer tokens are available in the writer budget.
+        let templateContext: [String: any Sendable]? =
+            tier == .qwen3_5_4b_4bit ? ["enable_thinking": false] : nil
         let session = ChatSession(
             container,
             instructions: nil,
@@ -276,7 +283,8 @@ public enum MLXBridge {
             generateParameters: GenerateParameters(
                 maxTokens: maxTokens,
                 kvScheme: resolvedKVScheme(for: tier),
-                temperature: 0))
+                temperature: 0),
+            additionalContext: templateContext)
         return (session, store)
     }
 

@@ -215,6 +215,13 @@ async fn cascade_off_serves_the_existing_flow() {
         return;
     };
     unsafe { std::env::set_var("BRAIN_AFM_BRIDGE", bridge_binary) };
+    // THE TIER POSTURE: this pin asserts the AFM contract (`on_device`)
+    // serves when the cascade gate is OFF, so the chat tier is pinned to
+    // the AFM tier explicitly — `Some("")` omits the model field from the
+    // bridge wire (Foundation Models), the documented AFM escape now that
+    // an unset env selects the default MLX writer tier — under the shared
+    // lock (tests/common — the scheduling-flake guard).
+    let (_tier_lock, _tier_env) = common::chat_tier::set_chat_model(Some(""));
     let (state, _dir) = cascade_app_with_memory(GREEN_TEA).await;
     let events = post_turn(
         state.clone(),

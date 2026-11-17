@@ -91,6 +91,20 @@ BUILD_VERSION="$("$SRC_BIN" --version 2>/dev/null | awk '{print $2}')"
 [[ "$BUILD_VERSION" =~ ^[0-9]+(\.[0-9]+)+$ ]] \
 	|| die "cannot read the built version from $SRC_BIN --version (got: '${BUILD_VERSION:-nothing}') — refusing to install an unmeasurable binary"
 
+# 1d. Build the desktop bundle from the same clean, versioned source as the
+#     kernel. Staging refreshes the kernel sidecars and their sealed
+#     provenance; Tauri then embeds that exact set in the .app. The stage
+#     command intentionally refuses dirty trees because its provenance names
+#     a commit, so local installs must run from a committed checkout.
+log "staging version-matched app sidecars..."
+( cd "$REPO" && node shell/scripts/sidecar.mjs stage )
+log "building StewardMem.app..."
+( cd "$REPO/shell" && pnpm tauri build --bundles app --target aarch64-apple-darwin )
+# Tauri's beforeBuildCommand leaves shell/build in the webview's root posture;
+# the launchd-served /app seat needs the regular /app-prefixed shell build.
+log "building the launchd-served /app client..."
+( cd "$REPO/shell" && pnpm build )
+
 # 2. Install server + operator CLIs to ~/.local/bin
 #    (decoupled from the checkout: survives cargo clean).
 #    On macOS (Sonoma+), newly-written executables get a `com.apple.provenance`
@@ -487,6 +501,17 @@ SHELL_DIST="$REPO/shell/build"
 plutil -remove EnvironmentVariables.BRAIN_CLIENT_DIST "$PLIST" 2>/dev/null || true
 plutil -insert EnvironmentVariables.BRAIN_CLIENT_DIST -string "$SHELL_DIST" "$PLIST"
 ok "BRAIN_CLIENT_DIST=$SHELL_DIST pinned (the /app seat serves the shell build)"
+
+# 4. The grounded chat writer uses the locally cached, standard Qwen3.5 4B
+#    4-bit tier. Disable its hidden reasoning budget so the response tokens
+#    go to the cited answer; both chat and cascade use the same model.
+for KEY in BRAIN_CHAT_MODEL BRAIN_CASCADE_WRITER_MODEL; do
+	plutil -remove "EnvironmentVariables.$KEY" "$PLIST" 2>/dev/null || true
+	plutil -insert "EnvironmentVariables.$KEY" -string "qwen3.5-4b-4bit" "$PLIST"
+done
+plutil -remove EnvironmentVariables.BRAIN_MLX_THINKING_BUDGET "$PLIST" 2>/dev/null || true
+plutil -insert EnvironmentVariables.BRAIN_MLX_THINKING_BUDGET -string "max=0,minAnswer=256" "$PLIST"
+ok "Qwen3.5 4B 4-bit selected; hidden reasoning budget set to zero"
 
 # 3. Restart the launchd service so it runs the new binary.
 #    bootout is best-effort (service may not be loaded yet); bootstrap reloads

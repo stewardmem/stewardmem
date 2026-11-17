@@ -250,8 +250,10 @@ async fn the_zero_evidence_control_abstains_deterministically_without_the_bridge
     let (_tier_lock, _tier_env) = common::chat_tier::set_chat_model(Some(MLX_TIER));
 
     // An EMPTY corpus. Turn 1 answers through the bridge (honest ok) and
-    // persists the prior turn; turn 2's message plus the prior topic
-    // exceeds the recall query bound → degraded + zero hits.
+    // persists the prior turn; turn 2 is an ELLIPTICAL follow-up (it opens
+    // with "and", so needs_prior_grounding carries the prior topic) whose
+    // prior-plus-current query exceeds the recall query bound (2,000 chars)
+    // → degraded + zero hits.
     let (state, _dir) = mlx_app_with_memory(None).await;
     let turn1 = post_turn(
         state.clone(),
@@ -266,7 +268,7 @@ async fn the_zero_evidence_control_abstains_deterministically_without_the_bridge
         "turn 1 answers through the bridge (empty store, honest ok): {final1}"
     );
 
-    let long_followup = format!("please find out {}", "a".repeat(1975));
+    let long_followup = format!("and {}", "a".repeat(1980));
     let turn2 = post_turn(state, "mlx-control", &long_followup).await;
     let abstain = final_of(&turn2);
     assert_eq!(
@@ -351,4 +353,49 @@ async fn killing_the_bridge_mid_chat_loses_no_in_context_answer_on_the_mlx_tier(
         answer.contains("morning"),
         "turn 2 answers IN-CONTEXT from the seeded history (the morning fact was never in any memory): answer={answer} final={final2}"
     );
+}
+
+/// ARM — the tier-selection DEFAULTS are the round's own law: an unset
+/// `BRAIN_CHAT_MODEL` selects the standard Qwen3.5 4B 4-bit MLX writer
+/// (thinking disabled at the template, so the visible answer owns the
+/// budget), an explicit EMPTY value omits the field (Foundation Models —
+/// the AFM escape the on_device pins ride), and an explicit id passes
+/// through verbatim; the cascade writer default follows the same 4B tier.
+/// Pure config derivation under the shared lock (no bridge, no server).
+#[test]
+fn tier_selection_defaults_name_the_4b_writer_and_the_empty_afm_escape() {
+    // Three SEPARATE critical sections, not one: set_chat_model's guard is
+    // a non-reentrant mutex, so a second acquire inside the same scope
+    // self-deadlocks (the shape the run's first hang measured). Each block
+    // acquires, asserts, releases — and each Drop restores the prior env,
+    // so the chain ends where the process started.
+    {
+        let (_tier_lock, _tier_env) = common::chat_tier::set_chat_model(None);
+        assert_eq!(
+            brain_server::config::chat_model_id().as_deref(),
+            Some("qwen3.5-4b-4bit"),
+            "an unset BRAIN_CHAT_MODEL selects the default MLX writer tier"
+        );
+        assert_eq!(
+            brain_server::config::cascade_writer_model().as_deref(),
+            Some("qwen3.5-4b-4bit"),
+            "the cascade writer default is the same 4B tier"
+        );
+    }
+    {
+        let (_lock2, _env2) = common::chat_tier::set_chat_model(Some(""));
+        assert_eq!(
+            brain_server::config::chat_model_id(),
+            None,
+            "an explicit EMPTY value omits the model field — Foundation Models"
+        );
+    }
+    {
+        let (_lock3, _env3) = common::chat_tier::set_chat_model(Some("qwen3-8b-4bit"));
+        assert_eq!(
+            brain_server::config::chat_model_id().as_deref(),
+            Some("qwen3-8b-4bit"),
+            "an explicit id passes through verbatim"
+        );
+    }
 }

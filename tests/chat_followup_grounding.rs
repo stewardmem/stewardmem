@@ -148,9 +148,12 @@ async fn the_followup_grounds_to_the_prior_turns_topic_not_the_corpus_generic() 
     };
     unsafe { std::env::set_var("BRAIN_AFM_BRIDGE", bridge_binary) };
     // THE TIER POSTURE, held for the whole body: this pin asserts
-    // `on_device` finals, so the chat tier is pinned to the AFM default
-    // under the shared lock (tests/common — the scheduling-flake guard).
-    let (_tier_lock, _tier_env) = common::chat_tier::set_chat_model(None);
+    // `on_device` finals, so the chat tier is pinned to the AFM tier
+    // explicitly — `Some("")` omits the model field from the bridge wire
+    // (Foundation Models), the documented AFM escape now that an unset
+    // env selects the default MLX writer tier — under the shared lock
+    // (tests/common — the scheduling-flake guard).
+    let (_tier_lock, _tier_env) = common::chat_tier::set_chat_model(Some(""));
 
     // ── the server over its own database (the loopback fixture shape) ──
     let dir = tempfile::TempDir::new().expect("temp dir");
@@ -326,9 +329,12 @@ async fn an_abstaining_turn_files_exactly_one_capture_proposal_and_no_knowledge(
     };
     unsafe { std::env::set_var("BRAIN_AFM_BRIDGE", bridge_binary) };
     // THE TIER POSTURE, held for the whole body: this pin asserts
-    // `on_device` finals, so the chat tier is pinned to the AFM default
-    // under the shared lock (tests/common — the scheduling-flake guard).
-    let (_tier_lock, _tier_env) = common::chat_tier::set_chat_model(None);
+    // `on_device` finals, so the chat tier is pinned to the AFM tier
+    // explicitly — `Some("")` omits the model field from the bridge wire
+    // (Foundation Models), the documented AFM escape now that an unset
+    // env selects the default MLX writer tier — under the shared lock
+    // (tests/common — the scheduling-flake guard).
+    let (_tier_lock, _tier_env) = common::chat_tier::set_chat_model(Some(""));
 
     let dir = tempfile::TempDir::new().expect("temp dir");
     let db_path = dir.path().join("brain.db");
@@ -387,8 +393,11 @@ async fn an_abstaining_turn_files_exactly_one_capture_proposal_and_no_knowledge(
 
     // ── a still-abstaining turn ──
     // Turn 1 (empty corpus) answers through the bridge and persists the
-    // prior turn. Turn 2's message plus the prior topic exceeds the
-    // recall query bound (2,000 chars), so grounding fails closed as
+    // prior turn. Turn 2 is an ELLIPTICAL follow-up (it opens with
+    // "and", so needs_prior_grounding carries the prior topic) whose
+    // combined query — prior plus current — exceeds the recall query
+    // bound (2,000 chars; the message alone can never blow it, the
+    // chat ceiling is the same 2,000), so grounding fails closed as
     // `degraded` with zero hits and the kernel abstains deterministically.
     // (The calibrated `low_confidence` arm needs ClarifyQuery + zero hits,
     // unreachable on a populated corpus: the estimator sees the same rows
@@ -401,7 +410,7 @@ async fn an_abstaining_turn_files_exactly_one_capture_proposal_and_no_knowledge(
         Some("on_device"),
         "turn 1 answers through the bridge (empty store, honest ok): {final1}"
     );
-    let long_followup = format!("please find out {}", "a".repeat(1975));
+    let long_followup = format!("and {}", "a".repeat(1980));
     let turn2 = post_turn(state.clone(), "capture", &long_followup).await;
     let final2 = final_of(&turn2);
     assert_eq!(
