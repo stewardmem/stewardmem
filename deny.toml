@@ -64,6 +64,7 @@ ignore = [
     # rationale lives there; these carry the review dates):
     { id = "RUSTSEC-2023-0071", reason = "rsa Marvin Attack — no fixed upstream (rsa 0.10.0-rc.18 via jsonwebtoken 11 + our own keygen); loopback single-tenant threat model, 0600 keys, EdDSA available; re-verify when rsa/jsonwebtoken ship a fix. Review by 2027-02-07" },
     { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5.5 timing variability — the reachable 0.7 copy was bumped to 0.7.7; the 0.5.5 copy is unreachable ECDSA code (RS256-pinned jsonwebtoken, no ES256/384 verify); re-check when elliptic-curve/p256 0.14 lands. Review by 2027-02-07" },
+    { id = "RUSTSEC-2026-0543", reason = "chrono UNMAINTAINED (not a vulnerability; triaged 2026-11-17) — direct dep 0.4.45, timestamps across the tree; no fixed upstream, replacement (jiff/time) is its own migration round. Review by 2027-02-17" },
 ]
 
 [licenses]

@@ -227,9 +227,8 @@ pub fn pack(
             .iter()
             .flatten()
             .fold(None, |bounds: Option<(f32, f32)>, score| {
-                Some(match bounds {
-                    Some((min, max)) => (min.min(*score), max.max(*score)),
-                    None => (*score, *score),
+                bounds.map_or(Some((*score, *score)), |(min, max)| {
+                    Some((min.min(*score), max.max(*score)))
                 })
             });
     let relevance: Vec<f32> = if let Some((min_score, max_score)) = rerank_bounds {

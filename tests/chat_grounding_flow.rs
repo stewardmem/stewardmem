@@ -67,6 +67,10 @@ fn sse_events(body: &str) -> Vec<(String, serde_json::Value)> {
 }
 
 #[tokio::test]
+// The tier guard INTENTIONALLY spans the body's awaits (the chat_tier
+// guard's shape — a single-test mutex serializing the process-global
+// BRAIN_CHAT_MODEL window; the same allow every sibling pin carries).
+#[allow(clippy::await_holding_lock)]
 async fn the_green_tea_chat_turn_is_grounded_fenced_and_streamed() {
     // The bridge binary is a macOS artifact; when it is not built this test
     // owns its skip with a stated reason (the macOS lane runs it for real).
@@ -90,7 +94,9 @@ async fn the_green_tea_chat_turn_is_grounded_fenced_and_streamed() {
     // omits the model field from the bridge wire (Foundation Models), the
     // documented AFM escape now that an unset env selects the default MLX
     // writer tier — under the shared lock (tests/common — the
-    // scheduling-flake guard).
+    // scheduling-flake guard). The guard INTENTIONALLY spans the body's
+    // awaits (the chat_tier guard's shape, a single-test mutex — the same
+    // fn-level allow every sibling pin carries).
     let (_tier_lock, _tier_env) = common::chat_tier::set_chat_model(Some(""));
 
     // ── the server over its own database (the loopback fixture shape) ──
