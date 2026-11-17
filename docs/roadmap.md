@@ -11,8 +11,25 @@ private plans archive on 2026-10-04 — this page is the in-repo roadmap.)
 
 ## Current status
 
-**v1.29.x — the current server line (1.29.45 — the served-chat repair
-release: the chat writer's MLX resource bundle ships scripted in the Tools
+**v1.29.x — the current server line (1.29.46 — the cite-truth verdict
+release: a citation that names an in-range hit is now TOLD whether the
+hit's text actually contains the claim — `supported` means verified-
+quoted, `partial` is the honest label for cited-but-paraphrased, the
+matcher is pure text arithmetic with no model in the gate, one shared
+normalizer and one shared span law serve both the verdict and the
+cascade judge, the counts ride the support event additively at every
+arm, the decision vocabulary and the stored verdict are untouched, and
+the live receipt caught a real misattributed citation the old law
+passed as supported; beside it the writer-posture round lands as the
+measured default — the locally-cached writer tier with its hidden
+reasoning disabled so answer tokens own the budget, the grounding
+budget doubled with a deeper recall pool, rerank-aware packing
+relevance, follow-up grounding only for elliptical follow-ups, and both
+empty-answer shapes refused honestly — and the release standing state
+is repaired: the test-count badge carries the measured healthy
+derivation again after CI's drift gate had refused the truncated paste
+since the previous wrap; beneath it, 1.29.45's served-chat repair: the
+chat writer's MLX resource bundle ships scripted in the Tools
 installer, both app lanes, and the dev installer with a packaging pin
 refusing a bundle-less writer; the evidence-as-answer arm refuses a single
 document for a multi-part question or a low-confidence route and falls to

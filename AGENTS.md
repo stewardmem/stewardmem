@@ -1,5 +1,39 @@
 # Agent Execution Log — StewardMem
 
+> **RELEASE v1.29.46 (2026-11-17): the cite-truth verdict release — a
+> citation that names an in-range hit is now TOLD whether the hit's text
+> actually contains the claim: `supported` means verified-quoted, `partial`
+> is the honest label for cited-but-paraphrased, the matcher is pure text
+> arithmetic with no model in the gate, ONE shared normalizer and ONE
+> shared span law serve both the support verdict and the cascade judge
+> (the judge byte-identical; kernel-derived claims quoted exactly when
+> cited — a pinned theorem), the counts ride the support event additively
+> at all four arms, the decision vocabulary and the stored verdict are
+> untouched, and the live receipt caught a REAL misattributed citation
+> the old law passed as supported (the model cited the Eiffel Tower chunk
+> for a verbatim green-tea claim — partial, quoted:0, paraphrase:1). Beside
+> it the writer-posture round lands as the measured default (found
+> UNCOMMITTED on the tree, never run by its author — its tier-selection
+> pin self-deadlocked; verified, four repairs, landed with the operator's
+> named yes: the locally-cached writer tier with hidden reasoning disabled
+> so answer tokens own the budget, the grounding budget doubled with a
+> deeper recall pool, rerank-aware packing relevance, follow-up grounding
+> only for elliptical follow-ups, both empty-answer shapes refused
+> honestly), and the release standing state is repaired — the test-count
+> badge had carried a TRUNCATED derivation since the 1.29.45 wrap (CI's
+> drift gate red since), and the number is now the measured healthy
+> derivation (4243, local and CI reconciling exactly). The round's guards
+> earned their keep: the duplicate-helper guard caught the matcher move
+> AND its own blindness (crate-visibility definitions invisible since
+> birth — recorded, allowlisted with a reasoned entry, the parser gap
+> named for its own round), the comments gate caught the round's own
+> label-bearing line, and the badge lane caught the round's own miscount
+> (off by two — the corrected number reconciles the cross-platform
+> parity claim). The dry-run: 34 lanes green, the remaining reds the
+> recorded docling RAM-contention flake (green standalone every time) and
+> the badge drift the correction closed. This note sits above the v1.29.45
+> note — the release wrap per docs/release-checklist.md step 6.**
+
 > **RELEASE v1.29.45 (2026-11-15): the served-chat repair release — the
 > first live-traffic cascade session's four witnessed failure classes
 > closed at their mechanisms (the brain-afm + metallib pair scripted into

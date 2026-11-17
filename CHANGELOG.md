@@ -13,6 +13,156 @@ measured. Those records are kept as they were written (this file is
 append-only), and their heading says `Unreleased` because that is what they
 were when the round landed — not because the work is still unreleased.
 
+## [1.29.46] — 2026-11-17 — the cite-truth verdict: supported means verified-quoted, the writer-posture round lands as the measured default, and the release badge/CI standing state is repaired
+
+A citation that names an in-range hit is now TOLD whether the hit's
+text actually contains the claim. The kernel's chat verdict — the pure
+arithmetic that labels every turn supported, partial, unsupported,
+abstained or degraded — gains a second axis: per-claim TEXT MATCHING
+against the very evidence the cites name. A claim whose normalized words
+the cited hit carries verbatim (or shares a six-word contiguous run
+with) counts as quoted; a cited claim in the answerer's own words is
+disclosed as paraphrase; and an answer with claims but ZERO quoted claims
+is partial — "cited, not verbatim" — never supported. No model sits in
+the gate: the matcher is pure text arithmetic beside the existing index
+arithmetic, one shared normalizer and one shared span law serving both
+the verdict and the cascade judge. The wire carries the two new counts
+additively on the support event at every arm that emits one; the shell
+passes them through with the same additive discipline as the typed
+final; the decision vocabulary and the stored verdict are untouched.
+The live receipt was stronger than the planned shape: on its very first
+question to the real on-device tier, the model cited the WRONG in-range
+hit for a verbatim claim — a turn the old law labeled supported and the
+cite-truth verdict labeled partial with the counts disclosing why.
+
+The release also lands the writer-posture round — the on-device writer
+tier becomes the measured default with its hidden reasoning disabled, so
+response tokens land in the cited answer instead of a think block the
+user never sees — and repairs the release badge standing state: the test
+count badge had carried a truncated derivation since the previous wrap,
+CI's drift gate had been red since, and the number is now the measured
+healthy derivation again.
+
+### Release notes
+
+**Improvements**
+
+- the chat support verdict becomes the cite-truth verdict: a citation
+  that names an in-range hit is TOLD whether the hit's text actually
+  contains the claim — a verbatim-quoted claim (or one sharing a
+  six-word contiguous run with its evidence) counts as quoted, a cited
+  claim in the answerer's own words is disclosed as paraphrase, and an
+  answer with claims but zero quoted claims is partial (cited, not
+  verbatim), never supported. The matcher is pure text arithmetic — no
+  model in the gate — built on ONE shared normalizer and ONE shared span
+  law that the cascade judge and the support verdict both delegate to
+  (the judge's behavior is byte-identical; kernel-derived claims are
+  quoted exactly when cited, pinned as a theorem). The two counts ride
+  the support event additively beside the existing ones at all four arms
+  that emit it, the shell parses them with the typed-final's
+  present-or-malformed discipline, and the decision vocabulary and the
+  stored verdict are untouched — no storage migration. Live-verified on
+  a scratch kernel: a verbatim-quoted turn reads supported with quoted
+  two, and a turn whose single claim cited the wrong in-range hit reads
+  partial with quoted zero — the exact misattribution the old law
+  passed as supported. (19c8b10d, 026b27d7, 62ede837, 25136662,
+  d4c5e442, e1c67075)
+- the on-device writer tier becomes the measured default with its
+  hidden reasoning disabled: an unset chat-model environment now
+  selects the standard locally-cached writer tier (an explicit empty
+  value still selects the Apple on-device tier, the documented escape
+  every such pin rides), the template-level thinking switch is set for
+  that tier so answer tokens own the budget, the grounding budget
+  doubles with a deeper recall pool, and the installer pins the posture
+  in the service environment beside the version-matched app build.
+  (e2c15c2e)
+- the packing path's relevance now uses the cross-encoder's rerank
+  scores when the reranker actually scored the candidates: raw fused
+  scores mix incomparable scales across vector, full-text and graph
+  retrieval, and a high-magnitude graph score could displace a
+  textually exact vector hit during packing. (e2c15c2e)
+- follow-up grounding carries the previous question only when the
+current one needs it: elliptical follow-ups (leading and/also/then/so,
+  bare why/how, dosage what-abouts, pronoun-subject turns) keep the
+  topic continuity, and a new self-contained question searches on its
+  own words — always prepending the prior topic served the wrong corpus
+  when the subject changed. (e2c15c2e)
+
+**Bug fixes**
+
+- both empty-answer shapes are refused honestly: a writer that spends
+  its whole budget in hidden reasoning and emits empty prose falls
+  through to the established chat path instead of persisting as a
+  successful writer turn, and a bridge final that arrives empty is
+  recorded as the deterministic abstention it is — never a successful
+  grounded answer over an empty string. (e2c15c2e)
+- the end-to-end chat harness pins the on-device tier explicitly: the
+  harness's own kernels spawned with the ambient chat-model default, so
+  the writer-tier default above changed what the specs assert mid-test —
+  the harness now pins the documented empty-value escape for both its
+  kernels, and the chromium project is green end to end again. (eb1127d1)
+- the test-count badge carries the measured healthy derivation again:
+  the previous wrap pasted a truncated run's sum (the count command
+  stops at the first failing binary and the failure class is a recorded
+  resource-contention flake), CI's drift gate had refused the number
+  since, and the badge now matches the full healthy derivation — with
+  the truncation mechanism itself recorded for the badge script's own
+  repair round. (44657070, eb1127d1)
+- a brand-new unmaintained advisory against a direct dependency is
+  triaged as a dated, reasoned waiver in both audit configs: the crate
+  is unmaintained, not vulnerable, its replacement is a migration round
+  of its own, and a security finding re-evaluates the posture
+  immediately. (fafd3263)
+
+**Security fixes**
+
+- none this release — the advisory triage above is a waiver, not a
+  vulnerability closure.
+
+### Engineering record
+
+- The round ledger: the writer-posture round was found UNCOMMITTED on
+  the tree (the named next-round work of the previous release's notes),
+  verified — it had never run its own suite: its tier-selection pin
+  self-deadlocked on a non-reentrant mutex, its writer-config pin still
+  asserted the retired default, the census had drifted, and two
+  deterministic-abstain fixtures broke under the new follow-up
+  heuristic — repaired and landed with the operator's named yes
+  (e2c15c2e); the cite-truth round then executed its eight steps
+  red-first (19c8b10d through eb1127d1), with the evidence file at
+  docs/IMPROVE22A_EVIDENCE_2026-11-17.md and the register row in
+  docs/gate-law-register.md.
+- The cite-truth design decision, recorded for the next reader: the
+  literal delegation the plan sketched (the judge calling the combined
+  matcher directly) is impossible byte-identically — the verbatim-
+  containment arm widens the judge's predicate and would grant cites to
+  short near-verbatim sentences the judge never verified. The judge
+  keeps the VERBATIM span law (moved, not rewritten) and the verdict's
+  matcher is the union (containment or shared span) — for judge-derived
+  claims the span arm holds by construction, which makes quoted-equals-
+  cited on kernel-derived turns a theorem, not a fixture hope (pinned,
+  and drilled red by removing the span arm).
+- The guards earned their keep this round: the duplicate-helper guard
+  caught the matcher move and exposed its own blindness (it has never
+  seen crate-visibility definitions — the visibility strip matches only
+  the space-suffixed form; the pair was allowlisted with a reasoned
+  entry extending the bench self-containment decision, and the parser
+  gap is recorded, not widened); the comments gate caught the round's
+  own label-bearing line (label dropped, invariant kept); and the
+  badge lane caught the round's own miscount — the first paste was off
+  by two because the count missed the posture round's two in-file
+  grounding-query pins, and the corrected number reconciles local and
+  CI derivations exactly (the cross-platform parity claim holds).
+- The shell lane's bundle job gained the missing metallib placement step
+  so the main-push proof lane runs the same verify the release lane
+  does (c06cddaf) — the one red the previous release's follow-up left.
+- The closing dry run: thirty-four lanes green; the remaining reds were
+  the recorded resource-contention flake (green standalone every time,
+  four occurrences, all in one binary) and the badge drift the
+  correction above closes. The full bench-and-migrate test invocation
+  derives 4243 passed — the number the badge carries and CI compares
+  against. (fafd3263, eb1127d1)
+
 ## [1.29.45] — 2026-11-15 — the served-chat repair: the writer pair ships scripted everywhere, the junk serve is dead by construction, the route confidence is calibrated by instruction, the chat turn carries its own honest budget, and the answer names its sources compactly
 
 The first live-traffic session on the armed chat cascade witnessed four
