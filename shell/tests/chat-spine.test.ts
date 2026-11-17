@@ -61,8 +61,12 @@ const ABSTAIN_FINAL_FRAME =
 	'event: final\n' +
 	'data: {"text":"Nothing in your memory answers this question, so I am not guessing an answer.","tier":"deterministic","turn":0,"inputTokens":0,"outputTokens":0,"abstain":true,"claims":[]}\n\n';
 
-const SUPPORT_FRAME = (decision = 'partial') =>
-	`event: support\ndata: ${JSON.stringify({ cited: 1, uncited: 1, unknown_refs: 0, decision })}\n\n`;
+const SUPPORT_FRAME = (decision = 'partial', extra: Record<string, unknown> = {}) =>
+	`event: support\ndata: ${JSON.stringify({ cited: 1, uncited: 1, unknown_refs: 0, decision, ...extra })}\n\n`;
+
+/** The 22A shape: the additive counts ride the verdict. */
+const TYPED_SUPPORT_FRAME = (decision = 'partial') =>
+	SUPPORT_FRAME(decision, { quoted: 1, paraphrase: 0 });
 
 const ERROR_FRAME = (code: string, message?: string) =>
 	`event: error\ndata: ${JSON.stringify(
@@ -341,7 +345,15 @@ describe('the SSE parser', () => {
 		const parser = mod.createSpineParser();
 		const events = parser.push(GROUNDING_FRAME + DELTA_FRAME('An answer.') + TYPED_FINAL_FRAME + SUPPORT_FRAME('unsupported'));
 		expect(events.map((e) => e.kind)).toEqual(['grounding', 'delta', 'final', 'support']);
-		expect(events[3]).toEqual({ kind: 'support', cited: 1, uncited: 1, unknownRefs: 0, decision: 'unsupported' });
+		expect(events[3]).toEqual({
+			kind: 'support',
+			cited: 1,
+			uncited: 1,
+			unknownRefs: 0,
+			quoted: null,
+			paraphrase: null,
+			decision: 'unsupported'
+		});
 		expect(parser.terminalOverflow, 'the contract trailing frame is NOT overflow').toBe(0);
 		expect(parser.closed).toBe(true);
 		expect(parser.supportDelivered).toBe(true);
@@ -392,7 +404,40 @@ describe('the SSE parser', () => {
 			'event: support\ndata: {"cited":0,"uncited":0,"unknown_refs":0,"decision":"abstained"}\n\n';
 		const events = parser.push(ABSTAIN_FINAL_FRAME + abstainedSupport);
 		expect(events[0]).toMatchObject({ kind: 'final', abstain: true, claims: [] });
-		expect(events[1]).toEqual({ kind: 'support', cited: 0, uncited: 0, unknownRefs: 0, decision: 'abstained' });
+		expect(events[1]).toEqual({
+			kind: 'support',
+			cited: 0,
+			uncited: 0,
+			unknownRefs: 0,
+			quoted: null,
+			paraphrase: null,
+			decision: 'abstained'
+		});
+	});
+
+	test('the_additive_verdict_counts_parse_or_refuse_lawfully', async () => {
+		const { mod } = await withFetchAnswering(() => sseResponse([TYPED_FINAL_FRAME]));
+		const parser = mod.createSpineParser();
+		// The 22A shape: the counts ride the verdict and parse through.
+		const events = parser.push(TYPED_FINAL_FRAME + TYPED_SUPPORT_FRAME('supported'));
+		expect(events[1]).toEqual({
+			kind: 'support',
+			cited: 1,
+			uncited: 1,
+			unknownRefs: 0,
+			quoted: 1,
+			paraphrase: 0,
+			decision: 'supported'
+		});
+		// A PRESENT but unlawful count is a malformed frame, never a silent
+		// null — the typed-final precedent applied to the counts.
+		const strict = mod.createSpineParser();
+		const badFrame =
+			'event: support\ndata: ' +
+			JSON.stringify({ cited: 1, uncited: 0, unknown_refs: 0, quoted: -1, decision: 'partial' }) +
+			'\n\n';
+		strict.push(TYPED_FINAL_FRAME + badFrame);
+		expect(strict.malformed, 'a present-but-unlawful count is malformed').toBe(1);
 	});
 });
 

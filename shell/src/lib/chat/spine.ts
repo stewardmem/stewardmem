@@ -93,11 +93,15 @@ export interface SpineClaim {
  * malformed — the vocabulary is the contract. */
 export type SpineSupportDecision = 'supported' | 'partial' | 'unsupported' | 'abstained' | 'degraded';
 
-/** The support event's payload. */
+/** The support event's payload. `quoted`/`paraphrase` are additive
+ * (22A): `null` on a pre-22A kernel that carries neither key — the counts
+ * disclose how many cited claims the evidence carries verbatim. */
 export interface SpineSupport {
 	readonly cited: number;
 	readonly uncited: number;
 	readonly unknownRefs: number;
+	readonly quoted: number | null;
+	readonly paraphrase: number | null;
 	readonly decision: SpineSupportDecision;
 }
 
@@ -124,7 +128,15 @@ export type SpineEvent =
 			abstain: boolean | null;
 			claims: readonly SpineClaim[] | null;
 	  }
-	| { kind: 'support'; cited: number; uncited: number; unknownRefs: number; decision: SpineSupportDecision }
+	| {
+				kind: 'support';
+				cited: number;
+				uncited: number;
+				unknownRefs: number;
+				quoted: number | null;
+				paraphrase: number | null;
+				decision: SpineSupportDecision;
+		  }
 	| { kind: 'error'; code: string; message: string | null; shortfallTokens: number | null };
 
 /**
@@ -227,17 +239,42 @@ function parsePayload(eventName: string, data: string): SpineEvent | null {
 		case 'support': {
 			// THE VERDICT (LL-04): counts are non-negative integers and the
 			// decision names the five-word vocabulary — anything else is a
-			// frame this contract cannot lawfully carry.
+			// frame this contract cannot lawfully carry. The 22A counts
+			// (quoted/paraphrase) are ADDITIVE and all-or-nothing per key: an
+			// absent key is the pre-22A shape (`null`), a present key must
+			// carry a lawful count or the frame is malformed — the typed-final
+			// precedent, applied to the counts.
 			const cited = record['cited'];
 			const uncited = record['uncited'];
 			const unknownRefs = record['unknown_refs'];
 			const decision = record['decision'];
 			const isCount = (v: unknown): v is number =>
 				typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
-			if (!isCount(cited) || !isCount(uncited) || !isCount(unknownRefs)) return null;
+			const additiveCount = (v: unknown): number | null | undefined => {
+				if (v === undefined) return null; // absent = the pre-22A shape
+				return isCount(v) ? v : undefined; // present but unlawful = malformed
+			};
+			const quoted = additiveCount(record['quoted']);
+			const paraphrase = additiveCount(record['paraphrase']);
+			if (
+				!isCount(cited) ||
+				!isCount(uncited) ||
+				!isCount(unknownRefs) ||
+				quoted === undefined ||
+				paraphrase === undefined
+			)
+				return null;
 			if (typeof decision !== 'string' || !SUPPORT_DECISIONS.includes(decision as SpineSupportDecision))
 				return null;
-			return { kind: 'support', cited, uncited, unknownRefs, decision: decision as SpineSupportDecision };
+			return {
+				kind: 'support',
+				cited,
+				uncited,
+				unknownRefs,
+				quoted,
+				paraphrase,
+				decision: decision as SpineSupportDecision
+			};
 		}
 		case 'error': {
 			const code = record['code'];
@@ -543,6 +580,9 @@ export interface SpineSupportEvent {
 	readonly cited: number;
 	readonly uncited: number;
 	readonly unknownRefs: number;
+	/** Additive (22A): `null` on a pre-22A kernel. */
+	readonly quoted: number | null;
+	readonly paraphrase: number | null;
 	readonly decision: SpineSupportDecision;
 }
 
@@ -706,6 +746,8 @@ export function turnSpine(request: SpineRequest, handlers: SpineHandlers): Spine
 						cited: event.cited,
 						uncited: event.uncited,
 						unknownRefs: event.unknownRefs,
+						quoted: event.quoted,
+						paraphrase: event.paraphrase,
 						decision: event.decision
 					});
 					return false;
