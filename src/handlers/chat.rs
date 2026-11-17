@@ -779,12 +779,8 @@ pub async fn chat_turn(
         grounding_event["decision"].as_str().unwrap_or_default(),
         grounding_hit_count,
     ) {
-        let support = crate::service::chat_support::support_verdict(
-            true,
-            &[],
-            grounding_hit_count,
-            grounding_degraded,
-        );
+        let support =
+            crate::service::chat_support::support_verdict(true, &[], &[], grounding_degraded);
         debug_assert_eq!(
             support.decision,
             crate::service::chat_support::SupportDecision::Abstained,
@@ -935,6 +931,7 @@ pub async fn chat_turn(
     let cascade_outcome: Option<(
         serde_json::Value,
         usize,
+        Vec<crate::agentloop::cascade::EvidenceChunk>,
         String,
         String,
         (i64, i64),
@@ -1182,11 +1179,14 @@ pub async fn chat_turn(
         };
 
         // The kernel-DERIVED claims (never the model's) ride the final; the
-        // support verdict re-judges them by the SAME index arithmetic — the
-        // universe is the grounding event's hits.
+        // support verdict re-judges them by the SAME index arithmetic over
+        // the SAME evidence universe — the chunks ride the tuple so the
+        // verdict's cite checks and quote matching see exactly what the
+        // judge saw (one universe, one truth).
         Some((
             grounding_event.clone(),
             grounding_hit_count,
+            cascade_evidence,
             answer,
             cascade_tier,
             cascade_tokens,
@@ -1197,6 +1197,7 @@ pub async fn chat_turn(
     if let Some((
         cascade_grounding_event,
         cascade_hit_count,
+        cascade_evidence,
         cascade_answer,
         cascade_tier,
         cascade_tokens,
@@ -1204,8 +1205,13 @@ pub async fn chat_turn(
     )) = cascade_outcome
     {
         // The kernel-DERIVED claims (never the model's) ride the final; the
-        // support verdict re-judges them by the SAME index arithmetic — the
-        // universe is the grounding event's hits.
+        // support verdict re-judges them over the SAME evidence chunks the
+        // judge span-matched — the universe is the grounding event's hits,
+        // and the texts are the quote matcher's ground truth.
+        let cascade_evidence_texts: Vec<&str> = cascade_evidence
+            .iter()
+            .map(|chunk| chunk.content.as_str())
+            .collect();
         let derived_claims: Vec<crate::agentloop::bridge_afm::BridgeClaim> = judged
             .claims
             .iter()
@@ -1217,7 +1223,7 @@ pub async fn chat_turn(
         let support = crate::service::chat_support::support_verdict(
             judged.abstained,
             &derived_claims,
-            cascade_hit_count,
+            &cascade_evidence_texts,
             false,
         );
         let now_unix = std::time::SystemTime::now()
@@ -1340,10 +1346,17 @@ pub async fn chat_turn(
         &prompt,
     );
     if let Some(cached) = state.chat_answer_cache.get(&cache_key) {
+        // The verdict is recomputed over THIS turn's own grounding — never
+        // copied from the cached answer's turn: the counts judge the cached
+        // claims against the hits this turn actually sent.
+        let evidence_texts: Vec<&str> = grounding_tagged
+            .iter()
+            .map(|(hit, _)| hit.content.as_str())
+            .collect();
         let support = crate::service::chat_support::support_verdict(
             cached.abstain,
             &cached.claims,
-            grounding_hit_count,
+            &evidence_texts,
             grounding_degraded,
         );
         let now_unix = std::time::SystemTime::now()
@@ -1478,6 +1491,13 @@ pub async fn chat_turn(
     let (tx, rx_out) = tokio::sync::mpsc::channel::<Result<Event, Infallible>>(64);
     tokio::spawn(async move {
         let send = |event: Event| async { tx.send(Ok(event)).await.is_ok() };
+        // The verdict's evidence universe, built by borrow from THIS turn's
+        // grounded hits — the same packed set the fence carried (one
+        // universe, one truth; the slice borrows, never clones).
+        let evidence_texts: Vec<&str> = grounding_tagged
+            .iter()
+            .map(|(hit, _)| hit.content.as_str())
+            .collect();
         if !send(
             Event::default()
                 .event("grounding")
@@ -1548,7 +1568,7 @@ pub async fn chat_turn(
                     let support = crate::service::chat_support::support_verdict(
                         abstain,
                         &claims,
-                        grounding_hit_count,
+                        &evidence_texts,
                         grounding_degraded,
                     );
                     // THE PAIR PERSISTS AT THE FINAL, before the event is
