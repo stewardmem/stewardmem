@@ -441,40 +441,15 @@ pub(crate) struct JudgedAnswer {
     pub(crate) abstained: bool,
 }
 
-/// The S0 normalizer (the ONE declared metric device, now the kernel's
-/// citation law): lowercase; every non-alphanumeric char becomes a space;
-/// whitespace collapsed.
-pub(crate) fn normalize(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for c in s.chars() {
-        if c.is_alphanumeric() {
-            out.push(c.to_ascii_lowercase());
-        } else {
-            out.push(' ');
-        }
-    }
-    out.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-/// The span law (S0's preregistered 6-gram): the answer text contains a
-/// contiguous run of `SPAN_NGRAM` consecutive normalized gold words. A gold
-/// text shorter than the n-gram degrades to containment (the preregistered
-/// degenerate case).
-const SPAN_NGRAM: usize = 6;
-
-pub(crate) fn spans_verified(answer_norm: &str, gold_norm: &str) -> bool {
-    let aw: Vec<&str> = answer_norm.split(' ').collect();
-    let gw: Vec<&str> = gold_norm.split(' ').collect();
-    if gw.len() < SPAN_NGRAM {
-        return !gold_norm.is_empty() && answer_norm.contains(gold_norm);
-    }
-    // EVERY 6-gram window of the gold is a span to find in the answer's
-    // own 6-gram windows — both sides slide (the S0 harness's law verbatim).
-    gw.windows(SPAN_NGRAM).any(|g| {
-        let g = g.join(" ");
-        aw.windows(SPAN_NGRAM).any(|w| w.join(" ") == g)
-    })
-}
+// ── THE MATCHER DELEGATES (22A) ──
+//
+// The normalizer and the span law moved to `service::chat_support`
+// (normalize_claim_span + spans_verified) so the support verdict and the
+// cascade judge share ONE matcher — two span laws drift, and the drift is
+// silent (the verdict would say `quoted` while the judge said `cited`
+// over differently-normalized text). `judge_answer` below calls the
+// shared law verbatim; the no-op theorem (judge-derived claims are
+// quoted exactly when cited) is pinned in chat_support's battery.
 
 /// The deterministic sentence split: terminal punctuation (. ! ?) followed
 /// by whitespace or end; fragments trim to non-empty. Same prose in, same
@@ -501,15 +476,17 @@ pub(crate) fn split_sentences(prose: &str) -> Vec<String> {
 /// each sentence against every evidence chunk's content, assign the hit
 /// indices it verifies, and abstain when NOTHING verified. The evidence
 /// chunks carry the FULL chunk content (the caps apply at the fenced
-/// block, not here — the span law needs the real text).
+/// block, not here — the span law needs the real text). The matcher is
+/// chat_support's shared law, called verbatim — one matcher, two callers
+/// (the 22A delegation; a cascade verdict change is a wrong answer).
 pub(crate) fn judge_answer(prose: &str, evidence: &[EvidenceChunk]) -> JudgedAnswer {
     let mut claims = Vec::new();
     for sentence in split_sentences(prose) {
-        let sn = normalize(&sentence);
+        let sn = crate::service::chat_support::normalize_claim_span(&sentence);
         let mut cites = Vec::new();
         for chunk in evidence {
-            let cn = normalize(&chunk.content);
-            if spans_verified(&sn, &cn) {
+            let cn = crate::service::chat_support::normalize_claim_span(&chunk.content);
+            if crate::service::chat_support::spans_verified(&sn, &cn) {
                 cites.push(chunk.hit_index);
             }
         }
@@ -1382,24 +1359,29 @@ pub(crate) mod tests {
     #[test]
     fn tc4_the_span_law_is_the_s0_law() {
         // Six consecutive normalized words (the ONE declared metric device,
-        // now the kernel's citation law); a shorter gold degrades to
-        // containment (the S0 preregistered degenerate case).
+        // now the kernel's citation law — LIVING IN service::chat_support
+        // since the 22A delegation, called here through the shared law so
+        // the cascade judge and the support verdict read the same text the
+        // same way); a shorter gold degrades to containment (the S0
+        // preregistered degenerate case).
+        let n = crate::service::chat_support::normalize_claim_span;
+        let s = crate::service::chat_support::spans_verified;
         let gold = "vSAN storage policies set FTT failures to tolerate and FTM per VM.";
-        assert!(spans_verified(
-            &normalize("per VM it is true: vSAN storage policies set FTT failures to tolerate"),
-            &normalize(gold)
+        assert!(s(
+            &n("per VM it is true: vSAN storage policies set FTT failures to tolerate"),
+            &n(gold)
         ));
         // Only 5 consecutive shared words → no 6-gram → correctly refused
         // (a 6-word shared prefix IS a span under the law — the case that
         // taught the pin its own law).
-        assert!(!spans_verified(
-            &normalize("vSAN storage policies set FTT to some other rule entirely"),
-            &normalize(gold)
+        assert!(!s(
+            &n("vSAN storage policies set FTT to some other rule entirely"),
+            &n(gold)
         ));
         // The degenerate gold (< 6 words): containment counts.
-        assert!(spans_verified(
-            &normalize("it says vMotion failing at ten percent"),
-            &normalize("vMotion failing at ten percent")
+        assert!(s(
+            &n("it says vMotion failing at ten percent"),
+            &n("vMotion failing at ten percent")
         ));
     }
 

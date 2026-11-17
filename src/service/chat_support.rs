@@ -488,4 +488,64 @@ mod tests {
         assert_eq!(support.quoted, 0);
         assert_eq!(support.paraphrase, 0);
     }
+
+    /// S2's NO-OP THEOREM (22A): judge_answer derives cites BY the shared
+    /// span law, and claim_is_quoted's span arm IS that law — so every
+    /// kernel-derived claim is quoted exactly when cited, and the cascade
+    /// arms' support verdicts are unchanged by the cite-truth law. The
+    /// prose here is the adversarial shape: a sentence that shares the
+    /// six-word span but is NOT contained in the evidence (the containment
+    /// arm alone would call it paraphrase — this pin reds if the span arm
+    /// is ever removed from the matcher).
+    #[test]
+    fn judge_derived_claims_are_quoted_exactly_when_cited() {
+        let evidence = vec![
+            crate::agentloop::cascade::EvidenceChunk {
+                hit_index: 0,
+                chunk_id: 1,
+                score: 1.0,
+                title: None,
+                content: "Green tea is made from Camellia sinensis leaves that are steamed soon after picking, which preserves catechins like EGCG.".to_owned(),
+                provenance: None,
+            },
+            crate::agentloop::cascade::EvidenceChunk {
+                hit_index: 1,
+                chunk_id: 2,
+                score: 0.9,
+                title: None,
+                content: "Its benefits include antioxidant support, improved metabolic markers, and a milder caffeine lift than coffee.".to_owned(),
+                provenance: None,
+            },
+        ];
+        // The first sentence extends the evidence in both directions —
+        // span-covered, never contained; the second is pure synthesis and
+        // the judge drops it (no cites, not a claim).
+        let prose = "Indeed, green tea is made from Camellia sinensis leaves that are steamed soon after picking, and this preserves the good compounds. The writer's own synthesis names no evidence at all here.";
+        let judged = crate::agentloop::cascade::judge_answer(prose, &evidence);
+        assert_eq!(
+            judged.claims.len(),
+            1,
+            "only the span-covered sentence becomes a claim"
+        );
+        let evidence_texts: Vec<&str> = evidence.iter().map(|c| c.content.as_str()).collect();
+        let claims: Vec<BridgeClaim> = judged
+            .claims
+            .iter()
+            .map(|c| BridgeClaim {
+                text: c.text.clone(),
+                cites: c.cites.iter().map(|&i| i as i64).collect(),
+            })
+            .collect();
+        let support = support_verdict(judged.abstained, &claims, &evidence_texts, false);
+        assert_eq!(
+            support.quoted, support.cited,
+            "judge-derived cites satisfy the span arm by construction — the delegation no-op"
+        );
+        assert_eq!(support.paraphrase, 0);
+        assert_eq!(
+            support.decision,
+            SupportDecision::Supported,
+            "the cascade arm's verdict is unchanged by the cite-truth law"
+        );
+    }
 }
