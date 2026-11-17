@@ -147,7 +147,7 @@ fn strip_cite_markers(text: &str) -> String {
 /// `SPAN_NGRAM` consecutive normalized words; an evidence text shorter
 /// than the n-gram degrades to whole-evidence containment (the
 /// preregistered degenerate case). Byte-identical semantics — a cascade
-/// verdict change is a wrong answer (the F2 law).
+/// verdict change is a wrong answer (delegation must be a no-op).
 pub fn spans_verified(claim_norm: &str, evidence_norm: &str) -> bool {
     let cw: Vec<&str> = claim_norm.split(' ').collect();
     let ew: Vec<&str> = evidence_norm.split(' ').collect();
