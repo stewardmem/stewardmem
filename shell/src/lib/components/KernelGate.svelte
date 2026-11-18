@@ -438,7 +438,7 @@
 			<fieldset class="mt-4 grid gap-2" data-testid="posture-choices">
 				<legend class="sr-only">{m['posture.heading']()}</legend>
 				<label
-					class="flex items-start gap-3 rounded-md border border-border p-3 has-[:checked]:border-brand"
+					class="flex items-start gap-3 rounded-md border border-border p-3 has-checked:border-brand"
 				>
 					<input
 						type="radio"
@@ -454,7 +454,7 @@
 					</span>
 				</label>
 				<label
-					class="flex items-start gap-3 rounded-md border border-border p-3 has-[:checked]:border-brand"
+					class="flex items-start gap-3 rounded-md border border-border p-3 has-checked:border-brand"
 				>
 					<input
 						type="radio"
@@ -470,7 +470,7 @@
 					</span>
 				</label>
 				<label
-					class="flex items-start gap-3 rounded-md border border-border p-3 has-[:checked]:border-brand"
+					class="flex items-start gap-3 rounded-md border border-border p-3 has-checked:border-brand"
 				>
 					<input
 						type="radio"
