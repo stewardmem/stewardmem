@@ -330,9 +330,10 @@ jobs:
       # ARM64-ONLY (the operator's decision, 2026-10-29, III-5): the app is
       # built for aarch64 alone — no Intel slice. Intel Macs run the KERNEL
       # headless (the darwin-x86_64 artifacts below), not the desktop app.
-      # The staged sidecar stays universal (the stage is the kernel's
-      # record); the aarch64 build resolves the -aarch64-apple-darwin
-      # staged file by its own target triple.
+      # The staged KERNEL stays universal (the stage is the kernel's record);
+      # the Swift sidecars stage arm64-only — no consumer anywhere names
+      # their Intel or universal slices. The aarch64 build resolves the
+      # -aarch64-apple-darwin staged file by its own target triple.
       #
       # APPLE_SIGNING_IDENTITY overrides the overlay's Developer ID pin back
       # to ad-hoc: the public Actions hold no certificate and must never sign

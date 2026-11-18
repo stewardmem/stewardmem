@@ -8,11 +8,13 @@ import { createHash } from 'node:crypto';
 import {
 	chmodSync,
 	cpSync,
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
 	rmSync,
-	writeFileSync
+	writeFileSync,
+	type PathLike
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
@@ -20,6 +22,7 @@ import { afterAll, afterEach, expect, test } from 'vitest';
 import { kernelRoot, shellRoot } from './fixtures';
 import {
 	checkProvenance,
+	clearStaleCryptexCaches,
 	machoArchs,
 	provenanceFor,
 	readVersions,
@@ -572,6 +575,95 @@ test('the_staged_kernel_compiles_the_shipped_feature_set', () => {
 		expect(args[args.indexOf('--bin') + 1]).toBe('brain-server');
 		expect(args[args.indexOf('--target') + 1]).toBe(target);
 	}
+});
+
+test('the_swift_sidecars_build_and_stage_arm64_only', () => {
+	// The named act: the Swift sidecars (brain-afm, shell-vision) left the
+	// kernel's three-file law. Every app lane builds aarch64, the Tools set
+	// installs the aarch64 slice, and no consumer anywhere names a Swift
+	// Intel or universal slice (measured: zero references) — while the x86_64
+	// leg of each universal Swift build paid full compile time and printed
+	// the SDK's deprecation warning on every stage. The pins hold the law
+	// structurally: the swift argv carries exactly one --arch, the kernel's
+	// universal expectation is untouched, and lipo serves the KERNEL
+	// universal alone (the Swift product of a single-arch build is already
+	// thin — copied, never thinned).
+	const source = readFileSync(scriptPath, 'utf8');
+	expect(source, 'the Swift build must not request an x86_64 slice').not.toContain("'--arch', 'x86_64'");
+	expect(source).toMatch(/\['build', '-c', 'release', '--arch', 'arm64'\]/);
+	expect(source, 'the KERNEL keeps the universal three-file law').toContain(
+		"const expectedArchs = ['arm64', 'x86_64'];"
+	);
+	expect(source).toContain('const SWIFT_TARGET = ');
+	const lipoCallSites = source.match(/run\('lipo'/g) ?? [];
+	expect(
+		lipoCallSites,
+		'lipo serves the kernel universal alone — the Swift sidecars copy a thin product'
+	).toHaveLength(1);
+	// The stale-shape law: a stage that no longer writes the universal and
+	// Intel slices must not leave a prior stage's copies behind — the staged
+	// set is exactly what this run's record names.
+	expect(source).toContain("for (const staleShape of [UNIVERSAL_TRIPLE, 'x86_64-apple-darwin'])");
+});
+
+test('the_cryptex_guard_clears_stale_mount_references_and_spares_live_ones', () => {
+	// The OS rotates its asset cryptexes under OS updates; SwiftPM's cached
+	// build plan and the Metal dep files keep naming the OLD mount, and the
+	// next swift build dies spawning `metal` from a dead path — the failure
+	// that reads like a toolchain break and has killed staging twice. The
+	// guard clears the poisoned caches (the XCBuildData plan cache
+	// wholesale + every cache file naming a dead mount) and spares live
+	// references, clean files, and the checkouts/ sources.
+	const root = tempDir('brain-cryptex-');
+	const macosDir = join(root, 'shell-macos');
+	const xcData = join(macosDir, '.build', 'out', 'Intermediates.noindex', 'XCBuildData');
+	const metalDir = join(macosDir, '.build', 'out', 'Intermediates.noindex', 'mlx-swift_Cmlx-b.build', 'Metal');
+	const checkouts = join(macosDir, '.build', 'checkouts', 'mlx-swift');
+	mkdirSync(xcData, { recursive: true });
+	mkdirSync(metalDir, { recursive: true });
+	mkdirSync(checkouts, { recursive: true });
+	const dead = '/var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v27.2.47.0.deadM0unt';
+	const live = '/var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v27.2.47.0.liveM0unt';
+	writeFileSync(join(xcData, 'build.db'), `plan names ${dead}/Metal.xctoolchain/usr/bin/metal`);
+	writeFileSync(join(metalDir, 'random.dat'), `${dead}/usr/bin/metal random.metal\n`);
+	writeFileSync(join(metalDir, 'live.dat'), `${live}/usr/bin/metal live.metal\n`);
+	writeFileSync(join(metalDir, 'clean.dat'), 'no mount references at all');
+	writeFileSync(join(checkouts, 'Generated.c'), `// ${dead}/header`); // sources are not caches
+
+	const liveMounts = new Set([live]);
+	// The probe parameter is the SEAM the guard calls through — typed as
+	// node's own `existsSync` shape (PathLike), so the test's stand-in must
+	// accept exactly what the guard may hand it (never a narrower string).
+	const report = clearStaleCryptexCaches(
+		macosDir,
+		(p: PathLike) => liveMounts.has(String(p)) || existsSync(p)
+	);
+
+	expect(report.staleMounts).toEqual([dead]);
+	expect(report.removedPaths).toContain(join(metalDir, 'random.dat'));
+	expect(report.removedPaths).toContain(xcData);
+	expect(existsSync(join(metalDir, 'random.dat'))).toBe(false);
+	expect(existsSync(join(metalDir, 'live.dat'))).toBe(true);
+	expect(existsSync(join(metalDir, 'clean.dat'))).toBe(true);
+	expect(existsSync(join(checkouts, 'Generated.c'))).toBe(true);
+});
+
+test('the_cryptex_guard_is_a_noop_on_clean_and_absent_build_trees', () => {
+	// A guard that fires on a clean tree would be churn; a guard that fires
+	// without scanning (probe hostile, tree empty) would be a false clear.
+	// Both arms must be no-ops that touch nothing.
+	const absent = clearStaleCryptexCaches(join(tempDir('brain-cryptex-'), 'nope'), () => false);
+	expect(absent.staleMounts).toEqual([]);
+	expect(absent.removedPaths).toEqual([]);
+
+	const root = tempDir('brain-cryptex-');
+	const out = join(root, '.build', 'out');
+	mkdirSync(out, { recursive: true });
+	writeFileSync(join(out, 'build.db'), 'references no mount');
+	const clean = clearStaleCryptexCaches(root, () => false);
+	expect(clean.staleMounts).toEqual([]);
+	expect(clean.removedPaths).toEqual([]);
+	expect(existsSync(join(out, 'build.db'))).toBe(true);
 });
 
 test('the_sidecar_is_wired_macos_only_and_its_artifacts_are_ignored', () => {

@@ -10,12 +10,16 @@
  * One module, builtins only, two subcommands:
  *
  *   stage   Build the kernel for both Apple silicon and Intel, lipo a
- *           universal binary, stage every file Tauri requires — per binary:
- *           the two thin slices each compile step resolves plus the
- *           universal the bundle copy takes (brain-afm thinned from ITS
- *           verified universal) — and write SIDECAR_PROVENANCE.json.
- *           Refuses a dirty tree: a build record names a commit, and a
- *           dirty tree has no truthful one.
+ *           universal binary, stage every file Tauri requires — per KERNEL
+ *           binary: the two thin slices each compile step resolves plus
+ *           the universal the bundle copy takes — and write
+ *           SIDECAR_PROVENANCE.json. The SWIFT sidecars (brain-afm,
+ *           shell-vision) stage arm64-only, one thin file each: every app
+ *           lane builds aarch64, the Tools set installs the aarch64 slice
+ *           beside the kernel, and no consumer anywhere names their Intel
+ *           or universal slices (measured: zero references). Refuses a
+ *           dirty tree: a build record names a commit, and a dirty tree
+ *           has no truthful one.
  *
  *   verify  Walk a real bundle, FIND every Mach-O by PATH (never by the
  *           line count `file` emits — a fat binary prints one line per
@@ -102,6 +106,14 @@ const TARGETS = [
 	{ triple: 'x86_64-apple-darwin', arch: 'x86_64' }
 ];
 
+// The Swift sidecars' staging law: ONE thin arm64 file each. The desktop app
+// is arm64-only on every lane, the Tools set installs the aarch64 slice
+// beside the kernel, and nothing consumes a Swift Intel or universal slice
+// (measured: zero consumers) — while the KERNEL keeps the full three-file
+// shape, because headless Intel deployments run the kernel binary directly
+// from the release assets.
+const SWIFT_TARGET = { triple: 'aarch64-apple-darwin', arch: 'arm64' };
+
 /** cputype -> the spelling `file`/`lipo` use. */
 const CPU_ARCH = new Map([
 	[0x01000007, 'x86_64'],
@@ -116,6 +128,94 @@ const CPU_ARCH = new Map([
 function archName(cputype) {
 	const name = CPU_ARCH.get(cputype >>> 0);
 	return name ?? `cpu-0x${(cputype >>> 0).toString(16)}`;
+}
+
+/**
+ * The cryptex-mount staleness guard. The OS rotates its asset cryptexes
+ * (`/var/run/com.apple.security.cryptexd/mnt/<id>`) under OS updates, but
+ * SwiftPM's cached build plan (XCBuildData) and the Metal dep files keep
+ * naming the OLD mount — the next `swift build` then dies spawning `metal`
+ * from a path that no longer exists ("unable to spawn process ... No such
+ * file or directory"), a failure that reads like a toolchain break and has
+ * killed staging twice. The guard runs BEFORE the Swift build: it scans
+ * `.build` for cached references to cryptex mounts that no longer resolve
+ * and clears the poisoned caches — the XCBuildData plan cache wholesale (a
+ * partially-cleared plan is its own hazard) plus every cache/dep file that
+ * names a dead mount. Sources under `checkouts/` are not caches and are
+ * never touched; files above the size cap are skipped (object files run to
+ * tens of MB and never carry toolchain paths; the caches that do are
+ * small). A concurrent `swift build` holding `build.db` is NOT killed by
+ * this guard — that remains the operator's call, named here.
+ */
+export function clearStaleCryptexCaches(swiftDir, probeExists = existsSync) {
+	const buildRoot = join(swiftDir, '.build');
+	const report = { staleMounts: [], removedPaths: [] };
+	if (!existsSync(buildRoot)) return report;
+	const mountPattern = /\/var\/run\/com\.apple\.security\.cryptexd\/mnt\/([A-Za-z0-9._-]+)/g;
+	const mountBase = '/var/run/com.apple.security.cryptexd/mnt';
+	const referenced = new Map();
+	const xcBuildDataDirs = [];
+	const walk = (dir, inCheckouts) => {
+		let entries;
+		try {
+			entries = readdirSync(dir, { withFileTypes: true });
+		} catch {
+			return;
+		}
+		for (const entry of entries) {
+			const path = join(dir, entry.name);
+			if (entry.isDirectory()) {
+				if (entry.name === 'XCBuildData') xcBuildDataDirs.push(path);
+				walk(path, inCheckouts || entry.name === 'checkouts');
+			} else if (entry.isFile() && !inCheckouts) {
+				let size;
+				try {
+					size = statSync(path).size;
+				} catch {
+					continue;
+				}
+				if (size > 16 * 1024 * 1024) continue;
+				let text;
+				try {
+					text = readFileSync(path, 'utf8');
+				} catch {
+					continue;
+				}
+				for (const match of text.matchAll(mountPattern)) {
+					const id = match[1];
+					const list = referenced.get(id) ?? [];
+					list.push(path);
+					referenced.set(id, list);
+				}
+			}
+		}
+	};
+	walk(buildRoot, false);
+	const staleIds = [];
+	for (const id of referenced.keys()) {
+		if (!probeExists(join(mountBase, id))) staleIds.push(id);
+	}
+	if (staleIds.length === 0) return report;
+	console.log(
+		`[cryptex guard] ${staleIds.length} referenced OS asset mount(s) no longer resolve — the OS rotated a cryptex under SwiftPM's cached build plan; clearing the poisoned caches:`
+	);
+	for (const dir of xcBuildDataDirs) {
+		rmSync(dir, { recursive: true, force: true });
+		report.removedPaths.push(dir);
+		console.log(`[cryptex guard] removed the build-plan cache ${dir}`);
+	}
+	const staleSet = new Set(staleIds);
+	for (const [id, files] of referenced) {
+		if (!staleSet.has(id)) continue;
+		for (const file of files) {
+			if (!existsSync(file)) continue; // already gone with its XCBuildData dir
+			rmSync(file, { force: true });
+			report.removedPaths.push(file);
+			console.log(`[cryptex guard] removed ${file} (names the dead mount)`);
+		}
+	}
+	report.staleMounts = staleIds.map((id) => join(mountBase, id));
+	return report;
 }
 
 /**
@@ -740,7 +840,7 @@ function stage() {
 	artifacts.push({ name: universalName, target: UNIVERSAL_TRIPLE, path: universalPath });
 
 	// The Swift sidecars — brain-afm (the chat spine) and shell-vision (the
-	// OCR sidecar, IMPROVE05). Built by ONE SwiftPM universal build in
+	// OCR sidecar, IMPROVE05). Built by ONE SwiftPM arm64 build in
 	// shell-macos (both executables live in the package), staged under the
 	// same triple convention so the bundler's externalBin places them beside
 	// the kernel in Contents/MacOS (the kernel resolves each as
@@ -751,13 +851,14 @@ function stage() {
 	// boot the model; the arch check + the sealed sha256 + the kernel's own
 	// live protocol pins carry the integrity story.
 	const swiftDir = join(REPO_ROOT, 'shell-macos');
+	// The cryptex guard runs BEFORE the build: a rotated OS asset mount
+	// poisons SwiftPM's cached plan and the build dies spawning `metal` from
+	// a dead path (two witnessed staging failures). The clear is loud and
+	// named; a clean cache tree is untouched.
+	clearStaleCryptexCaches(swiftDir);
 	const swiftSidecars = ['brain-afm', 'shell-vision'];
-	console.log('[stage] swift build -c release --arch arm64 --arch x86_64 (brain-afm, shell-vision)');
-	const swiftBuild = run(
-		'swift',
-		['build', '-c', 'release', '--arch', 'arm64', '--arch', 'x86_64'],
-		{ cwd: swiftDir }
-	);
+	console.log('[stage] swift build -c release --arch arm64 (brain-afm, shell-vision — arm64-only)');
+	const swiftBuild = run('swift', ['build', '-c', 'release', '--arch', 'arm64'], { cwd: swiftDir });
 	if (swiftBuild.status !== 0) {
 		console.error(`[stage] swift build failed: ${output(swiftBuild)}`);
 		process.exit(1);
@@ -779,43 +880,41 @@ function stage() {
 			process.exit(1);
 		}
 		const archs = machoArchs(source);
-		if (!sameArchSet(archs, expectedArchs)) {
+		if (archs.length !== 1 || archs[0] !== SWIFT_TARGET.arch) {
 			console.error(
-				`[stage] ${sidecarName} carries [${archs.join(' ')}], expected the universal [${expectedArchs.join(' ')}]`
+				`[stage] ${sidecarName} carries [${archs.join(' ')}], expected exactly [${SWIFT_TARGET.arch}] — the Swift sidecars build arm64-only (every app lane builds aarch64; no consumer names an Intel or universal Swift slice)`
 			);
 			process.exit(1);
 		}
-		const universalName = `${sidecarName}-${UNIVERSAL_TRIPLE}`;
-		const universalPath = join(STAGED_DIR, universalName);
-		copyFileSync(source, universalPath);
-		chmodSync(universalPath, 0o755);
-		artifacts.push({ name: universalName, target: UNIVERSAL_TRIPLE, path: universalPath });
-
-		// The same three-file law the kernel's staging obeys (see the header
-		// note): each arch's compile step resolves externalBin against its OWN
-		// triple, and only the bundle copy step takes the universal name — only
-		// the universal file present fails with `resource path ... doesn't exist`.
-		// The thin slices are THINNED out of the verified universal rather than
-		// copied, so a fat binary can never sit under a thin name, and each is
-		// arch-checked before it earns a record entry.
-		for (const target of TARGETS) {
-			const thinName = `${sidecarName}-${target.triple}`;
-			const thinPath = join(STAGED_DIR, thinName);
-			rmSync(thinPath, { force: true });
-			const thin = run('lipo', ['-thin', target.arch, universalPath, '-output', thinPath]);
-			if (thin.status !== 0) {
-				console.error(`[stage] lipo -thin ${target.arch} failed for ${sidecarName}: ${output(thin)}`);
-				process.exit(1);
+		// ONE thin file per Swift sidecar — the single-file staging law. The
+		// shape every consumer resolves is `<name>-aarch64-apple-darwin`: the
+		// bundler's externalBin on the aarch64 target, the Tools set's
+		// beside-the-kernel install, install-service.sh's bridge refresh. The
+		// product of a single-arch build is already thin — copied, arch-checked
+		// again, and only then recorded.
+		const thinName = `${sidecarName}-${SWIFT_TARGET.triple}`;
+		const thinPath = join(STAGED_DIR, thinName);
+		copyFileSync(source, thinPath);
+		chmodSync(thinPath, 0o755);
+		const thinArchs = machoArchs(thinPath);
+		if (thinArchs.length !== 1 || thinArchs[0] !== SWIFT_TARGET.arch) {
+			console.error(
+				`[stage] ${thinPath} carries [${thinArchs.join(' ')}], expected exactly [${SWIFT_TARGET.arch}]`
+			);
+			process.exit(1);
+		}
+		artifacts.push({ name: thinName, target: SWIFT_TARGET.triple, path: thinPath });
+		// A previous era's stage wrote universal and Intel slices here; this
+		// stage no longer produces them, so their lingering copies are removed
+		// — the staged set must be exactly what this run's record names (the
+		// lipo errno-17 precedent: a prior stage's product must never satisfy
+		// the next one).
+		for (const staleShape of [UNIVERSAL_TRIPLE, 'x86_64-apple-darwin']) {
+			const stalePath = join(STAGED_DIR, `${sidecarName}-${staleShape}`);
+			if (existsSync(stalePath)) {
+				rmSync(stalePath, { force: true });
+				console.log(`[stage] removed a prior stage's ${stalePath} (a shape this stage no longer writes)`);
 			}
-			chmodSync(thinPath, 0o755);
-			const thinArchs = machoArchs(thinPath);
-			if (thinArchs.length !== 1 || thinArchs[0] !== target.arch) {
-				console.error(
-					`[stage] ${thinPath} carries [${thinArchs.join(' ')}], expected exactly [${target.arch}]`
-				);
-				process.exit(1);
-			}
-			artifacts.push({ name: thinName, target: target.triple, path: thinPath });
 		}
 	}
 
