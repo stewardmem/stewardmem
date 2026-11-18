@@ -87,3 +87,14 @@ machine); it is included in the full vitest run.
 - The registry unit pin (`resolveStatusChain`) untouched and green.
 - Lanes: vitest 439 passed | 2 skipped (band red: 1,808,343 = +913, recorded),
   svelte-check 0/0, eslint clean, e2e chromium 9 passed | 1 skipped.
+
+## S6 · the rail (committed at its step)
+
+- Tooltip labels: the nav links already carried `title` = their label key;
+  the three icon CONTROLS (new-chat, settings, sidebar-toggle) gain `title`
+  beside `aria-label` — discoverability without text nav, no census change.
+- Session rows quiet: the row is a `group`; the pencil/trash cluster reveals
+  on hover (`group-hover`) and stays keyboard-recoverable
+  (`group-focus-within`); the per-button opacity multiplications removed (the
+  span is the single visibility control). Hover tint + active tint unchanged.
+- Lanes: appshell-chrome + default-nav + route-a11y 35 green, svelte-check 0/0.

@@ -507,6 +507,7 @@
 				size="icon-sm"
 				data-testid="shell-new-chat"
 				aria-label={m['shell.new_chat']()}
+				title={m['shell.new_chat']()}
 				onclick={newChat}
 			>
 				<PlusIcon aria-hidden="true" />
@@ -603,6 +604,7 @@
 				size="icon-sm"
 				data-testid="nav-settings"
 				aria-label={m['nav.settings']()}
+				title={m['nav.settings']()}
 				onclick={() => goto(resolve('/settings'))}
 			>
 				<SettingsIcon aria-hidden="true" />
@@ -616,6 +618,7 @@
 				variant="ghost"
 				size="icon-sm"
 				aria-label={collapsed ? m['shell.sidebar.expand']() : m['shell.sidebar.collapse']()}
+				title={collapsed ? m['shell.sidebar.expand']() : m['shell.sidebar.collapse']()}
 				aria-expanded={!collapsed}
 				data-testid="shell-sidebar-toggle"
 				onclick={toggleSidebar}
@@ -673,7 +676,7 @@
 										data-testid="session-row"
 										data-active={active ? 'true' : 'false'}
 										aria-current={active ? 'true' : undefined}
-										class="flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-left text-sm text-muted-foreground transition-colors hover:bg-sidebar-hover hover:text-foreground {active
+										class="group flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-left text-sm text-muted-foreground transition-colors hover:bg-sidebar-hover hover:text-foreground {active
 										? 'bg-sidebar-active text-foreground'
 										: ''}"
 										onclick={() => activateSession(row.session_key)}
@@ -686,12 +689,14 @@
 											{relativeTime(row.last_turn_at)}
 										</span>
 									</button>
-									<span class="absolute right-1 top-1 flex">
+									<span
+										class="absolute right-1 top-1 flex opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+									>
 										<button
 											type="button"
 											data-testid="session-rename"
 											aria-label={m['chat.sessions.rename']({ name })}
-											class="grid size-6 place-items-center rounded-md text-muted-foreground opacity-60 transition-opacity hover:opacity-100 focus-visible:opacity-100 hover:text-foreground"
+											class="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
 											onclick={() => startRename(row.session_key, row.label)}
 										>
 											<PencilIcon class="size-3.5" aria-hidden="true" />
@@ -700,7 +705,7 @@
 											type="button"
 											data-testid="session-delete"
 											aria-label={m['chat.sessions.delete']({ name })}
-											class="grid size-6 place-items-center rounded-md text-muted-foreground opacity-60 transition-opacity hover:opacity-100 focus-visible:opacity-100 hover:text-destructive"
+											class="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:text-destructive"
 											onclick={() => askDelete(row.session_key)}
 										>
 											<Trash2Icon class="size-3.5" aria-hidden="true" />
