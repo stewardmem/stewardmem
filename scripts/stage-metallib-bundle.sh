@@ -81,14 +81,23 @@ if [ -n "$SIGN" ]; then
     fi
     codesign "${SIGN_ARGS[@]}" "$MACOS_DIR/$BUNDLE_NAME" \
         || fail "$BUNDLE_NAME could not be signed — the parent's seal would refuse it"
-    # The re-seal PRESERVES the parent's hardened-runtime flag: a --force
-    # replaces the signature, and dropping the runtime bit would weaken the
-    # app's posture (witnessed: the bundler's own seal carries it when the
-    # conf sets hardenedRuntime).
+    # The re-seal applies the hardened-runtime flag UNCONDITIONALLY for a
+    # real identity — the same law the Cmlx signing three lines above
+    # follows and the same law the release walker demands on EVERY Mach-O
+    # (a flags=0x0 brain-shell reds the chain walk). The previous form
+    # CONDITIONED the flag on grepping the parent's codesign output at a
+    # moment when the seal was already stale (MacOS/ had just been
+    # modified), and the condition failed in the signing lane's first real
+    # run — the re-seal silently stripped the bundler's runtime flag and
+    # the chain refused to publish — while every manual reproduction of
+    # the same sequence passed the check. A preserve-that-can-silently-
+    # drop is worse than an unconditional apply: the flag is mandatory
+    # under the Developer ID identity, so it is always applied, never
+    # inferred. (Ad-hoc `-` keeps the plain seal — the public proof lanes
+    # walk for shape, not runtime.)
     RESEAL_ARGS=(--force --sign "$SIGN")
-    if codesign -d --entitlements - "$APP" >/dev/null 2>&1 \
-        && codesign -dv "$APP" 2>&1 | grep -q 'runtime'; then
-        RESEAL_ARGS+=(--options runtime)
+    if [ "$SIGN" != "-" ]; then
+        RESEAL_ARGS+=(--options runtime --timestamp)
     fi
     codesign "${RESEAL_ARGS[@]}" "$APP" \
         || fail "the parent app could not be re-sealed after the bundle placement"
