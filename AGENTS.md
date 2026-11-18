@@ -1,5 +1,68 @@
 # Agent Execution Log — StewardMem
 
+> **R152 "The front door" (2026-11-18, shell + docs — zero kernel files, zero
+> wire changes, zero new dependencies): the install lane's Swift death is
+> ROOT-CAUSED as a rotated OS cryptex (NOT x86_64 — the deprecation warning
+> was the red herring), staging gains the recurrence guard, the Swift
+> sidecars leave the three-file law as a NAMED ACT, and the README becomes
+> the front door.** THE CRYPTEX (install-service.sh → sidecar.mjs stage →
+> swift build): the build died spawning `metal` from
+> `/var/run/com.apple.security.cryptexd/mnt/…nIC5oJ/…` — the OS rotated
+> the Metal-toolchain asset mount (same 27.2.47.0 version, new mount id)
+> while SwiftPM's cached plan (XCBuildData/build.db + 14 Metal/*.dat dep
+> files) kept naming the dead path; the same class the v1.29.45 wrap
+> recorded. Hand-clearing restored the fat [x86_64 arm64] brain-afm
+> (verified by lipo, 209.53 s) — and proved x86_64 deprecated-with-grace,
+> not dead (FoundationModels.tbd still exports x86_64 targets in the 27.2
+> SDK). THE GUARD: `clearStaleCryptexCaches()` runs BEFORE every swift
+> build — it scans `.build` for cached references to cryptex mounts that
+> no longer resolve, clears XCBuildData wholesale (a partially-cleared
+> plan is its own hazard) plus every dep file naming a dead mount, LOUDLY
+> by name; `checkouts/` sources, live-mount references, clean files, and
+> oversized objects are spared; a concurrent swift-build holding
+> `build.db` is the operator's kill, documented as such. THE NAMED ACT:
+> brain-afm and shell-vision (the Swift sidecars) build and stage
+> arm64-only — ONE thin `-aarch64-apple-darwin` file each, because every
+> consumer resolves exactly that shape (the bundler's externalBin on the
+> aarch64 target, the Tools set's beside-the-kernel install,
+> install-service.sh's bridge refresh) and NOTHING names their Intel or
+> universal slices (measured: zero references repo-wide); the KERNEL
+> keeps the full three-file universal law (headless Intel deployments run
+> the release assets); prior-stage universal/x86_64 leftovers are removed
+> on sight (the lipo errno-17 precedent); the SDK deprecation warning and
+> ~half the Swift build time die with it. THE FRONT DOOR: README 669 → 73
+> lines, humanized (zero em-dashes, short sentences, no AI scaffolding),
+> the four promises in plain words (stays on your machine / shows its
+> sources / refuses to guess / deletes for real), a real quickstart, the
+> five-piece table, proof-not-promises; 10 badges → the 4 the gates pin
+> (version, tests, OpenAPI, SBOM), UMP survives as the selfcheck's
+> derived sentence, license in text. THE GATES BIT THE ROUND'S OWN COPY,
+> both recorded: external_claim_pins refused "signed audit chain" (the
+> chain is keyed HMAC-SHA256; Ed25519 signs manifests, parcels and
+> provenance at the boundaries) — reworded to the true mechanism, and "a
+> signed record of the removal" became "a record that cannot be quietly
+> changed" for the same truth; the no-LLM claim gate passes with the
+> claim scoped to recall ("Recall costs zero tokens" — the hyphenated
+> zero-token claim is the one it polices; the claim-file floor holds at
+> 5). The concurrent session's catch honored: the cryptex pin's injected
+> probe types its parameter PathLike to match the exported guard's
+> inferred signature (81370824 left it for this round by name). PINS (3
+> new, both drills RUN and reverted): the arm64 law is STRUCTURAL (red on
+> the reintroduced `'--arch', 'x86_64'`: "the Swift build must not
+> request an x86_64 slice"; lipo serves the kernel universal alone; the
+> kernel's universal expectation untouched; the stale-shape cleanup
+> pinned); the guard's clear-and-spare arm is BEHAVIORAL over a fixture
+> .build tree with an injected mount probe (red on the unconditional
+> no-op, the noop arm green through both); the noop arm holds on clean
+> and absent trees. Lanes at the wrap: vitest 443 passed | 2 skipped
+> (baseline 440+2), svelte-check 0/0, eslint clean, node --check OK,
+> docs_truth 20/20, external_claim_pins 14/14, badges selfcheck OK,
+> check-doc-links 567/567. OWED, named: the next stage run exercises the
+> guard and the arm64 build NATIVELY (this machine's caches were
+> hand-cleared before the guard existed — the guard's first live proof
+> is the next cut's); the release wrap names both commits; the site's
+> copy syncs to the front door's voice.
+
 > **RELEASE v1.29.46 "The quiet surface" (2026-11-18, shell-only — zero
 > kernel files, zero wire changes, zero new dependencies): the UI1 round
 > becomes the release — the chat canvas renders the answer and one quiet

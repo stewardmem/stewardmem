@@ -1,669 +1,73 @@
 # StewardMem
 
-**Governed, local-first memory and decision infrastructure for AI agents.**
+Self-hosted AI agent memory. It runs on your own machine, shows where every answer came from, refuses to guess, and deletes for real.
 
-StewardMem is a **self-hosted AI agent memory server** for systems where incorrect, poisoned, or unauthorized memory has real consequences.
-
-It provides **deterministic hybrid retrieval, human-gated memory promotion, provenance, tamper-evident audit, quarantine, verifiable deletion, and least-privilege access** in a single Rust/Axum server.
-
-> **No hosted memory service. No embedding API required. No LLM required in the hot recall path. No data leaves the system by default.**
->
-> Memory operations — recall, search, ingest, approval — are deterministic and
-> zero-token. Separately, an OPTIONAL **operator-launched GDL provider lane**
-> (`BRAIN_GDL_PROVIDER_*`) can call a configured HTTP or AFM-stdio provider for GDL workflow
-> runs under server-owned controls; its output **never auto-promotes** (a human
-> gate decides), and pointing it at a local endpoint keeps memory from leaving
-> the host at all.
+One open-source Rust binary. One SQLite file. No cloud, no account, no subscription.
 
 <p align="center">
-
-  <a href="https://github.com/stewardmem/stewardmem/actions/workflows/ci.yml?query=branch%3Av1.29.11">
-    <img alt="CI (release v1.29.11)" src="https://github.com/stewardmem/stewardmem/actions/workflows/ci.yml/badge.svg?branch=v1.29.10">
-  </a>
-  <a href="https://github.com/stewardmem/stewardmem/releases/latest">
-    <img alt="Latest release" src="https://img.shields.io/github/v/release/stewardmem/stewardmem?include_prereleases&sort=semver">
-  </a>
-  <a href="#">
-    <img alt="Version 1.29.46" src="https://img.shields.io/badge/version-1.29.46-blue.svg">
-  </a>
-  <a href="https://stewardmem.github.io/stewardmem/">
-    <img alt="Documentation" src="https://img.shields.io/badge/docs-brain--server-1f6feb.svg">
-  </a>
-  <a href="https://github.com/stewardmem/stewardmem/blob/main/LICENSE">
-    <img alt="Apache 2.0 license" src="https://img.shields.io/github/license/stewardmem/stewardmem.svg">
-  </a>
-
+  <a href="#"><img alt="Version 1.29.46" src="https://img.shields.io/badge/version-1.29.46-blue.svg"></a>
+  <a href="#proof-not-promises"><img alt="4243 tests passed" src="https://img.shields.io/badge/tests-4243%20passed-brightgreen.svg"></a>
+  <a href="openapi.yaml"><img alt="OpenAPI 1.29.46" src="https://img.shields.io/badge/OpenAPI-1.29.46-6b4bff.svg"></a>
+  <a href="sbom/brain-server-1.29.46.cdx.json"><img alt="CycloneDX 1.5 SBOM" src="https://img.shields.io/badge/SBOM-CycloneDX%201.5-013243.svg"></a>
 </p>
 
-<p align="center">
+*The test count comes from the build, never from a hand (`scripts/badges.sh --verify-count`; not selfcheck-verified, the cheap check cannot count tests, the CI badge-drift gate does that on every release tag).*
 
-  <a href="#verification-and-evidence">
-    <img alt="4243 tests passed" src="https://img.shields.io/badge/tests-4243%20passed-brightgreen.svg">
-  </a>
-  <a href="docs/universal-memory-protocol.md">
-    <img alt="UMP 1.0 L3 verified" src="https://img.shields.io/badge/UMP%201.0-L3%20verified-success.svg">
-  </a>
-  <a href="sbom/brain-server-1.29.46.cdx.json">
-    <img alt="CycloneDX 1.5 SBOM" src="https://img.shields.io/badge/SBOM-CycloneDX%201.5-013243.svg">
-  </a>
-  <a href="openapi.yaml">
-    <img alt="OpenAPI 1.29.46" src="https://img.shields.io/badge/OpenAPI-1.29.46-6b4bff.svg">
-  </a>
-  <a href="SECURITY.md">
-    <img alt="Security policy" src="https://img.shields.io/badge/security--policy-1f6feb.svg">
-  </a>
+## What you get
 
-</p>
+- **Memory that stays yours.** Everything sits on your machine in one SQLite file. Copy it, back it up, or delete it. It never leaves.
+- **Answers with receipts.** Every answer shows which memory it used, with the exact quote. You can check it yourself.
+- **No guessing.** If the memory is not there, it says so. It does not invent facts.
+- **Deleting works.** Remove a memory and it is gone, with a record of the removal that cannot be quietly changed.
+- **You hold the pen.** New memories can wait for your yes before they count. You decide what the AI keeps.
 
-<p align="center">
+## Quick start
 
-*The test-count badge is derived, never hand-typed (`scripts/badges.sh
---verify-count`; not selfcheck-verified — the cheap path cannot compare a
-count, CI's badge-drift gate does, on every release tag).*
+**On a Mac (easiest):** download the app or the tools installer from [the releases page](https://github.com/stewardmem/stewardmem/releases/latest), then run StewardMem.
 
-<p align="center">
-  <a href="Cargo.toml"><img alt="Rust 2024" src="https://img.shields.io/badge/Rust-2024-orange?logo=rust"></a>
-  <a href="Cargo.toml"><img alt="Axum 0.8" src="https://img.shields.io/badge/Axum-0.8-6b4bff.svg"></a>
-  <a href="#what-it-provides"><img alt="SQLite FTS5 and sqlite-vec" src="https://img.shields.io/badge/SQLite-FTS5%20%2B%20sqlite--vec-1f6feb.svg"></a>
-  <a href="shell/package.json"><img alt="Tauri 2" src="https://img.shields.io/badge/Tauri-2-24c8db.svg"></a>
-  <a href="shell/package.json"><img alt="SvelteKit 2" src="https://img.shields.io/badge/SvelteKit-2-ff3e00.svg"></a>
-  <a href="docs/mcp.md"><img alt="MCP stdio and HTTP" src="https://img.shields.io/badge/MCP-stdio%2FHTTP-5c4dab.svg"></a>
+**From source (macOS or Linux):**
 
-</p>
-
-*Version, UMP, and SBOM values are derived by `scripts/badges.sh` and are machine-checked by
-`--selfcheck`. CI and release badges are live GitHub signals; stack badges link to the in-repo
-manifests and docs.*
-
-*The CI badge tracks the release tag, not `main`: the full matrix runs on `v*` tag pushes
-(the 2026-10-06 billing law — private-repo Actions are off, public-repo Actions are free),
-and `main` is deliberately never pushed to the public repo (`scripts/release.sh`), so a
-`branch=main` badge would report a stale public snapshot forever. The badge moves with each
-release, like the version badge.*
-
-<p align="center">
-
-**Rust / Axum · SQLite · FTS5 · sqlite-vec · MCP · Tauri + SvelteKit · OpenClaw**
-
-</p>
-
-![StewardMem — governed local-first AI agent memory](docs/assets/hero-light.png)
-
----
-
-## Table of contents
-
-- [Why StewardMem?](#why-stewardmem)
-- [What it provides](#what-it-provides)
-- [Architecture](#architecture)
-- [Governance model](#governance-model)
-- [Local-first by default](#local-first-by-default)
-- [Security model](#security-model)
-- [Designed for reproducible agent systems](#designed-for-reproducible-agent-systems)
-- [Decision and evaluation direction](#decision-and-evaluation-direction)
-- [MCP](#mcp)
-- [OpenClaw](#openclaw)
-- [Who is it for?](#who-is-it-for)
-- [Try StewardMem](#try-stewardmem)
-- [Build from source](#build-from-source)
-- [CLI](#cli)
-- [Verification and evidence](#verification-and-evidence)
-- [Universal Memory Protocol](#universal-memory-protocol)
-- [Compliance and regulated environments](#compliance-and-regulated-environments)
-- [Documentation](#documentation)
-- [Project principles](#project-principles)
-- [What StewardMem is not](#what-stewardmem-is-not)
-- [License](#license)
-
----
-
-## Why StewardMem?
-
-AI agents increasingly depend on persistent memory: customer context, operational knowledge, decisions, preferences, case history, instructions, and facts collected over time.
-
-That creates a security and governance problem.
-
-- A wrong retrieval can produce a wrong answer.
-- A poisoned memory can influence future behavior.
-- An agent should not be able to silently turn untrusted content into permanent knowledge.
-
-StewardMem is built around a simple principle:
-
-> **Memory is governed state, not just retrieved text.**
-
-The server is the authority for memory, retrieval, provenance, governance, workflow, and audit.
-
----
-
-## What it provides
-
-### Deterministic AI agent memory
-
-StewardMem combines multiple retrieval signals without requiring an LLM in the hot recall path:
-
-- **FTS5 full-text search**
-- **Vector similarity**
-- **Reciprocal rank fusion (RRF)**
-- Provenance-bearing results
-- Explicit retrieval and decision metadata
-
-The retrieval pipeline is designed so that the same query against the same indexed state and configuration produces the same ordered result.
-
-### Human-gated memory promotion
-
-Agent-proposed knowledge is not automatically promoted to permanent memory.
-
-A proposal is reviewed by a human and approved against the **SHA-256 `content_digest` of the exact bytes being promoted**.
-
-If the content changes after review, the approval no longer matches and promotion fails.
-
-> High-risk deployments can require multiple distinct approvers.
-
-### Memory poisoning protection
-
-Incoming content is screened before it becomes trusted searchable state.
-
-Suspect content can be quarantined and excluded from:
-
-- Vector retrieval
-- Full-text retrieval
-- Graph retrieval
-
-Recalled content is explicitly represented as **untrusted data**, preventing stored instructions from silently becoming trusted agent instructions.
-
-### Provenance and evidence verification
-
-Recall results can include the evidence and provenance behind each result.
-
-StewardMem also provides a direct verification path so a claim can be checked against stored evidence rather than delegated to an LLM.
-
-```text
-POST /verify
-```
-
-The goal is simple:
-
-> **Show the evidence. Do not ask the model to invent the evidence.**
-
-### Tamper-evident audit
-
-StewardMem maintains an append-only keyed hash chain with a verifiable head.
-
-The audit chain can be checked directly:
-
-```text
-GET /audit/verify
-```
-
-This makes later modification of recorded events detectable.
-
-### Verifiable deletion
-
-Data lifecycle operations are part of the system rather than an afterthought.
-
-DSAR and purge operations can produce:
-
-- Certificates
-- Tombstones
-- Auditable deletion events
-
-Deletion therefore has a verifiable record.
-
-### Least-privilege access
-
-Agents and operators do not need the same authority.
-
-Scoped principals are restricted to the role capability vocabulary —
-`read`, `write`, `approve`, `reject`, `calibrate`, `release_quarantine`,
-`dsar_export`, `purge`, `admin`, `workflow` (`src/role.rs`) — plus tool-level
-scopes: the ship-with `agent` preset carries `read`/`write`/`reject` and only
-the `ump.recall`/`ump.get`/`ump.feedback` tools, and `BRAIN_MCP_SCOPE=read`
-denies every MCP write verb.
-
-Operator credentials remain separate from agent credentials.
-
-Revoked principals are refused immediately and cannot regain access simply by re-provisioning old credentials.
-
----
-
-## Architecture
-
-StewardMem is the **authoritative data and governance plane**.
-
-```mermaid
-flowchart TD
-    Client["AI agent / application / MCP client"]
-    Client -->|"request"| BS
-
-    subgraph BS["brain-server — Rust / Axum"]
-        direction TB
-        Gov["Governance"]
-        Mem["Memory"]
-        Ret["Retrieval"]
-        Prov["Provenance"]
-        Aud["Audit"]
-        Wf["Workflow"]
-    end
-
-    BS --> SQLite["SQLite"]
-    BS --> FTS["FTS5"]
-    BS --> Vec["sqlite-vec"]
-
-    SQLite --> State["Evidence / State"]
-    FTS --> State
-    Vec --> State
-
-    classDef plane fill:#dbe9ff,stroke:#1f6feb,color:#1f2328
-    classDef store fill:#dafbe1,stroke:#3fb950,color:#1f2328
-    classDef edge fill:#fff8c5,stroke:#d29922,color:#1f2328
-    class Client edge
-    class Gov,Mem,Ret,Prov,Aud,Wf plane
-    class SQLite,FTS,Vec,State store
-```
-
-The human-facing desktop client is a **Tauri + SvelteKit application** consuming the public server contract:
-
-```mermaid
-flowchart TD
-    GUI["Tauri + SvelteKit<br/>Human Control Plane"]
-    GUI -->|"HTTP / SSE"| Server["brain-server<br/>single authority"]
-
-    classDef gui fill:#efdbff,stroke:#a371f7,color:#1f2328
-    classDef srv fill:#dbe9ff,stroke:#1f6feb,color:#1f2328
-    class GUI gui
-    class Server srv
-```
-
-> **Transport note.** Streaming is **SSE** (`text/event-stream` on the `/events` routes).
-> There is no WebSocket endpoint in this server — `axum` is declared without its `ws`
-> feature and no upgrade handler is registered.
-
-The client is deliberately **not a second backend**.
-
-- It does not own the data plane, memory database, governance state, or authoritative business logic.
-- The server remains fully usable without the GUI through its binary, HTTP API, MCP interface, CLI, and verification tooling.
-
----
-
-## Governance model
-
-StewardMem treats durable agent knowledge as a governed lifecycle:
-
-```mermaid
-flowchart TD
-    A["untrusted input"] --> B["screening"]
-    B -->|"suspect"| Q["quarantine"]
-    B -->|"passes"| C["proposal"]
-    C --> D["exact content + digest"]
-    D --> E["human approval"]
-    E --> F["durable state"]
-    F --> G["audit + provenance"]
-
-    classDef input fill:#fff8c5,stroke:#d29922,color:#1f2328
-    classDef gate fill:#ffebe9,stroke:#f85149,color:#1f2328
-    classDef ok fill:#dafbe1,stroke:#3fb950,color:#1f2328
-    classDef warn fill:#fff8c5,stroke:#d29922,color:#1f2328
-    class A input
-    class B,D,E gate
-    class F,G ok
-    class Q warn
-```
-
-**This lifecycle is the `review` posture, not the default.** `BRAIN_WRITE_POSTURE` defaults to
-`open` for back-compatibility, and under `open` the write surfaces **insert durable memory
-directly** — the proposal and approval steps above are bypassed. Set
-`BRAIN_WRITE_POSTURE=review` to put agent-facing writes through the gate. Unknown values are
-refused at startup.
-
-Under either posture:
-
-- **Agent capture and durable memory are different states.**
-- **Quarantine is a flag, not a separate store.** Suspect content is still written, then marked
-  `flagged` and excluded from retrieval (a quarantined ingest writes no vector).
-- **Where the proposal path is used, promotion is digest-bound** — approval fails closed with
-  `409` if the content changed since it was displayed.
-
-See `docs/architecture.md` §"Who may decide what" for the capability vocabulary behind the gate.
-
----
-
-## Local-first by default
-
-StewardMem is designed to run under the customer's control.
-
-The default local path does **not** require:
-
-- A hosted memory provider
-- A cloud account
-- An embedding API
-- An LLM for recall
-
-Data remains in customer-controlled storage unless an explicitly configured integration sends it elsewhere.
-
-This makes StewardMem suitable for:
-
-- Self-hosted environments
-- Private networks
-- Sovereign deployments
-- Restricted environments
-- Edge devices
-- Disconnected or tightly controlled systems
-
----
-
-## Security model
-
-StewardMem is designed around explicit trust boundaries.
-
-Stored content is treated as **data, not trusted instructions**.
-
-The security model addresses concerns including:
-
-| Category | Concerns |
-|---|---|
-| Content | Memory poisoning, indirect prompt and instruction injection through stored content |
-| Governance | Unauthorized memory promotion, privilege escalation |
-| Evidence | Provenance loss, audit tampering |
-| Access | Unauthorized retrieval |
-| Lifecycle | Data-retention and deletion requirements |
-
-See:
-
-- [`SECURITY.md`](SECURITY.md)
-- [`THREAT_MODEL.md`](THREAT_MODEL.md)
-- [`COMPLIANCE.md`](COMPLIANCE.md)
-
----
-
-## Designed for reproducible agent systems
-
-StewardMem is **not** a general-purpose agent runtime.
-
-It is infrastructure that agent systems can depend on for:
-
-- Trusted memory
-- Deterministic recall
-- Governed writes
-- Evidence verification
-- Workflow state
-- Provenance
-- Audit
-
-The architecture is designed to extend this same authority model into a governed decision layer, where retrieval, local decision models, deterministic policy, optional reranking, thresholds, escalation, and human approval can participate in one structured execution trace.
-
-The rule remains:
-
-> **Decision capabilities belong inside the governed server; the GUI exposes them but never becomes authoritative.**
-
----
-
-## Decision and evaluation direction
-
-The long-term architecture introduces a versioned decision pipeline while preserving the existing governance boundary:
-
-```mermaid
-flowchart TD
-    I["Input"] --> NV["Normalize / Validate"]
-    NV --> RC["Retrieve Context"]
-    RC --> CG["Candidate Generation"]
-    CG --> DM["Local Decision Model"]
-    DM --> DP["Deterministic Policy"]
-    DP --> RR["Optional Re-ranking"]
-    RR --> TH["Threshold / Escalation"]
-    TH --> AC["Action or Human Approval"]
-
-    classDef stages fill:#dbe9ff,stroke:#1f6feb,color:#1f2328
-    classDef decision fill:#efdbff,stroke:#a371f7,color:#1f2328
-    classDef human fill:#dafbe1,stroke:#3fb950,color:#1f2328
-    class I,NV,RC,CG,DP,RR stages
-    class DM,TH decision
-    class AC human
-```
-
-Decision models remain **replaceable components behind a common contract**.
-
-The pipeline **ships and is wired to a live route** (`POST /workflow/decision-runs`), running all
-eight stages in this order with digest-bound traces and a replay-diff surface. Two honest
-qualifiers on the words in the diagram:
-
-- **"Local Decision Model"** is a seam, and the only implementation the route can load today is a
-  deterministic **rules table**. A learned model is expressible in the type system but has no
-  in-tree implementation.
-- **"Optional Re-ranking"** is a stable candidate re-order, not a cross-encoder: *"no learned
-  reranker exists on this path."* The cross-encoder (`bge-reranker-v2-m3`) is in **retrieval**,
-  behind both a `rerank-tier` feature gate and a runtime `BRAIN_RERANK_ENABLED` flag.
-
----
-
-## MCP
-
-StewardMem exposes a governed MCP surface so agent systems can use the same memory backend without creating a second data or governance layer.
-
-MCP is an **integration surface into StewardMem**, not an independent authority.
-
-See the documentation for the current MCP protocol and capability surface.
-
----
-
-## OpenClaw
-
-StewardMem can be used as a governed memory backend for agentic coding environments and OpenClaw deployments.
-
-The integration is intentionally thin: the agent uses StewardMem for memory and governance rather than bypassing the underlying controls.
-
----
-
-## Who is it for?
-
-StewardMem is designed for teams operating **long-lived AI agents** where memory quality, data control, provenance, and auditability matter.
-
-| Sector | Teams |
-|---|---|
-| Regulated industries | Financial services, healthcare, legal, government |
-| Operations | BPO and contact centers |
-| Assurance | Security, compliance, and platform teams |
-| Engineering | Agentic developer tools |
-| Deployment | Private and edge AI deployments |
-
-The core use case is simple:
-
-> **When a wrong memory has a cost.**
-
----
-
-## Try StewardMem
-
-The fastest way to understand the system is the [Quickstart](https://stewardmem.github.io/stewardmem/quickstart.html).
-
-It covers:
-
-- Building from source
-- Starting the server
-- Health and statistics
-- Ingestion
-- The human-in-the-loop promotion gate
-- Deterministic recall
-- Provenance
-- The `brain` CLI
-- Persistent service deployment
-
-For production deployment, see the [Deployment guide](https://stewardmem.github.io/stewardmem/deployment.html).
-
----
-
-## Build from source
-
-```bash
+```sh
 git clone https://github.com/stewardmem/stewardmem.git
 cd stewardmem
-
-cargo build --release --features bench
+cargo build --release --features bench --bin brain-server --bin brain --bin mcp
 ./target/release/brain-server
 ```
 
-| Setting | Default |
+The server listens on `127.0.0.1:8765`, reachable only from your machine. The login token lands in `~/.config/brain-server/auth-token`. On a Mac, `scripts/install-service.sh` does the whole install for you.
+
+**Connect your tools:** the `mcp` binary is an MCP server, so Claude Desktop, Cursor, Windsurf and other MCP clients can use the memory directly. Anything else can talk to the REST API.
+
+## The pieces
+
+| Piece | What it is |
 |---|---|
-| Data path | `~/.openclaw/workspace/brain.db` (override: `BRAIN_DB_PATH`) |
-| Bind address | `127.0.0.1:8765` (loopback) |
+| `brain-server` | The memory server. REST API with streaming chat, on your machine. |
+| `brain` | The command line tool. Ask, add, verify, back up. |
+| `mcp` | The MCP server for AI clients. |
+| StewardMem.app | The macOS desktop app, with chat and review screens. |
+| OpenClaw plugin | Memory for OpenClaw agents, checked before every prompt. |
 
-> [!IMPORTANT]
-> Loopback is the supported direct bind. `BIND_PUBLIC=1` temporarily retains
-> public HTTP through 2027-04-11 with a startup warning and `/ready` marker;
-> migrate remote access to a TLS-terminating reverse proxy. Unauthenticated
-> non-loopback binds still refuse startup.
+Finding things works three ways at once: by meaning, by keyword, and by the links between memories. The best hits become the answer's evidence. Recall costs zero tokens and needs no outside service.
 
----
+## Who it is for
 
-## CLI
+Anyone who must prove what their AI did. Schools and universities. Offices that handle other people's data. Regulated work. When someone asks "what did the AI store, and where did that answer come from", this server answers with evidence.
 
-The `brain` CLI provides a terminal interface to the same backend:
+## Proof, not promises
 
-```bash
-./target/release/brain status
-./target/release/brain query "your query" --k 3
-./target/release/brain explain "your query"
-./target/release/brain ingest-dir ./vault
-```
+- The test count in the badge above is real, counted by the build.
+- Every write lands in a keyed hash chain (HMAC-SHA256), a trail that cannot be quietly rewritten. `brain verify` checks the whole chain.
+- The SBOM and the OpenAPI spec in the badges are version-matched to the release by CI.
+- UMP 1.0 L3 conformance is checked by a CI gate (ci.yml), not self-attested.
 
----
+## Learn more
 
-## Verification and evidence
-
-StewardMem is built around the principle that important claims should be reproducible.
-
-The repository contains:
-
-- Benchmark definitions and measured results
-- Integration and conformance checks
-- Security tests
-- Audit-chain verification
-- Deletion verification
-- API contract definitions
-- A public trust and proof map
-
-Where a claim matters, the project aims to provide a path to verify it rather than relying on marketing language.
-
-See:
-
-- [`BENCHMARKS.md`](BENCHMARKS.md)
-- [`API_CONTRACT.md`](API_CONTRACT.md)
-- [`docs/trust/proof-map.md`](docs/trust/proof-map.md)
-
----
-
-## Universal Memory Protocol
-
-StewardMem includes a bounded implementation of **Universal Memory Protocol 1.0 (UMP)**, including its local integrity layer and portable memory bindings. The **UMP 1.0 L3** badge is derived from the conformance gate in `.github/workflows/ci.yml`.
-
-UMP support provides a standards-oriented path for moving governed memory records between compatible systems while retaining content integrity, capabilities, provenance, and audit semantics.
-
-See the API contract and UMP documentation for the exact implemented surface.
-
----
-
-## Compliance and regulated environments
-
-StewardMem is designed for environments where organizations need stronger controls around persistent agent state.
-
-The repository documents mappings and evidence for the frameworks buyers actually ask about:
-
-### Management systems & assurance
-
-| Framework | Where mapped |
-|---|---|
-| ISO/IEC 42001 (AI management systems) | [`COMPLIANCE.md`](COMPLIANCE.md) §6.1 |
-| NIST AI RMF | [`COMPLIANCE.md`](COMPLIANCE.md) §6.1 |
-| SOC 2 | [`COMPLIANCE.md`](COMPLIANCE.md) §6.1 + evidence kit |
-| Intent-Based Auditing (4/4 pillars) | [`COMPLIANCE.md`](COMPLIANCE.md) §6.2 |
-
-### Privacy & data protection
-
-| Framework | Where mapped |
-|---|---|
-| GDPR (Regulation (EU) 2016/679) | [`COMPLIANCE.md`](COMPLIANCE.md) §4, §6.3 — DSAR Art 15/17/19, Art 22 trace, Art 30 RoPA |
-| UK GDPR + ICO IDTA / Addendum | Cross-border transfer register ([`docs/README.md`](docs/README.md)) |
-| CCPA / CPRA + California ADMT | [`COMPLIANCE.md`](COMPLIANCE.md) §6.3 |
-| PH Data Privacy Act (RA 10173) + NPC | [`COMPLIANCE_PH.md`](COMPLIANCE_PH.md) |
-| EU SCCs 2021, EU-U.S. DPF, CBPR, adequacy | Validated transfer register ([`COMPLIANCE.md`](COMPLIANCE.md) §6.3) |
-
-### AI-specific regulation
-
-| Framework | Where mapped |
-|---|---|
-| EU AI Act (Regulation (EU) 2024/1689) | [`COMPLIANCE.md`](COMPLIANCE.md) §3, §6.4, §6.6, §7 — Art 4 literacy, Art 12/26(6) logging, Art 50 `/.well-known/ai-notice` |
-| EU Cyber Resilience Act (CRA) | SBOM + Art 14 reporting runbook ([`docs/cra.md`](docs/cra.md)) |
-| OWASP Agentic ASI06 (memory poisoning) | [`COMPLIANCE.md`](COMPLIANCE.md) §6.5 |
-| EU CoE CETS 225 (AI Framework Convention) | [`docs/compliance.md`](docs/compliance.md) |
-
-### Sector & regulated buyers
-
-| Framework | Where mapped |
-|---|---|
-| **HIPAA** (45 CFR Part 164 — Security Rule + §164.502(g)) | [`COMPLIANCE.md`](COMPLIANCE.md) §10.1 — access, audit, integrity, minimum-necessary, PHI tokenization, legal hold, retention report |
-| SOX (17 CFR §229 / PCAOB AS 2201) | [`COMPLIANCE.md`](COMPLIANCE.md) §10.2 |
-| FedRAMP / FISMA (NIST 800-53 posture) | [`COMPLIANCE.md`](COMPLIANCE.md) §10.3 |
-| US 50-state AI statutes (TX TRAIGA, CA/CO ADMT, NYC LL144, …) | [`COMPLIANCE.md`](COMPLIANCE.md) §11 + [`docs/US_STATE_MAP.md`](docs/US_STATE_MAP.md) |
-| COPC R8.0 / ISO 18295-1 / ISO 10002–10003 (contact centre) | [`COMPLIANCE.md`](COMPLIANCE.md) §6.7 |
-
-> [!WARNING]
-> These mappings describe how the implementation addresses relevant controls; they are **not** a claim of third-party certification. ISO/IEC 42001 and SOC 2 attestation are organization-level audits outside this repository. PCI DSS is an **explicit non-scope** (payment-card data is never ingested — see [`THREAT_MODEL.md`](THREAT_MODEL.md) §6).
-
-See the full row-by-row control maps in [`COMPLIANCE.md`](COMPLIANCE.md) and the trust/proof map in [`docs/trust/proof-map.md`](docs/trust/proof-map.md).
-
----
-
-## Documentation
-
-| Topic | Resource |
-|---|---|
-| Documentation | [StewardMem docs](https://stewardmem.github.io/stewardmem/) |
-| Quickstart | [Get started](https://stewardmem.github.io/stewardmem/quickstart.html) |
-| Deployment | [Deployment guide](https://stewardmem.github.io/stewardmem/deployment.html) |
-| API | `GET /openapi.yaml` and [`API_CONTRACT.md`](API_CONTRACT.md) |
-| Security | [`SECURITY.md`](SECURITY.md) |
-| Threat model | [`THREAT_MODEL.md`](THREAT_MODEL.md) |
-| Compliance | [`COMPLIANCE.md`](COMPLIANCE.md) |
-| Trust / proof map | [`docs/trust/proof-map.md`](docs/trust/proof-map.md) |
-
----
-
-## Project principles
-
-StewardMem is built around a small set of non-negotiable principles:
-
-1. **The server is the authority.**
-2. **Agent-proposed durable knowledge requires human approval.**
-3. **Approval is bound to the exact content reviewed.**
-4. **Untrusted memory remains untrusted.**
-5. **Recall should be reproducible.**
-6. **Audit history should be tamper-evident.**
-7. **Deletion should be verifiable.**
-8. **The default path should not require a cloud memory service.**
-9. **The server must remain useful without a GUI.**
-
----
-
-## What StewardMem is not
-
-StewardMem is **not**:
-
-- A chatbot
-- A general-purpose agent framework
-- A hosted cloud memory service
-- An LLM
-- A generic RAG library
-- A second agent runtime
-
-It is **infrastructure for governed, reproducible AI-agent memory and decision systems**.
-
----
+- [Full documentation](https://stewardmem.github.io/stewardmem/) for when you want the depth
+- [Security policy](SECURITY.md) and [support options](SUPPORT.md)
+- [Compliance notes](COMPLIANCE.md): GDPR, the EU AI Act, and the Philippine DepEd AI guidelines
+- [Benchmarks](BENCHMARKS.md)
 
 ## License
 
-StewardMem is released under the [Apache License, Version 2.0](LICENSE)
-(relicensed from MIT on 2026-10-27; prior tagged releases remain MIT).
-The distribution licence table — what ships under which licence, including
-the AGPL-3.0-only Signal stack when `signal-gateway` is added — is
-[LICENSES.md](LICENSES.md).
-
-Copyright © 2026 Mark Fietje.
+Apache 2.0. See [LICENSE](LICENSE).
