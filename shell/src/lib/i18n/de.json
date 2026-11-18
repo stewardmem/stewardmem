@@ -432,6 +432,7 @@
   "chat.support.unsupported": "Nicht belegt: die Zitate dieser Antwort passen nicht zu der Memory, die sie erhalten hat.",
   "chat.support.abstained": "Der Assistent hat verzichtet, statt aus dem Gedächtnis zu antworten.",
   "chat.support.degraded": "Die Memory-Evidenz war beeinträchtigt — behandeln Sie diese Antwort mit Vorsicht.",
+  "chat.support.counts": "{quoted} wörtlich · {paraphrase} paraphrasiert",
   "chat.answer.unsupported_chip": "unbelegt",
   "chat.claims.verbatim_from": "wortwörtlich übernommen aus: {titles}",
   "chat.claims.record_count": "{count} Aussagen · {titles}",

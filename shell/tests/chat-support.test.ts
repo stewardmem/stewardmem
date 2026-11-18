@@ -7,6 +7,7 @@ import {
 	type TurnRendering
 } from '../src/lib/chat/turn';
 import { replayTurns } from '../src/lib/chat/replay';
+import { buildTurnMeta } from '../src/lib/chat/turn-meta';
 import type { StoredTurn } from '../src/lib/shell/sessions.svelte';
 
 /**
@@ -195,5 +196,47 @@ describe('replay carries the stored verdict', () => {
 		const old = replayTurns(storedTurns(null));
 		expect(old[0]?.rendering.quoted).toBeNull();
 		expect(old[0]?.rendering.paraphrase).toBeNull();
+	});
+});
+
+describe('UI1 S2 · buildTurnMeta (the one row\'s token list)', () => {
+	test('the_generated_row_is_verdict_tier_counts_sources_in_reading_order', () => {
+		const rendering = withSupportLabel(
+			generatedFromFinal('q', { text: 'a', tier: 'on_device', abstain: false, claims: null }, []),
+			'partial',
+			{ quoted: 2, paraphrase: 1 }
+		);
+		const tokens = buildTurnMeta(rendering, 3);
+		expect(tokens.map((t) => t.kind)).toEqual(['verdict', 'tier', 'counts', 'sources']);
+		expect(tokens[0]).toMatchObject({ kind: 'verdict', support: 'partial' });
+		expect(tokens[1]).toMatchObject({ kind: 'tier', tier: 'on_device' });
+		expect(tokens[2]).toMatchObject({ kind: 'counts', quoted: 2, paraphrase: 1 });
+		expect(tokens[3]).toMatchObject({ kind: 'sources', count: 3 });
+	});
+
+	test('null_facts_are_absent_tokens_never_zero_tokens', () => {
+		// A verdict-less, count-less generated turn with no evidence: the row
+		// carries NOTHING but what exists — the omit law as an ABSENCE, never
+		// a zero-valued token (F5).
+		const rendering = generatedFromFinal('q', { text: 'a', tier: null, abstain: null, claims: null }, []);
+		expect(buildTurnMeta(rendering, null)).toEqual([]);
+		// The counts ride only when BOTH keys are non-null (the spine's
+		// all-or-nothing law) — one-sided counts never half-render.
+		const oneSided = { ...rendering, quoted: 1, paraphrase: null };
+		expect(buildTurnMeta(oneSided as typeof rendering, null).map((t) => t.kind)).toEqual([]);
+	});
+
+	test('the_answered_row_is_recalled_then_sources_and_the_streaming_row_is_sources_only', () => {
+		const answered: TurnRendering = {
+			kind: 'answered',
+			query: 'q',
+			passages: [{}, {}] as never[],
+			confidence: 0.82
+		};
+		const tokens = buildTurnMeta(answered, 2);
+		expect(tokens.map((t) => t.kind)).toEqual(['recalled', 'sources']);
+		expect(tokens[0]).toMatchObject({ count: 2, confidence: 'high' });
+		const streaming: TurnRendering = { kind: 'streaming', query: 'q', text: 'a', passages: [] };
+		expect(buildTurnMeta(streaming, 1).map((t) => t.kind)).toEqual(['sources']);
 	});
 });

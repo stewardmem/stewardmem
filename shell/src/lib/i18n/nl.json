@@ -432,6 +432,7 @@
   "chat.support.unsupported": "Niet onderbouwd: de citaties in dit antwoord passen niet bij het ontvangen geheugen.",
   "chat.support.abstained": "De assistent zag ervan af om uit het geheugen te antwoorden.",
   "chat.support.degraded": "Het geheugenbewijs was verminderd — behandel dit antwoord met zorg.",
+  "chat.support.counts": "{quoted} letterlijk · {paraphrase} geparafraseerd",
   "chat.answer.unsupported_chip": "onderbouwing ontbreekt",
   "chat.claims.verbatim_from": "woordelijk overgenomen uit: {titles}",
   "chat.claims.record_count": "{count} beweringen · {titles}",

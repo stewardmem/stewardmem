@@ -26,6 +26,7 @@
 		type Passage
 	} from '#lib/api/recall.js';
 	import { renderTurn, renderingToken, streamFailureToken, generatedFromFinal, streamingTurn, streamFailedTurn, withSupportLabel, type TurnRendering, type SupportLabel } from '#lib/chat/turn.js';
+	import { buildTurnMeta, type TurnMetaToken } from '#lib/chat/turn-meta.js';
 	import { provenanceBlock, type ProvenanceBlock } from '#lib/chat/provenance.js';
 	import type { TrustTier } from '#lib/api/recall.js';
 	import { hitToPassage } from '#lib/chat/replay.js';
@@ -395,6 +396,38 @@
 				return m['chat.support.abstained']();
 			case 'degraded':
 				return m['chat.support.degraded']();
+		}
+	}
+
+	/** UI1 S2 — the answered arm's recalled sentence, the exact composition
+	 * the old heading carried: the count, then the confidence WORD (plan 06
+	 * §2) or the honest “not stated”. A fact re-homed, never dropped. */
+	function recalledSentence(token: { count: number; confidence: 'high' | 'medium' | 'low' | null }): string {
+		const head = m['chat.recalled']({ count: token.count });
+		const tail = token.confidence === null
+			? m['chat.confidence.unknown']()
+			: m['chat.confidence']({ word: token.confidence });
+		return `${head} · ${tail}`;
+	}
+
+	/** UI1 S2 — the verdict dot's colour, CSS vars only (no new palette):
+	 * the dot is DECORATION (aria-hidden — falsifier F3); the SENTENCE
+	 * beside it carries the meaning, so the colour never has to. */
+	function metaDotClass(label: SupportLabel): string {
+		switch (label) {
+			case 'supported':
+				return 'bg-ok';
+			case 'partial':
+				return 'bg-warn-border';
+			case 'unsupported':
+				return 'bg-destructive';
+			case 'degraded':
+				// Degraded evidence is a HOLLOW warning: the amber ring on the
+				// surface colour, distinct from partial's solid amber at a
+				// glance and from unsupported's red by kind, never by guesswork.
+				return 'bg-surface ring-1 ring-warn-border';
+			case 'abstained':
+				return 'bg-muted-foreground/50';
 		}
 	}
 
@@ -843,39 +876,14 @@
 					<p aria-busy="true" class="text-sm">{m['chat.working']()}</p>
 				{:else if turn.rendering.kind === 'answered'}
 					{#if turn.provenance}
-						<p class="text-sm font-semibold">
-							{m['chat.recalled']({ count: turn.provenance.count })}
-							{#if turn.provenance.confidence.kind === 'word'}
-								· {m['chat.confidence']({ word: turn.provenance.confidence.word })}
-							{:else}
-								· {m['chat.confidence.unknown']()}
-							{/if}
-						</p>
-						<!-- M3-b — the verdict line is the answer; the citations
-						     are EVIDENCE, collapsed by default and opened on
-						     demand (plan 21 §3). A real disclosure control: in
-						     the tab order, operable by keyboard, carrying
-						     aria-expanded and aria-controls. The affordances
-						     render only inside the OPENED list, so the II-7g
-						     pins keep driving the opened state they always
-						     drove. -->
-						<Button
-							type="button"
-							variant="ghost"
-							size="sm"
-							class="w-fit"
-							data-testid="chat-evidence"
-							aria-expanded={evidenceIsOpen(turn.id)}
-							aria-controls="chat-evidence-list-{turn.id}"
-							onclick={() => toggleEvidence(turn.id)}
-						>
-							{#if evidenceIsOpen(turn.id)}
-								{m['chat.evidence.collapse']()}
-							{:else}
-								{m['chat.evidence.count']({ count: turn.provenance.count })}
-								<span class="sr-only"> — {m['chat.evidence.expand']()}</span>
-							{/if}
-						</Button>
+						<!-- UI1 S2 — the heading + the disclosure button became the ONE
+					     meta row's recalled and sources tokens: the SAME facts
+					     (count, confidence word, the citations affordance), the
+					     same disclosure contract (aria-expanded/aria-controls,
+					     in the tab order), one 11px muted line. The OPENED list
+					     below is the answered arm's own (the II-7g per-citation
+					     affordances live there, unchanged). -->
+						{@render turnMeta(turn.id, buildTurnMeta(turn.rendering, turn.provenance.count))}
 						{#if evidenceIsOpen(turn.id)}
 							<ul class="grid gap-3" id="chat-evidence-list-{turn.id}">
 							{#each turn.provenance.citations as citation (citation.id)}
@@ -1149,33 +1157,27 @@
 					{:else}
 						<Markdown md={turn.rendering.answer} />
 					{/if}
-					{#if turn.rendering.support !== null}
-						<p
-							role="status"
-							class="text-xs text-muted-foreground"
-							data-testid="chat-support"
-							data-support={turn.rendering.support}
-						>
-							{supportSentence(turn.rendering.support)}
-						</p>
-					{/if}
-					{#if turn.rendering.tier}
-						<p class="text-xs text-muted-foreground" data-testid="chat-tier">
-							{m['chat.tier']({ tier: turn.rendering.tier })}
-						</p>
-					{/if}
+					<!-- UI1 S2 — the ONE meta row: verdict · tier · counts · sources in
+					     a single 11px muted line (the round's design law). The
+					     sentences STAY — each token carries its own, visible at 11px
+					     and in its `title`; what dies is the STACKING, never a
+					     fact. The opened citations list renders BELOW the row. -->
+					{@render turnMeta(turn.id, buildTurnMeta(turn.rendering, turn.provenance?.count ?? null))}
 					{#if turn.provenance}
-						{@render evidenceDisclosure(turn.id, turn.provenance)}
+						{@render evidenceList(turn.id, turn.provenance)}
 					{/if}
 				{:else if turn.rendering.kind === 'streaming'}
-					<!-- The spine's live turn (plan 25 §4): the grounding card is
-					     already visible (collapsed), and the text grows under the
-					     rAF flush. The text node is the ONLY thing a delta moves —
-					     the transcript list is never re-mapped per delta. The
-					     evidence affordance is the SAME snippet the generated arm
-					     renders — one compiled body, not two. -->
+					<!-- The spine's live turn (plan 25 §4): the meta row (the sources
+					     chip, until the final lands the verdict tokens beside it) is
+					     already visible, and the text grows under the rAF flush. The
+					     text node is the ONLY thing a delta moves — the transcript
+					     list is never re-mapped per delta. The row is the SAME
+					     compiled body the generated arm renders, with its `min-h`
+					     reserved so the final's verdict tokens never shift the
+					     layout. -->
+					{@render turnMeta(turn.id, buildTurnMeta(turn.rendering, turn.provenance?.count ?? null))}
 					{#if turn.provenance}
-						{@render evidenceDisclosure(turn.id, turn.provenance)}
+						{@render evidenceList(turn.id, turn.provenance)}
 					{/if}
 					<div data-testid="chat-stream-text">
 						<Markdown md={turn.rendering.text} streaming={true} />
@@ -1230,19 +1232,67 @@
 		{/each}
 	</div>
 
-	<!-- M3-d — the evidence disclosure, as ONE snippet for BOTH arms that
-	     carry grounding (the generated turn of record and the streaming
-	     turn in flight): one compiled body, not two. Collapsed is the
-	     default (plan 21 §3); the citations render inside the opened
-	     disclosure. The streaming citations carry no passage body (the
-	     grounding event carries ids, not text), so the text line renders
-	     only when there is text to render — the same shape replay shows. -->
-	{#snippet evidenceDisclosure(turnId: number, block: ProvenanceBlock)}
+	<!-- UI1 S2 — the ONE meta row's compiled body, shared by every arm that
+	     shows one (generated · streaming · answered): verdict dot + sentence,
+	     tier word, the verdict's counts, the recalled count, and the sources
+	     chip, all in one 11px muted line whose `min-h` is reserved so the
+	     final's arriving tokens never shift the layout. THE CONTRACT (the
+	     e2e lane is the judge): `chat-tier` keeps the RAW tier word in its
+	     textContent; `chat-support` keeps `data-support` + the full sentence
+	     as visible text AND `title`; the dot is aria-hidden decoration
+	     (falsifier F3: the sentence carries the meaning). -->
+	{#snippet turnMeta(turnId: number, tokens: readonly TurnMetaToken[])}
+		<div
+			class="flex min-h-5 flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-[11px] leading-none text-muted-foreground"
+			data-testid="chat-meta"
+		>
+			{#each tokens as token (token.kind)}
+				{#if token.kind === 'verdict'}
+					<span class="inline-flex items-center gap-1.5">
+						<span class="size-1.5 shrink-0 rounded-full {metaDotClass(token.support)}" aria-hidden="true"></span>
+						<span
+							role="status"
+							data-testid="chat-support"
+							data-support={token.support}
+							title={supportSentence(token.support)}
+						>{supportSentence(token.support)}</span
+						>
+					</span>
+				{:else if token.kind === 'tier'}
+					<span
+						data-testid="chat-tier"
+						data-tier={token.tier}
+						title={m['chat.tier']({ tier: token.tier })}
+						>{token.tier}</span
+					>
+				{:else if token.kind === 'counts'}
+					<span
+						data-testid="chat-support-counts"
+						title={m['chat.support.counts']({ quoted: token.quoted, paraphrase: token.paraphrase })}
+							>{m['chat.support.counts']({ quoted: token.quoted, paraphrase: token.paraphrase })}</span
+					>
+				{:else if token.kind === 'recalled'}
+					<span data-testid="chat-recalled" title={recalledSentence(token)}
+						>{recalledSentence(token)}</span
+					>
+				{:else if token.kind === 'sources'}
+					{@render evidenceChip(turnId, token.count)}
+				{/if}
+			{/each}
+		</div>
+	{/snippet}
+
+	<!-- The sources chip — the disclosure BUTTON re-homed INTO the row
+	     (the `evidenceDisclosure` snippet's own control, unchanged in
+	     contract: a real disclosure control in the tab order, operable by
+	     keyboard, carrying aria-expanded and aria-controls for the list
+	     that renders beside the row when opened). -->
+	{#snippet evidenceChip(turnId: number, count: number)}
 		<Button
 			type="button"
 			variant="ghost"
 			size="sm"
-			class="w-fit"
+			class="h-auto w-fit gap-1 px-1.5 py-0 text-[11px] leading-none"
 			data-testid="chat-evidence"
 			aria-expanded={evidenceIsOpen(turnId)}
 			aria-controls="chat-evidence-list-{turnId}"
@@ -1251,10 +1301,20 @@
 			{#if evidenceIsOpen(turnId)}
 				{m['chat.evidence.collapse']()}
 			{:else}
-				{m['chat.evidence.count']({ count: block.count })}
+				{m['chat.evidence.count']({ count })}
 				<span class="sr-only"> — {m['chat.evidence.expand']()}</span>
 			{/if}
 		</Button>
+	{/snippet}
+
+	<!-- M3-d — the citations list, as ONE snippet for BOTH arms that carry
+	     grounding without the answered arm's per-citation affordances (the
+	     generated turn of record and the streaming turn in flight): one
+	     compiled body, not two. The streaming citations carry no passage
+	     body (the grounding event carries ids, not text), so the text line
+	     renders only when there is text to render — the same shape replay
+	     shows. -->
+	{#snippet evidenceList(turnId: number, block: ProvenanceBlock)}
 		{#if evidenceIsOpen(turnId)}
 			<ul class="grid gap-3" id="chat-evidence-list-{turnId}">
 			{#each block.citations as citation (citation.id)}

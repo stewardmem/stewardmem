@@ -406,3 +406,100 @@ describe('CG-02 W-4 — the chip renders the tier word', () => {
 		).toBeNull();
 	});
 });
+
+describe('UI1 S2 · the ONE meta row', () => {
+	/** A full live spine (grounding → typed final → support with the 22A
+	 * counts), as the wire's own SSE framing — the same frames
+	 * chat-spine.test.ts drives the parser with, delivered through the
+	 * page's fetch stub so the DOM sees what the LIVE turn renders. */
+	function spineStream(): Response {
+		const frames = [
+			'event: grounding\ndata: {"decision":"ok","hits":[{"id":7,"title":"Gate law","score":0.91,"domain":"global","flagged":false}]}\n\n',
+			'event: final\ndata: {"text":"Green tea is steamed Camellia sinensis.","tier":"on_device","turn":1,"inputTokens":40,"outputTokens":12,"abstain":false,"claims":[{"text":"Green tea is steamed Camellia sinensis.","cites":[0]}]}\n\n',
+			'event: support\ndata: {"cited":1,"uncited":0,"unknown_refs":0,"quoted":1,"paraphrase":0,"decision":"supported"}\n\n'
+		].join('');
+		const encoder = new TextEncoder();
+		const body = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(encoder.encode(frames));
+				controller.close();
+			}
+		});
+		return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+	}
+
+	test('the_turn_meta_is_one_row', async () => {
+		await renderChat(ANSWERED, spineStream);
+		await sendQuery();
+		await waitFor(() => expect(screen.getAllByTestId('chat-turn').length).toBe(1));
+		const turn = screen.getAllByTestId('chat-turn')[0]!;
+		expect(turn.getAttribute('data-rendering')).toBe('generated');
+
+		// THE ROUND'S LAW: exactly ONE meta row per turn — the three stacked
+		// rows (support, tier, evidence) became ONE token row, and no arm
+		// renders a second one.
+		const rows = within(turn).queryAllByTestId('chat-meta');
+		expect(rows.length, 'one meta row per turn, not a stack').toBe(1);
+
+		// THE E2E CONTRACT, held in the DOM: chat-tier keeps the RAW tier
+		// word in its textContent; chat-support keeps data-support + the
+		// full sentence as VISIBLE text (the dot alone is illegal — F3).
+		const tier = within(rows[0]!).getByTestId('chat-tier');
+		expect(tier.textContent).toContain('on_device');
+		const support = within(rows[0]!).getByTestId('chat-support');
+		expect(support.getAttribute('data-support')).toBe('supported');
+		expect(support.textContent!.length).toBeGreaterThan(10);
+		expect(support.getAttribute('title')).toBe(support.textContent);
+
+		// The counts token rides the SAME row (22A counts, rendered when
+		// non-null), and the sources chip is INSIDE the row.
+		const counts = within(rows[0]!).getByTestId('chat-support-counts');
+		expect(counts.textContent).toContain('1');
+		const chip = within(rows[0]!).getByTestId('chat-evidence');
+		expect(chip.getAttribute('aria-expanded')).toBe('false');
+
+		// And the verdict dot is DECORATION: aria-hidden, because the
+		// sentence beside it carries the meaning.
+		const dot = rows[0]!.querySelector('[aria-hidden="true"]');
+		expect(dot).not.toBeNull();
+
+		// THE A11Y RECIPE (S2's acceptance): axe AA over the GENERATED arm —
+		// the row's tokens are glyph-adjacent, so the sweep is the judge that
+		// no token became colour-only or title-only (falsifier F3).
+		const { default: axe } = await import('axe-core');
+		const results = await axe.run(document.body, {
+			runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] }
+		});
+		expect(results.violations).toEqual([]);
+	});
+
+	test('a_streaming_turn_carries_the_row_with_its_min_height_reserved', async () => {
+		// The stream that never finals: the row exists from the grounding,
+		// with the sources chip as its only token, and the reserved min-h
+		// means the final's arriving verdict tokens cannot shift the layout.
+		function groundingOnly(): Response {
+			const frame =
+				'event: grounding\ndata: {"decision":"ok","hits":[{"id":7,"title":"Gate law","score":0.91,"domain":"global","flagged":false}]}\n\n';
+			const encoder = new TextEncoder();
+			const body = new ReadableStream<Uint8Array>({
+				start(controller) {
+					controller.enqueue(encoder.encode(frame));
+					// left open: the turn stays streaming
+				}
+			});
+			return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+		}
+		await renderChat(ANSWERED, groundingOnly);
+		await userEvent.type(screen.getByTestId('chat-composer'), 'retention');
+		await userEvent.keyboard('{Meta>}{Enter}{/Meta}');
+		await waitFor(() => {
+			const turn = screen.getAllByTestId('chat-turn')[0]!;
+			expect(turn.getAttribute('data-rendering')).toBe('streaming');
+		});
+		const row = screen.getAllByTestId('chat-meta')[0]!;
+		expect(row.className).toContain('min-h');
+		expect(within(row).queryByTestId('chat-support')).toBeNull();
+		expect(within(row).queryByTestId('chat-tier')).toBeNull();
+		expect(within(row).getByTestId('chat-evidence')).toBeTruthy();
+	});
+});

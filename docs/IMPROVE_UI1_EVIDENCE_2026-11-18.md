@@ -19,3 +19,20 @@ no other session mid-round.
 
 The band pin runs in ~5.3s standalone (fast incremental vite build on this
 machine); it is included in the full vitest run.
+
+## S2 · the meta row (committed at its step)
+
+- Lanes: vitest **437 passed | 2 skipped + the band red** (the band: 1,808,084
+  gzipped = **+654 over R0 1,807,430** — past ±512; recorded as the mid-round
+  band state, the ideal close is S5's deletions pulling the net back within
+  the band so no re-baseline is owed), svelte-check 0/0, eslint clean,
+  e2e chromium **9 passed | 1 skipped**.
+- RED-proofs (run against the pre-S2 page, then restored):
+  `the_turn_meta_is_one_row` → `Unable to find an element by:
+  [data-testid="chat-meta"]`; `a_streaming_turn_carries_the_row_with_its_min_height_reserved`
+  → the same absence. Both green on the new tree.
+- The contract held through the restyle: `chat-tier` textContent carries the
+  RAW tier word; `chat-support` carries `data-support` + the full sentence as
+  visible text AND `title`; the dot is aria-hidden decoration.
+- Axe AA green over the generated arm (F3's judge).
+- New key `chat.support.counts` ×5 catalogs (parity green).

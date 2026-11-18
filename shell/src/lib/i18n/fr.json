@@ -432,6 +432,7 @@
   "chat.support.unsupported": "Non étayée : les citations de cette réponse ne correspondent pas à la mémoire reçue.",
   "chat.support.abstained": "L'assistant a choisi de ne pas répondre depuis la mémoire.",
   "chat.support.degraded": "La preuve en mémoire était dégradée — traitez cette réponse avec prudence.",
+  "chat.support.counts": "{quoted} citées · {paraphrase} paraphrasées",
   "chat.answer.unsupported_chip": "sans source",
   "chat.claims.verbatim_from": "servi tel quel depuis : {titles}",
   "chat.claims.record_count": "{count} affirmations · {titles}",
