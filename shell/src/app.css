@@ -90,6 +90,11 @@
 	--radius-xl: var(--radius-lg);
 	/* the base type stack; the platform layer overrides the family */
 	--font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	/* UI1 S3 — the greeting moment's SERIF stack: the platform's own
+	   (New York on macOS, Georgia elsewhere), SYSTEM-STACK ONLY (no webfont,
+	   no fetch, no CSP change — F7). One token, applied to the greeting
+	   alone; everything else stays in the UI stack. */
+	--font-serif: ui-serif, 'New York', Georgia, serif;
 }
 
 :root {

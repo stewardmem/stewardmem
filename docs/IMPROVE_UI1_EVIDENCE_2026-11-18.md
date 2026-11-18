@@ -36,3 +36,16 @@ machine); it is included in the full vitest run.
   visible text AND `title`; the dot is aria-hidden decoration.
 - Axe AA green over the generated arm (F3's judge).
 - New key `chat.support.counts` ×5 catalogs (parity green).
+
+## S3 · the empty state (committed at its step)
+
+- The greeting: serif moment (`--font-serif: ui-serif, 'New York', Georgia, serif`
+  — ONE @theme token, system stacks only, F7 clean), 28px, tracking tight.
+- The disclosure: demoted to one muted 12px (`text-xs`) line — still rendered,
+  still visible, still consumed in all five catalogs (F4's law).
+- The chips: `variant="ghost"` — the registry's `emptyChips` untouched, the
+  COUNT law held by the untouched pin.
+- The composer: `turns.length === 0` → centered float (`mx-auto max-w-xl`,
+  unstuck); first turn → docks sticky at the foot.
+- Lanes: chat-home-state + chat-surface + route-a11y + theme-retune +
+  i18n-parity all green (56 tests), svelte-check 0/0.

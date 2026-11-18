@@ -789,18 +789,23 @@
 	     below it is clutter. The composer keeps its mount focus: the chips
 	     render beside it, they never take focus for themselves. It sits in
 	     the column's middle, the way an empty conversation does, with the
-	     composer waiting below. -->
+	     composer waiting below. UI1 S3: the greeting is the SERIF moment
+	     (the system's own serif — New York on macOS, no webfont), the
+	     disclosure the one quiet 12px line beneath it, the chips ghost —
+	     the same three acts, less chrome. -->
 	{#if turns.length === 0}
-		<div class="my-auto grid gap-4 py-10 text-center" data-testid="chat-empty">
-			<p class="text-xl font-semibold tracking-tight">{m['chat.empty.greeting']()}</p>
+		<div class="my-auto grid gap-3 py-10 text-center" data-testid="chat-empty">
+			<p class="font-serif text-[28px] leading-tight font-semibold tracking-tight">{m['chat.empty.greeting']()}</p>
 			<!-- Art 50(1) — the plain-language AI-interaction disclosure
 			     (improve12 S4): the person is told they are interacting with an
 			     AI system BEFORE the first turn, beside the greeting; the
 			     per-turn tier and support labels below carry the ongoing
 			     provenance. The kernel pins the key's presence in all five
 			     catalogs AND this consumption (ai_act_transparency_deliverable_
-			     is_declared); the shell pins key-set parity (i18n-parity). -->
-			<p class="mx-auto max-w-md text-sm text-muted-foreground" data-testid="chat-ai-disclosure">
+			     is_declared); the shell pins key-set parity (i18n-parity).
+			     UI1 S3: the paragraph demoted to one muted 12px line — still a
+			     rendered, VISIBLE disclosure (the kernel pin's law). -->
+			<p class="mx-auto max-w-md text-xs text-muted-foreground" data-testid="chat-ai-disclosure">
 				{m['chat.disclosure.ai_interaction']()}
 			</p>
 			<!-- The three-chip law (M3-b), now registry-backed: coreChat
@@ -808,12 +813,14 @@
 			     focuses the composer by id — the recorded jsdom discipline,
 			     kept in the manifest — the navigators go through
 			     $app/navigation), and the page renders them verbatim. The
-			     pins judge the registry: a chip removed there reds here. -->
+			     pins judge the registry: a chip removed there reds here.
+			     UI1 S3: ghost variant — the COUNT law holds, the chrome
+			     quiets. -->
 			<div class="flex flex-wrap justify-center gap-2">
 				{#each emptyChips as chip (chip.id)}
 					<Button
 						type="button"
-						variant="outline"
+						variant="ghost"
 						size="sm"
 						data-testid="chat-empty-{chip.id}"
 						onclick={chip.run}
@@ -1378,14 +1385,18 @@
 		</div>
 	{/if}
 
-	<!-- The composer. Focused on mount, so the app opens ready to type. It
-	     sticks to the bottom of the column while the transcript scrolls
-	     above it — the one control that is always within reach. Its bar
-	     blurs what scrolls beneath it: the window background is translucent
-	     glass on macOS, and a see-through composer read the transcript's
-	     lines through the input (measured on the built app). -->
+	<!-- The composer (plan 02 §3): the textarea grows with the draft and
+	     ⌘⏎ sends. UI1 S3: while the canvas is EMPTY the composer FLOATS —
+	     centered, unstuck, the greeting's quiet companion; at the first
+	     turn it DOCKS sticky to the foot, where it stays for the whole
+	     conversation. Its bar blurs what scrolls beneath it: the window
+	     background is translucent glass on macOS, and a see-through
+	     composer read the transcript's lines through the input (measured
+	     on the built app). -->
 	<form
-		class="sticky bottom-0 mt-auto grid gap-2 bg-background/90 pt-3 backdrop-blur-xl"
+		class="grid gap-2 pt-3 {turns.length === 0
+			? 'mx-auto w-full max-w-xl pb-2'
+			: 'sticky bottom-0 mt-auto bg-background/90 backdrop-blur-xl'}"
 		onsubmit={(event) => {
 			event.preventDefault();
 			void send();
