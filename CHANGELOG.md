@@ -265,63 +265,115 @@ named as its next round's work.
   test invocation derives 4243 passed — the number the badge carries and
   and CI compares against. (fafd3263, eb1127d1)
 
-## [Unreleased] — UI1 the quiet surface: the canvas renders the answer and one quiet provenance row (2026-11-18, shell-only — zero kernel files, zero wire changes, zero new dependencies)
+## [1.29.46] — 2026-11-18 — the quiet surface: the chat canvas renders the answer and one quiet provenance row (shell-only — zero kernel files, zero wire changes, zero new dependencies)
 
-The chat canvas stops reading as "an AI with lots of text" and reads as
-the Claude-Code register: the answer, one quiet meta row, nothing else —
-WITHOUT removing a single fact, sentence, pin, or law. The product's
-differentiator (private, on-device, cite-truthed) becomes the design
-language instead of paragraph copy.
+The desktop shell's chat canvas stops reading as "an AI with lots of text"
+and reads as the Claude-Code register: the answer, one quiet meta row,
+nothing else — without removing a single fact, sentence, pin, or law. The
+product's differentiator (private, on-device, cite-truthed) becomes the
+design language instead of paragraph copy. The kernel is untouched by this
+release — every change lives in the shell — and the wire contract is
+byte-identical.
 
-- **The one meta row (S2, the round's core):** three stacked rows per
-  turn — the support sentence, the tier sentence, the evidence disclosure
-  — became ONE 11px muted token row (verdict dot + sentence · tier word ·
-  the verdict's quoted/paraphrase counts · the sources chip), built by a
-  NEW pure module (`shell/src/lib/chat/turn-meta.ts`), rendered through
-  ONE compiled snippet shared by the generated/streaming/answered arms,
-  with `min-h` reserved so the final's arriving tokens never shift the
-  layout. The sentences STAY — visible at 11px AND in `title`; the verdict
-  dot is aria-hidden decoration, CSS-var colours only. The e2e contract
-  held through the restyle and is pinned in the DOM: `chat-tier` keeps the
-  RAW tier word in its textContent, `chat-support` keeps `data-support` +
-  the full sentence.
-- **The counts ride the model (S1):** the verdict's quoted/paraphrase
-  counts (additive on the support event) flow through the rendering model
-  instead of dying at the page's `onSupport`; replay rows carry `null` —
-  the omit law, red-first pinned (`replay_rows_omit_the_counts_never_zero`):
-  zero is a fact only the kernel's verdict can state.
-- **The empty state (S3):** the greeting learns the SYSTEM serif
-  (`--font-serif: ui-serif, 'New York', Georgia, serif` — no webfont, no
-  fetch, no CSP change), 28px tracking-tight; the Art-50 disclosure
-  demotes to one muted 12px line (still a rendered, VISIBLE disclosure —
-  the kernel pin's consumption law); the three acting chips go ghost
-  (registry untouched, the COUNT law held); the composer floats centered
-  while the canvas is empty and docks sticky at the first turn.
-- **The composer (S4):** the permanent hint row dies (the shortcut
-  sentence stays consumed as an sr-only `aria-describedby` binding —
-  keyboard discovery intact); the on-device posture becomes the
-  interface's own mark — a lock badge whose `title`/`aria-label` carry the
-  honest posture sentence (NEW keys `chat.badge.ondevice[.tip]` ×5
-  catalogs). No fake affordances: no attach, no mic, no picker.
-- **THE NAMED ACT (S5) — the footer dies:** every fact re-homed WITH its
-  law — the wire state rides the rail dot's `data-wire` (the fault
-  SENTENCE stays in the chat banner alone); the model fact moves to the
-  composer badge (`shell-status-model`, the never-guessed null-shape
-  re-asserted there); rows/integrity/status-context compose the dot's
-  tooltip and sr-only line (the never-"0 rows" law verbatim, the
-  registry's status-context joining when non-null). The two chrome pins
-  REWRITTEN red-first (receipts in the evidence file).
-- **The rail (S6):** tooltip labels on every icon control; the session
-  rows' pencil/trash reveal on hover and stay keyboard-recoverable.
-- **The band (S8):** moved as a NAMED ACT — 1,807,430 → 1,808,365
-  gzipped (+935; the accounting in the pin's own comment: the row + badge
-  are new surface, the deletions were DOM noise not compiled bytes, every
-  sentence stays rendered by law).
-- Register rows: the meta-row law + the footer re-homing (red-proof
-  texts recorded); the register's own parser caught the round's first
-  draft (an unescaped pipe in a grep pattern inside the row) — the guard
-  biting the round, the guard winning. Evidence:
-  `docs/IMPROVE_UI1_EVIDENCE_2026-11-18.md`.
+### Release notes
+
+**Improvements**
+
+- the chat turn's provenance collapses into ONE quiet meta row: the three
+  stacked rows below every answer — the support sentence, the tier
+  sentence, the evidence disclosure — became a single 11px muted token row
+  (verdict dot + sentence · the raw tier word · the verdict's
+  quoted/paraphrase counts · the sources chip), built by a new pure module
+  and rendered through one compiled body shared by the generated,
+  streaming and answered arms, with the row's height reserved so the
+  verdict's arriving tokens never shift the layout. The sentences STAY —
+  visible at 11px and in each token's tooltip; the verdict dot is
+  aria-hidden decoration whose colour comes from the theme's own status
+  variables; and the end-to-end contract is pinned in the DOM: the tier
+  keeps its raw word in the text content, the support verdict keeps its
+  attribute and its full sentence. The cite-truth counts now ride the
+  rendering model instead of dying at the page's handler — and replayed
+  turns omit them honestly (null, never zero: zero is a fact only the
+  kernel's verdict can state). (7f17037b, 2c1c2b58)
+- the empty state becomes a quiet moment: the greeting learns the system
+  serif (the platform's own — New York on macOS; no webfont, no network
+  fetch, no CSP change) at 28px with tight tracking; the AI-interaction
+  disclosure demotes to one muted line beneath it (still rendered, still
+  visible — the transparency obligation survives the restyle); the three
+  acting chips go ghost; and the composer floats centered while the canvas
+  is empty, docking sticky at the foot at the first turn. (2bbed871)
+- the composer states the product's posture as its own mark: the permanent
+  hint row is gone (the shortcut sentence stays available to keyboard users
+  through the textarea's accessible description — the key stays live in all
+  five locales), and a lock badge in the card's right cluster carries the
+  honest on-device sentence in its tooltip and accessible name. No fake
+  affordances were added — no attach button, no mic, no model picker. A new
+  badge key pair ships in all five catalogs. (bc1e31a0)
+- the status bar is gone, and every fact it carried landed in exactly one
+  new home with its law: the wire state rides the sidebar integrity dot
+  (the fault sentence stays in the chat page's banner, its one home); the
+  model fact moves to the composer's badge — never "unknown" over a
+  refused read; the row count, the integrity verdict and the surface's own
+  status context compose the dot's tooltip, still never guessing "0 rows"
+  over a refusal. (15d33ab2)
+- the sidebar goes quiet: every icon control carries its label as a
+  tooltip, and the session rows' rename/delete actions reveal on hover
+  while staying keyboard-recoverable. (51c94a3e)
+
+### Engineering record
+
+The round is UI1 "the quiet surface", executed 2026-11-18 against the
+execution prompt in the plans repo, one commit per step over the pre-round
+base `84310c3f`; the evidence file is
+`docs/IMPROVE_UI1_EVIDENCE_2026-11-18.md` with receipts under
+`~/round-scripts/ui1-quiet/`.
+
+- S1 (7f17037b): the rendering model gains the verdict's counts —
+  `quoted`/`paraphrase` as additive params on `generatedFromFinal` and
+  `withSupportLabel`, the page's `onSupport` passes them through, and the
+  OMIT LAW is red-first pinned (`replay_rows_omit_the_counts_never_zero`,
+  `expected undefined to be null` on the pre-change tree): replay rows
+  carry null, never zero.
+- S2 (2c1c2b58): the one meta row — the new pure `turn-meta.ts` (token
+  list in reading order, null facts ABSENT never zero), the compiled
+  `turnMeta`/`evidenceChip`/`evidenceList` snippets, the e2e contract
+  DOM-pinned (`the_turn_meta_is_one_row`, SSE-driven, axe AA swept), and
+  the new key `chat.support.counts` ×5 catalogs. RED-proofs run against
+  the pre-change page (`Unable to find [data-testid="chat-meta"]`).
+- S3 (2bbed871): the empty state — one `@theme` serif token, the demoted
+  disclosure (the kernel's Art-50 pin stayed green — the consumption law),
+  ghost chips (the COUNT pin untouched), the floating composer.
+- S4 (bc1e31a0): the composer — the hint row died sr-only with the key
+  still consumed ×5; the badge pinned present-and-non-empty in every
+  locale (`ui1_the_composer_posture_badge_sentence_exists_in_all_five_catalogs`).
+- S5 (15d33ab2): the named act — the footer deleted, both chrome pins
+  REWRITTEN red-first (`expected <footer …> to be null`;
+  `Unable to find [data-testid="shell-status-model"]`), the re-homing map
+  in the evidence file, `refreshFacts`/`refreshChain` still feeding the
+  dot and the badge, the registry's status-context resolver untouched.
+- S6 (51c94a3e): the rail — tooltips on the icon controls, hover-revealed
+  session actions with focus-within recovery.
+- S8 (e6941957): the wrap — the bundle band moved as a NAMED ACT
+  (1,807,430 → 1,808,365 gzipped, +935, the accounting in the pin's own
+  comment: the row + badge are new surface, the deletions were DOM noise
+  not compiled bytes, every sentence stays rendered by law); two register
+  rows appended (the meta-row law, the footer re-homing) — and the
+  register's own parser caught the round's first draft (an unescaped pipe
+  in a grep pattern inside the row), fixed with the pin green.
+- The v1.29.45 recut's two signing-lane repairs rode the range after that
+  tag and ship here (both release-process only, no user-facing surface):
+  the updater artifact is REBUILT from the placed bundle after the
+  metallib placement, so the shipped archive carries the MLX resource
+  bundle the bundler's own tarball predates (3126c8b2); and the metallib
+  re-seal APPLIES the hardened-runtime flag unconditionally for a real
+  identity instead of inferring it from a stale seal — the silent-strip
+  transient the recut's first lane run caught (05fcdba9).
+
+The falsifiers F1–F7 all closed (the evidence file's own section). The
+lanes at the wrap: vitest 440 passed | 2 skipped (baseline 432+2),
+svelte-check 0/0, eslint clean, e2e chromium 9 passed | 1 skipped, the
+full kernel suite 4,225 passed / 0 failed with zero kernel files in the
+diff, lipstyk-gate green over the pre-round base.
 
 ## [1.29.44] — 2026-11-14 — the improvement rounds land with the standing-state repair: the document pipeline with its tier ladder and correction lane, the scholar and the watch, the customer journey and appeals, the cascade gate and the near-miss guard, the /app seat and the client decommission — and every CI red since 2026-11-09 closed at its mechanism, both RUSTSEC graphs closed, the last two CodeQL alerts closed at the sink, and the tree is dependency-current
 

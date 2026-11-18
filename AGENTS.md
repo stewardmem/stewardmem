@@ -1,5 +1,32 @@
 # Agent Execution Log — StewardMem
 
+> **RELEASE v1.29.46 "The quiet surface" (2026-11-18, shell-only — zero
+> kernel files, zero wire changes, zero new dependencies): the UI1 round
+> becomes the release — the chat canvas renders the answer and one quiet
+> provenance row.** The six-part wrap: (1) Cargo.toml 1.29.45 → 1.29.46
+> with the Cargo.lock lockstep (exactly one line moved); (2) openapi.yaml
+> version + x-api-version in lockstep, the typed client regenerated
+> BYTE-IDENTICAL (the stamps do not feed the generated schema — the drift
+> gate green without a schema.d.ts diff); (3) CHANGELOG's ## [1.29.46]
+> section — five user-facing Improvements bullets citing all six
+> feat(shell) commits + the Engineering record naming the full range
+> INCLUDING the two post-1.29.45-tag lane repairs the completeness arm
+> caught unnamed on the first run (3126c8b2 the updater-artifact rebuild
+> from the placed bundle, 05fcdba9 the re-seal's unconditional
+> hardened-runtime apply) — release-notes-check OK (9 candidates named,
+> citations verified, no audit IDs); (4) docs/roadmap.md's current-status
+> leads with 1.29.46; (5) README badges at 1.29.46 (version, OpenAPI, the
+> SBOM link) with the test count re-derived by the REAL full invocation;
+> (6) this entry. The SBOM committed (sbom/brain-server-1.29.46.cdx.json,
+> regenerated over this tree). The release carries the UI1 record below in
+> full — the one meta row, the counts' omit law, the serif greeting, the
+> badge, the footer's named death, the register rows, the band's named
+> act — and the kernel lanes are untouched-and-green (4,225 passed / 0
+> failed at the round's wrap; the bench,migrate derivation re-verified at
+> the cut). The tag follows via scripts/release.sh v1.29.46 — the chain,
+> the DMG, and the Tools DMG publish through the lane; the receipts land
+> in the follow-up wrap commit.
+
 > **UI1 "The quiet surface" (2026-11-18, shell-only — zero kernel files,
 > zero wire changes, zero new dependencies, zero webfonts): the chat canvas
 > stops reading as "an AI with lots of text" and reads as the Claude-Code

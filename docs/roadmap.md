@@ -11,7 +11,17 @@ private plans archive on 2026-10-04 — this page is the in-repo roadmap.)
 
 ## Current status
 
-**v1.29.x — the current server line (1.29.45 recut — the served-chat
+**v1.29.x — the current server line (1.29.46 — the quiet surface: the
+shell's chat canvas renders the answer and ONE quiet provenance row —
+three stacked rows per turn became a single 11px muted token row whose
+sentences all stay (the verdict dot + sentence, the raw tier word, the
+cite-truth quoted/paraphrase counts, the sources chip), the greeting
+learned the system serif, the Art-50 disclosure demoted to one muted
+line, the on-device posture became a lock badge on the composer, and the
+status bar died with every fact re-homed — the wire state on the rail
+dot, the model on the badge, rows/integrity/context in the tooltip;
+shell-only: zero kernel files, zero wire changes, zero new dependencies;
+before it, the 1.29.45 recut — the served-chat
 repair JOINED by the cite-truth verdict and the writer-posture round:
 a citation that names an in-range hit is now TOLD whether the hit's
 text actually contains the claim — `supported` means verified-
