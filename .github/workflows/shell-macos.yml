@@ -159,19 +159,33 @@ jobs:
       # argument" is weaker than "impossible by measurement". This asserts the
       # compiled object really carries undefined FoundationModels symbols, which
       # is what proves the AFM surface was compiled rather than guarded away.
+      #
+      # BOTH BUILD LAYOUTS (2026-11-18, the xcode-27 image rolled a toolchain
+      # whose SwiftPM defaults to Xcode's build system): the classic layout
+      # puts objects in `$(swift build --show-bin-path)` (`$bin/*.o`), the
+      # XCBuild layout returns a PRODUCTS dir from --show-bin-path while the
+      # objects land in `.build/out/Intermediates.noindex/**` and the
+      # executables in `.build/out/Products/**` — the flat `$bin/*.o` glob
+      # matched nothing and the lane reded on a perfectly-built bridge
+      # (brain-afm's main.o carries 105 undefined FoundationModels symbols in
+      # that very layout, measured on the first red). The scan now walks the
+      # WHOLE .build tree: every .o (either layout) and every brain-afm
+      # product, refusing only when NOTHING that got built references the
+      # framework.
       - name: Assert the bridge actually links FoundationModels
         working-directory: shell-macos
         run: |
           set -euo pipefail
-          bin="$(swift build --show-bin-path)"
           shopt -s nullglob
           found=0
-          for obj in "$bin"/*.o "$bin"/*.swiftmodule; do
+          while IFS= read -r obj; do
             if nm -u "$obj" 2>/dev/null | grep -q "FoundationModels"; then
-              echo "FoundationModels referenced by: $(basename "$obj")"
+              echo "FoundationModels referenced by: ${obj#.build/}"
               found=1
             fi
-          done
+          done < <(find .build \
+                     \( -name '*.o' -o -name 'brain-afm' -o -name 'brain-afm.exe' \) \
+                     -type f 2>/dev/null)
           if [ "$found" -eq 0 ]; then
             echo "::error::no built object references FoundationModels. The " \
                  "@available guards compiled the AFM surface out — check the host " \
