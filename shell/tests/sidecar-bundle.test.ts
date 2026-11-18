@@ -637,6 +637,36 @@ test('the_sidecar_is_wired_macos_only_and_its_artifacts_are_ignored', () => {
 	);
 	expect(helper).toContain('mlx-swift_Cmlx.bundle');
 	expect(helper).toContain('default.metallib');
+	// THE RE-SEAL'S RUNTIME FLAG IS UNCONDITIONAL (v1.29.46's first public
+	// lane run, 2026-11-18): the walker demands `runtime` on EVERY Mach-O
+	// — ad-hoc lane included — and the bundler's own seal carries it on
+	// both lanes, so a re-seal without `--options runtime` STRIPS the flag
+	// the build just set (the live red: brain-shell re-sealed to
+	// flags=0x2(adhoc), the walk refused the bundle). The identity-gated
+	// branch below must gate ONLY the timestamp (a secure timestamp needs
+	// a real identity; the runtime bit does not) — asserted structurally:
+	// the runtime option rides the UNCONDITIONAL argument lists, and the
+	// `[ "$SIGN" != "-" ]` branch carries no `--options` of its own.
+	expect(
+		helper,
+		'the re-seal must apply --options runtime unconditionally (both lanes)'
+	).toMatch(/RESEAL_ARGS=\(--force --sign "\$SIGN" --options runtime\)/);
+	expect(
+			helper,
+		'the Cmlx bundle signing must apply --options runtime unconditionally (both lanes)'
+		).toMatch(/SIGN_ARGS=\(--force\)/); // followed by --sign + runtime outside the identity branch
+	const unconditionalRuntime = /SIGN_ARGS=\(--force\)\n\s*if \[ -n "\$SIGN" \]; then\n\s*SIGN_ARGS\+=\(--sign "\$SIGN" --options runtime\)/.test(
+		helper
+	);
+	expect(
+		unconditionalRuntime,
+		'the Cmlx signing assembles --options runtime BEFORE the identity branch (adhoc keeps it)'
+	).toBe(true);
+	const timestampBranchHasNoOptions = !/\[ "\$SIGN" != "-" \][^\n]*\n[^\n]*--options/.test(helper);
+	expect(
+		timestampBranchHasNoOptions,
+		'the identity branch must gate only the timestamp — a --options inside it strips runtime from the adhoc lane'
+	).toBe(true);
 	const releaseWorkflow = readFileSync(
 		join(kernelRoot, '.github', 'workflows', 'release.yml'),
 		'utf8'

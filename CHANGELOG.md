@@ -368,6 +368,15 @@ base `84310c3f`; the evidence file is
   re-seal APPLIES the hardened-runtime flag unconditionally for a real
   identity instead of inferring it from a stale seal — the silent-strip
   transient the recut's first lane run caught (05fcdba9).
+- The release's own first lane run caught and closed a third: the re-seal
+  kept a PLAIN ad-hoc branch whose re-seal STRIPPED the bundler's runtime
+  flag on the public proof lane — the walk refused brain-shell at
+  flags=0x2(adhoc) — so the runtime option is now UNCONDITIONAL on both
+  lanes (a secure timestamp stays identity-gated; it is the only thing
+  that does), drilled end to end on a scratch bundle (the old form
+  reproduces the lane's exact flags=0x2, the fixed form lands
+  adhoc,runtime) and pinned structurally beside the walker's own pins,
+  red-first against the pre-fix script.
 
 The falsifiers F1–F7 all closed (the evidence file's own section). The
 lanes at the wrap: vitest 440 passed | 2 skipped (baseline 432+2),

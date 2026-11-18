@@ -72,32 +72,32 @@ cp -R "$STAGED/$BUNDLE_NAME" "$MACOS_DIR/$BUNDLE_NAME"
 
 SIGN_ARGS=(--force)
 if [ -n "$SIGN" ]; then
-    SIGN_ARGS+=(--sign "$SIGN")
+    SIGN_ARGS+=(--sign "$SIGN" --options runtime)
     if [ -n "$ENTITLEMENTS" ]; then
         SIGN_ARGS+=(--entitlements "$ENTITLEMENTS")
     fi
     if [ "$SIGN" != "-" ]; then
-        SIGN_ARGS+=(--options runtime --timestamp)
+        SIGN_ARGS+=(--timestamp)
     fi
     codesign "${SIGN_ARGS[@]}" "$MACOS_DIR/$BUNDLE_NAME" \
         || fail "$BUNDLE_NAME could not be signed — the parent's seal would refuse it"
-    # The re-seal applies the hardened-runtime flag UNCONDITIONALLY for a
-    # real identity — the same law the Cmlx signing three lines above
-    # follows and the same law the release walker demands on EVERY Mach-O
-    # (a flags=0x0 brain-shell reds the chain walk). The previous form
-    # CONDITIONED the flag on grepping the parent's codesign output at a
-    # moment when the seal was already stale (MacOS/ had just been
-    # modified), and the condition failed in the signing lane's first real
-    # run — the re-seal silently stripped the bundler's runtime flag and
-    # the chain refused to publish — while every manual reproduction of
-    # the same sequence passed the check. A preserve-that-can-silently-
-    # drop is worse than an unconditional apply: the flag is mandatory
-    # under the Developer ID identity, so it is always applied, never
-    # inferred. (Ad-hoc `-` keeps the plain seal — the public proof lanes
-    # walk for shape, not runtime.)
-    RESEAL_ARGS=(--force --sign "$SIGN")
+    # The re-seal applies the hardened-runtime flag UNCONDITIONALLY — for a
+    # real identity AND for ad-hoc. The runtime bit is the one flag the
+    # release walker demands on EVERY Mach-O (sidecar.mjs: `runtime is
+    # pinned`; the refusal text names linker-signed shapes), and the
+    # bundler's own seal CARRIES it on both lanes (the public ad-hoc build
+    # is "ad-hoc, hardened runtime" by the workflow's own step name) — so
+    # a re-seal without `--options runtime` STRIPS the flag the build just
+    # set, on either lane. The first public run after the conditional's
+    # removal proved it live: the ad-hoc branch re-sealed brain-shell to
+    # flags=0x2(adhoc) and the walker refused the bundle (v1.29.46's first
+    # lane run, 2026-11-18). A secure TIMESTAMP, by contrast, requires a
+    # real identity, so it stays gated. (The previous form's own comment —
+    # "the public proof lanes walk for shape, not runtime" — was measured
+    # false by that run: the walk is unconditional.)
+    RESEAL_ARGS=(--force --sign "$SIGN" --options runtime)
     if [ "$SIGN" != "-" ]; then
-        RESEAL_ARGS+=(--options runtime --timestamp)
+        RESEAL_ARGS+=(--timestamp)
     fi
     codesign "${RESEAL_ARGS[@]}" "$APP" \
         || fail "the parent app could not be re-sealed after the bundle placement"
