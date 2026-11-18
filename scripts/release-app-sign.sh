@@ -693,6 +693,13 @@ ARTIFACT_DIR="$(dirname "$ARTIFACT")"
 		COPYFILE_DISABLE=1 tar -czf "$(basename "$ARTIFACT").tmp" "$(basename "$BUNDLE")" &&
 		mv "$(basename "$ARTIFACT").tmp" "$(basename "$ARTIFACT")"
 ) || die "the updater artifact could not be rebuilt from the placed bundle"
+# The bundler's signature beside the artifact covers the ORIGINAL bytes
+# (pre-Cmlx, pre-rebuild); the lane's chain step REUSES a present .sig, so
+# the stale one MUST go — otherwise the round trip verifies a signature
+# over bytes that no longer exist and refuses (the first rebuilt-artifact
+# run died exactly here). Removing it hands signing to the lane's own
+# step, which signs the REBUILT bytes with the same CLI and key.
+rm -f "$ARTIFACT.sig"
 
 # ── THE APPLE IDENTITY GATE (III-5) ──────────────────────────────────
 #
