@@ -143,7 +143,7 @@ function navEntries(): Array<{ testid: string; name: string; tag: string }> {
 	}));
 }
 
-test('the_frame_renders_one_nav_with_the_surface_list_in_order_one_main_and_a_healthy_status_bar', async () => {
+test('the_frame_renders_one_nav_with_the_surface_list_in_order_one_main_and_the_healthy_rail_dot', async () => {
 	responder = quiet;
 	// THE PROOF SURFACES REVEALED (the operator's ask, 2026-10-30): the
 	// first GUI shows ONLY the conversation; Memory/Review/Audit/Governance
@@ -194,10 +194,20 @@ test('the_frame_renders_one_nav_with_the_surface_list_in_order_one_main_and_a_he
 	expect(document.querySelectorAll('main').length).toBe(1);
 	expect(document.querySelector('main')?.contains(screen.getByTestId('host-content'))).toBe(true);
 
-	// The status bar reads healthy at rest: no wire fault was classified.
-	const status = screen.getByTestId('shell-status');
-	expect(status.getAttribute('data-wire')).toBe('healthy');
-	expect(status.textContent).toContain(m['shell.status.healthy']());
+	// UI1 S5 — THE NAMED ACT: the footer DIED. The wire state rides the
+	// rail dot's data-wire; at rest (no fault classified) NO fault word
+	// renders anywhere in the frame — the chat page's fault banner is the
+	// fault sentence's ONE home, and it is a page-level interrupt, absent
+	// at rest. The healthy WORD joins the dot's tooltip (the sentence
+	// `shell.status.healthy` stays consumed) and the dot keeps its own
+	// never-guessed laws (asserted in the facts pin below).
+	expect(
+		screen.queryByTestId('shell-status'),
+		'the status bar died — its facts re-homed: wire→the rail dot, model→the composer badge, rows/integrity/context→the dot tooltip'
+	).toBeNull();
+	const dot = screen.getByTestId('shell-facts');
+	expect(dot.getAttribute('data-wire')).toBe('healthy');
+	expect(dot.getAttribute('title')).toContain(m['shell.status.healthy']());
 
 	// The brand is the RAIL'S S-MARK now (zero chrome text — the Codex
 	// shape): the mark's presence is the assertion, and the accessible
@@ -280,12 +290,18 @@ test('the_sidebar_facts_are_read_from_the_kernel_and_never_guessed', async () =>
 		expect(screen.getByTestId('shell-facts').getAttribute('title')).toContain(
 			m['shell.facts.integrity.verified']()
 		);
+		// UI1 S5: the STATUS CONTEXT (the registry's chain, the old bar's
+		// middle slot) joins the same tooltip when non-null — the
+		// surface's own sentence re-homed, never dropped.
+		expect(screen.getByTestId('shell-facts').getAttribute('title')).toContain(
+			m['support.status.context']()
+		);
 	});
 	// The kernel VERSION fact's home is the About settings page (asserted
-	// in the settings-page pin's own file); the rail carries the dot.
-	expect(screen.getByTestId('shell-status-model').textContent).toContain(
-		m['shell.status.model']({ model: 'test-model' })
-	);
+	// in the settings-page pin's own file); the rail carries the dot. UI1
+	// S5: the MODEL fact's home moved to the chat composer's posture badge
+	// (asserted in chat-surface's own file — `shell-status-model` rides the
+	// badge, the never-guessed laws with it).
 
 	cleanup();
 	// The frame store is module-level: the next scenario must not inherit
@@ -335,9 +351,9 @@ test('the_sidebar_facts_are_read_from_the_kernel_and_never_guessed', async () =>
 		);
 	});
 	// A refused /stats leaves the count OUT of the tooltip — never "0 rows"
-	// over a refusal — and the sentence is absent, not blank.
+	// over a refusal — and the sentence is absent, not blank. (The model's
+	// null-shape moved WITH the fact to the composer badge's own pin.)
 	expect(screen.getByTestId('shell-facts').getAttribute('title') ?? '').not.toMatch(/\b0 rows\b/);
-	expect(screen.queryByTestId('shell-status-model')).toBeNull();
 });
 
 test('new_chat_bumps_the_conversation_epoch_and_navigates_home', async () => {

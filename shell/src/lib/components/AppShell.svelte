@@ -37,7 +37,6 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { CommandPalette } from '#lib/components/ui/command/index.js';
 	import { Dialog } from '#lib/components/ui/dialog/index.js';
-	import { wireFaultMessage } from '#lib/api/wire-fault.js';
 	import { fetchKernelFacts } from '#lib/api/kernel-facts.js';
 	import { verifyAuditChain } from '#lib/api/audit.js';
 	import { fetchPendingQueue } from '#lib/queue/client.js';
@@ -429,6 +428,21 @@
 		return m['shell.facts.integrity.unverified']();
 	});
 
+	/** UI1 S5 — the dot's tooltip is the old footer's one honest line,
+	 *  assembled: the healthy WORD at rest (the fault sentence stays in the
+	 *  page banner — the dot's `data-wire` carries the state silently),
+	 *  then rows (never over a refusal), then the integrity verdict, then
+	 *  the registry's status context when a member has one. Nothing is
+	 *  guessed; a refused read stays OUT. */
+	function factsTitle(): string {
+		const parts: string[] = [];
+		if (wireFault === null) parts.push(m['shell.status.healthy']());
+		if (rowsLabel !== null) parts.push(rowsLabel);
+		parts.push(integrityLabel);
+		if (statusContext !== null) parts.push(statusContext);
+		return parts.join(' · ');
+	}
+
 	// A credential change (the token section notes it on the frame's epoch)
 	// is the one moment the frame's facts can go from refused to answered
 	// (or back), so the three glance reads re-run on it rather than waiting
@@ -557,12 +571,21 @@
 		<div class="mt-auto grid justify-items-center gap-1">
 			<!-- The integrity dot: visually THE FACT (the rail carries no
 			     text); the rows/integrity sentence stays in the accessible
-						 tree for the screen reader. -->
+			     tree for the screen reader. UI1 S5 — THE FOOTER DIED and its
+			     facts re-homed HERE: the WIRE state rides `data-wire` (the
+			     fault SENTENCE lives in the chat page's banner alone — a
+			     page-level interrupt, never chrome text), the healthy word
+			     joins the tooltip at rest (the sentence stays consumed), and
+			     the registry's status-context chain joins when non-null
+			     (the old bar's middle slot, the surface's own sentence).
+			     The never-"0 rows" law is unchanged: a refused read stays
+			     OUT of the tooltip, never guessed over. -->
 			<div
 				class="grid h-6 w-6 place-items-center"
 				data-testid="shell-facts"
 				data-integrity={chain}
-				title={rowsLabel !== null ? `${rowsLabel} · ${integrityLabel}` : integrityLabel}
+				data-wire={wireFault ?? 'healthy'}
+				title={factsTitle()}
 			>
 				<span
 					class="size-2 rounded-full {chain === 'verified'
@@ -572,9 +595,7 @@
 							: 'bg-muted-foreground/50'}"
 					aria-hidden="true"
 				></span>
-				<span class="sr-only">
-					{#if rowsLabel !== null}{`${rowsLabel} · `}{/if}{integrityLabel}
-				</span>
+				<span class="sr-only">{factsTitle()}</span>
 			</div>
 
 			<Button
@@ -755,30 +776,13 @@
 				{@render children()}
 			</div>
 		</main>
-		<footer
-			data-slot="status-bar"
-			data-testid="shell-status"
-			data-wire={wireFault ?? 'healthy'}
-			class="flex shrink-0 items-center gap-2 border-t border-border px-4 py-2 text-xs text-muted-foreground"
-		>
-			<span
-				class="size-2 shrink-0 rounded-full {wireFault === null ? 'bg-ok' : 'bg-destructive'}"
-				aria-hidden="true"
-			></span>
-			<span class="truncate">
-				{#if wireFault === null}
-					{m['shell.status.healthy']()}
-				{:else}
-					{wireFaultMessage(wireFault)}
-				{/if}
-				{#if statusContext !== null}
-					· <span data-testid="shell-status-context">{statusContext}</span>
-				{/if}
-				{#if facts?.model}
-					· <span data-testid="shell-status-model">{m['shell.status.model']({ model: facts.model })}</span>
-				{/if}
-			</span>
-		</footer>
+		<!-- UI1 S5 — THE NAMED ACT: the footer DIED. Every fact re-homed with
+		     its law: the wire state → the rail dot's `data-wire` (the fault
+		     SENTENCE stays in the chat page's banner, its one home); the
+		     model → the composer's posture badge (`shell-status-model`, the
+		     page's own file); rows/integrity/status-context → the dot's
+		     tooltip and sr-only line. `refreshFacts`/`refreshChain` still
+		     run — the facts still feed the dot and the badge. -->
 	</div>
 </div>
 

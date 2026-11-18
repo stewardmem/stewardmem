@@ -64,3 +64,26 @@ machine); it is included in the full vitest run.
 - No fake affordances added (no +, no mic, no picker — the badge states a fact).
 - Lanes: i18n-parity 4 green, chat-surface/home-state/transport 27 green,
   svelte-check 0/0, eslint clean.
+
+## S5 · THE NAMED ACT — the footer dies (committed at its step)
+
+- RED-first (run against the pre-S5 tree, all three red, then green):
+  `the_frame_renders_one_nav…healthy_rail_dot` → `expected <footer …> to be null`;
+  `the_sidebar_facts…never_guessed` → the status-context tooltip arm;
+  `the_model_fact_rides_the_composer_badge…` → `Unable to find [data-testid="shell-status-model"]`.
+- The re-homing map (testid → new home, one line each):
+  - `shell-status` (the footer) → DELETED; wire state → the rail dot's `data-wire`
+    (the fault SENTENCE stays in the chat banner alone, its one home)
+  - `shell-status-model` → the composer's posture badge (+page.svelte, inside
+    `composer-posture`); the refusal arm's null-shape re-asserted there
+  - `shell-facts` → unchanged home, gains `data-wire` + the healthy word + the
+    registry's status-context in its tooltip and sr-only line
+  - rows/integrity/context → the dot's tooltip (`factsTitle()`), never-"0 rows"
+    law verbatim
+- `refreshFacts`/`refreshChain` still run (7 references) — the facts feed the
+  dot and the badge.
+- Greps: `shell-status|status-bar` outside the model testid = **0** in src;
+  `shell-status-model` exactly once in markup; `shell-facts` once.
+- The registry unit pin (`resolveStatusChain`) untouched and green.
+- Lanes: vitest 439 passed | 2 skipped (band red: 1,808,343 = +913, recorded),
+  svelte-check 0/0, eslint clean, e2e chromium 9 passed | 1 skipped.

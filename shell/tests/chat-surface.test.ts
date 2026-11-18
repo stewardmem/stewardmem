@@ -503,3 +503,31 @@ describe('UI1 S2 · the ONE meta row', () => {
 		expect(within(row).getByTestId('chat-evidence')).toBeTruthy();
 	});
 });
+
+describe('UI1 S5 · the model fact\'s new home (the composer badge)', () => {
+	test('the_model_fact_rides_the_composer_badge_and_a_refusal_leaves_it_absent', async () => {
+		const { recordKernelFacts } = await import('../src/lib/shell/frame.svelte.js');
+		// The facts ARE the store's (the layout reads them at mount; the
+		// page renders what the frame recorded — the same seam the chrome
+		// pin drives). A model that answered: the badge carries the
+		// `shell-status-model` span, sentence and all.
+		recordKernelFacts({ version: '1.29.32', count: 8745, model: 'test-model' });
+		await renderChat(ANSWERED);
+		const badge = screen.getByTestId('composer-posture');
+		const model = within(badge).getByTestId('shell-status-model');
+		expect(model.textContent).toContain('test-model');
+		cleanup();
+		recordKernelFacts(null);
+
+		// A refused /stats (the store's null facts — the refusal shape the
+		// old footer pin asserted at its own home): the span is ABSENT,
+		// never "model: unknown" over a refusal — the same never-guessed
+		// law, moved WITH the fact.
+		recordKernelFacts({ version: '1.29.32', count: null, model: null });
+		await renderChat(ANSWERED);
+		const badge2 = screen.getByTestId('composer-posture');
+		expect(within(badge2).queryByTestId('shell-status-model')).toBeNull();
+		cleanup();
+		recordKernelFacts(null);
+	});
+});
