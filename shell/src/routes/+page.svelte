@@ -520,10 +520,17 @@
 			onSupport: (support) => {
 				// THE KERNEL'S VERDICT (LL-04): patch the label on, render it,
 				// never re-derive it. The turn is already `generated` — the
-				// final always precedes the verdict on the wire.
+				// final always precedes the verdict on the wire. UI1 S1: the
+				// verdict's counts (quoted/paraphrase) ride the SAME patch —
+				// the meta row renders them, replay omits them (the omit law).
 				const current = turns.find((t) => t.id === id);
 				if (current !== undefined && current.rendering.kind === 'generated') {
-					updateTurn(id, { rendering: withSupportLabel(current.rendering, support.decision) });
+					updateTurn(id, {
+						rendering: withSupportLabel(current.rendering, support.decision, {
+							quoted: support.quoted,
+							paraphrase: support.paraphrase
+						})
+					});
 				}
 			},
 			onStreamError: (err) => {

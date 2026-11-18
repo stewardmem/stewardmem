@@ -123,6 +123,9 @@ describe('the support label on the turn', () => {
 			claims: [{ text: 'An answer.', cites: [0] }],
 			support: null
 		});
+		// UI1 S1: the turn starts UNCOUNTED — the counts arrive with the
+		// trailing verdict, never the final.
+		expect(rendering).toMatchObject({ quoted: null, paraphrase: null });
 	});
 
 	test('an_absent_typed_pair_reads_as_the_untyped_posture', () => {
@@ -134,6 +137,10 @@ describe('the support label on the turn', () => {
 		const generated = generatedFromFinal('q', { text: 'x', tier: null, abstain: null, claims: null }, []);
 		const labeled = withSupportLabel(generated, 'unsupported');
 		expect(labeled).toMatchObject({ kind: 'generated', support: 'unsupported' });
+		// UI1 S1: a caller without counts keeps the omit law (null, never 0).
+		expect(labeled).toMatchObject({ quoted: null, paraphrase: null });
+		const counted = withSupportLabel(generated, 'partial', { quoted: 2, paraphrase: 1 });
+		expect(counted).toMatchObject({ support: 'partial', quoted: 2, paraphrase: 1 });
 		const pending: TurnRendering = { kind: 'pending', query: 'q' };
 		expect(withSupportLabel(pending, 'supported')).toBe(pending);
 	});
@@ -171,5 +178,22 @@ describe('replay carries the stored verdict', () => {
 		expect(junk[0]?.rendering.support, 'a name outside the vocabulary is not a label').toBeNull();
 		const old = replayTurns(storedTurns(null));
 		expect(old[0]?.rendering.support, 'pre-LL-04 rows render unlabeled').toBeNull();
+	});
+
+	test('replay_rows_omit_the_counts_never_zero', () => {
+		// UI1 S1 — the counts' OMIT LAW: the stored row predates the counts
+		// (they ride only the live support event), so replay carries `null` —
+		// the field is PRESENT and null, never `0`, never `undefined`. Zero
+		// is a fact only the kernel's verdict can state (falsifier F5): a
+		// replay row that rendered "0 quoted" would assert a count the store
+		// never made.
+		const replayed = replayTurns(storedTurns('partial'));
+		expect(replayed[0]?.rendering.quoted).toBeNull();
+		expect(replayed[0]?.rendering.paraphrase).toBeNull();
+		// An unlabeled row omits them identically — the absence is the
+		// stored shape's, not the label's.
+		const old = replayTurns(storedTurns(null));
+		expect(old[0]?.rendering.quoted).toBeNull();
+		expect(old[0]?.rendering.paraphrase).toBeNull();
 	});
 });

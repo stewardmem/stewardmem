@@ -56,6 +56,16 @@ import type { Passage, RecallOutcome } from '../api/recall';
  */
 export type SupportLabel = 'supported' | 'partial' | 'unsupported' | 'abstained' | 'degraded';
 
+/** The kernel's support counts (UI1 S1), as the support event named them —
+ * ADDITIVE (22A), all-or-nothing per key on the wire. `null` is the omit
+ * law's value: every producer that predates the counts (a replay row, a
+ * pre-22A kernel's verdict) carries `null`, NEVER `0` — zero is a fact
+ * only the kernel's verdict can state (falsifier F5). */
+export interface SupportCounts {
+	readonly quoted: number | null;
+	readonly paraphrase: number | null;
+}
+
 /** One sentence-level claim from the typed final (the model's sentence and
  * the grounding-hit indices it asserted — verbatim, unjudged). */
 export interface AnswerClaim {
@@ -81,7 +91,12 @@ export type TurnRendering =
 			 * final and is patched on; `null` until then and on replay rows
 			 * that predate the verdict. */
 			support: SupportLabel | null;
-	  }
+			/** The verdict's counts (UI1 S1), additive on the support event;
+			 * `null` until the verdict arrives and on every stored row —
+			 * replay OMITS (never zeroes) what the store never held. */
+			quoted: number | null;
+			paraphrase: number | null;
+		  }
 	| { kind: 'streaming'; query: string; text: string; passages: Passage[] }
 	| {
 			kind: 'stream_failed';
@@ -213,7 +228,8 @@ export function generatedFromFinal(
 		abstain: boolean | null;
 		claims: readonly { text: string; cites: readonly number[] }[] | null;
 	},
-	passages: Passage[]
+	passages: Passage[],
+	counts?: SupportCounts
 ): TurnRendering {
 	return {
 		kind: 'generated',
@@ -223,19 +239,28 @@ export function generatedFromFinal(
 		passages,
 		abstain: final.abstain ?? false,
 		claims: final.claims,
-		support: null
+		support: null,
+		quoted: counts?.quoted ?? null,
+		paraphrase: counts?.paraphrase ?? null
 	};
 }
 
 /** The trailing verdict (LL-04): patches the kernel's label onto the
  * generated turn. The label is THE decision of record — the shell renders
- * it, never re-derives it from the claims. */
+ * it, never re-derives it from the claims. UI1 S1: the verdict's counts
+ * ride the same patch (additive — a caller without them keeps `null`). */
 export function withSupportLabel(
 	rendering: TurnRendering,
-	label: SupportLabel
+	label: SupportLabel,
+	counts?: SupportCounts
 ): TurnRendering {
 	if (rendering.kind !== 'generated') return rendering;
-	return { ...rendering, support: label };
+	return {
+		...rendering,
+		support: label,
+		quoted: counts?.quoted ?? null,
+		paraphrase: counts?.paraphrase ?? null
+	};
 }
 
 /** Parse a stored verdict name (the replay wire / the DB's vocabulary).

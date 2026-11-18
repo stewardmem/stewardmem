@@ -116,6 +116,12 @@ export interface ReplayedTurn {
 		abstain: boolean;
 		claims: readonly { text: string; cites: readonly number[] }[] | null;
 		support: ReturnType<typeof parseSupportLabel>;
+		/** UI1 S1 — the counts' OMIT LAW: the stored row predates them (they
+		 * ride only the live support event), so replay carries `null` —
+		 * never `0` (zero is a fact only the kernel's verdict can state).
+		 * The pin is `replay_rows_omit_the_counts_never_zero`. */
+		quoted: null;
+		paraphrase: null;
 	};
 	/** The grounding passages, for the page's provenance block. */
 	readonly passages: Passage[];
@@ -153,7 +159,9 @@ export function replayTurns(turns: readonly StoredTurn[]): ReplayedTurn[] {
 				// the stored shape has no boolean.
 				abstain: false,
 				claims: null,
-				support: parseSupportLabel(turn.support)
+				support: parseSupportLabel(turn.support),
+				quoted: null,
+				paraphrase: null
 			},
 			passages
 		});
