@@ -672,7 +672,29 @@ echo ">> placing the metallib bundle beside brain-afm (the metallib law)…"
 	--staged "$SHELL_DIR/src-tauri/binaries" \
 	--sign "$SIGNING_IDENTITY"
 
-# ── THE APPLE IDENTITY GATE (III-5) ────────────────────────────────────────
+# ── THE ARTIFACT REBUILD (the metallib law's second half) ──────────────────
+# The bundler created the updater tarball BEFORE the metallib placement,
+# so tauri's own artifact lacks the Cmlx bundle — the SHIPPED bytes would
+# crash the writer tier at first MLX use even though the walked .app beside
+# it is correct (the first metallib-era chain run refused exactly here:
+# the archive walk found no default.metallib beside brain-afm). The
+# artifact is re-created FROM THE PLACED BUNDLE with bsdtar's
+# COPYFILE_DISABLE=1 (no AppleDouble `._` pollution; entry list verified
+# equivalent to the bundler's — same root, same files, the Cmlx tree
+# added; the cosmetic difference is dir-entry trailing slashes, which the
+# updater's Rust tar reader handles). The R134 hand-made-archive caution
+# was a WRONG-ROOT/parent malformation; this re-tar keeps the bundler's
+# own root name and is walked by the lane's own extract-and-walk step
+# below before any byte is signed or shipped.
+echo ">> rebuilding the updater artifact from the placed bundle (the Cmlx pair must ship)…"
+ARTIFACT_DIR="$(dirname "$ARTIFACT")"
+(
+	cd "$ARTIFACT_DIR" &&
+		COPYFILE_DISABLE=1 tar -czf "$(basename "$ARTIFACT").tmp" "$(basename "$BUNDLE")" &&
+		mv "$(basename "$ARTIFACT").tmp" "$(basename "$ARTIFACT")"
+) || die "the updater artifact could not be rebuilt from the placed bundle"
+
+# ── THE APPLE IDENTITY GATE (III-5) ──────────────────────────────────
 #
 # The bundler signed with the real identity (the overlay pins it, and the
 # public CI's ad-hoc proof build is a different posture). The walker re-walks
