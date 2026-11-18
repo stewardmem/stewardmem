@@ -1,5 +1,43 @@
 # Agent Execution Log — StewardMem
 
+> **UI1 "The quiet surface" (2026-11-18, shell-only — zero kernel files,
+> zero wire changes, zero new dependencies, zero webfonts): the chat canvas
+> stops reading as "an AI with lots of text" and reads as the Claude-Code
+> register — the answer, one quiet meta row, nothing else — WITHOUT removing
+> a single fact, sentence, pin, or law.** Three stacked rows per turn (the
+> support sentence, the tier sentence, the evidence disclosure) became ONE
+> 11px muted token row: verdict dot + sentence · the RAW tier word · the
+> verdict's quoted/paraphrase counts (S1: the counts now ride the rendering
+> model — replay rows carry `null`, the omit law, red-first pinned — zero is
+> a fact only the kernel's verdict can state) · the sources chip re-homed
+> INSIDE the row. The sentences STAY — visible at 11px AND in `title`; the
+> dot is aria-hidden decoration, CSS-var colours only; the e2e contract
+> held and is DOM-pinned (`chat-tier` keeps the raw tier in textContent,
+> `chat-support` keeps `data-support` + the full sentence). The greeting
+> learned the SYSTEM serif (one @theme token, no webfont), the Art-50
+> disclosure demoted to one muted 12px line (still rendered, still visible,
+> still consumed — F4's fence), the chips went ghost (COUNT law untouched),
+> the composer floats centered while empty and docks sticky at the first
+> turn. THE NAMED ACT (S5): the footer DIED — the wire state rides the rail
+> dot's `data-wire` (the fault sentence stays in the chat banner alone), the
+> model fact moved to the composer's lock badge (`shell-status-model`, the
+> never-guessed null-shape re-asserted), rows/integrity/status-context
+> compose the dot's tooltip (never-"0 rows" verbatim); the two chrome pins
+> REWRITTEN red-first. The hint row died (sr-only aria-describedby, key
+> still consumed ×5). The band moved as a NAMED ACT (1,807,430 → 1,808,365,
+> +935 gzipped — the accounting in the pin's comment: the row + badge are
+> new surface, the deletions were DOM noise not compiled bytes, every
+> sentence stays rendered by law). The register gained two rows — and its
+> own parser caught the round's first draft (an unescaped pipe in a grep
+> pattern inside the row): the guard biting the round, the guard winning.
+> Lanes at the wrap: vitest 440 passed | 2 skipped (baseline 432+2),
+> svelte-check 0/0, eslint clean, e2e chromium 9 passed | 1 skipped (run at
+> S0, S2, S5, and the close — all green), lipstyk-gate green over the
+> pre-round base 84310c3f, the FULL kernel suite untouched-and-green
+> (4,225 passed, 0 failed — zero kernel files in the diff), badges
+> selfcheck OK. Evidence: docs/IMPROVE_UI1_EVIDENCE_2026-11-18.md; the cut
+> is the operator's.
+
 > **RELEASE v1.29.45 REcut (2026-11-17, the tag first cut 2026-11-15 never
 > published — its matrix refused the truncated test-count badge and the
 > shell lane's toolchain pin, both repaired in-tree since): the recut

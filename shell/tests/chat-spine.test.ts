@@ -1137,7 +1137,22 @@ describe('the envelope law', () => {
 		// disclosure pattern for the claim record, the deterministic tier's
 		// one-line source naming (`claims_record_collapsed`), the uncited
 		// arm that never collapses, and 4 keys ×5 locales).
-		const R0_BASELINE = 1_807_430;
+		// UI1 (the quiet-surface round) re-base, the named act: 1_807_430 →
+		// 1_808_365 (+935 gzipped — the round's mandate is NEW SURFACE, and
+		// the accounting owns it: ADDED the one-meta-row compile body
+		// (turn-meta.ts the pure module, the turnMeta/evidenceChip/
+		// evidenceList snippets, metaDotClass/recalledSentence), the
+		// composer's posture badge (+LockIcon, +factsTitle re-homing the
+		// footer's model fact), the verdict counts through the model
+		// (quoted/paraphrase), and 3 keys ×5 locales (chat.support.counts,
+		// chat.badge.ondevice[.tip]); REMOVED the three stacked rows' markup
+		// (the support/tier <p>s, the old evidenceDisclosure button, the
+		// answered heading + inline button, the visible hint <p>, the entire
+		// footer + its wireFaultMessage import) — DOM noise, not compiled
+		// bytes: every SENTENCE the old rows carried stays rendered by law,
+		// so the i18n payload did not shrink, and the quiet came from
+		// collapsing STRUCTURE, not from deleting copy).
+		const R0_BASELINE = 1_808_365;
 		const BAND = 512;
 		expect(
 			Math.abs(total - R0_BASELINE),

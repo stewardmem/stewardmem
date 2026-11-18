@@ -98,3 +98,57 @@ machine); it is included in the full vitest run.
   (`group-focus-within`); the per-button opacity multiplications removed (the
   span is the single visibility control). Hover tint + active tint unchanged.
 - Lanes: appshell-chrome + default-nav + route-a11y 35 green, svelte-check 0/0.
+
+## S7 · i18n + audit (verified at the wrap)
+
+- 3 keys added, 0 removed: `chat.support.counts`, `chat.badge.ondevice`,
+  `chat.badge.ondevice.tip` — ×5 catalogs. i18n-parity green (4 tests);
+  text-audit green (the new keys sit OUTSIDE the eight chrome families by
+  their names — `chat.support.*` and `chat.badge.*` were never audit families;
+  the audit's exhaustiveness held).
+- Every demoted key STILL consumed (grep receipts): `chat.composer.hint`
+  (sr-only), `shell.status.healthy` (dot title), `shell.status.model` (badge),
+  `chat.recalled`/`chat.confidence[.unknown]` (recalledSentence), `chat.tier`
+  (tier token title), `chat.support.*` (meta row), `shell.facts.*` (dot title),
+  `support.status.context` (status context → dot title),
+  `chat.disclosure.ai_interaction` (the demoted line — F4's fence, the kernel
+  pin `ai_act_transparency_deliverable_is_declared` green).
+
+## S8 · the wrap
+
+- The band: **1,807,430 → 1,808,365 gzipped (+935)**, moved as a NAMED ACT —
+  the accounting in the pin's own comment and in CHANGELOG §[Unreleased].
+  Removed (DOM/structure, not bytes): the support/tier `<p>`s, the old
+  evidenceDisclosure block, the answered heading + inline button, the visible
+  hint `<p>`, the footer + its wireFaultMessage import. Added (the mandate):
+  turn-meta.ts + the three snippets + the helpers, the badge (+LockIcon,
+  factsTitle), the counts through the model, 3 keys ×5 locales. The quiet
+  came from collapsing STRUCTURE — every sentence stays rendered by law, so
+  the i18n payload could not shrink.
+- Register: two rows appended (the meta-row law, the footer re-homing) —
+  the register's own parser (`the_gate_law_register_rows_parse…`) caught the
+  first draft's unescaped pipe (5 columns in a 4-column table), fixed; the
+  pin green (main_suite 354 passed).
+- The dry-run: vitest **440 passed | 2 skipped**, svelte-check 0/0, eslint
+  clean, e2e chromium **9 passed | 1 skipped**, lipstyk-gate **green**
+  (base 84310c3f, exit 0), kernel fmt green, clippy default `-D warnings`
+  green, **the FULL kernel suite 4,225 passed / 0 failed** (zero kernel
+  files in the diff — §3 held), badges selfcheck OK.
+- CHANGELOG §[Unreleased] engineering record + the AGENTS header entry landed.
+
+## The falsifiers, closed
+
+- F1 (e2e reds): never — the lane ran green at S0/S2/S5/close (9 passed |
+  1 skipped each time).
+- F2 (the band): moved as the named act WITH the accounting (above).
+- F3 (axe on the meta row): green — every token carries its sentence; the
+  dot is aria-hidden with the sentence visible beside it.
+- F4 (the kernel Art-50 pin): green — `ai_act_transparency_deliverable…`
+  4 passed; the disclosure still rendered and visible at 12px.
+- F5 (a replay row renders "0"): the omit law pinned red-first at S1; the
+  counts token renders only when non-null.
+- F6 (a fact deleted, not re-homed): the S5 map is in this file, every
+  testid accounted; the chrome pin rewrite names each home.
+- F7 (webfont/remote/new dependency): none — the serif is a system stack
+  (one @theme token), no fetch, no CSP change, no new dependency (Cargo
+  untouched; pnpm-lock untouched).

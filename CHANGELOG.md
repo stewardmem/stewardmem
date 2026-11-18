@@ -263,7 +263,65 @@ named as its next round's work.
   (green standalone every time, four occurrences, all in one binary)
   and the badge drift the correction closed; the full bench-and-migrate
   test invocation derives 4243 passed — the number the badge carries and
-  CI compares against. (fafd3263, eb1127d1)
+  and CI compares against. (fafd3263, eb1127d1)
+
+## [Unreleased] — UI1 the quiet surface: the canvas renders the answer and one quiet provenance row (2026-11-18, shell-only — zero kernel files, zero wire changes, zero new dependencies)
+
+The chat canvas stops reading as "an AI with lots of text" and reads as
+the Claude-Code register: the answer, one quiet meta row, nothing else —
+WITHOUT removing a single fact, sentence, pin, or law. The product's
+differentiator (private, on-device, cite-truthed) becomes the design
+language instead of paragraph copy.
+
+- **The one meta row (S2, the round's core):** three stacked rows per
+  turn — the support sentence, the tier sentence, the evidence disclosure
+  — became ONE 11px muted token row (verdict dot + sentence · tier word ·
+  the verdict's quoted/paraphrase counts · the sources chip), built by a
+  NEW pure module (`shell/src/lib/chat/turn-meta.ts`), rendered through
+  ONE compiled snippet shared by the generated/streaming/answered arms,
+  with `min-h` reserved so the final's arriving tokens never shift the
+  layout. The sentences STAY — visible at 11px AND in `title`; the verdict
+  dot is aria-hidden decoration, CSS-var colours only. The e2e contract
+  held through the restyle and is pinned in the DOM: `chat-tier` keeps the
+  RAW tier word in its textContent, `chat-support` keeps `data-support` +
+  the full sentence.
+- **The counts ride the model (S1):** the verdict's quoted/paraphrase
+  counts (additive on the support event) flow through the rendering model
+  instead of dying at the page's `onSupport`; replay rows carry `null` —
+  the omit law, red-first pinned (`replay_rows_omit_the_counts_never_zero`):
+  zero is a fact only the kernel's verdict can state.
+- **The empty state (S3):** the greeting learns the SYSTEM serif
+  (`--font-serif: ui-serif, 'New York', Georgia, serif` — no webfont, no
+  fetch, no CSP change), 28px tracking-tight; the Art-50 disclosure
+  demotes to one muted 12px line (still a rendered, VISIBLE disclosure —
+  the kernel pin's consumption law); the three acting chips go ghost
+  (registry untouched, the COUNT law held); the composer floats centered
+  while the canvas is empty and docks sticky at the first turn.
+- **The composer (S4):** the permanent hint row dies (the shortcut
+  sentence stays consumed as an sr-only `aria-describedby` binding —
+  keyboard discovery intact); the on-device posture becomes the
+  interface's own mark — a lock badge whose `title`/`aria-label` carry the
+  honest posture sentence (NEW keys `chat.badge.ondevice[.tip]` ×5
+  catalogs). No fake affordances: no attach, no mic, no picker.
+- **THE NAMED ACT (S5) — the footer dies:** every fact re-homed WITH its
+  law — the wire state rides the rail dot's `data-wire` (the fault
+  SENTENCE stays in the chat banner alone); the model fact moves to the
+  composer badge (`shell-status-model`, the never-guessed null-shape
+  re-asserted there); rows/integrity/status-context compose the dot's
+  tooltip and sr-only line (the never-"0 rows" law verbatim, the
+  registry's status-context joining when non-null). The two chrome pins
+  REWRITTEN red-first (receipts in the evidence file).
+- **The rail (S6):** tooltip labels on every icon control; the session
+  rows' pencil/trash reveal on hover and stay keyboard-recoverable.
+- **The band (S8):** moved as a NAMED ACT — 1,807,430 → 1,808,365
+  gzipped (+935; the accounting in the pin's own comment: the row + badge
+  are new surface, the deletions were DOM noise not compiled bytes, every
+  sentence stays rendered by law).
+- Register rows: the meta-row law + the footer re-homing (red-proof
+  texts recorded); the register's own parser caught the round's first
+  draft (an unescaped pipe in a grep pattern inside the row) — the guard
+  biting the round, the guard winning. Evidence:
+  `docs/IMPROVE_UI1_EVIDENCE_2026-11-18.md`.
 
 ## [1.29.44] — 2026-11-14 — the improvement rounds land with the standing-state repair: the document pipeline with its tier ladder and correction lane, the scholar and the watch, the customer journey and appeals, the cascade gate and the near-miss guard, the /app seat and the client decommission — and every CI red since 2026-11-09 closed at its mechanism, both RUSTSEC graphs closed, the last two CodeQL alerts closed at the sink, and the tree is dependency-current
 
