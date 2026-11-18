@@ -65,6 +65,7 @@
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Textarea } from '#lib/components/ui/textarea/index.js';
 	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
+		import LockIcon from '@lucide/svelte/icons/lock';
 	import { emptyChips } from '#lib/extensions/registry.js';
 	import { currentConversationEpoch } from '#lib/shell/frame.svelte.js';
 	import {
@@ -1414,8 +1415,23 @@
 				placeholder={m['chat.composer.placeholder']()}
 				rows={2}
 				class="min-h-0 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
+				aria-describedby="composer-hint"
 				data-testid="chat-composer"
 			/>
+			<!-- UI1 S4 — the on-device posture as the interface's own mark: the
+			     lock badge in the card's right cluster. The glyph carries its
+			     sentence in `title` AND `aria-label` (the round's glyph law);
+			     the tooltip is the honest posture sentence, no marketing. NOT
+			     a fake affordance — it states a fact, it is not a picker. -->
+			<span
+				class="mb-1 hidden shrink-0 items-center gap-1 text-[11px] leading-none text-muted-foreground sm:inline-flex"
+				data-testid="composer-posture"
+				title={m['chat.badge.ondevice.tip']()}
+				aria-label={m['chat.badge.ondevice.tip']()}
+			>
+				<LockIcon aria-hidden="true" class="size-3" />
+				<span>{m['chat.badge.ondevice']()}</span>
+			</span>
 			{#if streamPhase === 'streaming'}
 				<!-- Stop replaces Send while the answer streams (plan 25 §4). It
 				     is a plain button — the form's submit must not fire — and its
@@ -1444,6 +1460,11 @@
 				</Button>
 			{/if}
 		</div>
-		<p class="px-2 text-xs text-muted-foreground">{m['chat.composer.hint']()}</p>
+		<!-- UI1 S4 — the permanent hint row is GONE from the canvas: the
+		     shortcut sentence is still CONSUMED (keyboard users keep the
+		     discovery) as an sr-only description bound to the textarea
+			     through aria-describedby — the key stays live in all five
+			     catalogs, the row dies. -->
+		<span id="composer-hint" class="sr-only">{m['chat.composer.hint']()}</span>
 	</form>
 </div>

@@ -175,6 +175,8 @@
   "chat.transcript": "Historique de la conversation",
   "chat.composer.label": "Interrogez votre mémoire",
   "chat.composer.placeholder": "Posez une question…",
+  "chat.badge.ondevice": "Sur l'appareil",
+  "chat.badge.ondevice.tip": "Les réponses sont générées sur cet appareil — rien ne quitte la machine.",
   "chat.composer.hint": "⌘⏎ envoie · Entrée ajoute une ligne",
   "chat.send": "Envoyer",
   "chat.working": "Recherche en cours…",

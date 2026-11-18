@@ -175,6 +175,8 @@
   "chat.transcript": "Gesprächsverlauf",
   "chat.composer.label": "Frage dein Gedächtnis",
   "chat.composer.placeholder": "Stelle eine Frage…",
+  "chat.badge.ondevice": "Auf dem Gerät",
+  "chat.badge.ondevice.tip": "Antworten werden auf diesem Gerät erzeugt — nichts verlässt den Computer.",
   "chat.composer.hint": "⌘⏎ sendet · Eingabe: neue Zeile",
   "chat.send": "Senden",
   "chat.working": "Wird abgerufen…",

@@ -175,6 +175,8 @@
   "chat.transcript": "Conversation transcript",
   "chat.composer.label": "Ask your memory",
   "chat.composer.placeholder": "Ask a question…",
+  "chat.badge.ondevice": "On-device",
+  "chat.badge.ondevice.tip": "Answers are generated on this device — nothing leaves the machine.",
   "chat.composer.hint": "⌘⏎ sends · Enter adds a line",
   "chat.send": "Send",
   "chat.working": "Recalling…",

@@ -93,3 +93,31 @@ test('control_a_planted_missing_locale_key_reds_the_parity_checker', () => {
 	// does not red everything.
 	expect(() => expectSameKeySet(en, 'de', ['a', 'b', 'c'])).not.toThrow();
 });
+
+/**
+ * UI1 S4 — the composer's posture badge: the honest on-device sentence
+ * exists in EVERY catalog, because the badge is a glyph the reader meets
+ * with no visible sentence beside it — its `title`/`aria-label` IS the
+ * disclosure, and a missing locale would silently serve English for a
+ * privacy claim (the exact class the parity law exists for).
+ */
+test('ui1_the_composer_posture_badge_sentence_exists_in_all_five_catalogs', () => {
+	for (const locale of LOCALES) {
+		const values = JSON.parse(readFileSync(join(i18nDir, `${locale}.json`), 'utf8')) as Record<
+			string,
+			string
+		>;
+		for (const key of ['chat.badge.ondevice', 'chat.badge.ondevice.tip'] as const) {
+			const value = values[key];
+			expect(
+				typeof value === 'string' && value.length > 0,
+				`${locale}:${key} must carry the badge sentence — the glyph's tooltip is the disclosure`
+			).toBe(true);
+		}
+		// The tooltip is a SENTENCE (a claim, not a word): it must say more
+		// than the badge's own label.
+		expect(values['chat.badge.ondevice.tip']!.length).toBeGreaterThan(
+			values['chat.badge.ondevice']!.length
+		);
+	}
+});

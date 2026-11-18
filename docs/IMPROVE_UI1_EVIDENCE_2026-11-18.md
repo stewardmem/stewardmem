@@ -49,3 +49,18 @@ machine); it is included in the full vitest run.
   unstuck); first turn → docks sticky at the foot.
 - Lanes: chat-home-state + chat-surface + route-a11y + theme-retune +
   i18n-parity all green (56 tests), svelte-check 0/0.
+
+## S4 · the composer (committed at its step)
+
+- The permanent hint ROW deleted: `chat.composer.hint` stays CONSUMED as an
+  sr-only span bound through `aria-describedby="composer-hint"` on the textarea
+  (keyboard discovery kept, the canvas loses the row). Key live in all five.
+- The on-device badge: lock glyph + label in the card's right cluster,
+  `data-testid="composer-posture"`, the honest posture sentence in `title` AND
+  `aria-label` (the glyph law). NEW keys `chat.badge.ondevice` +
+  `chat.badge.ondevice.tip` ×5 catalogs.
+- The badge pin: `ui1_the_composer_posture_badge_sentence_exists_in_all_five_catalogs`
+  (presence + non-emptiness + the tooltip says more than the label).
+- No fake affordances added (no +, no mic, no picker — the badge states a fact).
+- Lanes: i18n-parity 4 green, chat-surface/home-state/transport 27 green,
+  svelte-check 0/0, eslint clean.

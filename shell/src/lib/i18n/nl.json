@@ -175,6 +175,8 @@
   "chat.transcript": "Gespreksgeschiedenis",
   "chat.composer.label": "Stel je geheugen een vraag",
   "chat.composer.placeholder": "Stel een vraag…",
+  "chat.badge.ondevice": "Op het apparaat",
+  "chat.badge.ondevice.tip": "Antwoorden worden op dit apparaat gegenereerd — niets verlaat de machine.",
   "chat.composer.hint": "⌘⏎ verstuurt · Enter: nieuwe regel",
   "chat.send": "Versturen",
   "chat.working": "Ophalen…",
