@@ -1,5 +1,49 @@
 # Agent Execution Log — StewardMem
 
+> **UI2 "The just-works surface" (2026-11-20, 13 commits + the wrap — zero
+> wire changes, zero Swift, zero new dependencies): the shipped app reads as
+> the quiet harnesses (Codex, Claude Code) — the answer is the screen, one
+> accent, receipts on every claim — and the operator's PLAIN-LANGUAGE LAW is
+> permanent: no AI language in the UI, ever.** Seven repairs (the hidden
+> title S1; the badge states posture not identity S2 — /stats's `model` names
+> the RETRIEVAL EMBEDDER, the exact wrong-pairing the never-guess law exists
+> to kill, so the id dies and `KernelFacts.model` with it; the import
+> sentence agreement-free S4; the badge ring S5; secondary chips S6; glass
+> washes S7; composer breathing room S8), four behavior rounds (the calm
+> searching line S9 with role=status ×5 locales; KERNEL sessions name
+> themselves from the first prompt S10 — screened head, 40 chars, 80 bytes,
+> CJK binds at the byte cap, second turns never rename, red-first module pin
+> + census/badge +1; date groups S11 — Today/Yesterday/7 days/Older under
+> one header per run, the per-row time column dies but stays sr-only + the
+> row title; palette Chats S12 — the store the frame holds, Enter activates,
+> no new read cadence), and the settings fold S13 (five categories to THREE:
+> model+rerank to advanced, update under about's ONE version line with the
+> honest "not reported" word replacing the em-dash placeholder; dead copy
+> retired with the fold; runmode STAYS in general — the Tier C default).
+> THE SWEEP: 238 dash-bearing values reworked across the five catalogs
+> (colons for fragments, French keeps its space; the Art 50 disclosure keeps
+> its meaning and the kernel pin stays 7/7); the lint pin red 238×
+> pre-sweep and makes both halves permanent (word-boundary hot-air matching —
+> the nl "Modelverwijzingen"/"delve" false positive is the pinned control).
+> Research via Context7 (Tauri hiddenTitle, Tailwind 4 ring semantics,
+> shadcn secondary, Paraglide exact-number locals needing a plugin newer
+> than the pinned ^4.6.0 → agreement-free nouns) + the benchmark study
+> (Codex's community asks for grouped/filterable history; Claude Code's
+> status indicators are its praised convention — S11/S12/S9 land exactly
+> those). Lanes: vitest 450+2 (+7 pins), svelte-check 0/0, eslint clean,
+> e2e 10+1 (the sessions drill skips LOUD on this machine's recorded
+> AFM-bridge posture — its S10/S11 amendments' live proof rides the next
+> bridge-available session, OWED), kernel 2855→green after the census
+> re-derivation caught the round's +1 (the drift refusal working), ai_act
+> 7/7, memform 23/23, docs_truth 20/20, external_claim 14/14, fmt+clippy
+> clean, badges selfcheck OK and --verify-count at 4244, links 567/567.
+> THE BAND HOLDS: 1,808,836 gzipped (+471 of ±512 over UI1's midpoint) — the
+> additions nearly cancel the removals, no named move. Evidence:
+> docs/IMPROVE23_EVIDENCE_2026-11-20.md. Tier C asked once, in one list
+> (native settings window + ⌘,, alt-gated developer area, toggle
+> relocation, brand square, native update menu item, additive chat_model on
+> /stats); silence keeps every default.
+
 > **R152 "The front door" (2026-11-18, shell + docs — zero kernel files, zero
 > wire changes, zero new dependencies): the install lane's Swift death is
 > ROOT-CAUSED as a rotated OS cryptex (NOT x86_64 — the deprecation warning
