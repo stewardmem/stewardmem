@@ -180,6 +180,7 @@
   "chat.composer.hint": "⌘⏎ sendet · Eingabe: neue Zeile",
   "chat.send": "Senden",
   "chat.working": "Wird abgerufen…",
+  "chat.searching": "Ihr Speicher wird durchsucht…",
   "chat.recalled": "{count} Passagen abgerufen",
   "chat.confidence": "Sicherheit {word}",
   "chat.confidence.unknown": "Sicherheit nicht angegeben",

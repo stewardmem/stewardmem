@@ -505,6 +505,52 @@ describe('UI1 S2 · the ONE meta row', () => {
 	});
 });
 
+describe('UI2 S9 · one calm searching line', () => {
+	test('the_pending_window_announces_the_search_and_the_turn_replaces_it', async () => {
+		// The line between send and the first arrival (grounding or delta):
+		// ONE muted role="status" line, no counts, no model names. It announces
+		// once (status's implicit polite live region) and the arriving turn
+		// REPLACES it — the searching state is never left on screen beside
+		// content. The stream delays its grounding frame so the pending window
+		// is observable; the old copy ("Recalling…", no role) reds this pin.
+		function delayedGrounding(): Response {
+			const encoder = new TextEncoder();
+			const body = new ReadableStream<Uint8Array>({
+				start(controller) {
+					setTimeout(() => {
+						controller.enqueue(
+							encoder.encode(
+								'event: grounding\ndata: {"decision":"ok","hits":[]}\n\n' +
+									'event: final\ndata: {"text":"the answer of record"}\n\n'
+							)
+						);
+					}, 150);
+				}
+			});
+			return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+		}
+		await renderChat(ANSWERED, delayedGrounding);
+		await userEvent.type(screen.getByTestId('chat-composer'), 'retention');
+		await userEvent.keyboard('{Meta>}{Enter}{/Meta}');
+		// THE PENDING WINDOW: the line exists, it is a status region (the
+		// screen reader hears the search started), and it carries the
+		// searching copy, not the old working copy.
+		const line = await screen.findByTestId('chat-searching');
+		expect(line.getAttribute('role')).toBe('status');
+		expect(line.textContent).toContain(m['chat.searching']());
+		// AND THE TURN REPLACES IT: after the grounding + final land, the
+		// searching line is gone — a state left beside content is noise. The
+		// final made the turn the answer of record.
+		await waitFor(() => {
+			expect(screen.queryByTestId('chat-searching')).toBeNull();
+		});
+		const turn = screen.getAllByTestId('chat-turn')[0]!;
+		await waitFor(() => {
+			expect(turn.textContent).toContain('the answer of record');
+		});
+	});
+});
+
 describe('UI2 S2 · the composer badge states posture, not identity', () => {
 	test('the_badge_carries_no_model_id_even_when_stats_answered_one', async () => {
 		const { recordKernelFacts } = await import('../src/lib/shell/frame.svelte.js');

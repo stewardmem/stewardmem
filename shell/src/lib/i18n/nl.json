@@ -180,6 +180,7 @@
   "chat.composer.hint": "⌘⏎ verstuurt · Enter: nieuwe regel",
   "chat.send": "Versturen",
   "chat.working": "Ophalen…",
+  "chat.searching": "Je geheugen wordt doorzocht…",
   "chat.recalled": "{count} passages opgehaald",
   "chat.confidence": "zekerheid {word}",
   "chat.confidence.unknown": "zekerheid niet vermeld",

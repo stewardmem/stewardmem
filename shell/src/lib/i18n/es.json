@@ -180,6 +180,7 @@
   "chat.composer.hint": "⌘⏎ envía · Intro añade una línea",
   "chat.send": "Enviar",
   "chat.working": "Buscando en la memoria…",
+  "chat.searching": "Buscando en tu memoria…",
   "chat.recalled": "{count} pasajes recuperados",
   "chat.confidence": "confianza {word}",
   "chat.confidence.unknown": "confianza no indicada",

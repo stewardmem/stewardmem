@@ -180,6 +180,7 @@
   "chat.composer.hint": "⌘⏎ sends · Enter adds a line",
   "chat.send": "Send",
   "chat.working": "Recalling…",
+  "chat.searching": "Searching your memory…",
   "chat.recalled": "Recalled {count} passages",
   "chat.confidence": "confidence {word}",
   "chat.confidence.unknown": "confidence not stated",

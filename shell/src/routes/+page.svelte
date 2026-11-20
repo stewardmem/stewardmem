@@ -887,7 +887,20 @@
 					</p>
 				{/if}
 				{#if turn.rendering.kind === 'pending'}
-					<p aria-busy="true" class="text-sm">{m['chat.working']()}</p>
+					<!-- UI2 S9 — ONE calm searching line for the window between send and
+					     the first arrival (grounding or delta): muted, role="status" so
+					     the search announces once, no counts, no candidate numbers, no
+					     model names. The arriving turn REPLACES it (the streaming arm
+					     renders its own meta row). `chat.working` stays the verify
+					     flow's busy word — this line is the search's. -->
+					<p
+						role="status"
+						aria-busy="true"
+						class="text-sm text-muted-foreground"
+						data-testid="chat-searching"
+					>
+						{m['chat.searching']()}
+					</p>
 				{:else if turn.rendering.kind === 'answered'}
 					{#if turn.provenance}
 						<!-- UI1 S2 — the heading + the disclosure button became the ONE
