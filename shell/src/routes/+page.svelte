@@ -818,13 +818,16 @@
 			     kept in the manifest — the navigators go through
 			     $app/navigation), and the page renders them verbatim. The
 			     pins judge the registry: a chip removed there reds here.
-			     UI1 S3: ghost variant — the COUNT law holds, the chrome
-			     quiets. -->
+			     UI1 S3 made them ghost; UI2 S6 makes them secondary — a quiet
+			     FILL so they read as the buttons they are (shadcn-svelte's
+			     "less prominent actions" variant, confirmed via Context7
+			     /websites/shadcn-svelte). The COUNT law holds: three, the
+			     same acts. -->
 			<div class="flex flex-wrap justify-center gap-2">
 				{#each emptyChips as chip (chip.id)}
 					<Button
 						type="button"
-						variant="ghost"
+						variant="secondary"
 						size="sm"
 						data-testid="chat-empty-{chip.id}"
 						onclick={chip.run}
