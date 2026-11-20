@@ -517,7 +517,7 @@
   "posture.card.evidence": "Trouvé via : {path}",
   "settings.import.heading": "Importer",
   "settings.import.hint": "Le rapport d'abord ; tout est annulable.",
-  "settings.import.disclosure": "{count} de ces fichiers sont des micro-restes vides ; {real} portent de vraies données.",
+  "settings.import.disclosure": "{count} micro-restes vides. {real} avec de vraies données.",
   "settings.import.pick": "Choisir une base",
   "settings.import.none": "Rien de choisi",
   "settings.import.read": "Lire le rapport",

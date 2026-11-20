@@ -517,7 +517,7 @@
   "posture.card.evidence": "Gevonden via: {path}",
   "settings.import.heading": "Importeren",
   "settings.import.hint": "Eerst het rapport; alles kan terug.",
-  "settings.import.disclosure": "{count} van deze bestanden zijn lege mini-resten; {real} bevatten echte gegevens.",
+  "settings.import.disclosure": "{count} lege mini-resten. {real} met echte gegevens.",
   "settings.import.pick": "Kies een database",
   "settings.import.none": "Niets gekozen",
   "settings.import.read": "Rapport lezen",

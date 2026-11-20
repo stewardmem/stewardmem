@@ -517,7 +517,7 @@
   "posture.card.evidence": "Gefunden über: {path}",
   "settings.import.heading": "Importieren",
   "settings.import.hint": "Erst der Bericht; alles ist umkehrbar.",
-  "settings.import.disclosure": "{count} dieser Dateien sind leere Kleinstreste; {real} tragen echte Daten.",
+  "settings.import.disclosure": "{count} leere Kleinstreste. {real} mit echten Daten.",
   "settings.import.pick": "Datenbank wählen",
   "settings.import.none": "Nichts gewählt",
   "settings.import.read": "Bericht lesen",

@@ -517,7 +517,7 @@
   "posture.card.evidence": "Encontrado vía: {path}",
   "settings.import.heading": "Importar",
   "settings.import.hint": "Primero el informe; todo es reversible.",
-  "settings.import.disclosure": "{count} de estos archivos son restos vacíos diminutos; {real} contienen datos reales.",
+  "settings.import.disclosure": "{count} restos vacíos diminutos. {real} con datos reales.",
   "settings.import.pick": "Elegir una base",
   "settings.import.none": "Nada elegido",
   "settings.import.read": "Leer el informe",

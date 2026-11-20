@@ -222,6 +222,58 @@ test('control_a_planted_missing_locale_key_reds_the_parity_checker', () => {
 });
 
 /**
+ * UI2 S4 — the import disclosure is AGREEMENT-FREE: two noun phrases, no
+ * verb to disagree with the count. The old copy carried one ("{real} carry
+ * real data" read "1 carry" — the grammar bug, in all five locales because
+ * they were translations of the same shape). The fix is the plan's default:
+ * noun copy, NOT a plural variant (exact-number locals need a newer message
+ * format plugin than the tree pins — /generaltranslation/paraglide-js
+ * docs/variants.md, fetched 2026-11-20). The pin holds the shape: at
+ * real=1 the second fragment names the count and holds NO verb — the verbs
+ * listed are the ones the old copy used, per locale, so restoring any of
+ * them reds by name.
+ */
+const IMPORT_DISCLOSURE_VERBS: Readonly<Record<string, readonly string[]>> = {
+	en: ['carry', 'carries'],
+	de: ['tragen', 'trägt', 'sind'],
+	fr: ['portent', 'porte', 'sont'],
+	es: ['contienen', 'contiene', 'son'],
+	nl: ['bevatten', 'bevat', 'zijn']
+};
+
+test('ui2_the_import_disclosure_is_agreement_free_at_every_count', () => {
+	for (const locale of LOCALES) {
+		const values = JSON.parse(readFileSync(join(i18nDir, `${locale}.json`), 'utf8')) as Record<
+			string,
+			string
+		>;
+		const template = values['settings.import.disclosure'];
+		expect(template, `${locale} carries the disclosure key`).toBeDefined();
+		// Compose the REAL count shape the reviewer saw (tiny artifacts outnumber
+		// the real ones) with the count that reds: ONE real file.
+		const composed = template
+			.replace('{count}', '2')
+			.replace('{real}', '1');
+		const fragments = composed.split('.').map((s) => s.trim()).filter((s) => s.length > 0);
+		expect(
+				fragments.length,
+				`${locale}: the disclosure is TWO noun phrases (a period between them) — "${composed}"`
+		).toBe(2);
+		const realFragment = fragments[1] ?? '';
+		expect(
+				realFragment.startsWith('1'),
+				`${locale}: the real-data phrase names its own count first — "${composed}"`
+		).toBe(true);
+		for (const verb of IMPORT_DISCLOSURE_VERBS[locale] ?? []) {
+			expect(
+					composed.toLowerCase(),
+					`${locale}: the disclosure holds no verb for the count to disagree with (found "${verb}") — "${composed}"`
+			).not.toContain(verb);
+		}
+	}
+});
+
+/**
  * UI1 S4 — the composer's posture badge: the honest on-device sentence
  * exists in EVERY catalog, because the badge is a glyph the reader meets
  * with no visible sentence beside it — its `title`/`aria-label` IS the
