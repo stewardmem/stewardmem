@@ -40,9 +40,9 @@ that applies them, not in prose that can drift from it.
 | `behavioral_pin` | 3636 | 84.2% |
 | `structural` | 503 | 11.6% |
 | `control` | 99 | 2.3% |
-| `residual_documentation` | 70 | 1.6% |
+| `residual_documentation` | 71 | 1.6% |
 | `unclassified` | 11 | 0.3% |
-| **total** | **4319** | |
+| **total** | **4320** | |
 
 Scope: `src/` + `tests/`, the two trees the badge's count comes from.
 The census reads HIGHER than the README badge for two reasons, both
