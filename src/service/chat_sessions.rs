@@ -178,6 +178,28 @@ fn screened(content: &str) -> String {
     crate::gate::sanitize_read(content, false, &None)
 }
 
+/// UI2 S10 — the lazy-create label: the first user prompt's head, derived
+/// from the SCREENED stored form so the row name carries no unscreened
+/// bytes. ≤ 40 chars (whole chars, never a torn boundary), then ≤ 80 bytes
+/// by popping WHOLE chars (the rename ceiling re-asserted — 40 CJK chars
+/// are 120 bytes, so the byte cap is the binding one there), invisibles
+/// stripped (idempotent beside the screen), whitespace trimmed at both
+/// ends. Nothing derivable stays empty: the shell's unlabelled fallback
+/// still covers that row.
+fn first_prompt_label(user_stored: &str) -> String {
+    const SNIPPET_CHARS: usize = 40;
+    let stripped = crate::strip_invisible::strip_invisible(user_stored);
+    let trimmed = stripped.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let mut head: String = trimmed.chars().take(SNIPPET_CHARS).collect();
+    while head.len() > MAX_LABEL_BYTES {
+        head.pop();
+    }
+    head.trim_end().to_owned()
+}
+
 /// One session as the wire states it (the handler maps 1:1; the service
 /// never names an HTTP shape beyond these stored facts).
 #[derive(Debug, Clone, PartialEq)]
@@ -406,10 +428,13 @@ pub fn persist_turn_pair(
             id
         }
         None => {
+            // UI2 S10: the row names itself from the first prompt's head —
+            // the list reads as conversations, not a wall of "Conversation".
+            let label = first_prompt_label(&user_stored);
             tx.execute(
                 "INSERT INTO chat_sessions(session_key, owner, label, created_at, last_turn_at, turn_count)
-                 VALUES (?1, ?2, '', ?3, ?3, 1)",
-                params![key, owner, now_unix],
+                 VALUES (?1, ?2, ?4, ?3, ?3, 1)",
+                params![key, owner, now_unix, label],
             )?;
             let id = tx.last_insert_rowid();
             crate::audit::record(
@@ -1061,5 +1086,123 @@ mod tests {
         }
         let (_, total) = list_sessions(&conn, &OwnerScope::unrestricted(), 20, 0).unwrap();
         assert_eq!(total, 0, "a refused key wrote nothing");
+    }
+
+    /// UI2 S10 — a session NAMES ITSELF: the lazy create derives the label
+    /// from the first user prompt's head, so the list stops reading as a wall
+    /// of "Conversation". The label is the SCREENED stored form's head, ≤ 40
+    /// chars at a UTF-8 boundary, ≤ 80 bytes (CJK crosses the byte ceiling at
+    /// 27+ chars — the byte cap catches it), invisibles stripped, trimmed;
+    /// an empty derivation stays empty (the shell's unlabelled fallback still
+    /// covers it), and a SECOND turn never renames (rename stays the user's
+    /// verb). RED at S10: the create INSERT writes '' and this pin reds with
+    /// the stale/derived label pair.
+    #[test]
+    fn a_created_session_names_itself_from_the_first_prompt() {
+        let mut conn = db();
+        // The plain shape: a prompt over 40 chars truncates at the char count.
+        let long = "What is the gate law in one complete sentence please";
+        persist_turn_pair(&mut conn, "s-name", OWNER, long, "a", None, None, None, T0).unwrap();
+        let (rows, _) = list_sessions(&conn, &OwnerScope::unrestricted(), 20, 0).unwrap();
+        assert_eq!(
+            rows[0].label, "What is the gate law in one complete sen",
+            "the label is the first prompt's head, 40 chars"
+        );
+
+        // The BYTE cap: 40 CJK chars are 120 bytes, over the 80-byte ceiling;
+        // the derivation pops to the boundary and stays a whole-char prefix.
+        let cjk = "問".repeat(40);
+        persist_turn_pair(&mut conn, "s-cjk", OWNER, &cjk, "a", None, None, None, T0).unwrap();
+        let (rows, _) = list_sessions(&conn, &OwnerScope::unrestricted(), 20, 0).unwrap();
+        let cjk_label = rows
+            .iter()
+            .find(|r| r.session_key == "s-cjk")
+            .unwrap()
+            .label
+            .clone();
+        assert!(
+            cjk_label.len() <= MAX_LABEL_BYTES,
+            "the byte ceiling holds: {}",
+            cjk_label.len()
+        );
+        assert_eq!(
+            cjk_label.chars().count(),
+            26,
+            "26 whole chars = 78 bytes fits; 27 = 81 does not"
+        );
+        assert!(
+            cjk.starts_with(&cjk_label),
+            "the label is a PREFIX of the prompt, never a torn char"
+        );
+
+        // Leading whitespace and invisibles: stripped and trimmed, never a
+        // smuggled byte in the row name.
+        let dirty = "\u{200B}  leading zero-width and spaces \u{202E}rest";
+        persist_turn_pair(
+            &mut conn, "s-dirty", OWNER, dirty, "a", None, None, None, T0,
+        )
+        .unwrap();
+        let (rows, _) = list_sessions(&conn, &OwnerScope::unrestricted(), 20, 0).unwrap();
+        let dirty_label = rows
+            .iter()
+            .find(|r| r.session_key == "s-dirty")
+            .unwrap()
+            .label
+            .clone();
+        assert_eq!(dirty_label, "leading zero-width and spaces rest");
+        assert!(
+            !dirty_label.contains('\u{200B}'),
+            "no zero-width bytes ride the label"
+        );
+        assert!(
+            !dirty_label.contains('\u{202E}'),
+            "no bidi controls ride the label"
+        );
+
+        // A SECOND turn never renames: the first prompt owns the name.
+        persist_turn_pair(
+            &mut conn,
+            "s-name",
+            OWNER,
+            "a completely different second question",
+            "a2",
+            None,
+            None,
+            None,
+            T0 + 5,
+        )
+        .unwrap();
+        let (rows, _) = list_sessions(&conn, &OwnerScope::unrestricted(), 20, 0).unwrap();
+        assert_eq!(
+            rows.iter()
+                .find(|r| r.session_key == "s-name")
+                .unwrap()
+                .label,
+            "What is the gate law in one complete sen",
+            "the label keeps the FIRST prompt's head; rename stays the user's verb"
+        );
+
+        // An invisible-only prompt stays empty (the shell fallback covers it).
+        persist_turn_pair(
+            &mut conn,
+            "s-empty",
+            OWNER,
+            "\u{200B}\u{200B}",
+            "a",
+            None,
+            None,
+            None,
+            T0,
+        )
+        .unwrap();
+        let (rows, _) = list_sessions(&conn, &OwnerScope::unrestricted(), 20, 0).unwrap();
+        assert_eq!(
+            rows.iter()
+                .find(|r| r.session_key == "s-empty")
+                .unwrap()
+                .label,
+            "",
+            "nothing to name stays unnamed — the shell's unlabelled fallback renders"
+        );
     }
 }

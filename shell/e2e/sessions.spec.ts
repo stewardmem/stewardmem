@@ -110,6 +110,17 @@ test('sessions_create_by_turn_switch_rename_delete_over_the_real_kernel', async 
 	// turn_count counts PAIRS (one persist per turn); the stored rows are
 	// two — the turns wire is where the pair is visible.
 	expect(alphaEntry!.turn_count, 'one pair = one counted turn').toBe(1);
+	// UI2 S10 — the created row NAMES ITSELF: the label is the first prompt's
+	// head (40-char / 80-byte fence; QUESTION_A is 38 chars, so the whole
+	// question is the label). The wall of "Conversation" is gone.
+	const labelled = await fetch(`${kernelUrl}/chat/sessions?limit=50`);
+	const labelledBody = (await labelled.json()) as {
+		sessions: Array<{ session_key: string; label: string }>;
+	};
+	expect(
+		labelledBody.sessions.find((s) => s.session_key === SESSION_A)?.label,
+		'the lazy create derives the label from the first prompt'
+	).toBe(QUESTION_A);
 	const turnsWire = await fetch(`${kernelUrl}/chat/sessions/${SESSION_A}/turns?limit=50`);
 	expect(turnsWire.ok, 'the turns wire').toBe(true);
 	const turnsBody = (await turnsWire.json()) as {
@@ -142,7 +153,12 @@ test('sessions_create_by_turn_switch_rename_delete_over_the_real_kernel', async 
 		sessions: Array<{ session_key: string; label: string }>;
 	};
 	const betaKey = namedBody.sessions.find((s) => s.label === 'Beta drill')!.session_key;
-	const alphaKey = namedBody.sessions.find((s) => s.label === '')!.session_key;
+	// UI2 S10: the never-renamed row is found by its SELF-DERIVED label (the
+	// first prompt's head) — whichever question that key asked, the wire says.
+	const autoRow = namedBody.sessions.find((s) => s.label !== 'Beta drill')!;
+	const alphaKey = autoRow.session_key;
+	const autoLabel = autoRow.label;
+	expect([QUESTION_A, 'Name the erasure posture for chat transcr']).toContain(autoLabel);
 	expect(betaKey === SESSION_B || betaKey === SESSION_A).toBe(true);
 	expect(alphaKey).not.toBe(betaKey);
 
@@ -158,15 +174,14 @@ test('sessions_create_by_turn_switch_rename_delete_over_the_real_kernel', async 
 	await expect(turnB).toContainText(QUESTION_B, { ignoreCase: true });
 	await expect(turnB).toContainText(second.finalText!.slice(0, 30));
 
-	await openByName('Conversation');
-	// The unlabelled row is the only one left showing the unlabelled
-	// sentence (Beta was renamed above) — find it by its li, then rename
-	// through the affordance scoped to THAT item (the affordances are
-	// siblings of the row button, not descendants — a button-scoped locator
-	// never resolves).
+	await openByName(autoLabel);
+	// The self-named row is the only one left showing its auto label (Beta
+	// was renamed above) — find it by its li, then rename through the
+	// affordance scoped to THAT item (the affordances are siblings of the
+	// row button, not descendants — a button-scoped locator never resolves).
 	const unlabelledItem = page
 		.getByTestId('session-item')
-		.filter({ has: page.getByTestId('session-row').filter({ hasText: 'Conversation' }) })
+		.filter({ has: page.getByTestId('session-row').filter({ hasText: autoLabel }) })
 		.first();
 	const unlabelledRow = unlabelledItem.getByTestId('session-row');
 	await unlabelledRow.click();
