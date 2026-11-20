@@ -52,7 +52,8 @@
 		fresh as freshSession,
 		refresh as refreshSessions,
 		remove as removeSession,
-		rename as renameSession
+		rename as renameSession,
+		type SessionSummary
 	} from '#lib/shell/sessions.svelte.js';
 	import { currentLocaleCode } from '#lib/shell/locale.svelte.js';
 	import {
@@ -228,12 +229,45 @@
 
 	/** The row's name: the renamed label if the user gave one, else the
 	 * kernel-agnostic "session" sentence — the SNIPPET-first design lives
-	 * with the stored turns (open() maps them), not a guess on the row. */
+	 * with the stored turns (open() maps them), not a guess on the row.
+	 * UI2 S10: the kernel now names rows from the first prompt, so the
+	 * fallback is the RARE shape (invisible-only first prompts), kept. */
 	function rowName(label: string): string {
 		const trimmed = label.trim();
 		if (trimmed.length > 0) return trimmed;
 		return m['chat.sessions.unlabelled']();
 	}
+
+	// ── UI2 S11: the rows group by DATE ──────────────────────────────────
+	//
+	// Today / Yesterday / Previous 7 days / Older, from last_turn_at against
+	// the LOCAL calendar day — pure presentation over the wire's newest-first
+	// order (no re-sort, no new read; the glance law is untouched). One header
+	// per contiguous run: the wire's order makes the runs monotone. Zero rows
+	// render no headers (chrome-by-exception holds for the groups).
+	type SessionGroup = 'today' | 'yesterday' | 'week' | 'older';
+
+	function groupOf(unixSeconds: number): SessionGroup {
+		const midnight = new Date();
+		midnight.setHours(0, 0, 0, 0);
+		const todayStart = Math.floor(midnight.getTime() / 1000);
+		if (unixSeconds >= todayStart) return 'today';
+		if (unixSeconds >= todayStart - 86_400) return 'yesterday';
+		if (unixSeconds >= todayStart - 7 * 86_400) return 'week';
+		return 'older';
+	}
+
+	const groupedSessions = $derived.by(() => {
+		const runs: Array<{ id: SessionGroup; rows: SessionSummary[] }> = [];
+		for (const row of sessionRows) {
+			const id = groupOf(row.last_turn_at);
+			const current: { id: SessionGroup; rows: SessionSummary[] } | undefined =
+				runs[runs.length - 1];
+			if (current !== undefined && current.id === id) current.rows.push(row);
+			else runs.push({ id, rows: [row] });
+		}
+		return runs;
+	});
 
 	let renamingKey = $state<string | null>(null);
 	let renameDraft = $state('');
@@ -652,73 +686,86 @@
 				onpointerleave={sessionScroll.leave}
 			>
 				{#if sessionRows.length > 0}
-					<ul class="grid gap-0.5 px-2 pt-2">
-						{#each sessionRows as row (row.session_key)}
-							{@const active = row.session_key === activeSessionKey}
-							{@const name = rowName(row.label)}
-							<li class="group relative" data-testid="session-item">
-								{#if renamingKey === row.session_key}
-									<input
-										class="h-8 w-full rounded-md border border-brand bg-background px-2 text-sm outline-none"
-										bind:value={renameDraft}
-										maxlength={80}
-										aria-label={m['chat.sessions.rename.label']({ name })}
-										data-testid="session-rename-input"
-										onkeydown={(event) => {
-											if (event.key === 'Enter') {
-												event.preventDefault();
-												void commitRename(row.session_key);
-											} else if (event.key === 'Escape') {
-												event.preventDefault();
-												renamingKey = null;
-											}
-										}}
-									/>
-								{:else}
-									<button
-										type="button"
-										data-testid="session-row"
-										data-active={active ? 'true' : 'false'}
-										aria-current={active ? 'true' : undefined}
-										class="group flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-left text-sm text-muted-foreground transition-colors hover:bg-sidebar-hover hover:text-foreground {active
-										? 'bg-sidebar-active text-foreground'
-										: ''}"
-										onclick={() => activateSession(row.session_key)}
-									>
-										<span class="min-w-0 flex-1 truncate">{name}</span>
-										<span
-											class="shrink-0 text-xs text-muted-foreground tabular-nums"
-											data-testid="session-relative-time"
-										>
-											{relativeTime(row.last_turn_at)}
-										</span>
-									</button>
-									<span
-										class="absolute right-1 top-1 flex opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
-									>
-										<button
-											type="button"
-											data-testid="session-rename"
-											aria-label={m['chat.sessions.rename']({ name })}
-											class="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
-											onclick={() => startRename(row.session_key, row.label)}
-										>
-											<PencilIcon class="size-3.5" aria-hidden="true" />
-										</button>
-										<button
-											type="button"
-											data-testid="session-delete"
-											aria-label={m['chat.sessions.delete']({ name })}
-											class="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:text-destructive"
-											onclick={() => askDelete(row.session_key)}
-										>
-											<Trash2Icon class="size-3.5" aria-hidden="true" />
-										</button>
-									</span>
-								{/if}
-							</li>
-						{/each}
-					</ul>
+					<!-- UI2 S11 — the rows render under DATE headers (one per contiguous
+					     run; the wire's newest-first order makes them monotone). The
+					     visible row carries ONLY the name; the relative time stays in the
+					     accessible tree (sr-only) and in the row's title — the repeated
+					     "yesterday · 2 days ago" column is gone. -->
+					{#each groupedSessions as group (group.id)}
+						<div data-testid="session-group" data-group={group.id}>
+							<div class="px-2.5 pb-1 pt-3 text-[11px] font-medium text-muted-foreground">
+								{m[`chat.sessions.group.${group.id}`]()}
+							</div>
+							<ul class="grid gap-0.5">
+								{#each group.rows as row (row.session_key)}
+									{@const active = row.session_key === activeSessionKey}
+									{@const name = rowName(row.label)}
+									<li class="group relative" data-testid="session-item">
+										{#if renamingKey === row.session_key}
+											<input
+												class="h-8 w-full rounded-md border border-brand bg-background px-2 text-sm outline-none"
+												bind:value={renameDraft}
+												maxlength={80}
+												aria-label={m['chat.sessions.rename.label']({ name })}
+												data-testid="session-rename-input"
+												onkeydown={(event) => {
+													if (event.key === 'Enter') {
+														event.preventDefault();
+														void commitRename(row.session_key);
+													} else if (event.key === 'Escape') {
+														event.preventDefault();
+														renamingKey = null;
+													}
+												}}
+												/>
+										{:else}
+											<button
+												type="button"
+												data-testid="session-row"
+												data-active={active ? 'true' : 'false'}
+												aria-current={active ? 'true' : undefined}
+												title={relativeTime(row.last_turn_at)}
+												class="group flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-left text-sm text-muted-foreground transition-colors hover:bg-sidebar-hover hover:text-foreground {active
+												? 'bg-sidebar-active text-foreground'
+												: ''}"
+												onclick={() => activateSession(row.session_key)}
+											>
+												<span class="min-w-0 flex-1 truncate">{name}</span>
+												<span
+													class="sr-only"
+													data-testid="session-relative-time"
+												>
+													{relativeTime(row.last_turn_at)}
+												</span>
+											</button>
+											<span
+													class="absolute right-1 top-1 flex opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+											>
+												<button
+														type="button"
+														data-testid="session-rename"
+														aria-label={m['chat.sessions.rename']({ name })}
+														class="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
+														onclick={() => startRename(row.session_key, row.label)}
+													>
+														<PencilIcon class="size-3.5" aria-hidden="true" />
+													</button>
+													<button
+														type="button"
+														data-testid="session-delete"
+														aria-label={m['chat.sessions.delete']({ name })}
+														class="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:text-destructive"
+														onclick={() => askDelete(row.session_key)}
+													>
+														<Trash2Icon class="size-3.5" aria-hidden="true" />
+													</button>
+												</span>
+										{/if}
+									</li>
+								{/each}
+							</ul>
+						</div>
+					{/each}
 				{/if}
 			</div>
 

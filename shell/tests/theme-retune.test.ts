@@ -643,6 +643,12 @@ const TEXT_AUDIT: Readonly<Record<string, AuditRow>> = {
 	// chat.sessions.*
 	'chat.sessions.heading': 'label',
 	'chat.sessions.unlabelled': 'label',
+	// UI2 S11 — the date-group headers (group headings are HINT-class per
+	// the audit's own definition; the wire's order makes the runs monotone).
+	'chat.sessions.group.today': 'hint',
+	'chat.sessions.group.yesterday': 'hint',
+	'chat.sessions.group.week': 'hint',
+	'chat.sessions.group.older': 'hint',
 	'chat.sessions.rename': 'hint',
 	'chat.sessions.rename.label': 'hint',
 	'chat.sessions.delete': 'hint',

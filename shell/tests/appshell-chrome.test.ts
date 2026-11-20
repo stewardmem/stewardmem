@@ -532,6 +532,58 @@ test('session_rows_carry_a_relative_time_in_the_rendered_locale', async () => {
 	// hardcodes a string.
 	const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
 	expect(time.textContent!.trim()).toBe(rtf.format(-1, 'minute'));
+	// UI2 S11, the amended law: the VISIBLE column carries only the name (the
+	// repeated "yesterday · yesterday · 2 days ago" column is gone); the time
+	// stays READ — sr-only in the accessible tree, and in the ROW's title for
+	// hover. The testid stays on the time element.
+	expect(time.className, 'the time element is sr-only, not a visible column').toContain('sr-only');
+	const row = screen.getByTestId('session-row');
+	expect(row.getAttribute('title')).toBe(rtf.format(-1, 'minute'));
+});
+
+test('session_rows_group_by_date_under_locale_aware_headers', async () => {
+	await resetSessionStore();
+	// Three rows across three groups: one minute ago (today), eight days ago
+	// (the week bucket's floor is 2..7 days — eight lands in older), and a
+	// 40-day-old row (month granularity, still "older"). The list arrives
+	// NEWEST-FIRST off the wire, so the groups render in the calendar order
+	// today → older, one header each — never a header per row.
+	const now = Math.floor(Date.now() / 1000);
+	const startOfToday = new Date();
+	startOfToday.setHours(0, 0, 0, 0);
+	const todayStart = Math.floor(startOfToday.getTime() / 1000);
+	serve({
+		'/proposals': [],
+		'/chat/sessions': {
+			sessions: [
+				sessionRow('s-now', { label: 'from today', last_turn_at: now - 60 }),
+				sessionRow('s-old', { label: 'from eight days', last_turn_at: todayStart - 8 * 86400 }),
+				sessionRow('s-older', { label: 'from forty days', last_turn_at: todayStart - 40 * 86400 })
+			],
+			total: 3
+		}
+	});
+	await renderHost();
+	const groups = await screen.findAllByTestId('session-group');
+	expect(groups.map((g) => g.getAttribute('data-group'))).toEqual(['today', 'older']);
+	expect(groups[0]!.textContent).toContain(m['chat.sessions.group.today']());
+	expect(groups[1]!.textContent).toContain(m['chat.sessions.group.older']());
+	// The rows stay under their own headers, in the wire's order — the
+	// VISIBLE column is the name alone (the time span is sr-only, asserted
+	// by the relative-time pin; jsdom's textContent cannot see layout, so
+	// the name is read off its own non-sr-only span).
+	const rows = await screen.findAllByTestId('session-row');
+	expect(
+		rows.map((r) => r.querySelector('span:not(.sr-only)')?.textContent)
+	).toEqual(['from today', 'from eight days', 'from forty days']);
+
+	// Zero rows render NO headers (chrome-by-exception holds for the groups).
+	cleanup();
+	await resetSessionStore();
+	await renderHost();
+	await waitFor(() => expect(screen.getByTestId('session-region')).toBeTruthy());
+	expect(screen.queryByTestId('session-group')).toBeNull();
+	cleanup();
 });
 
 test('the_glance_triggers_refresh_and_no_interval_exists_in_the_region', async () => {

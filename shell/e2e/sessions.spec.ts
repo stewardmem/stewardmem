@@ -134,10 +134,16 @@ test('sessions_create_by_turn_switch_rename_delete_over_the_real_kernel', async 
 	const second = await driveTurn(SESSION_B, QUESTION_B);
 	expect(second.ok, 'the second session turn answered').toBeTruthy();
 
-// ── the shell: open the frame, the region lists BOTH sessions ──
+	// ── the shell: open the frame, the region lists BOTH sessions ──
 	await page.goto('/');
 	await expect(page.getByTestId('session-region')).toBeVisible();
 	await expect(page.getByTestId('session-row')).toHaveCount(2);
+	// UI2 S11 — the rows sit under their DATE header (both drill sessions
+	// are seconds old, so one Today run covers both: ONE header, not one per
+	// row — the run structure is the assertion).
+	const groupHeaders = page.getByTestId('session-group');
+	await expect(groupHeaders).toHaveCount(1);
+	await expect(groupHeaders.first()).toHaveAttribute('data-group', 'today');
 
 	// ── RENAME FIRST (the switch legs click by NAME, not by position: the
 	//    list orders by last_turn_at and both turns are seconds apart).
