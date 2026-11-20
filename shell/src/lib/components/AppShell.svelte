@@ -552,11 +552,15 @@
 								{#if item.id === 'review' && queueCount !== null && queueCount > 0}
 									<!-- The count badge rides the icon: the state token
 									     is the stable hook; the count joins the
-										   accessible name. -->
+									       accessible name. UI2 S5: a 2px ring in the
+									     sidebar's own colour separates the count from
+									     the icon on glass (Tailwind v4: ring-2 is 2px,
+									     ring-sidebar resolves through @theme inline's
+									     --color-sidebar). -->
 									<span
 										data-testid="review-badge"
 										data-queue="nonempty"
-										class="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-medium text-primary-foreground tabular-nums"
+										class="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-medium text-primary-foreground tabular-nums ring-2 ring-sidebar"
 										aria-label={m['review.badge']({ count: queueCount })}
 									>
 										<span aria-hidden="true">{queueCount}</span>
