@@ -17,7 +17,7 @@
 	<Label for="setting-locale">{m["settings.locale.label"]()}</Label>
 	<!-- The native select (the open list stays the platform's own popup —
 	     the native-first control law). -->
-	<select id="setting-locale" value={currentLocale} onchange={onSelect}>
+	<select id="setting-locale" class="max-w-xs" value={currentLocale} onchange={onSelect}>
 		{#each LOCALES as l (l.code)}
 			<option value={l.code}>{l.name}</option>
 		{/each}

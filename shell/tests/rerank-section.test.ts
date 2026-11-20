@@ -234,13 +234,18 @@ describe('rerank section (CG-12)', () => {
 		}
 	});
 
-	test('the registry carries the section in the model category, after the model section', () => {
+	test('the registry carries the section in the advanced category, after the model section', () => {
 		const sections = coreSettings.contributes.settingsSections;
 		expect(sections, 'the core manifest contributes sections').toBeDefined();
 		const ids = (sections ?? []).map((s) => s.id);
 		const modelIdx = ids.indexOf('model');
 		const rerankIdx = ids.indexOf('rerank');
+		// UI2 S13: the model and rerank status surfaces FOLDED into advanced —
+		// five categories became three, and the failure sentences stay visible
+		// in their new home (the registry's order is unchanged: rerank still
+		// sits directly after the model section).
 		expect(rerankIdx).toBe(modelIdx + 1);
-		expect((sections ?? [])[rerankIdx]?.category).toBe('model');
+		expect((sections ?? [])[rerankIdx]?.category).toBe('advanced');
+		expect((sections ?? [])[modelIdx]?.category).toBe('advanced');
 	});
 });

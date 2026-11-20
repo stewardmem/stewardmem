@@ -13,12 +13,12 @@
 	import { fetchKernelFacts } from '#lib/api/kernel-facts.js';
 	import { onMount } from 'svelte';
 
-	type CategoryId = 'general' | 'model' | 'updates' | 'advanced' | 'about';
+	type CategoryId = 'general' | 'advanced' | 'about';
 
+	// UI2 S13 — THREE categories (five became three: the model and rerank
+	// status surfaces folded into advanced, the update surface into about).
 	const CATEGORIES: ReadonlyArray<{ id: CategoryId; label: string }> = [
 		{ id: 'general', label: m['settings.cats.general']() },
-		{ id: 'model', label: m['settings.cats.model']() },
-		{ id: 'updates', label: m['settings.cats.updates']() },
 		{ id: 'advanced', label: m['settings.cats.advanced']() },
 		{ id: 'about', label: m['settings.cats.about']() }
 	];
@@ -73,22 +73,25 @@
 				<section class="grid gap-5" aria-label={cat.label}>
 					<h2 class="text-lg font-semibold tracking-tight">{cat.label}</h2>
 					{#if cat.id === 'about'}
-						<!-- The About pane: the facts the app can NAME, nothing
-						     more. Minimal by law — no marketing copy. -->
-						<dl class="grid gap-1 text-sm" data-testid="settings-about">
-							<dt class="text-muted-foreground">StewardMem</dt>
-							<dd>{appVersion ?? '—'}</dd>
-							<dt class="text-muted-foreground">{m['settings.about.kernel']()}</dt>
-							<dd>{kernelVersion ?? '—'}</dd>
-						</dl>
-					{:else}
-						{#each sectionsIn(cat.id) as section (section.id)}
-							{@const Section = section.component}
-							<Section />
-						{/each}
-						{#if sectionsIn(cat.id).length === 0}
-							<p class="text-sm text-muted-foreground">{m['settings.empty']()}</p>
-						{/if}
+						<!-- UI2 S13 — the About pane: ONE version line (the two-row dl is
+						     gone, and so is its em-dash unknown placeholder). A fact
+						     that has not answered renders the honest "not reported"
+						     word — never a guessed version, never a dash. The category's
+						     SECTIONS render below (the update surface's new home); its
+						     verdict copy is unchanged. -->
+						<p class="text-sm" data-testid="settings-about">
+							{m['settings.about.line']({
+								app: appVersion ?? m['settings.about.unknown'](),
+								kernel: kernelVersion ?? m['settings.about.unknown']()
+							})}
+						</p>
+					{/if}
+					{#each sectionsIn(cat.id) as section (section.id)}
+						{@const Section = section.component}
+						<Section />
+					{/each}
+					{#if sectionsIn(cat.id).length === 0}
+						<p class="text-sm text-muted-foreground">{m['settings.empty']()}</p>
 					{/if}
 				</section>
 			{/if}

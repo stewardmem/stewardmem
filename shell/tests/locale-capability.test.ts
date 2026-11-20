@@ -44,8 +44,6 @@ function catalog(locale: string): Record<string, string> {
  * drifts quietly as the catalog grows.
  */
 const GERMAN_LOANWORDS = new Set([
-	'settings.about.kernel',
-	'settings.cats.model',
 	'nav.chat',
 	// UI2 S12: the palette's Chats group heading — "Chats" is the German
 	// plural of the established loanword "Chat".
@@ -63,7 +61,10 @@ const GERMAN_LOANWORDS = new Set([
 	'shell.brand',
 	'audit.title',
 	'audit.col.status',
-	'governance.title'
+	'governance.title',
+	// UI2 S13: the About pane's ONE version line is placeholders + the brand
+	// + "Kernel" (the German technical term) — identical to en by nature.
+	'settings.about.line'
 ]);
 // (M3-a: the overview.*/models.* entries retired with their keys — a
 // loanword entry for a key no catalog carries would be dead cover.)
@@ -77,8 +78,10 @@ const GERMAN_LOANWORDS = new Set([
  * untranslated string wearing a locale label.
  */
 const FRENCH_LOANWORDS = new Set([
-	'settings.about.kernel',
-	'settings.cats.model',
+	// UI2 S13: the About pane's ONE version line ("StewardMem {app}.
+	// Kernel {kernel}.") — the brand and the technical term "Kernel" carry
+	// over verbatim; the sentence around them is placeholders.
+	'settings.about.line',
 	// "Pipeline"/"Mode"/"Version"/"RRF k" are the same technical terms in
 	// French; "Leg" is the retrieval leg, a term of art kept verbatim;
 	// "Conversation"/"Scores"/"Salience" are French words of identical
@@ -117,9 +120,10 @@ const SPANISH_LOANWORDS = new Set([
 	'decisions.detail.rrf_k',
 	'decisions.detail.kernel',
 	// The settings page (2026-10-30): "General" is a same-spelling Spanish
-	// word; "Kernel" is an established Spanish loanword.
+	// word; UI2 S13: the About line's "Kernel" is an established Spanish
+	// loanword inside the version line.
 	'settings.cats.general',
-	'settings.about.kernel',
+	'settings.about.line',
 	// The sidebar frame (2026-10-25): "Actor" and "Roles" are Spanish words
 	// of identical spelling; "Steward" is the product name.
 	'shell.brand',
@@ -130,12 +134,11 @@ const SPANISH_LOANWORDS = new Set([
 const DUTCH_LOANWORDS = new Set([
 	// "Chat", "Pipeline" and "Kernel" are established Dutch loanwords;
 	// "Actor", "Model" and "Scores" are same-spelling cognates; "conflict"
-	// and "Conflict" are Dutch words in their own right. The settings
-	// page's cats (2026-10-30): "Model" and "Updates" are same-spelling
-	// Dutch cognates; "Kernel" is the established loanword.
-	'settings.cats.model',
-	'settings.cats.updates',
-	'settings.about.kernel',
+	// and "Conflict" are Dutch words in their own right. UI2 S13: the About
+	// line's "Kernel" is the established loanword inside the version line
+	// (the cats.model/cats.updates/about.kernel entries retired with their
+	// keys).
+	'settings.about.line',
 	'nav.chat',
 	// UI2 S12: "Chats" is the Dutch plural of the established loanword
 	// "chat" (the chat.stop precedent: the genuine word, spelled as English).

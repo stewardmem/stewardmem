@@ -101,6 +101,7 @@
 				autocapitalize="none"
 				autocorrect="off"
 				aria-describedby="setting-token-hint"
+				placeholder={tokenConfigured ? '••••••••' : undefined}
 				bind:value={tokenInput}
 			/>
 			<Button onclick={saveToken}>{m["settings.token.save"]()}</Button>

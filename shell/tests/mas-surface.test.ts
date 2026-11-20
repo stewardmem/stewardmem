@@ -88,7 +88,9 @@ describe('the App Store fork surface', () => {
 		state.channel = 'mas';
 		const user = (await import('@testing-library/user-event')).default.setup();
 		render(SettingsPageHost);
-		await user.click(screen.getByRole('button', { name: 'Updates' }));
+		// UI2 S13: the updater's home is ABOUT now (five categories folded into
+		// three; the 'Updates' category retired). The rail's button is About.
+		await user.click(screen.getByRole('button', { name: 'About' }));
 		await waitFor(() => {
 			expect(
 				screen.queryByText('Software update'),
@@ -146,7 +148,9 @@ describe('the App Store fork surface', () => {
 	test('the_direct_edition_still_renders_the_updater', async () => {
 		const user = (await import('@testing-library/user-event')).default.setup();
 		render(SettingsPageHost);
-		await user.click(screen.getByRole('button', { name: 'Updates' }));
+		// UI2 S13: the updater lives under ABOUT now (the Updates category
+		// retired with the three-category fold).
+		await user.click(screen.getByRole('button', { name: 'About' }));
 		expect(
 			await screen.findByRole('button', { name: 'Check for updates' }),
 			'the direct channel keeps its updater surface'

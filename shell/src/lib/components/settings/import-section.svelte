@@ -187,7 +187,7 @@
 		{/if}
 		<label class="grid gap-1">
 			<span class="text-sm">{m['settings.import.pick']()}</span>
-			<select class="text-sm" bind:value={chosen} data-testid="settings-import-picker">
+			<select class="max-w-xs text-sm" bind:value={chosen} data-testid="settings-import-picker">
 				<option value="">{m['settings.import.none']()}</option>
 				{#each realStores as store (store.name)}
 					<option value={store.name}>

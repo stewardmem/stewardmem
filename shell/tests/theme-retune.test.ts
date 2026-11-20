@@ -583,16 +583,16 @@ const TEXT_AUDIT: Readonly<Record<string, AuditRow>> = {
 	// so the loading/ready sentences are HINT-class (a name makes them
 		// open-ended) — the bounds law applies to the FIXED prose only.
 	'settings.model.heading': 'label',
-	// The settings PAGE (2026-10-30): the category rail's labels (one word
-	// each × five locales) + the About pane's facts + the empty-category
-	// placeholder. The Kernel label is a declared loanword in de/fr (the
-		// locale-capability pin's own list).
+	// The settings PAGE (2026-10-30; UI2 S13 folds five categories into
+	// three): the category rail's labels (one word each × five locales) +
+	// the About pane's ONE version line + the honest unknown word + the
+	// empty-category placeholder. (cats.model, cats.updates and
+	// about.kernel retired with UI2 S13 — dead copy has no home.)
 	'settings.cats.general': 'label',
-	'settings.cats.model': 'label',
-	'settings.cats.updates': 'label',
 	'settings.cats.advanced': 'label',
 	'settings.cats.about': 'label',
-	'settings.about.kernel': 'label',
+	'settings.about.line': 'verdict',
+	'settings.about.unknown': 'verdict',
 	'settings.empty': 'hint',
 	'settings.model.loading': 'hint',
 	'settings.model.ready': 'hint',

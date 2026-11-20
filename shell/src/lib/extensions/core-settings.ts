@@ -22,24 +22,33 @@ export const coreSettings: ExtensionManifest = {
 	version: '0.1.1',
 	contributes: {
 		settingsSections: [
-			{ id: 'model', component: ModelSection, category: 'model' },
+			// UI2 S13 — the model and rerank STATUS surfaces fold into ADVANCED
+			// (five categories became three: general, about, advanced). They are
+			// read-only fact surfaces; their failure sentences keep a visible
+			// home there. The registry's ORDER is unchanged.
+			{ id: 'model', component: ModelSection, category: 'advanced' },
 			// CG-12: the rerank tier's fact surface sits with the retrieval
 			// model's own facts (same category) — the kernel's state echo,
 			// read-only facts in EVERY edition; writes never ride here for a
 			// kernel the app does not own (P-9).
-			{ id: 'rerank', component: RerankSection, category: 'model' },
+			{ id: 'rerank', component: RerankSection, category: 'advanced' },
 			{ id: 'locale', component: LocaleSection, category: 'general' },
 			// W-2 (the wizard round): "How StewardMem runs" joins General — the
 			// gate's one-time decision, re-runnable as a SECTION, not a dialog.
 			// Direct channel only: the component renders nothing in the mas
-			// build (its commands are compiled out there).
+			// build (its commands are compiled out there). UI2 S13: it STAYS in
+			// general by default — the move to advanced is the operator's
+			// sub-decision (Tier C), not taken.
 			{ id: 'runmode', component: RunModeSection, category: 'general' },
 			// The workspace import (the D3 card's promise): the store's
 			// content crosses only through the tool's report + one named,
 			// reversible act. Direct channel only (the mas build compiles
 			// the commands out; the section renders inert there).
 			{ id: 'import', component: ImportSection, category: 'general' },
-			{ id: 'update', component: UpdateSection, category: 'updates' },
+			// UI2 S13: the update surface folds into ABOUT (the version facts'
+			// own pane; the 'updates' category retired). The verdict copy —
+			// refusals naming both versions — is unchanged.
+			{ id: 'update', component: UpdateSection, category: 'about' },
 			// The optional Signal gateway module (PLAN_MAS_FORK §1): an optional
 			// connect-your-own-gateway surface — describe + detect, nothing more —
 			// so it lives with the operator acts, not the onboarding steps.

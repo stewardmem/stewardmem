@@ -236,6 +236,22 @@ test('the_settings_dialog_renders_the_registry_s_sections_in_contribution_order'
 		'signal',
 		'advanced'
 	]);
+	// UI2 S13 — THE THREE-CATEGORY LAW: general, about, advanced. The model
+	// and rerank status surfaces folded into advanced (their failure
+	// sentences keep their home), the update surface folded into about, and
+	// the 'model'/'updates' categories retired. A section carrying a retired
+	// category reds here by name — the page's CategoryId set and this pin
+	// move together.
+	expect(
+		[...new Set(settingsSections.map((section) => section.category))].sort(),
+		'the settings categories are exactly general/about/advanced (UI2 S13)'
+	).toEqual(['about', 'advanced', 'general']);
+	for (const section of settingsSections) {
+		expect(
+			['general', 'about', 'advanced'].includes(section.category),
+			`${section.id} carries the retired category ${section.category}`
+		).toBe(true);
+	}
 });
 
 // ── the status context chain ──────────────────────────────────────────────
