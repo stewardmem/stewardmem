@@ -1420,7 +1420,7 @@
 				onkeydown={onKeydown}
 				placeholder={m['chat.composer.placeholder']()}
 				rows={2}
-				class="min-h-0 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
+				class="min-h-0 resize-none border-0 bg-transparent pb-4 shadow-none focus-visible:ring-0"
 				aria-describedby="composer-hint"
 				data-testid="chat-composer"
 			/>
