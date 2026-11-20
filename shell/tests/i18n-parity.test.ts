@@ -248,7 +248,9 @@ test('ui2_the_import_disclosure_is_agreement_free_at_every_count', () => {
 			string
 		>;
 		const template = values['settings.import.disclosure'];
-		expect(template, `${locale} carries the disclosure key`).toBeDefined();
+		if (typeof template !== 'string') {
+			throw new Error(`${locale} carries the import disclosure key`);
+		}
 		// Compose the REAL count shape the reviewer saw (tiny artifacts outnumber
 		// the real ones) with the count that reds: ONE real file.
 		const composed = template
