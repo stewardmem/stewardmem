@@ -666,6 +666,35 @@ test('the_cryptex_guard_is_a_noop_on_clean_and_absent_build_trees', () => {
 	expect(existsSync(join(out, 'build.db'))).toBe(true);
 });
 
+test('the_macos_window_hides_its_native_title_and_keeps_the_accessible_one', () => {
+	// UI2 S1 — the overlay titlebar still draws the window TITLE centered on
+	// macOS (measured on the built app: "StewardMem" painted over the first
+	// session row), because `titleBarStyle: "Overlay"` extends content under
+	// the bar but does not, by itself, stop the title text. WindowConfig's
+	// `hiddenTitle` ("If true, sets the window title to be hidden on macOS",
+	// Tauri v2 reference) removes exactly that. The `title` value STAYS:
+	// Mission Control, ⌘Tab and the accessibility tree read it — only the
+	// painted text goes. The pin holds both facts: the flag is true, and the
+	// title is non-empty (an empty title would trade a collision for an
+	// unnamed window).
+	const overlay = JSON.parse(
+		readFileSync(join(shellRoot, 'src-tauri', 'tauri.macos.conf.json'), 'utf8')
+	) as { app: { windows: Array<Record<string, unknown>> } };
+	const main = overlay.app.windows.find((w) => w['label'] === 'main');
+	expect(main, 'the main window block exists in the macOS overlay').toBeDefined();
+	expect(
+		main?.['hiddenTitle'],
+		'the macOS window must set hiddenTitle: true — without it the overlay ' +
+			'titlebar still paints the centered native title over the first session row'
+	).toBe(true);
+	expect(
+		typeof main?.['title'] === 'string' && (main?.['title'] as string).length > 0,
+		'the window title must stay non-empty: Mission Control and the ' +
+			'accessibility tree read it even while hiddenTitle stops the paint'
+	).toBe(true);
+	expect(main?.['titleBarStyle']).toBe('Overlay');
+});
+
 test('the_sidecar_is_wired_macos_only_and_its_artifacts_are_ignored', () => {
 	const base = JSON.parse(
 		readFileSync(join(shellRoot, 'src-tauri', 'tauri.conf.json'), 'utf8')

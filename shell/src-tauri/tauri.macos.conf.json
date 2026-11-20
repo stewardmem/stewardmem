@@ -8,6 +8,7 @@
 				"height": 768,
 				"resizable": true,
 				"titleBarStyle": "Overlay",
+				"hiddenTitle": true,
 				"transparent": true,
 				"windowEffects": {
 					"effects": [
