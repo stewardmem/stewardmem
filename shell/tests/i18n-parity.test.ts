@@ -79,6 +79,133 @@ test('ai_disclosure_key_set_exists_in_every_locale', () => {
 });
 
 /**
+ * UI2 S3 — THE PLAIN-LANGUAGE LAW (the operator's directive, 2026-11-20):
+ * no AI language in the UI, ever. Made structural here so it can never
+ * drift back:
+ *
+ *  - no em-dash (U+2014) and no en-dash (U+2013) in ANY catalog value, any
+ *    locale. They were the AI-house-style tell (the sweep reworked ~49 keys
+ *    per locale with periods, commas, colons and parentheses);
+ *  - no hot-air token (word-boundary, case-insensitive). The list is the
+ *    operator's: seamless/robust/leverage/unlock/elevate/streamline and the
+ *    rest of the marketing vocabulary. Per-locale cognate lists grow by
+ *    NAMED ACT when a translation genuinely needs one (the loanword-list
+ *    precedent); they start empty because the measured catalogs carry none.
+ */
+const HOT_AIR_TOKENS: readonly string[] = [
+	'seamless',
+	'seamlessly',
+	'robust',
+	'robustly',
+	'leverage',
+	'leveraging',
+	'unlock',
+	'unlocking',
+	'elevate',
+	'elevating',
+	'streamline',
+	'streamlining',
+	'empower',
+	'empowering',
+	'revolutionize',
+	'revolutionary',
+	'game-changing',
+	'cutting-edge',
+	'bleeding-edge',
+	'state-of-the-art',
+	'next-generation',
+	'world-class',
+	'best-in-class',
+	'synergy',
+	'synergies',
+	'holistic',
+	'paradigm',
+	'effortless',
+	'effortlessly',
+	'supercharge',
+	'transformative',
+	'disruptive',
+	'disrupting',
+	'delve',
+	'developments'
+] as const;
+
+/** Cognates per non-en locale, EMPTY BY DESIGN: an entry joins only as a
+ * named act when a translation genuinely needs the word (the measured
+ * five catalogs carried none at the law's landing). */
+const HOT_AIR_COGNATES: Readonly<Record<string, readonly string[]>> = {
+	de: [],
+	fr: [],
+	es: [],
+	nl: []
+};
+
+function dashFailure(locale: string, key: string, value: string): string | null {
+	if (value.includes('\u2014') || value.includes('\u2013')) {
+		return `${locale}:${key} carries an em/en dash — rework with periods, commas, colons or parentheses (the plain-language law, 2026-11-20)`;
+	}
+	return null;
+}
+
+function hotAirFailure(locale: string, key: string, value: string): string | null {
+	const tokens = [...HOT_AIR_TOKENS, ...(HOT_AIR_COGNATES[locale] ?? [])];
+	// WORD-BOUNDARY by tokenization (never substring): a "word" is a run of
+	// letters/digits joined by inner hyphens, so "Modelverwijzingen" (nl) is
+	// ONE word and never trips "delve", while "game-changing" matches its
+	// own hyphenated form. Case-insensitive on both sides.
+	const words = value.toLowerCase().match(/[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*/gu) ?? [];
+	const seen = new Set(words);
+	for (const token of tokens) {
+		if (seen.has(token.toLowerCase())) {
+			return `${locale}:${key} carries the hot-air token "${token}" — plain words only (the operator's law, 2026-11-20): "${value}"`;
+		}
+	}
+	return null;
+}
+
+test('ui2_the_plain_language_law_holds_in_all_five_catalogs', () => {
+	const failures: string[] = [];
+	for (const locale of LOCALES) {
+		const values = JSON.parse(readFileSync(join(i18nDir, `${locale}.json`), 'utf8')) as Record<
+			string,
+			string
+		>;
+		for (const [key, value] of Object.entries(values)) {
+			const dash = dashFailure(locale, key, value);
+			if (dash !== null) failures.push(dash);
+			const hot = hotAirFailure(locale, key, value);
+			if (hot !== null) failures.push(hot);
+		}
+	}
+	expect(
+		failures,
+		'the catalogs carry AI house style or hot-air vocabulary — the UI speaks plain words in short sentences (the operator\'s law)'
+	).toEqual([]);
+});
+
+/**
+ * The control that keeps the plain-language checker honest (the planted-miss
+ * discipline the parity checker carries): a synthetic value carrying a dash
+ * and one carrying a hot-air token MUST both red, named; a clean value must
+ * pass. A checker that cannot fail is the one defect a structural pin must
+ * never have.
+ */
+test('control_a_planted_dash_and_hot_air_token_red_the_plain_language_checker', () => {
+	expect(hotAirFailure('en', 'demo.key', 'Seamless sync — everywhere')).toMatch(
+		/hot-air token "seamless"/
+	);
+	expect(
+		dashFailure('en', 'demo.key', 'One dash\u2014 two words'),
+		'the dash arm must name the em-dash shape it refuses'
+	).toMatch(/em\/en dash/);
+	// And the checker discriminates rather than reds everything: a plain
+	// value, and the MEASURED false-positive class (the nl substring
+	// "Modelverwijzingen" contains "delve" — word boundaries must hold).
+	expect(hotAirFailure('nl', 'demo.key', 'Modelverwijzingen')).toBeNull();
+	expect(dashFailure('en', 'demo.key', 'Plain words. Short sentences.')).toBeNull();
+});
+
+/**
  * The control that keeps the parity checker honest: it PLANTS a missing
  * key — a synthetic de catalog that lacks a key en carries, exactly the
  * shape paraglide's fallback hides — and the checker MUST red it, named.
