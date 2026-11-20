@@ -48,6 +48,7 @@
 
 import { client, type WireFault } from '#lib/api/client.js';
 import { faultOf } from '#lib/api/wire-fault.js';
+import { localMidnightUnix } from '#lib/shell/local-day.js';
 import { SvelteSet } from 'svelte/reactivity';
 
 /** The wire's row, as openapi.yaml states it (parsed, never trusted). */
@@ -188,6 +189,20 @@ export function mintSessionKey(): string {
 	let suffix = '';
 	for (let i = 0; i < 8; i += 1) suffix += hex();
 	return `s-${suffix}`;
+}
+
+/** UI2 S11 — a row's DATE GROUP (Today / Yesterday / Previous 7 days /
+ * Older), from last_turn_at against the LOCAL calendar day (the boundary
+ * math lives in the plain `local-day` module — see its doc). Pure
+ * presentation over the wire's newest-first order: no re-sort, no new
+ * read, no reactivity. */
+export type SessionGroup = 'today' | 'yesterday' | 'week' | 'older';
+
+export function sessionGroupOf(unixSeconds: number, todayStart = localMidnightUnix()): SessionGroup {
+	if (unixSeconds >= todayStart) return 'today';
+	if (unixSeconds >= todayStart - 86_400) return 'yesterday';
+	if (unixSeconds >= todayStart - 7 * 86_400) return 'week';
+	return 'older';
 }
 
 // ── the store ────────────────────────────────────────────────────────────

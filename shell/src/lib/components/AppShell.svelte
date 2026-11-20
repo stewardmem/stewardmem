@@ -53,6 +53,8 @@
 		refresh as refreshSessions,
 		remove as removeSession,
 		rename as renameSession,
+		sessionGroupOf,
+		type SessionGroup,
 		type SessionSummary
 	} from '#lib/shell/sessions.svelte.js';
 	import { currentLocaleCode } from '#lib/shell/locale.svelte.js';
@@ -240,27 +242,14 @@
 
 	// ── UI2 S11: the rows group by DATE ──────────────────────────────────
 	//
-	// Today / Yesterday / Previous 7 days / Older, from last_turn_at against
-	// the LOCAL calendar day — pure presentation over the wire's newest-first
-	// order (no re-sort, no new read; the glance law is untouched). One header
-	// per contiguous run: the wire's order makes the runs monotone. Zero rows
-	// render no headers (chrome-by-exception holds for the groups).
-	type SessionGroup = 'today' | 'yesterday' | 'week' | 'older';
-
-	function groupOf(unixSeconds: number): SessionGroup {
-		const midnight = new Date();
-		midnight.setHours(0, 0, 0, 0);
-		const todayStart = Math.floor(midnight.getTime() / 1000);
-		if (unixSeconds >= todayStart) return 'today';
-		if (unixSeconds >= todayStart - 86_400) return 'yesterday';
-		if (unixSeconds >= todayStart - 7 * 86_400) return 'week';
-		return 'older';
-	}
-
+	// Today / Yesterday / Previous 7 days / Older, one header per contiguous
+	// run — the wire's newest-first order makes the runs monotone. The group
+	// math lives in the sessions module (pure, testable); zero rows render no
+	// headers (chrome-by-exception holds for the groups).
 	const groupedSessions = $derived.by(() => {
 		const runs: Array<{ id: SessionGroup; rows: SessionSummary[] }> = [];
 		for (const row of sessionRows) {
-			const id = groupOf(row.last_turn_at);
+			const id = sessionGroupOf(row.last_turn_at);
 			const current: { id: SessionGroup; rows: SessionSummary[] } | undefined =
 				runs[runs.length - 1];
 			if (current !== undefined && current.id === id) current.rows.push(row);
