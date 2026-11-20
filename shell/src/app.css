@@ -186,6 +186,13 @@
 	--surface: rgba(255, 255, 255, 0.6);
 	--surface-2: rgba(0, 0, 0, 0.05);
 	--sidebar: rgba(0, 0, 0, 0.04);
+	/* UI2 S7 — the active/hover fills go TRANSLUCENT on glass (the scheme
+	   defaults are opaque hex, which read as painted chips over the system
+	   vibrancy): a wash, not a chip. The values are measured on the built
+	   app in both schemes; Reduce Transparency restates the opaque set
+	   below. */
+	--sidebar-active: rgba(0, 0, 0, 0.08);
+	--sidebar-hover: rgba(0, 0, 0, 0.05);
 	--glass-blur: blur(24px) saturate(1.4);
 }
 
@@ -201,6 +208,9 @@
 		--surface: rgba(27, 34, 43, 0.6);
 		--surface-2: rgba(255, 255, 255, 0.06);
 		--sidebar: rgba(0, 0, 0, 0.22);
+		/* UI2 S7 — the dark glass washes (the light block's twins). */
+		--sidebar-active: rgba(255, 255, 255, 0.1);
+		--sidebar-hover: rgba(255, 255, 255, 0.06);
 	}
 }
 
@@ -212,6 +222,11 @@
 		--bg: #f5f7fa;
 		--surface: #ffffff;
 		--sidebar: #edf1f6;
+		/* UI2 S7 — the opaque set RESTATED: readability wins over the wash
+		   when transparency is reduced (the scheme defaults, not the glass
+		   literals above). */
+		--sidebar-active: #dbe2ec;
+		--sidebar-hover: #e5eaf2;
 		--glass-blur: none;
 	}
 
@@ -220,6 +235,8 @@
 			--bg: #10141a;
 			--surface: #171c23;
 			--sidebar: #0b0e13;
+			--sidebar-active: #1b2129;
+			--sidebar-hover: #141920;
 		}
 	}
 }
