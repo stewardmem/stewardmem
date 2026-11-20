@@ -13,6 +13,7 @@
   "palette.placeholder": "Escriba un comando o busque…",
   "palette.empty": "No hay comandos coincidentes.",
   "palette.navigate": "Navegar",
+  "palette.chats": "Conversaciones",
   "palette.more": "Más",
   "palette.open": "Abrir la paleta de comandos",
   "settings.title": "Ajustes",

@@ -509,7 +509,10 @@ const TEXT_AUDIT: Readonly<Record<string, AuditRow>> = {
 	'palette.title': 'label',
 	'palette.placeholder': 'hint',
 	'palette.empty': 'hint',
-	'palette.navigate': 'label',
+	'palette.navigate': 'hint',
+	// UI2 S12 — the Chats group's heading (one word, the group the sessions
+	// live under; "Chats" is a declared loanword in de/nl).
+	'palette.chats': 'label',
 	'palette.more': 'label',
 	'palette.open': 'hint',
 	// settings.*

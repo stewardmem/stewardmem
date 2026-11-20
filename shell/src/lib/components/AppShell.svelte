@@ -29,13 +29,14 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import ListTreeIcon from '@lucide/svelte/icons/list-tree';
+	import MessageSquareIcon from '@lucide/svelte/icons/message-square';
 	import PanelLeftIcon from '@lucide/svelte/icons/panel-left';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { CommandPalette } from '#lib/components/ui/command/index.js';
+	import { CommandPalette, type PaletteGroup } from '#lib/components/ui/command/index.js';
 	import { Dialog } from '#lib/components/ui/dialog/index.js';
 	import { fetchKernelFacts } from '#lib/api/kernel-facts.js';
 	import { verifyAuditChain } from '#lib/api/audit.js';
@@ -297,27 +298,49 @@
 		void refreshSessions();
 	}
 
-	const PALETTE_GROUPS = $derived([
-		{
-			heading: m['palette.navigate'](),
-			items: [
-				...navEntries.map((item) => ({
-					value: item.route,
-					label: m[item.labelKey](),
-					Icon: item.Icon,
-					onSelect: () => runItem(() => goto(resolve(item.route)))
-				})),
-				{
-					// The frame's own operator entry: `/decisions` is reachable
-					// from the palette BY DESIGN while never being a nav entry.
-					value: '/decisions',
-					label: m['nav.decisions'](),
-					Icon: ListTreeIcon,
-					onSelect: () => runItem(() => goto(resolve('/decisions')))
-				}
-			]
-		},
-		{
+	const PALETTE_GROUPS = $derived.by(() => {
+		const groups: PaletteGroup[] = [
+			{
+				heading: m['palette.navigate'](),
+				items: [
+					...navEntries.map((item) => ({
+						value: item.route,
+						label: m[item.labelKey](),
+						Icon: item.Icon,
+						onSelect: () => runItem(() => goto(resolve(item.route)))
+					})),
+					{
+						// The frame's own operator entry: `/decisions` is reachable
+						// from the palette BY DESIGN while never being a nav entry.
+						value: '/decisions',
+						label: m['nav.decisions'](),
+						Icon: ListTreeIcon,
+						onSelect: () => runItem(() => goto(resolve('/decisions')))
+					}
+				]
+			}
+		];
+		// UI2 S12 — the Chats group: the session list the frame already holds
+		// (the glance refresh runs at palette open, so there is NO new read
+		// cadence), filtered by the palette's own substring match over the
+		// label, Enter activates. Zero sessions render no group header
+		// (chrome-by-exception holds inside the palette too).
+		if (sessionRows.length > 0) {
+			groups.push({
+				heading: m['palette.chats'](),
+				items: sessionRows.map((row) => ({
+					value: row.session_key,
+					label: rowName(row.label),
+					Icon: MessageSquareIcon,
+					onSelect: () =>
+						runItem(() => {
+							activateSession(row.session_key);
+							void goto(resolve('/'));
+						})
+				}))
+			});
+		}
+		groups.push({
 			heading: m['palette.more'](),
 			items: [
 				{
@@ -326,11 +349,12 @@
 					value: 'settings',
 					label: m['nav.settings'](),
 					Icon: SettingsIcon,
-					onSelect: () => runItem(() => goto(resolve('/settings')))
+						onSelect: () => runItem(() => goto(resolve('/settings')))
 				}
 			]
-		}
-	]);
+		});
+		return groups;
+	});
 
 	// Reached from the foot, the native ⌘,/menu event, and the palette —
 	// all three NAVIGATE (the settings is a PAGE now, the ChatGPT-desktop

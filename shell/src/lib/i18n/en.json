@@ -13,6 +13,7 @@
   "palette.placeholder": "Type a command or search…",
   "palette.empty": "No matching commands.",
   "palette.navigate": "Navigate",
+  "palette.chats": "Chats",
   "palette.more": "More",
   "palette.open": "Open the command palette",
   "settings.title": "Settings",

@@ -47,6 +47,9 @@ const GERMAN_LOANWORDS = new Set([
 	'settings.about.kernel',
 	'settings.cats.model',
 	'nav.chat',
+	// UI2 S12: the palette's Chats group heading — "Chats" is the German
+	// plural of the established loanword "Chat".
+	'palette.chats',
 	'decisions.list.pipeline',
 	'decisions.detail.model_version',
 	'decisions.detail.limit',
@@ -134,6 +137,9 @@ const DUTCH_LOANWORDS = new Set([
 	'settings.cats.updates',
 	'settings.about.kernel',
 	'nav.chat',
+	// UI2 S12: "Chats" is the Dutch plural of the established loanword
+	// "chat" (the chat.stop precedent: the genuine word, spelled as English).
+	'palette.chats',
 	'recall.conflict',
 	'recall.trace.fields.actor',
 	'decisions.list.pipeline',
