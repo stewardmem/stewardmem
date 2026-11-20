@@ -324,7 +324,6 @@
   "shell.facts.integrity.broken": "integriteit GEBROKEN",
   "shell.facts.integrity.unverified": "integriteit niet geverifieerd",
   "shell.status.healthy": "gezond",
-  "shell.status.model": "model: {model}",
   "memory.title": "Geheugen",
   "memory.subtitle": "Wat de kernel bewaart. Zoek het hier — een chatbeurt is hetzelfde terughalen.",
   "memory.search.label": "Geheugen doorzoeken",

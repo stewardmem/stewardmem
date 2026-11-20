@@ -783,11 +783,12 @@
 		</main>
 		<!-- UI1 S5 — THE NAMED ACT: the footer DIED. Every fact re-homed with
 		     its law: the wire state → the rail dot's `data-wire` (the fault
-		     SENTENCE stays in the chat page's banner, its one home); the
-		     model → the composer's posture badge (`shell-status-model`, the
-		     page's own file); rows/integrity/status-context → the dot's
-		     tooltip and sr-only line. `refreshFacts`/`refreshChain` still
-		     run — the facts still feed the dot and the badge. -->
+		     SENTENCE stays in the chat page's banner, its one home);
+		     rows/integrity/status-context → the dot's tooltip and sr-only
+		     line; the model fact RETIRED with UI2 S2 (the badge states
+		     posture only — /stats's model names the embedder, not the
+		     writing tier). `refreshFacts`/`refreshChain` still run — the
+		     facts still feed the dot and the about pane. -->
 	</div>
 </div>
 

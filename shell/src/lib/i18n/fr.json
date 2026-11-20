@@ -324,7 +324,6 @@
   "shell.facts.integrity.broken": "intégrité ROMPUE",
   "shell.facts.integrity.unverified": "intégrité non vérifiée",
   "shell.status.healthy": "sain",
-  "shell.status.model": "modèle : {model}",
   "memory.title": "Mémoire",
   "memory.subtitle": "Ce que le noyau détient. Cherchez ici — un tour de discussion est le même rappel.",
   "memory.search.label": "Chercher dans la mémoire",

@@ -44,7 +44,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 vi.mock('#lib/api/kernel-facts.js', () => ({
 	fetchKernelFacts: vi.fn(async () => ({
 		kind: 'ok',
-		facts: { version: null, count: null, model: null }
+		facts: { version: null, count: null }
 	}))
 }));
 vi.mock('#lib/api/audit.js', () => ({

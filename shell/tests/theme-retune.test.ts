@@ -492,7 +492,8 @@ const TEXT_AUDIT: Readonly<Record<string, AuditRow>> = {
 	'shell.facts.integrity.broken': 'law',
 	'shell.facts.integrity.unverified': 'law',
 	'shell.status.healthy': { kind: 'label', max: 1 },
-	'shell.status.model': 'law',
+	// ("shell.status.model" retired with UI2 S2: the badge states posture
+	// only, and the key has no consumer — dead copy has no home here.)
 	// nav.*
 	'nav.chat': 'label',
 	'nav.memory': 'label',

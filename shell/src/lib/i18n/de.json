@@ -324,7 +324,6 @@
   "shell.facts.integrity.broken": "Integrität VERLETZT",
   "shell.facts.integrity.unverified": "Integrität nicht geprüft",
   "shell.status.healthy": "gesund",
-  "shell.status.model": "Modell: {model}",
   "memory.title": "Gedächtnis",
   "memory.subtitle": "Was der Kernel hält. Hier durchsuchen — ein Chat-Zug ist derselbe Abruf.",
   "memory.search.label": "Gedächtnis durchsuchen",

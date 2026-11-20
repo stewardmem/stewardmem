@@ -324,7 +324,6 @@
   "shell.facts.integrity.broken": "integridad ROTA",
   "shell.facts.integrity.unverified": "integridad sin verificar",
   "shell.status.healthy": "sano",
-  "shell.status.model": "modelo: {model}",
   "memory.title": "Memoria",
   "memory.subtitle": "Lo que guarda el núcleo. Búsquelo aquí — un turno de chat es la misma recuperación.",
   "memory.search.label": "Buscar en la memoria",

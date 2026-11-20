@@ -324,7 +324,6 @@
   "shell.facts.integrity.broken": "integrity BROKEN",
   "shell.facts.integrity.unverified": "integrity not verified",
   "shell.status.healthy": "healthy",
-  "shell.status.model": "model: {model}",
   "memory.title": "Memory",
   "memory.subtitle": "What the kernel holds. Search it here — a chat turn is the same recall.",
   "memory.search.label": "Search memory",

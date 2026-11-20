@@ -298,10 +298,9 @@ test('the_sidebar_facts_are_read_from_the_kernel_and_never_guessed', async () =>
 		);
 	});
 	// The kernel VERSION fact's home is the About settings page (asserted
-	// in the settings-page pin's own file); the rail carries the dot. UI1
-	// S5: the MODEL fact's home moved to the chat composer's posture badge
-	// (asserted in chat-surface's own file — `shell-status-model` rides the
-	// badge, the never-guessed laws with it).
+	// in the settings-page pin's own file); the rail carries the dot. UI2 S2:
+	// the badge states posture ONLY — no model id anywhere (the embedder's
+	// id is not the writing tier; asserted in chat-surface's own file).
 
 	cleanup();
 	// The frame store is module-level: the next scenario must not inherit

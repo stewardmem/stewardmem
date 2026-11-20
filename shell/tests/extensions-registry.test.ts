@@ -240,7 +240,7 @@ test('the_settings_dialog_renders_the_registry_s_sections_in_contribution_order'
 
 // ── the status context chain ──────────────────────────────────────────────
 
-const FACTS = { version: '1.29.34', count: 3, model: 'on-device' };
+const FACTS = { version: '1.29.34', count: 3 };
 
 test('the_status_context_chain_is_facts_in_string_or_null_out_first_non_null_wins', () => {
 	const member = (order: number, value: string | null): StatusContextMember => ({

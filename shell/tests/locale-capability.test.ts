@@ -148,7 +148,6 @@ const DUTCH_LOANWORDS = new Set([
 	'nav.audit',
 	'nav.governance',
 	'shell.brand',
-	'shell.status.model',
 	'memory.filter.procedures',
 	'memory.badge.score',
 	'memory.add.kind.procedure',

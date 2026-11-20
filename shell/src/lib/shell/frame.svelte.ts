@@ -12,7 +12,7 @@
  * - **The status context.** The bottom bar's middle slot is the surface's
  *   own sentence ("3 memories", "4 citations"). A surface SETS it while it
  *   is on screen and CLEARS it when it leaves; the bar never guesses one.
- * - **The kernel facts.** Version, corpus count and model are read ONCE per
+ * - **The kernel facts.** Version and corpus count are read ONCE per
  *   glance moment by the frame and shared with every surface that shows
  *   them, so two readers cannot disagree about the kernel they are looking
  *   at. The read itself lives in `#lib/api/kernel-facts` — this module only

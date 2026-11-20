@@ -1,13 +1,15 @@
 /**
- * The kernel facts the frame shows: version, corpus count, model.
+ * The kernel facts the frame shows: version and corpus count.
  *
  * Two reads, both over the typed wire with the shell's own bearer:
  *
  * - `GET /health` is PUBLIC and answers the kernel's version. It is the one
  *   read that can tell "the kernel is there" from "the kernel is not".
- * - `GET /stats` is Read-scoped and answers the corpus count and the model
- *   id. A refusal here is NOT a fault — the kernel spoke — so the count and
- *   the model simply stay unknown and the sidebar says so by omission.
+ * - `GET /stats` is Read-scoped and answers the corpus count. A refusal
+ *   here is NOT a fault — the kernel spoke — so the count simply stays
+ *   unknown and the sidebar says so by omission. (The wire's `model` field
+ *   names the RETRIEVAL EMBEDDER, not the writing tier; UI2 S2 dropped it
+ *   from the facts rather than let the badge pair it with "On-device".)
  *
  * The answer is a record of what was observed, fact by fact, with `null`
  * for each fact the kernel did not give. Nothing is guessed: a sidebar that
@@ -22,7 +24,6 @@ import type { WireFault } from '#lib/api/client.js';
 export interface KernelFacts {
 	readonly version: string | null;
 	readonly count: number | null;
-	readonly model: string | null;
 }
 
 /** The retrieval model's boot-lazy posture (bind-first; the S-4 finding). */
@@ -58,18 +59,16 @@ export async function fetchKernelFacts(): Promise<KernelFactsRead> {
 	}
 
 	let count: number | null = null;
-	let model: string | null = null;
 	try {
 		const stats = await client.GET('/stats');
 		if (stats.response.status === 200 && stats.data !== undefined) {
 			count = countOrNull(stats.data['count']);
-			model = stringOrNull(stats.data['model']);
 		}
 	} catch {
-		// A failed stats read leaves the two facts unknown; the version read
+		// A failed stats read leaves the fact unknown; the version read
 		// above already decided whether the kernel is reachable at all.
 	}
-	return { kind: 'ok', facts: { version, count, model } };
+	return { kind: 'ok', facts: { version, count } };
 }
 
 /**

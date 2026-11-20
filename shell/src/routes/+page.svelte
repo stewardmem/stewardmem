@@ -67,7 +67,7 @@
 	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
 		import LockIcon from '@lucide/svelte/icons/lock';
 	import { emptyChips } from '#lib/extensions/registry.js';
-	import { currentConversationEpoch, currentKernelFacts } from '#lib/shell/frame.svelte.js';
+	import { currentConversationEpoch } from '#lib/shell/frame.svelte.js';
 	import {
 		currentActiveKey,
 		noteFinal
@@ -684,10 +684,9 @@
 	}
 
 	const bannerFault = $derived(currentWireFault());
-	// UI1 S5 — the footer's model fact, read from the FRAME store (the
-	// layout's glance reads feed it; the page renders what was recorded,
-	// never re-reads, never guesses).
-	const kernelFacts = $derived(currentKernelFacts());
+	// (UI2 S2: the page no longer derives kernelFacts — the badge states
+	// posture only, and the frame store's facts feed the rail dot and the
+	// about pane, not this page.)
 
 	function inTauri(): boolean {
 		return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -1422,11 +1421,12 @@
 				aria-describedby="composer-hint"
 				data-testid="chat-composer"
 			/>
-			<!-- UI1 S4/S5 — the on-device posture as the interface's own mark,
-			     and the footer's MODEL FACT's new home: the lock badge in
-			         the card's right cluster, carrying the kernel's own model
-			         id when /stats answered one — never "unknown" over a
-			         refusal (the never-guessed law, moved WITH the fact).
+			<!-- UI1 S4/S5 + UI2 S2 — the on-device posture as the interface's own
+			     mark: the lock badge in the card's right cluster. The badge states
+			     ONE true thing — answers are generated on this machine — and carries
+			     NO model id: /stats's `model` names the retrieval embedder, not the
+			     writing tier, and a wrong name is worse than none (UI2 S2's law;
+			     the fuller fix, an additive `chat_model` on /stats, is Tier C).
 			     The glyphs carry their sentences in `title` AND `aria-label`
 			     (the round's glyph law); the tooltip is the honest posture
 			     sentence, no marketing. NOT a fake affordance — it states a
@@ -1439,9 +1439,6 @@
 			>
 				<LockIcon aria-hidden="true" class="size-3" />
 				<span>{m['chat.badge.ondevice']()}</span>
-				{#if kernelFacts?.model}
-					<span data-testid="shell-status-model">{m['shell.status.model']({ model: kernelFacts.model })}</span>
-				{/if}
 			</span>
 			{#if streamPhase === 'streaming'}
 				<!-- Stop replaces Send while the answer streams (plan 25 §4). It

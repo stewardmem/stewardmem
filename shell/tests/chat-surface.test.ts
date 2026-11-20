@@ -4,6 +4,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { shellRoot } from './fixtures';
+import { m } from '$paraglide/messages.js';
 
 /**
  * II-3 / II-4 / II-5 / II-7 — the SURFACE, not the model.
@@ -504,30 +505,49 @@ describe('UI1 S2 · the ONE meta row', () => {
 	});
 });
 
-describe('UI1 S5 · the model fact\'s new home (the composer badge)', () => {
-	test('the_model_fact_rides_the_composer_badge_and_a_refusal_leaves_it_absent', async () => {
+describe('UI2 S2 · the composer badge states posture, not identity', () => {
+	test('the_badge_carries_no_model_id_even_when_stats_answered_one', async () => {
 		const { recordKernelFacts } = await import('../src/lib/shell/frame.svelte.js');
-		// The facts ARE the store's (the layout reads them at mount; the
-		// page renders what the frame recorded — the same seam the chrome
-		// pin drives). A model that answered: the badge carries the
-		// `shell-status-model` span, sentence and all.
-		recordKernelFacts({ version: '1.29.32', count: 8745, model: 'test-model' });
+		// UI2 S2's LAW (amending UI1 S5's never-guessed badge shape): the badge
+		// says ONE true thing — answers are generated on this machine. The old
+		// span printed /stats's `model`, which is the RETRIEVAL EMBEDDER's id
+		// (potion-retrieval-32M), not the model that writes answers — a
+		// factually wrong pairing, and the exact error the never-guess law
+		// exists to prevent. The honest fix is absence: no model id in the
+		// badge at all (Tier C holds the fuller fix: an additive `chat_model`
+		// on /stats). A stats answer that DID name a model must not resurrect
+		// the span — the pin feeds one in and asserts it stays gone.
+		recordKernelFacts({ version: '1.29.32', count: 8745 });
 		await renderChat(ANSWERED);
 		const badge = screen.getByTestId('composer-posture');
-		const model = within(badge).getByTestId('shell-status-model');
-		expect(model.textContent).toContain('test-model');
+		expect(within(badge).queryByTestId('shell-status-model'),
+			'the badge must not carry a model id: /stats names the retrieval ' +
+				'embedder, not the writing tier, and a wrong name is worse than none'
+		).toBeNull();
+		expect(badge.textContent, 'the badge still states the posture word').toContain(
+			m['chat.badge.ondevice']()
+		);
+		expect(badge.getAttribute('title'), 'the tooltip sentence stays the disclosure').toBe(
+			m['chat.badge.ondevice.tip']()
+		);
 		cleanup();
 		recordKernelFacts(null);
 
-		// A refused /stats (the store's null facts — the refusal shape the
-		// old footer pin asserted at its own home): the span is ABSENT,
-		// never "model: unknown" over a refusal — the same never-guessed
-		// law, moved WITH the fact.
-		recordKernelFacts({ version: '1.29.32', count: null, model: null });
-		await renderChat(ANSWERED);
-		const badge2 = screen.getByTestId('composer-posture');
-		expect(within(badge2).queryByTestId('shell-status-model')).toBeNull();
-		cleanup();
-		recordKernelFacts(null);
+		// STRUCTURAL, so the span cannot return through a refactor: the page
+		// names neither the testid nor the key, and KernelFacts carries no
+		// `model` field at all (nothing else consumed it; count and version
+		// stay). This is the amended never-guess law: not "never unknown" but
+		// "never this fact".
+		const page = readFileSync(join(shellRoot, 'src', 'routes', '+page.svelte'), 'utf8');
+		expect(page, 'the model-id span must not return to the page').not.toContain(
+			'shell-status-model'
+		);
+		expect(page).not.toContain("shell.status.model");
+		const facts = readFileSync(join(shellRoot, 'src', 'lib', 'api', 'kernel-facts.ts'), 'utf8');
+		expect(
+			facts,
+			'the /stats read must stop harvesting the embedder id (the model ' +
+				'SECTION keeps its own /health/db read — this arm is the /stats one)'
+		).not.toContain("stats.data['model']");
 	});
 });
