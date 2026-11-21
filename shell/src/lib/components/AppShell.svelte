@@ -705,7 +705,11 @@
 					     accessible tree (sr-only) and in the row's title — the repeated
 					     "yesterday · 2 days ago" column is gone. -->
 					{#each groupedSessions as group (group.id)}
-						<div data-testid="session-group" data-group={group.id}>
+						<!-- the group is a SECTION, not another div: the region is
+						     already a scroll column of divs, and a date group is a
+						     document section with a heading — the semantic element
+						     is also what keeps the div nesting within the slop law -->
+						<section data-testid="session-group" data-group={group.id}>
 							<div class="px-2.5 pb-1 pt-3 text-[11px] font-medium text-muted-foreground">
 								{m[`chat.sessions.group.${group.id}`]()}
 							</div>
@@ -777,7 +781,7 @@
 									</li>
 								{/each}
 							</ul>
-						</div>
+						</section>
 					{/each}
 				{/if}
 			</div>
