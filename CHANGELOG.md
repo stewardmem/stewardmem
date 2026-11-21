@@ -384,6 +384,100 @@ svelte-check 0/0, eslint clean, e2e chromium 9 passed | 1 skipped, the
 full kernel suite 4,225 passed / 0 failed with zero kernel files in the
 diff, lipstyk-gate green over the pre-round base.
 
+## [Unreleased] — R152 "the front door": the install lane's Swift death root-caused, the staleness guard, the Swift sidecars arm64-only, the README rewritten (2026-11-18)
+
+The install lane's Swift death is ROOT-CAUSED as a rotated OS cryptex, not
+x86_64: `swift build` died spawning `metal` from
+`/var/run/com.apple.security.cryptexd/mnt/…` because the OS rotated the
+Metal-toolchain asset mount while SwiftPM's cached plan (XCBuildData/build.db
++ 14 Metal dependency .dat files) kept naming the dead path — the same
+27.2.47.0 version, a new mount id, and the SDK's x86_64 deprecation warning
+was the red herring (FoundationModels.tbd still exports x86_64 targets).
+The fix: `clearStaleCryptexCaches()` runs BEFORE every swift build — it
+scans `.build` for cached references to cryptex mounts that no longer
+resolve, clears XCBuildData wholesale (a partially-cleared plan is its own
+hazard) plus every dep file naming a dead mount, LOUDLY by name; `checkouts/`
+sources, live-mount references, clean files, and oversized objects are
+spared. A concurrent swift-build holding `build.db` is the operator's kill,
+documented as such.
+
+The Swift sidecars leave the three-file law as a NAMED ACT: `brain-afm` and
+`shell-vision` build and stage arm64-only (one thin
+`-aarch64-apple-darwin` file each) because every consumer resolves exactly
+that shape and nothing names their Intel or universal slices (measured:
+zero references repo-wide); the KERNEL keeps the full three-file universal
+law; prior-stage universal/x86_64 leftovers are removed on sight. The
+README becomes the front door (669 → 73 lines): four promises in plain
+words, a real quickstart, proof-not-promises, 10 badges → the 4 the gates
+pin. The round's own gates bit the round's copy twice, both recorded: the
+external_claim pins refused "signed audit chain" (the chain is keyed
+HMAC-SHA256; Ed25519 signs manifests, parcels and provenance at the
+boundaries) and "a signed record of the removal" — reworded to the true
+mechanisms. PINS (3 new, both drills RUN and reverted): the arm64 law is
+STRUCTURAL (red on a reintroduced `--arch x86_64`); the guard's
+clear-and-spare arm is BEHAVIORAL over a fixture `.build` tree with an
+injected mount probe; the noop arm holds on clean and absent trees. Two
+lane repairs ride the range beside the round: the shell-macos anti-vacuity
+scanner learned the XCBuild layout (the runner image's SwiftPM moved the
+objects to Intermediates.noindex; the scan walks the whole `.build` tree
+now, drilled against the exact layout — caf1611a) and the posture labels'
+`has-[:checked]` arbitrary variant became the modern `has-checked`
+shorthand, same compiled CSS (81370824).
+
+## [Unreleased] — UI2 "the just-works surface": thirteen steps, the plain-language law, and the Tier C ask (2026-11-20)
+
+The external 20-item UX review's Tier A and Tier B land as thirteen steps,
+one commit each, every pin red-first — and the operator's new
+plain-language law rides with them: no AI language in the UI, ever, kept
+that way by a pin. The steps: the macOS overlay titlebar's centered native
+title hides (`hiddenTitle: true`, the accessible `title` intact — S1,
+cce6c358); the composer badge states POSTURE, not identity (the `model`
+fact it printed named the retrieval EMBEDDER — the exact wrong pairing the
+never-guess law exists to kill — so `KernelFacts.model` and the
+`shell-status-model` id die with it, S2, a89c4182); the plain-language
+sweep reworks 238 dash-bearing catalog values across the five locales
+(colons for fragments, the Art-50 disclosure keeps its meaning; the lint
+pin red 238× pre-sweep and pins both halves, with the nl
+"Modelverwijzingen" word-boundary case as the pinned control — S3,
+0dac78eb); the import sentence becomes agreement-free noun copy because
+Paraglide's exact-number locals need a message-format plugin newer than the
+pinned ^4.6.0 (S4, eaf57aa0 + the pin-narrowing d7a3a28e); the review badge
+gains a `ring-2 ring-sidebar` ring (Tailwind v4 semantics verified first,
+S5, db117df3); the three empty-state chips become `secondary` (shadcn's
+"less prominent actions" pill, S6, 92b25503); the sidebar's active/hover
+fills go translucent on macOS glass in both schemes with the
+Reduce-Transparency blocks restating the opaque set (S7, 1578beef); the
+composer breathes (S8, 9b82b98b); the send→first-arrival window renders one
+calm `role="status"` searching line announced once and replaced by the
+arriving turn (S9, 1f542a89); KERNEL: sessions name themselves from the
+first prompt's screened head — 40 chars, 80 bytes, CJK binds at the byte
+cap, second turns never rename (S10, 45f9754d, the round's one kernel
+pin); the session list groups under Today / Yesterday / Previous 7 days /
+Older with the per-row time demoted to sr-only + title (S11, 480ac89d + the
+plain-module boundary ddd8e255); the palette gains a Chats group over the
+store the frame already holds, Enter activates, no new read cadence (S12,
+439b93f0); and the five settings categories fold to THREE — model+rerank
+to advanced, update under about's ONE version line with the honest "not
+reported" word, runmode STAYS in general (S13, e3f55bf2).
+
+The wrap re-derivations: census 4319 → 4320, badge 4243 → 4244, the band
+measured 1,808,836 gzipped (+471 of the ±512 band over UI1's midpoint —
+the additions nearly cancel the removals, no named move) (77a9f6f8); the
+evidence file `docs/IMPROVE23_EVIDENCE_2026-11-20.md` carries the
+before/after per step, the research citations (Tauri hiddenTitle, Tailwind
+ring semantics, shadcn secondary, the Paraglide plugin floor — all via
+Context7) and the benchmark study (35398b92); the AGENTS.md ledger records
+the plain-language law's origin, the lanes, and the Tier C register (S13's
+sub-decision: silence keeps runmode in general) (e27abcc1). The lanes:
+shell vitest 450 passed | 2 skipped, svelte-check 0/0, eslint clean, e2e
+10 passed | 1 skipped (the sessions drill skips LOUD on this machine's
+recorded AFM-bridge posture — its S10/S11 amendments' live proof rides the
+next bridge-available session, OWED), kernel green after the census
+re-derivation caught the round's +1, docs_truth 20/20, external_claim
+14/14, memform 23/23, ai_act 7/7. A follow-up completes the S13 advanced
+pane's kernel-facts mocks (d873cdcf); the editor's sourcekit-lsp is rooted
+at the Swift packages so the nested-package phantom errors die (15c0327b).
+
 ## [1.29.44] — 2026-11-14 — the improvement rounds land with the standing-state repair: the document pipeline with its tier ladder and correction lane, the scholar and the watch, the customer journey and appeals, the cascade gate and the near-miss guard, the /app seat and the client decommission — and every CI red since 2026-11-09 closed at its mechanism, both RUSTSEC graphs closed, the last two CodeQL alerts closed at the sink, and the tree is dependency-current
 
 This release carries two trains at once. The improvement rounds land end to
