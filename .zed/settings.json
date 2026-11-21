@@ -33,6 +33,21 @@
 // - check.allTargets=false: per-save checks cover lib+bins, not every test
 //   target of six workspaces (in-IDE test diagnostics remain available by
 //   editing a test file — the save then checks that target).
+// sourcekit-lsp: the two Swift packages (shell-macos, shell-macos-mlx) are
+// NESTED SwiftPM packages under a non-SwiftPM root, and sourcekit-lsp does
+// not create SwiftPM workspaces for nested packages — every Swift file that
+// imports a package module got fallback compiler arguments ("No such module
+// 'Testing'" / "'MLXLMCommon'") while the real builds stayed green. The
+// wrapper re-roots the LSP at shell-macos-mlx (the package whose TEST target
+// needs root-class preparation) and adds shell-macos as a workspace folder
+// after initialize (sourcekit-lsp ignores initialize-time extra folders;
+// the dynamic didChangeWorkspaceFolders is the mechanism VS Code's Swift
+// extension uses). Measured result: both packages' sources and test files
+// diagnose correctly; the residual @Generable phantom type errors on
+// brain-afm/main.swift + BridgeProtocolTests.swift reproduce identically
+// with the LSP rooted AT shell-macos itself (pre-existing upstream
+// limitation, not a rooting artifact). With the layout absent the wrapper
+// is a byte-for-byte transparent relay.
 {
   "languages": {
     "CSS": {
@@ -50,6 +65,11 @@
     }
   },
   "lsp": {
+    "sourcekit-lsp": {
+      "binary": {
+        "path": ".zed/sourcekit-lsp-wrapper.py"
+      }
+    },
     "rust-analyzer": {
       "initialization_options": {
         "linkedProjects": [
