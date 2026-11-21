@@ -384,6 +384,178 @@ svelte-check 0/0, eslint clean, e2e chromium 9 passed | 1 skipped, the
 full kernel suite 4,225 passed / 0 failed with zero kernel files in the
 diff, lipstyk-gate green over the pre-round base.
 
+## [1.29.47] — 2026-11-21 — the just-works surface: thirteen UI2 steps under the plain-language law, sessions that name themselves, a date-grouped history, and the install lane's Swift death root-caused
+
+This release makes the app read as its own promises: no AI language in any
+user-facing string in any locale (the operator's plain-language law, now a
+pin), a chat canvas whose every affordance states a fact (the badge says
+the answers are on-device; the searching line says memory is being
+searched), a session history that groups itself by day and names itself
+from its first prompt, and a settings page reduced to three categories.
+Beside it the install lane's Swift death is root-caused (a rotated OS
+cryptex, not x86_64) and guarded, the Swift sidecars go arm64-only as a
+named act, and the README becomes the front door. One kernel change rides
+the release (sessions derive their label at lazy-create); the wire
+contract is byte-identical — the stamps move in lockstep only.
+
+### Release notes
+
+**Improvements**
+
+- the window reads clean: the macOS overlay titlebar no longer paints the
+  centered native "StewardMem" over the first session row — the native
+  title is hidden while the accessible title stays (Mission Control and
+  screen readers keep the name). (cce6c358)
+- the composer badge states posture, not identity: it printed /stats's
+  `model`, which names the retrieval EMBEDDER — the wrong pairing for a
+  sentence about who answers — so the badge now carries the lock, the
+  "On-device" word, and the honest tip sentence, and the embedder id is
+  gone from the interface. (a89c4182)
+- the plain-language law: no em-dash or spaced en-dash in any catalog
+  value in any locale, no hot-air vocabulary — 238 dash-bearing values
+  reworked across the five catalogs (colons for fragments; the Article 50
+  disclosure keeps its meaning), with a pin over all five catalogs that
+  red 238 times before the sweep and stays permanent after it. (0dac78eb)
+- the import disclosure no longer disagrees with itself at one file: the
+  sentence becomes two noun phrases with no verb to disagree
+  ("{count} tiny empty artifacts. {real} with real data."). (eaf57aa0)
+- the review badge's count reads clean on glass: a sidebar-colored ring
+  separates the count from the icon. (db117df3)
+- the three empty-state chips read as buttons: the secondary variant's
+  quiet pill instead of ghost text that looked unclickable. (92b25503)
+- the sidebar's active and hover fills go translucent on macOS glass in
+  both schemes — no more painted chips over vibrancy — while
+  Reduce-Transparency keeps the opaque set. (1578beef)
+- the composer's last line no longer sits against the card's bottom edge.
+  (9b82b98b)
+- a calm searching line: between sending and the first arriving turn the
+  canvas renders one muted "Searching your memory…" line (announced once,
+  replaced by the answer) instead of answer-sized type with no role.
+  (1f542a89)
+- sessions name themselves: a new conversation takes its label from the
+  first prompt's screened head (up to 40 whole characters, 80 bytes — CJK
+  binds at the byte cap — invisibles stripped), and second turns never
+  rename it. One kernel change; the rename verb is untouched. (45f9754d)
+- the session list groups by day under Today / Yesterday / Previous 7
+  days / Older headers (local day boundaries, one header per contiguous
+  run, in all five locales), and the repeated per-row relative-time column
+  is gone — the time stays in the accessible tree and the row's tooltip.
+  (480ac89d)
+- the command palette can reach a past conversation by name: a Chats
+  group filters the sessions the window already holds; Enter opens one.
+  No new kernel reads. (439b93f0)
+- Settings reduces to three categories — General, About, Advanced: the
+  model and rerank status panels fold into Advanced (their failure
+  sentences keep their home), the update check folds under About's one
+  version line ("StewardMem {app}. Kernel {kernel}.", with the honest "not
+  reported" when a version is not reported), and the run-mode choice stays
+  on the front page. (e3f55bf2)
+
+**Bug fixes**
+
+- the install lane's Swift death is root-caused and guarded: the OS had
+  rotated its Metal-toolchain cryptex mount while SwiftPM's cached build
+  plan kept naming the dead path — the same toolchain version, a new mount
+  id (the x86_64 deprecation warning was the red herring). A staleness
+  guard now clears the stale caches before every Swift build, loudly by
+  name, sparing sources and live mounts; the failure class dies. (fcbf09fd)
+- the session date-group markup's nesting is fixed (a section per group
+  with its heading — the same rows, testids and behavior; the pre-push
+  gate's structure law caught it). (5507455c)
+
+### Engineering record
+
+The release carries four trains, every commit in the range named:
+
+**R152 — the front door (2026-11-18).** The cryptex root cause and the
+staleness guard, the arm64-only Swift sidecars as a named act (one thin
+`-aarch64-apple-darwin` slice per sidecar — every consumer resolves that
+shape and nothing names their Intel or universal slices, measured zero
+references repo-wide; the KERNEL keeps the three-file universal law),
+and the README rewritten 669 → 73 lines as the front door with four
+promises in plain words and the four badges the gates pin (fcbf09fd,
+5a31ae34). The round's own gates bit its copy twice: the claim pins
+refused "signed audit chain" (the chain is keyed HMAC-SHA256; Ed25519
+signs manifests, parcels and provenance at the boundaries) and "a signed
+record of the removal" — both reworded to the true mechanisms. Three
+pins landed, both drills RUN and reverted: the arm64 law is STRUCTURAL
+(red on a reintroduced `--arch x86_64`), the guard's clear-and-spare arm
+is BEHAVIORAL over a fixture tree with an injected mount probe, and the
+noop arm holds on clean and absent trees.
+
+**The lane and style repairs riding the range.** The shell-macos
+anti-vacuity scanner learned the XCBuild layout: the runner image's
+SwiftPM moved the built objects to Intermediates.noindex while the
+products dir carries none, so the old glob found nothing over a bridge
+that links FoundationModels 319 times — the scan walks the whole `.build`
+tree now, drilled locally against the exact layout (caf1611a). The
+posture labels' `has-[:checked]` arbitrary variant became the modern
+`has-checked` shorthand — same compiled CSS, the tailwind linter's three
+warnings cleared at the source (81370824).
+
+**UI2 — the just-works surface (2026-11-20), one commit per step, every
+pin red-first.** S1 hiddenTitle with the accessible title kept
+(cce6c358); S2 the badge states posture and the `shell-status-model` id
+dies with `KernelFacts.model` (a89c4182); S3 the plain-language sweep,
+238 values × five locales, the lint pin red-first 238× with the nl
+"Modelverwijzingen" word-boundary case as the pinned control and the
+planted "seamless" proving the hot-air half bites (0dac78eb); S4 the
+agreement-free import sentence — Paraglide's exact-number locals need a
+message-format plugin newer than the pinned ^4.6.0 (opral/inlang#4440),
+so the noun copy is the plan's default — with the pin narrowing the
+template before composing (eaf57aa0, d7a3a28e); S5 the badge ring on
+verified Tailwind v4 ring semantics (db117df3); S6 the secondary chips
+against shadcn's documented "less prominent actions" (92b25503); S7 the
+glass fills, measured on the built app in both schemes, the ok-dot law
+riding `--sidebar` unchanged (1578beef); S8 the textarea breathing room
+(9b82b98b); S9 the searching line, `role="status"` ×5 locales, the
+verify-flow's `chat.working` consumer untouched (1f542a89); S10 KERNEL:
+`first_prompt_label` — the screened prompt's head, ≤40 whole chars,
+≤80 bytes, char-boundary safe, invisibles stripped, empty stays empty,
+second turns never rename, the rename verb untouched — pinned in the
+service module red-first (`a_created_session_names_itself_from_the_first_prompt`)
+with the CJK boundary arm, the router census unmoved (45f9754d); S11 the
+date groups with the boundary math in a plain module (the Svelte
+reactivity lint forbids mutable Dates in components) and the relative
+time demoted to sr-only + title as a named act (480ac89d, ddd8e255); S12
+the palette Chats group over the store the frame already holds — the
+glance refresh at palette open is the read, no new cadence (439b93f0);
+S13 the settings fold with the dead copy retired and the token input's
+fixed bullet placeholder (the value never echoes), runmode STAYS in
+general on the operator's silence (e3f55bf2). The wrap re-derivations:
+census 4319 → 4320, badge 4243 → 4244, the band measured 1,808,836
+gzipped (+471 of the ±512 band over UI1's midpoint — the additions
+nearly cancel the removals, no named move) (77a9f6f8); the evidence file
+carries the before/after per step, the research citations (Tauri
+hiddenTitle, Tailwind ring semantics, shadcn secondary, the Paraglide
+plugin floor — all via Context7) and the benchmark study (35398b92); the
+AGENTS.md ledger records the plain-language law's origin and the Tier C
+register, asked once in one list — silence keeps every default (e27abcc1).
+A follow-up completes the S13 advanced pane's kernel-facts mocks so the
+pane mounts its model/rerank sections without unhandled errors
+(d873cdcf); the editor's sourcekit-lsp is rooted at the Swift packages
+so the nested-package phantom errors die (15c0327b).
+
+**The standing records.** The changelog gains the two engineering records
+the law expects — R152 and UI2 below the newest release, kept as written
+(3cdf3b8f). The pre-push gate caught the round's own markup at the
+closing fix: the S11 date-group container's five-level div nest became a
+section with its heading — same testids, same rows, the thirteen
+session/appshell pins green and the suite at 450 passed | 2 skipped
+(5507455c). The release's own wrap: Cargo.toml + Cargo.lock in lockstep
+(exactly one line moved), the openapi stamps moved with the typed client
+regenerated byte-identical (the stamps do not feed the generated schema —
+the drift gate green without a schema.d.ts diff), the SBOM regenerated
+over this tree, the README badges re-derived, this section, and the
+AGENTS entry.
+
+The lanes at the wrap: the FULL bench,migrate suite green at the count
+4244 (`--verify-count` reconciles), fmt + clippy clean, docs_truth 20/20,
+the release-notes gate green with completeness coverage over the full
+range, badges selfcheck OK, doc links 567/567, the shell lanes green
+(vitest 450 passed | 2 skipped, svelte-check 0/0, eslint clean), lipstyk
+clean over the pre-round base.
+
 ## [Unreleased] — R152 "the front door": the install lane's Swift death root-caused, the staleness guard, the Swift sidecars arm64-only, the README rewritten (2026-11-18)
 
 The install lane's Swift death is ROOT-CAUSED as a rotated OS cryptex, not

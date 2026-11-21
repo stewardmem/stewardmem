@@ -11,7 +11,21 @@ private plans archive on 2026-10-04 — this page is the in-repo roadmap.)
 
 ## Current status
 
-**v1.29.x — the current server line (1.29.46 — the quiet surface: the
+**v1.29.x — the current server line (1.29.47 — the just-works surface:
+the thirteen UI2 steps under the operator's plain-language law — no AI
+language in any user-facing string in any locale, 238 dash-bearing
+values reworked and a pin keeping them that way — the macOS window's
+title hidden with the accessible one kept, the composer badge stating
+posture instead of the retrieval embedder's id, the import disclosure
+agreement-free, the review badge ringed, the chips secondary, the
+sidebar's fills translucent on glass, a calm searching line, the
+session history grouped by day and naming itself from its first prompt
+(the release's one kernel change), the palette's Chats group, and
+Settings reduced to three categories; beside it, the install lane's
+Swift death root-caused as a rotated OS cryptex with a staleness guard,
+the Swift sidecars arm64-only as a named act, and the README rewritten
+as the front door; wire contract byte-identical — the stamps move in
+lockstep only; before it, 1.29.46 — the quiet surface: the
 shell's chat canvas renders the answer and ONE quiet provenance row —
 three stacked rows per turn became a single 11px muted token row whose
 sentences all stay (the verdict dot + sentence, the raw tier word, the

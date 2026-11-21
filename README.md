@@ -5,10 +5,10 @@ Self-hosted AI agent memory. It runs on your own machine, shows where every answ
 One open-source Rust binary. One SQLite file. No cloud, no account, no subscription.
 
 <p align="center">
-  <a href="#"><img alt="Version 1.29.46" src="https://img.shields.io/badge/version-1.29.46-blue.svg"></a>
+  <a href="#"><img alt="Version 1.29.47" src="https://img.shields.io/badge/version-1.29.47-blue.svg"></a>
   <a href="#proof-not-promises"><img alt="4244 tests passed" src="https://img.shields.io/badge/tests-4244%20passed-brightgreen.svg"></a>
-  <a href="openapi.yaml"><img alt="OpenAPI 1.29.46" src="https://img.shields.io/badge/OpenAPI-1.29.46-6b4bff.svg"></a>
-  <a href="sbom/brain-server-1.29.46.cdx.json"><img alt="CycloneDX 1.5 SBOM" src="https://img.shields.io/badge/SBOM-CycloneDX%201.5-013243.svg"></a>
+  <a href="openapi.yaml"><img alt="OpenAPI 1.29.47" src="https://img.shields.io/badge/OpenAPI-1.29.47-6b4bff.svg"></a>
+  <a href="sbom/brain-server-1.29.47.cdx.json"><img alt="CycloneDX 1.5 SBOM" src="https://img.shields.io/badge/SBOM-CycloneDX%201.5-013243.svg"></a>
 </p>
 
 *The test count comes from the build, never from a hand (`scripts/badges.sh --verify-count`; not selfcheck-verified, the cheap check cannot count tests, the CI badge-drift gate does that on every release tag).*
