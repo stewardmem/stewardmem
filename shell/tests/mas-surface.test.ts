@@ -45,7 +45,12 @@ vi.mock('#lib/api/kernel-facts.js', () => ({
 	fetchKernelFacts: vi.fn(async () => ({
 		kind: 'ok',
 		facts: { version: null, count: null }
-	}))
+	})),
+	// UI2 S13: the model and rerank sections ride the ADVANCED pane now, so
+	// the host mounts them when the tests open it — their reads are part of
+	// the module boundary this file already mocks (the neutral answers).
+	fetchModelState: vi.fn(async () => ({ model: null, state: 'unknown', error: null })),
+	fetchRerankState: vi.fn(async () => ({ state: 'not-reported' }))
 }));
 vi.mock('#lib/api/audit.js', () => ({
 	verifyAuditChain: vi.fn(async () => ({ kind: 'refused', status: 403, fault: 'unknown' }))

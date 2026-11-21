@@ -38,7 +38,11 @@ vi.mock('#lib/api/kernel-facts.js', () => ({
 	fetchKernelFacts: vi.fn(async () => ({
 		kind: 'ok',
 		facts: { version: null, count: null }
-	}))
+	})),
+	// UI2 S13: the settings host mounts the model/rerank sections under the
+	// Advanced pane; their reads join the same module-boundary mock.
+	fetchModelState: vi.fn(async () => ({ model: null, state: 'unknown', error: null })),
+	fetchRerankState: vi.fn(async () => ({ state: 'not-reported' }))
 }));
 vi.mock('#lib/api/audit.js', () => ({
 	verifyAuditChain: vi.fn(async () => ({ kind: 'refused', status: 403, fault: 'unknown' }))
