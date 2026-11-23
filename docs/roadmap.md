@@ -11,22 +11,32 @@ private plans archive on 2026-10-04 — this page is the in-repo roadmap.)
 
 ## Current status
 
-**v1.29.x — the current server line (1.29.47 — the just-works surface:
-the thirteen UI2 steps under the operator's plain-language law — no AI
-language in any user-facing string in any locale, 238 dash-bearing
-values reworked and a pin keeping them that way — the macOS window's
-title hidden with the accessible one kept, the composer badge stating
-posture instead of the retrieval embedder's id, the import disclosure
-agreement-free, the review badge ringed, the chips secondary, the
-sidebar's fills translucent on glass, a calm searching line, the
-session history grouped by day and naming itself from its first prompt
-(the release's one kernel change), the palette's Chats group, and
-Settings reduced to three categories; beside it, the install lane's
-Swift death root-caused as a rotated OS cryptex with a staleness guard,
-the Swift sidecars arm64-only as a named act, and the README rewritten
-as the front door; wire contract byte-identical — the stamps move in
-lockstep only; before it, 1.29.46 — the quiet surface: the
-shell's chat canvas renders the answer and ONE quiet provenance row —
+**v1.29.x — the current server line (1.29.48 — the policy-anchor
+registry: the kernel gains a governed registry of the AI policy
+instruments a deployment is governed by, every instrument carrying the
+SHA-256 of its original text or an honest statement that the text is not
+held; `brain policy-anchor seed|verify|gate` lands the registry, answers
+"which instruments were in force on this date", and refuses to let a pack
+switch on over a policy text it cannot verify, naming every blocker;
+instrument history is append-only and every registry act is audited in
+its own transaction; the vocabulary is `verified / not verified /
+superseded`, never "compliant"; schema 1.32.36; all 22 open CodeQL
+alerts reviewed and closed with the guard named; wire contract
+byte-identical — the stamps move in lockstep only; before it, 1.29.47 —
+the just-works surface: the thirteen UI2 steps under the operator's
+plain-language law — no AI language in any user-facing string in any
+locale, 238 dash-bearing values reworked and a pin keeping them that way
+— the macOS window's title hidden with the accessible one kept, the
+composer badge stating posture instead of the retrieval embedder's id,
+the import disclosure agreement-free, the review badge ringed, the chips
+secondary, the sidebar's fills translucent on glass, a calm searching
+line, the session history grouped by day and naming itself from its
+first prompt (the release's one kernel change), the palette's Chats
+group, and Settings reduced to three categories; beside it, the install
+lane's Swift death root-caused as a rotated OS cryptex with a staleness
+guard, the Swift sidecars arm64-only as a named act, and the README
+rewritten as the front door; before that, 1.29.46 — the quiet surface:
+the shell's chat canvas renders the answer and ONE quiet provenance row —
 three stacked rows per turn became a single 11px muted token row whose
 sentences all stay (the verdict dot + sentence, the raw tier word, the
 cite-truth quoted/paraphrase counts, the sources chip), the greeting

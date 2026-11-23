@@ -13,6 +13,118 @@ measured. Those records are kept as they were written (this file is
 append-only), and their heading says `Unreleased` because that is what they
 were when the round landed — not because the work is still unreleased.
 
+## [1.29.48] — 2026-11-23 — the policy-anchor registry: governance instruments are anchored by hash, and a pack refuses to activate over a policy text it cannot verify
+
+This release gives the kernel a governed registry of the AI policy
+instruments a deployment is governed by. Every instrument carries the
+SHA-256 of its original text, or an honest statement that the text is not
+held. A new command line decides whether a pack may switch on, and it
+refuses when a required instrument is missing, superseded, retired, or not
+yet verified. The registry's vocabulary is the product: it says
+`verified`, `not verified`, and `superseded`, and it never says
+"compliant", because that conclusion belongs to the agency and its
+lawyers. Beside it, a blog post on the Philippine AI Governance Framework
+(Executive Order No. 131, series of 2026) states first what is not held:
+the order's own text. No route, no wire shape, and no shell file moved.
+
+### Release notes
+
+**Improvements**
+
+- governance instruments are now anchored by hash. The kernel refuses to
+  activate a pack whose policy text it cannot verify: every required
+  instrument must be held, hash-matched, and in force, and each blocker is
+  named with its own reason (`not in the registry`, `advisory-only —
+  anchor text not held`, `superseded`, `retired`). An unset configuration
+  is itself a refusal. (0b663b14, 4563b1f9, 241e918a)
+- three new commands: `brain policy-anchor seed` hash-verifies every held
+  instrument against the corpus before landing it (drift refuses the whole
+  seed, naming the file and both hashes), `verify` answers the dated
+  question "which instruments were in force on this date", and `gate`
+  decides whether a pack may activate. (241e918a)
+- instrument history is append-only. A superseded instrument is a new row
+  plus a stamp on the old one, in one transaction with its audit record.
+  Nothing in the registry's history is ever edited or deleted. (0b663b14)
+- every registry act (seed, supersede, gate decision) writes a
+  `policy-anchor` audit row inside the same transaction, so
+  kind-filtered audit readers can isolate governance-instrument evidence.
+  (0b663b14)
+- a broken `BRAIN_POLICY_PACK_REQUIRED_ANCHORS` setting is refused with the
+  parse error printed, instead of reading as unset. The setting is never
+  applied halfway. (147fc0fa)
+- the registry's date column is labelled `dated`. It prints the effectivity
+  date when an instrument states one and the signing date otherwise, and no
+  longer claims an in-force date for an order that fixes none. (147fc0fa)
+- a new blog post, [EO 131 and the registry that refuses to
+  guess](https://stewardmem.github.io/stewardmem/blog/30-eo-131-and-the-registry-that-refuses-to-guess.html),
+  on the Philippine AI Governance Framework's quarterly reporting duty and
+  why the registry starts by refusing. (03ea25f3)
+- all 22 open CodeQL alerts (`rust/unsafe-deserialization`, opened
+  2026-11-21) were reviewed individually and closed with the guard named
+  for each: 19 mitigated, 2 false positives, 1 in test code. No code change
+  was needed, because every flagged site parses into a plain JSON value or
+  a typed struct behind an authentication, a size limit, or both. The
+  review is recorded in the gate-law register. (9ae612fc)
+- the schema moves to 1.32.36 with two additive tables. A migration
+  rehearsal now carries both, so a restore cannot silently lose the
+  registry. (5fb8781b)
+- ten new tests pin the registry's laws, each proven to fail against the
+  defect it guards before being proven to pass. (645fbd82, 147fc0fa)
+
+### Engineering record
+
+**GOVPACK-1 — the policy-anchor registry (2026-11-23).** Range
+`v1.29.47..v1.29.48`, eleven commits, one per step: `6c33c074` S0 ·
+`5fb8781b` S1 · `0b663b14` S2 · `4563b1f9` S4 · `241e918a` S3 ·
+`645fbd82` S5 · `6aebc5cd` S6a · `147fc0fa` S6b · `9ae612fc` S6c ·
+`03ea25f3` blog 30 · `8f31dea3` S6a repair. Gate A1's core, A2's knob, and
+A4's command-line subset of the plan of record; the wire surface, the
+quarterly export, and the tracker page are GOVPACK-2.
+
+- **The commits that ship no note of their own.** `6c33c074` (S0) lands
+  `tests/fixtures/policy_anchors.json`, a byte-identical copy of the
+  corpus master manifest; both held instruments were re-hashed and matched
+  (DepEd `18263a9a…4202b`, CHED `0a4536a7…fe01f`), so the fixture moved and
+  nothing user-facing did. `6aebc5cd` (S6a) answers the three standing
+  gates that bit the round at their mechanisms (the duplicate-helper guard,
+  the CLI-reference pin, the schema-round re-pin ritual across twelve
+  files). `8f31dea3` re-pins the two assertions that sweep missed in
+  `tests/memform_pins.rs`. Both are test and docs repairs to the round's
+  own diff.
+- **Two named deviations from the prompt's literal text, each found by
+  measuring.** (1) The DDL said `anchor_id TEXT NOT NULL UNIQUE`, which
+  cannot coexist with the anti-vacuity arm's two-rows-one-anchor_id
+  history; the shape that holds both laws is a PARTIAL unique index over
+  the live states. (2) `state_as_of` was specified with a
+  `state != superseded` filter, which makes a superseded row unanswerable
+  for its own quarter (measured: `left: [] right: ["PH-QTR"]`); the
+  `in_force_until` stamp is the supersession filter.
+- **The byte-pin on `audit/mod.rs`** (the correction round's scope
+  proof, `r45_0_correction_leaves_the_audit_chain_module_byte_untouched`)
+  was re-recorded for ONE enum
+  variant + its `as_str` arm (`AuditKind::PolicyAnchor`), the module's own
+  battery 57/57 green.
+- **Seven drills RUN and REVERTED**, the red texts in
+  `docs/GOVPACK1_EVIDENCE_2026-11-23.md`; an eighth pin born from
+  fact-checking a blog sentence against the real binary (a warning that
+  went to a log the command line never reads), its drill red
+  `a broken knob must SAY so on stderr …: ""`.
+- **The receipt's date label** moved from `in force from` to `dated`: both
+  held orders take effect "fifteen (15) days after its publication" and
+  name no calendar date for that, so the registry holds the signing date
+  and the label claims no more.
+- **The wrap's own lesson.** The first full run aborted at the recorded
+  docling RAM-contention flake, and `cargo test` stops at the first failing
+  binary, so two real re-pin failures sat unseen behind it. A
+  `--no-fail-fast` run over all 122 binaries was needed to see every one.
+- **Lanes at the wrap:** the FULL `cargo test --features bench,migrate` —
+  4254 passed / 0 failed / 8 ignored (the docling test green standalone
+  17/17 and green in the final run); `cargo clippy --all-targets` with
+  `-D warnings` in default and `bench,migrate`; `cargo fmt --check`; the
+  schema-drift drill byte-identical; census `--check` (4320 → 4330);
+  `check-doc-links` all resolve.
+
+
 ## [1.29.45] — 2026-11-17 — recut: the served-chat repair joined by the cite-truth verdict (supported means verified-quoted) and the writer-posture round as the measured default — the writer pair ships scripted everywhere, the route confidence is calibrated by instruction, and the release badge/CI standing state is repaired
 
 This release was first cut on 2026-11-15 and never published — the tag's

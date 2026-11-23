@@ -458,6 +458,9 @@ async fn ropa_upsert(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    // The strict digest predicate lives in ONE place (the dup-guard caught this
+    // module's second copy): service::policy_anchor owns it.
+    use crate::service::policy_anchor::is_sha256_hex;
 
     /// Install the FIXED test seed directly into the process-global cache and
     /// hold the crate-wide decision test lock for the caller's whole
@@ -491,13 +494,9 @@ pub(crate) mod tests {
     #[test]
     fn dataset_hash_predicate_is_strict() {
         let hex = "a".repeat(64);
-        assert!(crate::service::policy_anchor::is_sha256_hex(&hex));
-        assert!(!crate::service::policy_anchor::is_sha256_hex(
-            &"g".repeat(64)
-        ));
-        assert!(!crate::service::policy_anchor::is_sha256_hex(
-            &"a".repeat(63)
-        ));
+        assert!(is_sha256_hex(&hex));
+        assert!(!is_sha256_hex(&"g".repeat(64)));
+        assert!(!is_sha256_hex(&"a".repeat(63)));
         assert!(!is_sha256_hex(""));
     }
 
