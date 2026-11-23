@@ -631,10 +631,11 @@ fn mf1_migration_stamps_1_32_34() {
         )
         .expect("stamp");
     assert_eq!(
-        stamp, "1.32.35",
-        "run_migration must stamp the CURRENT ceiling — 1.32.35 is the \
-         CustomerProvenance schema act (IMPROVE15; the MemformStamps ceiling \
-         moved with it); the stamp and the vocabulary moved together"
+        stamp, "1.32.36",
+        "run_migration must stamp the CURRENT ceiling — 1.32.36 is the policy-anchor \
+         registry (GOVPACK-1; the 1.32.35 ceiling was the CustomerProvenance schema act, \
+         IMPROVE15, and the MemformStamps ceiling moved before it); the stamp and the \
+         vocabulary move together"
     );
 }
 
@@ -692,18 +693,19 @@ fn mf1_migration_adds_the_closed_column_with_its_check() {
 /// MF-1, the structural half: the known-version bound and the migration's
 /// stamp string agree — either side moving alone reds here. (The const-name
 /// agreement is held by storage_layout's own probe test, which moves to
-/// 1.32.36 in the same commit — the IMPROVE15 schema act moved the ceiling.)
+/// 1.32.37 in the same commit — the GOVPACK-1 policy-anchor round moved the
+/// ceiling to 1.32.36; IMPROVE15 had moved it to 1.32.35.)
 #[test]
 fn mf1_lockstep_ceiling_moves_with_the_stamp() {
     assert_eq!(
         brain_server::storage_layout::LATEST_KNOWN_SCHEMA,
-        "1.32.35",
-        "the ceiling is the CustomerProvenance schema act (IMPROVE15)"
+        "1.32.36",
+        "the ceiling is the policy-anchor registry (GOVPACK-1; IMPROVE15's 1.32.35 before it)"
     );
     let migration = read_repo("src/migration.rs");
     assert!(
-        migration.contains("'schema_version', '1.32.35'"),
-        "run_migration must stamp 1.32.35 — the stamp and the ceiling move together"
+        migration.contains("'schema_version', '1.32.36'"),
+        "run_migration must stamp 1.32.36 — the stamp and the ceiling move together"
     );
 }
 
