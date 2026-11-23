@@ -206,6 +206,7 @@
 - [Two seams, found twice](./blog/29-two-seams-found-twice.md)
 - [Adopting the unreleased engine](./blog/13-adopting-the-unreleased-engine.md)
 - [Every binding gets the seam](./blog/14-every-binding-gets-the-seam.md)
+- [EO 131 and the registry that refuses to guess](./blog/30-eo-131-and-the-registry-that-refuses-to-guess.md)
 
 # Product site
 
