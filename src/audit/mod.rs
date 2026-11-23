@@ -201,6 +201,14 @@ pub enum AuditKind {
     /// no query text rides a row). Tier transitions in S2+ audit under the
     /// same kind.
     Cascade,
+    /// governance-instrument acts (the policy-anchor registry, K-31): one
+    /// row per seed act, supersede, and pack-gate decision. A dedicated
+    /// kind (the `Forget`/`Procedure` precedent) so kind-filtered audit
+    /// consumers can isolate governance-instrument evidence without
+    /// detail-hash mining; the detail carries closed-vocabulary counts and
+    /// anchor ids, and the chain stores hashes, so no instrument text and
+    /// no corpus path ride a row.
+    PolicyAnchor,
 }
 
 impl AuditKind {
@@ -237,6 +245,7 @@ impl AuditKind {
             AuditKind::Watch => "watch",
             AuditKind::DocCorrection => "doc-correction",
             AuditKind::Cascade => "cascade",
+            AuditKind::PolicyAnchor => "policy-anchor",
         }
     }
 }

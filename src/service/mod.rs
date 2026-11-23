@@ -76,6 +76,7 @@ pub mod gate;
 pub mod ingest;
 pub mod journey;
 pub mod lifecycle;
+pub mod policy_anchor;
 pub mod procedure;
 pub mod purge;
 pub mod quarantine;

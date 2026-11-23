@@ -1147,8 +1147,18 @@ fn r45_0_correction_leaves_the_audit_chain_module_byte_untouched() {
 // moved. The call's row is pinned behaviorally in src/doc_corrector.rs's
 // tests (the hash-only columns, the byte-exact detail vocabulary) and by
 // tests/doc_correction.rs's route pin.
+// RE-PINNED 2026-11-23 (GOVPACK-1, the policy-anchor registry K-31), the
+// escape hatch taken again: the touch is ONE enum variant + its as_str arm
+// — `AuditKind::PolicyAnchor` ("policy-anchor"), one row per seed act,
+// supersede, and pack-gate decision (the Forget/Procedure/Import dedicated-
+// kind precedent exactly); NO verdict, key, epoch, chain-link, scheme,
+// check, or audit-row WRITE shape moved. The acts are pinned behaviorally
+// in tests/policy_anchor_pins.rs (the in-tx CHECKED form, the rollback
+// law, the hash-only detail vocabulary) and the module's own battery
+// (keyed hash, tamper controls, genesis + head pins) is untouched and
+// still green.
 const CHAIN_MODULE_SHA256: &str =
-    "a8816c8dabf69ddbff7040fc349209c23d9318229fa3ebfeedf0e24b004a62f7";
+    "25d3862d3acd8273a9542001214f6586f62eb0fc4e6b47dc3bd71a666fd07b24";
 // (Movement history, each its own round with its own red-first battery, the
 // R45-0 pin's own law: IMPROVE16 added `AuditKind::DocCorrection` — the
 // per-call accounting kind, no verdict/key/epoch/link/scheme/check/row-write
