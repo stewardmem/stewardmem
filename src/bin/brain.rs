@@ -2108,25 +2108,25 @@ fn cmd_policy_anchor_gate(args: &[String]) -> Result<(), String> {
     // operator was being told the wrong reason. Parse here with config's own
     // pure parser, never a second grammar: unset is unset; set-but-broken
     // refuses naming the parse error.
-    let required = match std::env::var("BRAIN_POLICY_PACK_REQUIRED_ANCHORS") {
-        Err(_) => None,
-        Ok(raw) => match brain_server::config::parse_required_anchors(&raw) {
-            Ok(bindings) => Some(bindings),
-            Err(e) => {
-                eprintln!(
-                    "warning: BRAIN_POLICY_PACK_REQUIRED_ANCHORS is set but not parsable and is \
-     IGNORED in full ({e}). The knob never half-applies: fix the JSON or unset it."
-                );
-                None
+    let required = std::env::var("BRAIN_POLICY_PACK_REQUIRED_ANCHORS")
+        .ok()
+        .and_then(|raw| {
+            match brain_server::config::parse_required_anchors(&raw) {
+                Ok(bindings) => Some(bindings),
+                Err(e) => {
+                    eprintln!(
+                        "warning: BRAIN_POLICY_PACK_REQUIRED_ANCHORS is set but not parsable and is      IGNORED in full ({e}). The knob never half-applies: fix the JSON or unset it."
+                    );
+                    None
+                }
             }
-        },
-    }
-    .and_then(|bindings| {
-        bindings
-            .iter()
-            .find(|(p, _)| p == &pack)
-            .map(|(_, anchors)| anchors.clone())
-    });
+        })
+        .and_then(|bindings| {
+            bindings
+                .iter()
+                .find(|(p, _)| p == &pack)
+                .map(|(_, anchors)| anchors.clone())
+        });
 
     match use_pa::pack_gate(&conn, &pack, required.as_deref())? {
         use_pa::PackGateOutcome::NoBindingsConfigured => {
