@@ -163,6 +163,10 @@ pub enum SeedRefusal {
     /// A held instrument's file is absent from the corpus root — the same
     /// class as drift: the manifest claims a held text that is not there.
     CorpusMissing { anchor_id: String, path: String },
+    /// The manifest holds verified text but the caller gave no corpus root:
+    /// a held text is verified against the corpus bytes or it is not
+    /// verified.
+    CorpusRootMissing,
 }
 
 impl std::fmt::Display for SeedRefusal {
@@ -199,6 +203,12 @@ impl std::fmt::Display for SeedRefusal {
                 f,
                 "anchor '{anchor_id}' claims held text at {path} but the file is absent from \
                  the corpus root — a held text that is not there is drift by another name"
+            ),
+            SeedRefusal::CorpusRootMissing => write!(
+                f,
+                "the manifest holds verified text but no corpus root was given — a held text \
+                 is verified against the corpus bytes or it is not verified; pass \
+                 --corpus-root"
             ),
         }
     }
@@ -336,10 +346,13 @@ fn validate_corpus_path(anchor_id: &str, path: &str) -> Result<(), String> {
 /// held file's bytes against the recorded digest. Returns the seed plan, or
 /// a TOTAL refusal for anything that poisons the whole act: unparsable
 /// JSON, a wrong manifest version, no anchors, duplicate ids, hash drift,
-/// or a missing held file. Per-anchor schema problems ride the plan as
-/// refusals — the seed lands the rest and reports both (the CLI exits 1 so
-/// a partial seed is never mistaken for a clean one).
-pub fn verify_manifest(json: &str, corpus_root: &Path) -> Result<SeedPlan, SeedRefusal> {
+/// a missing held file, or held text with no corpus root to verify
+/// against. Per-anchor schema problems ride the plan as refusals — the
+/// seed lands the rest and reports both (the CLI exits 1 so a partial seed
+/// is never mistaken for a clean one). `corpus_root` may be None for a
+/// manifest that holds no text; a manifest that DOES hold text refuses
+/// without one (never-guess: absence of a root is not absence of a claim).
+pub fn verify_manifest(json: &str, corpus_root: Option<&Path>) -> Result<SeedPlan, SeedRefusal> {
     let manifest: Manifest =
         serde_json::from_str(json).map_err(|e| SeedRefusal::Unparsable(e.to_string()))?;
     let version = match &manifest.manifest_version {
@@ -373,7 +386,8 @@ pub fn verify_manifest(json: &str, corpus_root: &Path) -> Result<SeedPlan, SeedR
                 // Held text is verified HERE, at plan time: a drift or a
                 // missing file refuses the whole act before anything lands.
                 if planned.state == AnchorLifecycle::VerifiedTextHeld {
-                    let path = corpus_root.join(
+                    let root = corpus_root.ok_or(SeedRefusal::CorpusRootMissing)?;
+                    let path = root.join(
                         planned
                             .corpus_path
                             .as_deref()
@@ -532,6 +546,20 @@ fn immediate_tx<T>(
     }
 }
 
+/// The live row's content tuple, as the seed's idempotency read fetches it.
+type LiveRowContent = (
+    i64,
+    String,
+    String,
+    String,
+    String,
+    String,
+    String,
+    Option<String>,
+    String,
+    Option<String>,
+);
+
 // ── seed ─────────────────────────────────────────────────────────────────
 
 /// Land the plan's rows in ONE `BEGIN IMMEDIATE` transaction, idempotent by
@@ -546,18 +574,7 @@ pub fn seed(conn: &Connection, plan: &SeedPlan) -> Result<SeedReport, String> {
         let mut inserted = 0usize;
         let mut skipped = 0usize;
         for row in &plan.rows {
-            let existing: Option<(
-                i64,
-                String,
-                String,
-                String,
-                String,
-                String,
-                String,
-                Option<String>,
-                String,
-                Option<String>,
-            )> = tx
+            let existing: Option<LiveRowContent> = tx
                 .query_row(
                     "SELECT id, issuer, instrument_no, series, title, scope_tags, state, \
                          sha256_hex, in_force_from, corpus_path
@@ -869,16 +886,27 @@ pub struct AnchorState {
 
 /// The registry's deterministic quarter answer: a row is IN FORCE at `T`
 /// iff `in_force_from <= T` and (`in_force_until` IS NULL OR
-/// `in_force_until > T`) and its state is neither superseded nor retired.
-/// Pure, deterministic, unit-drivable — this is the function K-30's
-/// as-of-the-quarter export will build on.
+/// `in_force_until > T`) and its state is not `retired`.
+///
+/// A SUPERSEDED row answers as of any T BEFORE its stamp — the
+/// `in_force_until` stamp IS the supersession filter (the stamp's value is
+/// the new version's `in_force_from`, so the cutover is clean: at the
+/// boundary instant the old row's `until > T` goes false exactly when the
+/// new row's `from <= T` becomes true). A superseded row whose stamp is
+/// MISSING lingers in the as-of answer forever — which is precisely the
+/// defect the quarter-boundary pin's drill plants and catches (`left: 2
+/// rows, right: 1`). The never-guess reading of the state vocabulary ("not
+/// superseded" meaning "not yet superseded AS OF T") is the temporal one;
+/// a literal state filter would make history unanswerable and the drill
+/// toothless. Pure, deterministic, unit-drivable — this is the function
+/// K-30's as-of-the-quarter export will build on.
 pub fn state_as_of(conn: &Connection, as_of: &str) -> Result<Vec<AnchorState>, String> {
     validate_date("as_of", "--as-of", as_of).map_err(|e| format!("state_as_of: {e}"))?;
     let mut stmt = conn
         .prepare(
             "SELECT anchor_id, title, state, sha256_hex, in_force_from, in_force_until
              FROM policy_anchor
-             WHERE state NOT IN ('superseded','retired')
+             WHERE state != 'retired'
                AND in_force_from <= ?1
                AND (in_force_until IS NULL OR in_force_until > ?1)
              ORDER BY anchor_id",
