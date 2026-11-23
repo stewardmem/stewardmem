@@ -188,7 +188,7 @@ pub async fn post_evaluation_record(
     }
     // the dataset hash must BE a SHA-256 hex digest — a free-text blob here
     // would defeat the "tied to dataset" property the record exists for.
-    if !is_sha256_hex(&body.dataset_hash) {
+    if !crate::service::policy_anchor::is_sha256_hex(&body.dataset_hash) {
         return Err(HandlerError::bad_request(
             "dataset_hash_invalid",
             "dataset_hash must be 64 hex characters (SHA-256)",
@@ -342,11 +342,6 @@ struct InventoryCounts {
     promoted_freshness_overdue: i64,
 }
 
-/// strict SHA-256 hex-digest predicate (pure, pinned).
-fn is_sha256_hex(s: &str) -> bool {
-    s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())
-}
-
 fn art(name: &str, present: bool, count: i64, _now: Option<i64>) -> serde_json::Value {
     serde_json::json!({ "artifact": name, "present": present, "count": count })
 }
@@ -496,9 +491,13 @@ pub(crate) mod tests {
     #[test]
     fn dataset_hash_predicate_is_strict() {
         let hex = "a".repeat(64);
-        assert!(is_sha256_hex(&hex));
-        assert!(!is_sha256_hex(&"g".repeat(64)));
-        assert!(!is_sha256_hex(&"a".repeat(63)));
+        assert!(crate::service::policy_anchor::is_sha256_hex(&hex));
+        assert!(!crate::service::policy_anchor::is_sha256_hex(
+            &"g".repeat(64)
+        ));
+        assert!(!crate::service::policy_anchor::is_sha256_hex(
+            &"a".repeat(63)
+        ));
         assert!(!is_sha256_hex(""));
     }
 

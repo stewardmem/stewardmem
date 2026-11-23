@@ -322,7 +322,11 @@ fn sha256_hex(bytes: &[u8]) -> String {
     digest.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-fn is_sha256_hex(s: &str) -> bool {
+/// Strict SHA-256 hex-digest predicate — the ONE implementation in the
+/// tree (the dup-guard caught this round's second copy the day it landed:
+/// handlers/compliance.rs's local predicate moved here, the handler calls
+/// this one, dependency direction handler → service).
+pub(crate) fn is_sha256_hex(s: &str) -> bool {
     s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())
 }
 

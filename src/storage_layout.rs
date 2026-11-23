@@ -867,13 +867,15 @@ mod tests {
         // IMPROVE13 round (the MemForm provenance stamps) moved
         // the ceiling to 1.32.34, so the probe moved to 1.32.35, and the
         // IMPROVE15 round (the CustomerProvenance schema act) moved
-        // the ceiling to 1.32.35, so the probe moved to 1.32.36.
+        // the ceiling to 1.32.35, so the probe moved to 1.32.36, and the
+        // GOVPACK-1 round (the policy-anchor registry) moved the ceiling
+        // to 1.32.36, so the probe moved to 1.32.37.
         // A probe
         // pinned AT the ceiling silently tests `Equal`, not `Greater` — the assertion
         // would keep passing while a NEWER-schema database was blessed instead of
         // refused, which is the one failure this function exists to prevent.
-        assert!(is_newer_than_known(Some("1.32.36")));
-        assert!(!is_newer_than_known(Some("1.32.35")));
+        assert!(is_newer_than_known(Some("1.32.37")));
+        assert!(!is_newer_than_known(Some("1.32.36")));
         assert!(!is_newer_than_known(Some("1.32.9")));
         assert!(!is_newer_than_known(Some("1.28.9")));
     }

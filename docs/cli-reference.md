@@ -17,6 +17,9 @@ on the HTTP API or the client console.
 | `brain status` | Counts, model, version |
 | `brain check-consistency` | Report duplicates, conflicts, stale sources, near-duplicates |
 | `brain verify-governance` [`--db PATH`] | Row-level governance-integrity scan: recount every knowledge row's SHA-256 over its governance tuple (owner, access_scope, domain); reports ok / tampered (ids) / legacy_unhashed, exit ≠ 0 on tampering |
+| `brain policy-anchor seed --manifest PATH [--corpus-root DIR] [--db PATH]` | Seed the policy-anchor registry (GOVPACK-1, K-31) from a manifest: schema-checks every anchor row, hash-verifies every held instrument against the corpus bytes (drift or a missing held file refuses the whole seed, naming path + expected + actual); lands rows idempotently (identical content skips, any drift refuses — supersede is the only lawful change) with one audited act per seed. Prints the per-anchor verdict table; exit ≠ 0 names every refusal. The corpus stays the master |
+| `brain policy-anchor verify [--db PATH] [--corpus-root DIR] [--as-of DATE]` | Read-only registry read: the anchor table + counts. `--as-of DATE` (YYYY-MM-DD or YYYY-MM at month precision) answers the quarter question deterministically — a row is in force iff `in_force_from <= T` and (`in_force_until` IS NULL or `> T`). With held text and a corpus root, re-measures every held digest (the corpus-drift detector); held text without a root is a named refusal (verify without the corpus is not verification). The registry speaks verified / not verified / superseded — never compliant. The date column prints as `dated`: the effectivity date when the instrument states one, otherwise the signing date. An instrument that takes effect "N days after publication" and names no calendar date for it is stored at its signing date and the label never claims more; an as-of answer is only as good as the dates the instruments state |
+| `brain policy-anchor gate --pack ID [--db PATH]` | The pack gate: exit 0 = the pack may activate; exit 2 = refused, naming EVERY blocking anchor with its distinct reason (missing, `advisory-only — anchor text not held`, superseded, retired). Bindings come from `BRAIN_POLICY_PACK_REQUIRED_ANCHORS` (JSON `[{"pack":…,"anchors":[…]}]`); an unset knob is itself the no-bindings refusal — fail-closed on the knob too. A knob that is SET BUT UNPARSABLE is also refused, and the gate names the parse error on stderr (the whole knob is dropped, never half-applied; unset prints no warning because unset is not broken). The decided verdict records its binding rows + one audit row |
 | `brain watch add <name> --kind arxiv_api\|rss\|atom\|adapter --url URL --cadence SECS [--query Q] [--destination proposals] [--db PATH] | Create a research-watch lane (IMPROVE08): the closed vocabularies, the https/host/no-userinfo URL law, the arXiv once-per-day cadence law (sub-daily refuses), the SSRF screen at create (private/metadata hosts refuse). The destination is the CLOSED value `proposals` — the watch files proposals, never memory |
 | `brain watch tick <lane> [--db PATH]` | Run ONE lane tick (IMPROVE08): freshness floors before any fetch (`skipped_fresh` is the honest accounting line), fetch+parse outside the tx, then ONE `BEGIN IMMEDIATE` — seen inserts, gate filings (source `watch`), the accounting row, the CHECKED audit row. Replay transport unless `BRAIN_WATCH_LIVE_PROBE=1`; external cron drives the cadence — never a daemon |
 | `brain watch list [--db PATH]` | List the watch lanes with each one's LAST tick accounting (seen/deduped/filed/failed/skipped_fresh) — the loop's health at a glance |
@@ -208,6 +211,15 @@ brain check-consistency
 
 # Verify row-level governance integrity (owner/scope/domain tamper-evidence)
 brain verify-governance
+
+# Seed the policy-anchor registry from the corpus's manifest (hash-verifies held text)
+brain policy-anchor seed --manifest ANCHORS.json --corpus-root ph-ai-policies
+
+# The quarter question, deterministically
+brain policy-anchor verify --as-of 2026-06-30
+
+# May this pack activate? (exit 0 yes; exit 2 refused, naming every blocker)
+brain policy-anchor gate --pack gov.education
 
 # Back up the database (passphrase via file; DB path from BRAIN_DB_PATH)
 brain backup ~/backups/brain-$(date +%F).enc --passphrase-file ~/.config/brain-server/backup.pass

@@ -93,8 +93,9 @@ fn ap1_the_ceiling_is_the_schema_act() {
     // the lockstep set, moved in the same commit (the mf1 pin's shape):
     assert_eq!(
         brain_server::storage_layout::LATEST_KNOWN_SCHEMA,
-        "1.32.35",
-        "the ceiling is the CustomerProvenance round (IMPROVE15)"
+        "1.32.36",
+        "the ceiling is the policy-anchor registry round (GOVPACK-1; the CustomerProvenance \
+         round IMPROVE15 held it at 1.32.35)"
     );
 }
 

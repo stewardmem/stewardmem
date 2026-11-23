@@ -463,8 +463,9 @@ async fn control_ht1_the_accounting_reds_on_a_stripped_write_and_names_the_act()
 
 // ── HT-4 · the lockstep: schema const, stamp, probe, inventory move TOGETHER ──
 
-/// The migrated stamp and the moved schema const agree on 1.32.35 — this
-/// round's additive migration, not a renumbered neighbor. The equality
+/// The migrated stamp and the moved schema const agree on the CURRENT
+/// ceiling (1.32.36 after the policy-anchor registry round) — the lockstep
+/// the ledger depends on, re-pinned by each schema round. The equality
 /// between the stamp literal and the const is separately pinned by
 /// `latest_stamp_matches_migration` (storage_layout.rs) and the moved
 /// main_suite/per_domain pins; this pin holds the VALUES themselves so a
@@ -475,12 +476,12 @@ fn ht4_schema_stamp_and_version_const_agree() {
     let conn = srv.state.pool.get().expect("conn");
     assert_eq!(
         brain_server::storage_layout::schema_version(&conn).as_deref(),
-        Some("1.32.35"),
-        "the migrated stamp is 1.32.35 — the MemformStamps round re-pins the ledger's stamp"
+        Some("1.32.36"),
+        "the migrated stamp is 1.32.36 — the GOVPACK-1 policy-anchor round re-pins the stamp"
     );
     assert_eq!(
         brain_server::storage_layout::LATEST_KNOWN_SCHEMA,
-        "1.32.35",
+        "1.32.36",
         "the schema const must move WITH the stamp — refuse_newer must not bless a DB \
          this binary cannot migrate, nor refuse its own"
     );
@@ -494,7 +495,7 @@ fn read_repo(rel: &str) -> String {
 }
 
 /// The refuse-newer probe sits ABOVE the moved stamp by construction: it
-/// asserts 1.32.36 is newer and the moved schema const 1.32.35 is not. A
+/// asserts 1.32.37 is newer and the moved schema const 1.32.36 is not. A
 /// probe pinned AT the stamp silently tests `Equal`, not `Greater` — the one
 /// failure `refuse_newer` exists to prevent. The stamp lives in migration.rs.
 #[test]
@@ -502,20 +503,20 @@ fn ht4_probe_moves_one_above_and_the_stamp_matches() {
     let layout = read_repo("src/storage_layout.rs");
     let migration = read_repo("src/migration.rs");
     assert!(
-        layout.contains(r#"assert!(is_newer_than_known(Some("1.32.36")));"#),
-        "the probe must move ABOVE the new ceiling — 1.32.36 is newer than 1.32.35"
+        layout.contains(r#"assert!(is_newer_than_known(Some("1.32.37")));"#),
+        "the probe must move ABOVE the new ceiling — 1.32.37 is newer than 1.32.36"
     );
     assert!(
-        layout.contains(r#"assert!(!is_newer_than_known(Some("1.32.35")));"#),
-        "the ceiling itself (1.32.35) must read as not-newer"
+        layout.contains(r#"assert!(!is_newer_than_known(Some("1.32.36")));"#),
+        "the ceiling itself (1.32.36) must read as not-newer"
     );
     assert!(
-        !layout.contains(r#"assert!(is_newer_than_known(Some("1.32.35")));"#),
-        "a probe pinned AT the ceiling tests Equal, not Greater — move it to 1.32.36"
+        !layout.contains(r#"assert!(is_newer_than_known(Some("1.32.36")));"#),
+        "a probe pinned AT the ceiling tests Equal, not Greater — move it to 1.32.37"
     );
     assert!(
-        migration.contains("'schema_version', '1.32.35'"),
-        "run_migration must stamp 1.32.35 — the stamp and the ceiling move together"
+        migration.contains("'schema_version', '1.32.36'"),
+        "run_migration must stamp 1.32.36 — the stamp and the ceiling move together"
     );
 }
 
