@@ -2133,6 +2133,81 @@ pub fn gdl_case_token_budget() -> Option<u64> {
 /// default above 3 × the loopback p99 — the live basis is named here.
 pub const GDL_CASE_TOKEN_BUDGET_DEFAULT: Option<u64> = Some(3 * 3_987);
 
+/// The policy-pack bindings (GOVPACK-1, K-31): the packs whose activation
+/// the pack gate guards, each with the anchor ids it requires.
+/// `BRAIN_POLICY_PACK_REQUIRED_ANCHORS` carries JSON of the shape
+/// `[{"pack":"gov.education","anchors":["PH-DEPED-DO-003-2026", …]}]`.
+///
+/// `None` when the knob is unset — and None when it is SET BUT UNPARSABLE,
+/// after a WARN naming the parse failure: the knob must never silently
+/// half-apply (a half-parsed binding list is either a gate with fewer
+/// bindings than the operator wrote, or an allow-all the operator never
+/// configured — both are the silent-degrade shape this law exists to kill).
+/// The boot path does NOT read this knob; its only consumer is the pack
+/// gate (`brain policy-anchor gate`), so an unparsable value never breaks
+/// an existing deployment — the gate refuses, naming the knob.
+pub fn policy_pack_required_anchors() -> Option<Vec<(String, Vec<String>)>> {
+    let Ok(raw) = std::env::var("BRAIN_POLICY_PACK_REQUIRED_ANCHORS") else {
+        return None;
+    };
+    match parse_required_anchors(&raw) {
+        Ok(bindings) => Some(bindings),
+        Err(e) => {
+            tracing::warn!(
+                "BRAIN_POLICY_PACK_REQUIRED_ANCHORS is not parsable and is IGNORED in full: {e} \
+                 — the knob never half-applies; fix the JSON or unset it (the pack gate \
+                 refuses while it is broken)"
+            );
+            None
+        }
+    }
+}
+
+/// The pure parser behind [`policy_pack_required_anchors`] (unit-drivable
+/// without touching process env — a process-global env mutation in a
+/// parallel suite is a known flake class). Duplicate pack ids refuse (a
+/// knob that names a pack twice contradicts itself); an empty `anchors`
+/// array is kept as written — the gate renders it as the no-bindings
+/// refusal, fail-closed.
+pub fn parse_required_anchors(raw: &str) -> Result<Vec<(String, Vec<String>)>, String> {
+    let value: serde_json::Value =
+        serde_json::from_str(raw).map_err(|e| format!("not valid JSON: {e}"))?;
+    let arr = value
+        .as_array()
+        .ok_or("the knob is a JSON array of {\"pack\":…,\"anchors\":[…]} objects")?;
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for item in arr {
+        let obj = item
+            .as_object()
+            .ok_or("each binding is an object with a pack id and an anchors array")?;
+        let pack = obj
+            .get("pack")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.trim().is_empty())
+            .ok_or("each binding carries a non-empty string pack id")?;
+        let anchors = obj
+            .get("anchors")
+            .and_then(|v| v.as_array())
+            .ok_or("each binding carries an anchors array")?;
+        let mut ids = Vec::new();
+        for a in anchors {
+            let s = a
+                .as_str()
+                .filter(|s| !s.trim().is_empty())
+                .ok_or("each anchor id is a non-empty string")?;
+            ids.push(s.to_string());
+        }
+        if !seen.insert(pack.to_string()) {
+            return Err(format!(
+                "pack '{pack}' is bound twice — the knob contradicts itself"
+            ));
+        }
+        out.push((pack.to_string(), ids));
+    }
+    Ok(out)
+}
+
 /// whether the opt-in `/suggest` routes are live. Defaults
 /// to `true` (the feature ships on); set `BRAIN_SUGGEST_ENABLED=false` to
 /// disable the surface entirely — the routes then return `501 Not Implemented`.
