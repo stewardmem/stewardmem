@@ -865,6 +865,125 @@ fn the_unpacked_deployment_is_unchanged() {
     );
 }
 
+// ── the knob's broken state is NAMED on the command line ─────────────────
+
+/// A knob that is SET BUT BROKEN must not read as UNSET. Both are refused
+/// (fail-closed either way), but they are different facts and the operator
+/// is owed the true one. config's reader WARNs through `tracing`; the brain
+/// CLI installs no tracing subscriber, so that warning reached nobody, and a
+/// mistyped knob printed "unset or does not name it". Found while fact-
+/// checking a blog post's sentence ("with a warning") against the real
+/// binary: stderr was EMPTY. Now the gate parses with config's own pure
+/// parser and names the parse error on stderr. Driven through the REAL
+/// binary: the broken knob warns AND refuses; the unset knob refuses with NO
+/// warning (unset is not broken); the valid knob activates silently.
+/// THE DRILL (run and reverted): restore the silent `policy_pack_required_
+/// anchors()` read and this pin reds with `a broken knob must SAY so: ""`.
+#[test]
+fn a_broken_knob_is_refused_and_says_so_on_stderr() {
+    let corpus = mini_corpus();
+    let scratch = tempfile::tempdir().expect("tempdir");
+    let db_path = scratch.path().join("scratch.db");
+    let brain = env!("CARGO_BIN_EXE_brain");
+    let gate = |knob: Option<&str>| {
+        let mut cmd = Command::new(brain);
+        // The leash is the ENVIRONMENT: BRAIN_DB_PATH pinned to the scratch.
+        cmd.env("BRAIN_DB_PATH", &db_path);
+        cmd.env_remove("BRAIN_POLICY_PACK_REQUIRED_ANCHORS");
+        if let Some(k) = knob {
+            cmd.env("BRAIN_POLICY_PACK_REQUIRED_ANCHORS", k);
+        }
+        cmd.args([
+            "policy-anchor",
+            "gate",
+            "--pack",
+            "gov.test",
+            "--db",
+            db_path.to_str().expect("utf8"),
+        ])
+        .output()
+        .expect("run gate")
+    };
+
+    // Seed once so the registry holds something to gate against.
+    let seed = {
+        let mut cmd = Command::new(brain);
+        cmd.env("BRAIN_DB_PATH", &db_path);
+        cmd.args([
+            "policy-anchor",
+            "seed",
+            "--manifest",
+            corpus.manifest_path.to_str().expect("utf8"),
+            "--corpus-root",
+            corpus.dir.to_str().expect("utf8"),
+            "--db",
+            db_path.to_str().expect("utf8"),
+        ])
+        .output()
+        .expect("run seed")
+    };
+    assert_eq!(
+        seed.status.code(),
+        Some(0),
+        "seed exits 0: {}",
+        String::from_utf8_lossy(&seed.stdout)
+    );
+
+    // A VALID binding followed by garbage: half of it would have parsed.
+    let broken = gate(Some(
+        r#"[{"pack":"gov.test","anchors":["PH-TEST-HELD"]}] oops"#,
+    ));
+    let stderr = String::from_utf8_lossy(&broken.stderr);
+    let stdout = String::from_utf8_lossy(&broken.stdout);
+    assert_eq!(
+        broken.status.code(),
+        Some(2),
+        "a broken knob is refused, never half-applied: {stdout}"
+    );
+    assert!(
+        stderr.contains("BRAIN_POLICY_PACK_REQUIRED_ANCHORS is set but not parsable"),
+        "a broken knob must SAY so on stderr (the CLI has no tracing subscriber, \
+         so a tracing::warn reaches nobody here): {stderr:?}"
+    );
+    assert!(
+        stderr.contains("trailing characters"),
+        "the warning names the parse error: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("IGNORED in full"),
+        "the warning states the whole knob was dropped: {stderr:?}"
+    );
+    // The warning is ONE readable line, not a literal newline plus source
+    // indentation printed mid-sentence.
+    assert_eq!(
+        stderr.trim_end().lines().count(),
+        1,
+        "the warning prints on one line: {stderr:?}"
+    );
+
+    // UNSET is a different fact: refused, with nothing on stderr.
+    let unset = gate(None);
+    let unset_err = String::from_utf8_lossy(&unset.stderr);
+    assert_eq!(
+        unset.status.code(),
+        Some(2),
+        "an unset knob is still the refusal"
+    );
+    assert!(
+        unset_err.trim().is_empty(),
+        "unset is not broken: nothing is written to stderr, got {unset_err:?}"
+    );
+
+    // VALID: activates, silently.
+    let valid = gate(Some(r#"[{"pack":"gov.test","anchors":["PH-TEST-HELD"]}]"#));
+    let valid_err = String::from_utf8_lossy(&valid.stderr);
+    assert_eq!(valid.status.code(), Some(0), "a valid knob activates");
+    assert!(
+        valid_err.trim().is_empty(),
+        "a valid knob warns about nothing, got {valid_err:?}"
+    );
+}
+
 // ── the knob's pure parser ──────────────────────────────────────────────
 
 /// The knob parser's arms, driven pure (no process env): unset is handled

@@ -2101,8 +2101,27 @@ fn cmd_policy_anchor_gate(args: &[String]) -> Result<(), String> {
     let conn = policy_open_db(&flags, false)?;
     use brain_server::service::policy_anchor as use_pa;
 
-    let knob = brain_server::config::policy_pack_required_anchors();
-    let required = knob.as_ref().and_then(|bindings| {
+    // The knob, with its broken state NAMED. config's reader WARNs through
+    // `tracing`, but the brain CLI installs no tracing subscriber, so on the
+    // command line that warning goes nowhere and a mistyped knob read as
+    // "unset". The gate is still refused either way (fail-closed), but the
+    // operator was being told the wrong reason. Parse here with config's own
+    // pure parser, never a second grammar: unset is unset; set-but-broken
+    // refuses naming the parse error.
+    let required = match std::env::var("BRAIN_POLICY_PACK_REQUIRED_ANCHORS") {
+        Err(_) => None,
+        Ok(raw) => match brain_server::config::parse_required_anchors(&raw) {
+            Ok(bindings) => Some(bindings),
+            Err(e) => {
+                eprintln!(
+                    "warning: BRAIN_POLICY_PACK_REQUIRED_ANCHORS is set but not parsable and is \
+     IGNORED in full ({e}). The knob never half-applies: fix the JSON or unset it."
+                );
+                None
+            }
+        },
+    }
+    .and_then(|bindings| {
         bindings
             .iter()
             .find(|(p, _)| p == &pack)
@@ -2130,7 +2149,7 @@ fn cmd_policy_anchor_gate(args: &[String]) -> Result<(), String> {
             );
             for fact in &verdict.verified {
                 println!(
-                    "  ✓ {:28} verified  (in force from {})  sha256:{}",
+                    "  ✓ {:28} verified  (dated {})  sha256:{}",
                     fact.anchor_id,
                     fact.in_force_from,
                     fact.sha256_hex.as_deref().unwrap_or("not verified")
@@ -2157,6 +2176,12 @@ fn db_path_of(flags: &FlagMap) -> PathBuf {
 }
 
 /// Print one live anchor row for the registry tables.
+///
+/// The date prints as `dated`, never `in force from`. The stamp is the date the
+/// issuer STATED: the effectivity date when the instrument gives one, otherwise
+/// the signing date. Both held instruments (DepEd DO 003, CHED CMO 21) take effect
+/// "fifteen days after publication" and name no calendar date for that, so the
+/// registry holds the signing date and the label must not claim more.
 fn policy_print_anchor(row: &brain_server::service::policy_anchor::AnchorRow) {
     let digest = row.sha256_hex.as_deref().unwrap_or("not verified");
     let until = row
@@ -2165,7 +2190,7 @@ fn policy_print_anchor(row: &brain_server::service::policy_anchor::AnchorRow) {
         .map(|u| format!(" · until {u}"))
         .unwrap_or_default();
     println!(
-        "  {:28} {}  [{}]  in force from {}{}  sha256:{}",
+        "  {:28} {}  [{}]  dated {}{}  sha256:{}",
         row.anchor_id,
         truncate(&row.title, 56),
         row.state.as_str(),
