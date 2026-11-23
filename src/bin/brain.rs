@@ -203,6 +203,24 @@ const SUBCOMMANDS: &[Subcommand] = &[
         usage: "brain verify-governance [--db PATH]",
     },
     Subcommand {
+        name: "policy-anchor seed",
+        json: false,
+        run: cmd_policy_anchor_seed,
+        usage: "brain policy-anchor seed --manifest PATH [--corpus-root DIR] [--db PATH]\n                 (hash-verifies every held instrument against the corpus and lands the\n                 registry; the corpus stays the master; exit 1 names every refusal)",
+    },
+    Subcommand {
+        name: "policy-anchor verify",
+        json: false,
+        run: cmd_policy_anchor_verify,
+        usage: "brain policy-anchor verify [--db PATH] [--corpus-root DIR] [--as-of DATE]\n                 (read-only; the registry speaks verified / not verified / superseded —\n                 never compliant; --as-of answers the quarter question deterministically)",
+    },
+    Subcommand {
+        name: "policy-anchor gate",
+        json: false,
+        run: cmd_policy_anchor_gate,
+        usage: "brain policy-anchor gate --pack ID [--db PATH]\n                 (exit 0 = the pack may activate; exit 2 = refused, naming every blocking\n                 anchor and its reason; the refusal is recorded and audited)",
+    },
+    Subcommand {
         name: "watch add",
         json: false,
         run: cmd_watch_add,
@@ -849,6 +867,18 @@ const VALUE_FLAGS: &[&str] = &[
     "reviewed-at",
     "expires-at",
     "revision",
+    // `brain policy-anchor seed`: the seed manifest's path.
+    "manifest",
+    // `brain policy-anchor seed|verify`: the corpus root the held texts
+    // live under (the corpus stays the master; the registry only ever
+    // points into it).
+    "corpus-root",
+    // `brain policy-anchor verify --as-of`: the deterministic quarter
+    // question (YYYY-MM-DD or YYYY-MM at month precision).
+    "as-of",
+    // `brain policy-anchor gate --pack`: the pack id the binding knob
+    // configures.
+    "pack",
     // `brain plugin install`: the detached signature's path
     // (default: beside the archive, minisign's own convention).
     "sig",
@@ -1847,6 +1877,302 @@ fn cmd_verify_governance(args: &[String]) -> Result<(), String> {
             scan.tampered
         ))
     }
+}
+
+/// The policy-anchor registry's shared opener (GOVPACK-1): register the vec
+/// extension, open the DB, run the (idempotent, additive) migration — a CLI
+/// act rides the same guarded run as the server boot and `watch_open_db`.
+/// With `create` the store may be new (a scratch store seeds from nothing);
+/// without it, a missing DB is the refusal (a gate or verify against a
+/// store that does not exist is a refusal, never an empty registry).
+fn policy_open_db(flags: &FlagMap, create: bool) -> Result<rusqlite::Connection, String> {
+    let db = flags
+        .get("db")
+        .and_then(|o| o.clone())
+        .map(PathBuf::from)
+        .unwrap_or_else(default_db_path);
+    if !create && !db.exists() {
+        return Err(format!(
+            "no DB at {db:?} — pass --db PATH or set BRAIN_DB_PATH"
+        ));
+    }
+    brain_server::register_sqlite_vec::register_sqlite_vec();
+    let mut conn = rusqlite::Connection::open(&db).map_err(|e| format!("open {db:?}: {e}"))?;
+    brain_server::migration::run_migration(&mut conn, brain_server::config::DB_MMAP_SIZE_MIB)
+        .map_err(|e| format!("migration: {e}"))?;
+    Ok(conn)
+}
+
+/// `brain policy-anchor seed --manifest PATH [--corpus-root DIR] [--db PATH]`
+/// — the policy-anchor registry's loader (GOVPACK-1, K-31). Thin binary: the
+/// logic lives in `service::policy_anchor`; this only wires, prints, and
+/// sets the exit code. A seed that could not land everything reports what
+/// landed and what refused, and exits 1 — a partial seed is never mistaken
+/// for a clean one.
+fn cmd_policy_anchor_seed(args: &[String]) -> Result<(), String> {
+    let (positionals, flags) = parse_flags(args)?;
+    if !positionals.is_empty() {
+        return usage_err(
+            "usage: brain policy-anchor seed --manifest PATH [--corpus-root DIR] [--db PATH]"
+                .to_string(),
+        );
+    }
+    let Some(manifest_path) = flags.get("manifest").cloned().flatten() else {
+        return usage_err(
+            "usage: brain policy-anchor seed --manifest PATH [--corpus-root DIR] [--db PATH] \
+             (--manifest is required)"
+                .to_string(),
+        );
+    };
+    let corpus_root = flags
+        .get("corpus-root")
+        .cloned()
+        .flatten()
+        .map(PathBuf::from);
+    let json = std::fs::read_to_string(&manifest_path)
+        .map_err(|e| format!("cannot read manifest {manifest_path:?}: {e}"))?;
+    let plan = brain_server::service::policy_anchor::verify_manifest(&json, corpus_root.as_deref())
+        .map_err(|refusal| format!("seed refused: {refusal}"))?;
+    let conn = policy_open_db(&flags, true)?;
+    let report = brain_server::service::policy_anchor::seed(&conn, &plan)?;
+
+    println!(
+        "policy-anchor registry seeded from {} ({}):",
+        manifest_path,
+        db_path_of(&flags).display()
+    );
+    let rows = brain_server::service::policy_anchor::list_live(&conn)?;
+    for row in &rows {
+        policy_print_anchor(row);
+    }
+    println!(
+        "  inserted {} · skipped {} · refused {} (state counts: {} held / {} fetch-owed)",
+        report.inserted,
+        report.skipped,
+        report.schema_refusals.len(),
+        rows.iter()
+            .filter(|r| r.state
+                == brain_server::service::policy_anchor::AnchorLifecycle::VerifiedTextHeld)
+            .count(),
+        rows.iter()
+            .filter(
+                |r| r.state == brain_server::service::policy_anchor::AnchorLifecycle::TextFetchOwed
+            )
+            .count(),
+    );
+    for r in &report.schema_refusals {
+        println!(
+            "  refused {} : {}",
+            r.anchor_id.as_deref().unwrap_or("(unnamed)"),
+            r.reason
+        );
+    }
+    if report.schema_refusals.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "seed landed {} anchor(s) and refused {} — what landed is committed and audited; \
+             fix the refused rows and re-run (the re-run skips what already landed)",
+            report.inserted,
+            report.schema_refusals.len()
+        ))
+    }
+}
+
+/// `brain policy-anchor verify [--db PATH] [--corpus-root DIR] [--as-of DATE]`
+/// — read-only. Prints the anchor table + counts; with `--as-of` it answers
+/// the quarter question deterministically instead. With held text and a
+/// corpus root it re-measures every held file's digest (the corpus-drift
+/// detector); held text WITHOUT a root is a named refusal, because verify
+/// without the corpus is not verification. The registry's entire public
+/// vocabulary is verified / not verified / superseded — never compliant.
+fn cmd_policy_anchor_verify(args: &[String]) -> Result<(), String> {
+    let (positionals, flags) = parse_flags(args)?;
+    if !positionals.is_empty() {
+        return usage_err(
+            "usage: brain policy-anchor verify [--db PATH] [--corpus-root DIR] [--as-of DATE]"
+                .to_string(),
+        );
+    }
+    let conn = policy_open_db(&flags, false)?;
+    use brain_server::service::policy_anchor as use_pa;
+
+    if let Some(as_of) = flags.get("as-of").cloned().flatten() {
+        let states = use_pa::state_as_of(&conn, &as_of)?;
+        println!(
+            "policy-anchor registry as of {as_of} — {} anchor(s) in force:",
+            states.len()
+        );
+        for s in &states {
+            let digest = s.sha256_hex.as_deref().unwrap_or("not verified");
+            println!(
+                "  {:28} {}  [{}]  sha256:{}",
+                s.anchor_id,
+                truncate(&s.title, 60),
+                s.state.as_str(),
+                digest
+            );
+        }
+        return Ok(());
+    }
+
+    let rows = use_pa::list_live(&conn)?;
+    let held = rows
+        .iter()
+        .filter(|r| r.state == use_pa::AnchorLifecycle::VerifiedTextHeld)
+        .count();
+    let owed = rows
+        .iter()
+        .filter(|r| r.state == use_pa::AnchorLifecycle::TextFetchOwed)
+        .count();
+    println!(
+        "policy-anchor registry ({}): {} live anchor(s) — {} verified-text-held, {} \
+         text-fetch-owed",
+        db_path_of(&flags).display(),
+        rows.len(),
+        held,
+        owed
+    );
+    for row in &rows {
+        policy_print_anchor(row);
+    }
+
+    if held == 0 {
+        println!("  no held text to re-measure");
+        return Ok(());
+    }
+    let Some(root) = flags
+        .get("corpus-root")
+        .cloned()
+        .flatten()
+        .map(PathBuf::from)
+    else {
+        return Err(format!(
+            "the registry holds {held} verified text(s) — pass --corpus-root to re-measure \
+             them; verify without the corpus is not verification"
+        ));
+    };
+    let report = use_pa::verify_held_text(&conn, &root)?;
+    if report.is_clean() {
+        println!(
+            "  held text: {}/{} verified against the corpus bytes",
+            report.ok, report.checked
+        );
+        Ok(())
+    } else {
+        for fault in &report.faults {
+            match (&fault.expected, &fault.actual) {
+                (Some(expected), Some(actual)) => println!(
+                    "  DRIFT {} : {} hashes to {}, the registry records {}",
+                    fault.anchor_id, fault.path, actual, expected
+                ),
+                _ => println!(
+                    "  MISSING {} : {} is absent from the corpus root",
+                    fault.anchor_id, fault.path
+                ),
+            }
+        }
+        Err(format!(
+            "{} of {} held text(s) no longer match the registry's digests — the corpus \
+             moved or the stored hash lies; re-measure and re-record before trusting the \
+             registry",
+            report.faults.len(),
+            report.checked
+        ))
+    }
+}
+
+/// `brain policy-anchor gate --pack ID [--db PATH]` — the pack gate
+/// (GOVPACK-1 A2's minimal shape). Exit 0 = the pack may activate; exit 2 =
+/// refused, naming every blocking anchor and its reason (an unset knob is
+/// itself the no-bindings refusal — fail-closed on the knob too). The
+/// decided verdict is recorded and audited by the service core.
+fn cmd_policy_anchor_gate(args: &[String]) -> Result<(), String> {
+    let (positionals, flags) = parse_flags(args)?;
+    if !positionals.is_empty() {
+        return usage_err("usage: brain policy-anchor gate --pack ID [--db PATH]".to_string());
+    }
+    let Some(pack) = flags.get("pack").cloned().flatten() else {
+        return usage_err(
+            "usage: brain policy-anchor gate --pack ID [--db PATH] (--pack is required)"
+                .to_string(),
+        );
+    };
+    let conn = policy_open_db(&flags, false)?;
+    use brain_server::service::policy_anchor as use_pa;
+
+    let knob = brain_server::config::policy_pack_required_anchors();
+    let required = knob.as_ref().and_then(|bindings| {
+        bindings
+            .iter()
+            .find(|(p, _)| p == &pack)
+            .map(|(_, anchors)| anchors.clone())
+    });
+
+    match use_pa::pack_gate(&conn, &pack, required.as_deref())? {
+        use_pa::PackGateOutcome::NoBindingsConfigured => {
+            println!(
+                "refused: no pack bindings configured for pack '{pack}' — \
+                 BRAIN_POLICY_PACK_REQUIRED_ANCHORS is unset or does not name it; no bindings \
+                 is never everything-allowed"
+            );
+            exit(2);
+        }
+        use_pa::PackGateOutcome::Decided(verdict) => {
+            println!(
+                "pack gate for '{}' — {}",
+                pack,
+                if verdict.passed {
+                    "verified: every bound anchor is held, in force, and live"
+                } else {
+                    "refused"
+                }
+            );
+            for fact in &verdict.verified {
+                println!(
+                    "  ✓ {:28} verified  (in force from {})  sha256:{}",
+                    fact.anchor_id,
+                    fact.in_force_from,
+                    fact.sha256_hex.as_deref().unwrap_or("not verified")
+                );
+            }
+            for blocker in &verdict.blockers {
+                println!("  ✗ {:28} {}", blocker.anchor_id, blocker.reason.text());
+            }
+            if !verdict.passed {
+                exit(2);
+            }
+            Ok(())
+        }
+    }
+}
+
+/// The `--db` flag's resolved path (shared with the registry verbs' echoes).
+fn db_path_of(flags: &FlagMap) -> PathBuf {
+    flags
+        .get("db")
+        .and_then(|o| o.clone())
+        .map(PathBuf::from)
+        .unwrap_or_else(default_db_path)
+}
+
+/// Print one live anchor row for the registry tables.
+fn policy_print_anchor(row: &brain_server::service::policy_anchor::AnchorRow) {
+    let digest = row.sha256_hex.as_deref().unwrap_or("not verified");
+    let until = row
+        .in_force_until
+        .as_deref()
+        .map(|u| format!(" · until {u}"))
+        .unwrap_or_default();
+    println!(
+        "  {:28} {}  [{}]  in force from {}{}  sha256:{}",
+        row.anchor_id,
+        truncate(&row.title, 56),
+        row.state.as_str(),
+        row.in_force_from,
+        until,
+        digest
+    );
 }
 
 fn cmd_check_consistency(_args: &[String]) -> Result<(), String> {
