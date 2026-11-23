@@ -353,6 +353,18 @@ pub const SCHEMA_VERSION_V1_32_34: &str = "1.32.34";
 /// table rebuild (the vec_knowledge cosine-rebuild precedent), guarded on
 /// the stored sqlite_master SQL.
 pub const SCHEMA_VERSION_V1_32_35: &str = "1.32.35";
+/// GOVPACK-1 (K-31, the policy-anchor registry): TWO guarded CREATEs —
+/// `policy_anchor` (the bi-temporal instrument registry: one row per VERSION,
+/// append-only history — a change is a NEW row via supersede and the old row's
+/// `in_force_until` is stamped, never an in-place edit; `sha256_hex` carries
+/// the hash of the ORIGINAL operative text, never a derivative) and
+/// `policy_pack_binding` (the pack→anchor binding record a gate decision was
+/// made against). Exactly ONE live row per `anchor_id` is enforced by a
+/// PARTIAL unique index over the live states, because version history shares
+/// the anchor_id by law (a superseded instrument's earlier versions stay
+/// queryable as-of their own quarters) — a table-level UNIQUE would make that
+/// history unpersistable. No column dropped, none rebuilt.
+pub const SCHEMA_VERSION_V1_32_36: &str = "1.32.36";
 
 /// v1.32.33 (IMPROVE11): the HITL decision-event ledger — ONE additive
 /// guarded CREATE (`hitl_decision_events`, append-only, one row per decided
@@ -379,7 +391,7 @@ pub const SCHEMA_VERSION_V0_9_9: &str = "0.9.9";
 /// Security posture: a source DB stamped NEWER than this is refused loudly
 /// ([`refuse_newer_schema`]) — migrating *down* would silently drop columns
 /// the newer release added, i.e. data loss dressed as a migration.
-pub const LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_35;
+pub const LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_36;
 
 /// Numeric dotted-version compare (std-only, no semver dependency).
 /// Non-numeric components are skipped (the `schema_ge` precedent in the

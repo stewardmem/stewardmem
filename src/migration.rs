@@ -3536,8 +3536,8 @@ pub fn run_migration_with_store_dim(
     }
 
     db.execute(
-        "INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1.32.35')
-         ON CONFLICT(key) DO UPDATE SET value = '1.32.35';",
+        "INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1.32.36')
+         ON CONFLICT(key) DO UPDATE SET value = '1.32.36';",
         [],
     )?;
 
@@ -3931,6 +3931,65 @@ pub fn run_migration_with_store_dim(
             )?;
         }
     }
+
+    // ── GOVPACK-1 "PolicyAnchor": the policy-anchor registry (K-31) ─────
+    // The kernel's governed registry of the AI instruments a deployment is
+    // governed by: one row per VERSION of an instrument (append-only — a
+    // change is a NEW row via supersede with the old row's in_force_until
+    // stamped; no UPDATE of history, no DELETE), with `sha256_hex` carrying
+    // the hash of the ORIGINAL operative text, never a derivative (the seed
+    // manifest's own hash law; derivative hashes are corpus receipts,
+    // provenance only). The state vocabulary is the registry's whole public
+    // voice — verified_text_held / text_fetch_owed / superseded / retired —
+    // never "compliant" (the never-guess law: the registry speaks verified /
+    // not verified / superseded, and a pack gate says advisory-only for an
+    // anchor whose text it does not hold).
+    //
+    // Exactly ONE live row per anchor_id, enforced by the PARTIAL unique
+    // index below rather than a table-level UNIQUE: version history shares
+    // the anchor_id by law (a superseded instrument's earlier versions stay
+    // queryable as-of their own quarters), so a whole-table UNIQUE would
+    // make that history unpersistable. The index is the schema's own guard —
+    // a second live row for an anchor that already has one refuses at the
+    // storage layer, no service-side check required.
+    //
+    // `policy_pack_binding` records the pack→anchor bindings a gate decision
+    // was made against — the durable, audited record (the gate act's audit
+    // row names the counts; this table carries the ids). Additive +
+    // idempotent (the guarded-CREATE shape; IF NOT EXISTS is the replay
+    // guard), no column dropped, none rebuilt. Date stamps are ISO-8601
+    // TEXT compared lexicographically; a month-precision stamp (YYYY-MM)
+    // is stored as issued and compares before any day within that month —
+    // the precision is visible in the stored value, never guessed into a
+    // day that was never stated.
+    db.execute_batch(
+        "CREATE TABLE IF NOT EXISTS policy_anchor(
+            id INTEGER PRIMARY KEY,
+            anchor_id TEXT NOT NULL,
+            issuer TEXT NOT NULL,
+            instrument_no TEXT NOT NULL,
+            series TEXT NOT NULL,
+            title TEXT NOT NULL,
+            scope_tags TEXT NOT NULL,
+            sha256_hex TEXT,
+            state TEXT NOT NULL CHECK(state IN ('verified_text_held','text_fetch_owed','superseded','retired')),
+            corpus_path TEXT,
+            official_url TEXT,
+            notes TEXT,
+            supersedes_id INTEGER REFERENCES policy_anchor(id),
+            in_force_from TEXT NOT NULL,
+            in_force_until TEXT,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+         );
+         CREATE UNIQUE INDEX IF NOT EXISTS idx_policy_anchor_one_live_per_id
+             ON policy_anchor(anchor_id)
+             WHERE state IN ('verified_text_held','text_fetch_owed');
+         CREATE TABLE IF NOT EXISTS policy_pack_binding(
+             pack_id TEXT NOT NULL,
+             anchor_row_id INTEGER NOT NULL REFERENCES policy_anchor(id),
+             PRIMARY KEY (pack_id, anchor_row_id)
+         );",
+    )?;
 
     // ── Parity check: assert vec0 absorbed all valid legacy vectors ──────
     // A silent partial backfill (e.g. skipped non-512-dim rows) would otherwise

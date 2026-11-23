@@ -183,6 +183,12 @@ const PARITY_TABLES: &[&str] = &[
     "watch_configs",
     "watch_seen",
     "watch_ticks",
+    // the policy-anchor registry (GOVPACK-1, K-31). Instrument versions +
+    // the pack bindings a gate decision was made against: a rehearsal that
+    // lost them would produce a server that has forgotten every governance
+    // instrument it is anchored to, and would say so nowhere.
+    "policy_anchor",
+    "policy_pack_binding",
 ];
 
 /// Size of the random vec0 spot-check. ponytail: 50 is a heuristic — the formal

@@ -3611,6 +3611,11 @@ Final paragraph after the rule.";
             "claim_batches",
             "claims",
             "claim_evidence",
+            // GOVPACK-1: the policy-anchor registry (K-31) — instrument
+            // versions (append-only history, one live row per anchor_id) +
+            // the pack→anchor bindings a gate decision was made against.
+            "policy_anchor",
+            "policy_pack_binding",
         ];
         let missing: Vec<String> = expected_tables
             .iter()
