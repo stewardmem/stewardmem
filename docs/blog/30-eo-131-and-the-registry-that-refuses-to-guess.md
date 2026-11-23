@@ -170,7 +170,7 @@ what it did.
   keyed fingerprint) over the full row, under a key that never lives in the
   database. Someone holding only the database cannot forge a link. The head
   pin catches truncated or extended chains. See the
-  [security policy](../SECURITY.md).
+  [security policy](../security.md).
 - **Nothing enters memory without a human decision.** Agents propose. People
   approve. The approval is bound to a hash of the exact text the person saw,
   so the content cannot change between review and approval. An optional
