@@ -53,8 +53,8 @@ $ brain policy-anchor gate --pack gov.education --db …        (knob unset)
 $ brain policy-anchor gate --pack gov.education --db …
   (knob = [{"pack":"gov.education","anchors":["PH-DEPED-DO-003-2026","PH-CHED-CMO-21-2026"]}])
   pack gate for 'gov.education' — verified: every bound anchor is held, in force, and live
-    ✓ PH-DEPED-DO-003-2026  verified (in force from 2026-02-20)
-    ✓ PH-CHED-CMO-21-2026   verified (in force from 2026-07-21)                  exit 0
+    ✓ PH-DEPED-DO-003-2026  verified (dated 2026-02-20)
+    ✓ PH-CHED-CMO-21-2026   verified (dated 2026-07-21)                            exit 0
 
 $ brain policy-anchor gate --pack gov.education --db …        (+ PH-EO-131-2026, fetch-owed)
   pack gate for 'gov.education' — refused
@@ -70,6 +70,17 @@ Binding record after the two gate acts: `gov.education` → 3 rows in
 `policy_pack_binding`; audit rows: 4 (`policy-anchor` kind — one per seed/reseed/gate
 act). The as-of receipt also proves the month-precision law: `2026-06` (PCW MC
 2026-03, issued month-precision) compares `<= 2026-06-30` and is counted in force.
+
+**NAMED ACT, the receipt's date label (2026-11-23, found by checking the blog post
+against the instruments' own text):** the first receipts printed
+`in force from 2026-02-20` / `in force from 2026-07-21`. Both held orders say
+they take effect "fifteen (15) days after its publication … and filing" and give
+NO calendar date for that (DepEd §XII.2; CHED Art X §31). The registry stores the
+signing date (the date the issuer STATED) in `in_force_from`, which is its
+documented law, but the printed label claimed a calendar effectivity the text
+does not fix. The label is now `dated`, in both print sites, with the law stated
+at the shared printer. No pin asserted the old label. The receipts above are
+re-captured from the real binary after the change.
 
 ## S5 · The pins — every drill RUN, RED observed, REVERTED from the round's own copy
 
@@ -94,6 +105,22 @@ Anti-vacuity arm (folded into pin 1): the fixture asserts
 as-of verdict — a gate that passed over an empty registry fails loudly, never smiles.
 
 ### What the drills taught (recorded, not hidden)
+
+* **An eighth pin, born from fact-checking the blog post against the binary.
+  `a_broken_knob_is_refused_and_says_so_on_stderr`.** The post said a knob
+  that cannot be parsed is "dropped whole, with a warning". Driving the
+  REAL binary to confirm it: stderr was EMPTY and exit 2. The config reader
+  WARNs through `tracing`, but the `brain` CLI installs no tracing
+  subscriber, so on the command line that warning reached nobody, and a
+  mistyped knob printed "unset or does not name it". Refused either way
+  (fail-closed held), but the operator was told the wrong reason. The gate
+  now parses with config's own pure parser (`parse_required_anchors`, never
+  a second grammar) and names the parse error on stderr, one line. The
+  three states through the REAL binary: broken → warning + exit 2; unset →
+  no warning + exit 2 (unset is not broken); valid → exit 0, silent. Drill
+  (the old silent read planted back, reverted from the round's own copy,
+  `cmp`-verified): `a broken knob must SAY so on stderr (the CLI has no
+  tracing subscriber, so a tracing::warn reaches nobody here): ""`.
 
 * **Pin 3's first form was too weak and the drill caught IT.** The planted in-place
   edit UPDATED `created_at` — and stayed green, because the first seed and the planted
