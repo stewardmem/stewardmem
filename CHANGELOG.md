@@ -74,10 +74,11 @@ the order's own text. No route, no wire shape, and no shell file moved.
 ### Engineering record
 
 **GOVPACK-1 — the policy-anchor registry (2026-11-23).** Range
-`v1.29.47..v1.29.48`, eleven commits, one per step: `6c33c074` S0 ·
+`v1.29.47..v1.29.48`, twelve commits, one per step: `6c33c074` S0 ·
 `5fb8781b` S1 · `0b663b14` S2 · `4563b1f9` S4 · `241e918a` S3 ·
 `645fbd82` S5 · `6aebc5cd` S6a · `147fc0fa` S6b · `9ae612fc` S6c ·
-`03ea25f3` blog 30 · `8f31dea3` S6a repair. Gate A1's core, A2's knob, and
+`03ea25f3` blog 30 · `8f31dea3` S6a repair · `29c0c50e` S6a repair 2.
+Gate A1's core, A2's knob, and
 A4's command-line subset of the plan of record; the wire surface, the
 quarterly export, and the tracker page are GOVPACK-2.
 
@@ -89,7 +90,8 @@ quarterly export, and the tracker page are GOVPACK-2.
   gates that bit the round at their mechanisms (the duplicate-helper guard,
   the CLI-reference pin, the schema-round re-pin ritual across twelve
   files). `8f31dea3` re-pins the two assertions that sweep missed in
-  `tests/memform_pins.rs`. Both are test and docs repairs to the round's
+  `tests/memform_pins.rs`, and `29c0c50e` simplifies the lipstyk gate's
+  match to two arms. All three are test and docs repairs to the round's
   own diff.
 - **Two named deviations from the prompt's literal text, each found by
   measuring.** (1) The DDL said `anchor_id TEXT NOT NULL UNIQUE`, which
