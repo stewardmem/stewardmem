@@ -306,6 +306,21 @@ Continuous, not date-bounded. Every row carries a canonical URL and `verified YY
 | November sweep exclusions | the count was never written down in the prior round | this section |
 | arxiv-watch | not under version control, so the R5 guard has no commit; the drill is the receipt | this section |
 
+### Pin drills — pins 1–4 and 6–8
+
+Run 2026-11-26 with `plans/research-window/scratch/drill_register.py` (11 checks, 11 passed). Each case copies the live register, applies one mutation, and asserts the checker's failure text; the untouched copy is the control.
+
+| Pin | Mutation | Expected failure |
+|---|---|---|
+| 1 | first active row's reason set to `TBD` | `empty/placeholder reason` |
+| 2 | a 2025 `adapt` row with no `exception:` | `adapt row dated 2025-01-01 with no exception:` |
+| 3 | an RRF anchor replaced with "the engine" | `verify row mechanism has no tree anchor` |
+| 4 | `verified 2026-11-26` stripped from a standards row | `no 'verified YYYY-MM-DD'` |
+| 4b | the `https://` URL stripped from a standards row | `no https:// canonical URL` |
+| 6 | spot check: adopted rows link to `plans/`, no phase table copied | 15 adopted rows, 15 name a plan; 0 phase rows |
+| 7 | one exclusion line removed | `swept ids neither registered nor excluded` |
+| 8 | the register reduced to its header | `anti-vacuity: the register has zero rows` |
+
 ### R5 failure drill — a failed sweep does not advance seen-state
 
 Run 2026-11-26 with `plans/research-window/scratch/R5-failsafe-drill.py` (9 checks, 9 passed). Three runs against the live tool:

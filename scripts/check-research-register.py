@@ -53,10 +53,12 @@ def rows_of(text, section):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--register", default=str(REGISTER),
+                    help="register to check (default: docs/research/26-research-window-register.md)")
     ap.add_argument("--sweep", help="path to a sweep report .md to reconcile")
     args = ap.parse_args()
 
-    text = REGISTER.read_text(encoding="utf-8")
+    text = pathlib.Path(args.register).read_text(encoding="utf-8")
     failures = []
     counts = {}
 
