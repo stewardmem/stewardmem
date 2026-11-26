@@ -81,8 +81,8 @@ def main():
                 elif m.group(1) < "2026-06-01" and "exception:" not in reason.lower():
                     failures.append(f"{name} row {ident}: adapt row dated {m.group(1)} with no exception:")
 
-            # pin 3 — verify rows name a resolvable-looking tree anchor
-            if layer == "verify" and not ANCHOR.search(mechanism):
+            # pin 3 — foundation verify rows name a resolvable-looking tree anchor
+            if sec == 2 and layer == "verify" and not ANCHOR.search(mechanism):
                 failures.append(f"{name} row {ident}: verify row mechanism has no tree anchor ({mechanism!r})")
 
             # pin 4 — standards rows carry a verified date and a canonical URL

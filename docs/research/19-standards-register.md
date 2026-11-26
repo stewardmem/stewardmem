@@ -17,6 +17,11 @@ Nothing in the tree would notice. There is a `reg_watch` module for the
 
 **Verification rule applied.** Every entry was checked against the issuing
 body's own publication during authoring, not recalled. **Verified 2026-10-04.**
+**Re-verified 2026-11-26:** the GDPR article table and the CRA final-report leg
+were corrected against EUR-Lex, and the AI Act entry gained the Digital Omnibus
+(Regulation (EU) 2026/1744) transitional dates. The corrections are recorded in
+[the research window register](./26-research-window-register.md) §3, naming
+old → new.
 Where a designation in this repo is imprecise, that is recorded here rather
 than silently corrected, because the imprecision is itself the finding.
 **Addendum 2026-10-12:** the agent-ecosystem section below was added in a
@@ -145,21 +150,27 @@ are detected and put to a human as proposals, never resolved autonomously.
 ### GDPR article references
 
 The personal-data law, cited per-article because an article number is a precise
-claim:
+claim. **Corrected 2026-11-26 against the EUR-Lex OJ text:** the previous table
+mixed AI Act and CRA articles into GDPR rows. The mapping below is the GDPR
+text's own.
 
 | Article | Subject as this repo uses it |
 |---|---|
-| Art 4 | AI literacy obligations |
-| Art 10 | trace a procurement reviewer looks for |
-| Art 12-13 | logging and technical documentation |
-| Art 14-16 | the reporting playbook clock: ≤14 days after the corrective measure is available (Art 14(2)(c)), one month binding for severe incidents only |
-| Art 15/17 | DSAR access and erasure, with the deletion certificate |
-| Art 19 | onward notification to recipients (opt-in HMAC webhook) |
-| Art 22 | meaningful information about the logic involved (trace replay) |
+| Art 4 | definitions (personal data, controller, processor, consent) |
+| Art 10 | criminal-conviction and offence data — the special-category processing limit |
+| Art 12 | transparent information and the response clock: action on an Arts 15–22 request without undue delay and within one month (Art 12(3)), extendable by two months |
+| Art 13 | information to be provided where personal data are collected from the subject |
+| Art 14 | information to be provided where personal data were not obtained from the subject |
+| Art 15 | right of access by the data subject (DSAR) |
+| Art 16 | right to rectification |
+| Art 17 | right to erasure ("right to be forgotten") — the deletion certificate |
+| Art 19 | notification to recipients of rectification, erasure, or restriction (opt-in HMAC webhook) |
+| Art 22 | automated individual decision-making — meaningful information about the logic involved (trace replay) |
 
-The Art 14 split is worth keeping straight because it is a common source of
-error: **14 days** binds after the corrective or mitigating measure becomes
-available, and the **one-month** deadline applies only to severe incidents.
+The GDPR has **no 14-day clock**. The 14-day leg this table previously carried
+belongs to the CRA's incident-reporting sequence (and even there the final report
+is one month, not 14 days — see below). AI literacy is **AI Act Art 4**, and
+logging/record-keeping is **AI Act Art 12**; both were previously misfiled here.
 - <https://eur-lex.europa.eu/eli/reg/2016/679/oj>
 
 ## AI-specific regulation
@@ -180,6 +191,14 @@ carries a €15M or 3%-of-worldwide-turnover ceiling.
 The Art 50(2) marking is implemented as an AI-generation provenance mark
 (Ed25519 over a claim-bound wrapper) and is the one deadline in this register
 that has already moved from WATCH to DELIVERABLE form in `src/reg_watch.rs`.
+
+**Digital Omnibus (Regulation (EU) 2026/1744), verified 2026-11-26.** The
+general Art 50 transparency duties still apply from 2 August 2026. Systems
+already placed on the market before that date have until **2 December 2026** to
+comply with the Art 50(2) machine-readable marking. High-risk obligations move
+to **2 December 2027** (Annex III) and **2 August 2028** (Annex I). The
+transitional dates are read from the amending regulation's own text on EUR-Lex.
+- <https://eur-lex.europa.eu/eli/reg/2026/1744/oj>
 
 **Jurisdiction note.** This is an EU instrument. Where the repo's earlier notes
 referenced an AI Act citation needing fallback, the OJ-confirmed text removed
@@ -205,11 +224,12 @@ The CRA for products with digital elements. Published 20 November 2024, in force
 
 The reporting duty is a two-leg clock, and the legs are frequently confused:
 an **early warning within 24 hours** of becoming aware, then notification
-within 72 hours, then a final report within 14 days. The repo's runbook is
-split by trigger for exactly this reason, with CSIRT framing on a
-single-platform establishment. Reporting runs through **ENISA**'s single
-platform, with the national CSIRT or coordinator CSIRT as the receiving
-authority.
+within 72 hours, then a **final report within one month after the incident
+notification** (Art 14(3)(c); corrected 2026-11-26 — this entry previously said
+14 days). The repo's runbook is split by trigger for exactly this reason, with
+CSIRT framing on a single-platform establishment. Reporting runs through
+**ENISA**'s single platform, with the national CSIRT or coordinator CSIRT as the
+receiving authority.
 - <https://eur-lex.europa.eu/eli/reg/2024/2847/oj>
 - <https://digital-strategy.ec.europa.eu/en/policies/cyber-resilience-act>
 
