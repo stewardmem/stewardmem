@@ -38,7 +38,7 @@ def rows_of(text, section):
         if line.startswith("## "):
             current = None
             continue
-        if current != section or not line.startswith("|"):
+        if current != str(section) or not line.startswith("|"):
             continue
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
         if not cells or set("".join(cells)) <= set("-: "):
