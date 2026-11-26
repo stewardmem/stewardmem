@@ -23,7 +23,7 @@ import sys
 REGISTER = pathlib.Path(__file__).resolve().parent.parent / "docs" / "research" / "26-research-window-register.md"
 ID = re.compile(r"\b\d{4}\.\d{4,5}\b")
 ISO_DATE = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
-ANCHOR = re.compile(r"\.rs(:\d+)?\b|tests?/|\btest\b|::[a-z_]+|\b[a-z_]+\.rs\b")
+ANCHOR = re.compile(r"\.rs(:\d+)?\b|tests?/|\btest\b|::[a-z_]+|\b[a-z_]+\.rs\b|\bgap:")
 SECTION = re.compile(r"^## (\d) · ")
 
 

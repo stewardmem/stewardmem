@@ -169,6 +169,20 @@ Reference implementations, benchmarks, and standards that are older than the ada
 
 | id | title | date | layer | status | mechanism | claim | decision | reason |
 |---|---|---|---|---|---|---|---|---|
+| RRF-2009 | RRF (Cormack, Clarke & Büttcher, 2009) | 2009 (SIGIR) | verify | triaged | `src/search/mod.rs:31` RRF_K=60; `src/search/mod.rs:1088` rrf_fuse | hybrid fusion | cite | checked 2026-11-26: RRF_K=60 and rrf_fuse are in the tree; the 2009 paper is the reference, not re-adopted. |
+| BM25-2009 | BM25 (Robertson & Zaragoza, 2009) | 2009 (FnT IR) | verify | triaged | `src/search/mod.rs:1838` bm25(knowledge_fts) | lexical leg | cite | checked 2026-11-26: FTS5 bm25 ranking is the lexical leg; no separate BM25 implementation. |
+| PQ-2011 | Product Quantization (Jégou et al., 2011) | 2011 (TPAMI) | verify | triaged | `src/migration.rs:552` vec_quantize_int8 + vec_quantize_binary | vector storage | cite | checked 2026-11-26: int8+binary scalar quantization in the PQ family, not PQ itself; the docs say so. |
+| RAG-2020 | RAG (Lewis et al., 2020) | 2020 (NeurIPS) | verify | triaged | `src/chunker.rs:75` chunk_markdown | chunk-then-retrieve | cite | checked 2026-11-26: heading-aware splitter exists; RAG is framing, retrieval stays deterministic. |
+| 2310.08560 | MemGPT (Packer et al., 2023) | 2023-10-12 | verify | triaged | `src/service/suggest.rs:67` record_feedback + the suggest surface | opt-in anticipation | cite | checked 2026-11-26: anticipation is reviewable and nothing is silently injected; the paging metaphor is not implemented. |
+| 2304.03442 | Generative Agents (Park et al., 2023) | 2023-04-07 | verify | triaged | `src/handlers/ump_ops.rs:45` retrieval_signals | recall scoring | cite | checked 2026-11-26: similarity, recency, salience, scope, and provenance are explicit signals. |
+| 2402.17753 | LoCoMo (Maharana et al., 2024) | 2024-02-27 | verify | triaged | gap: no LoCoMo harness in tree; plan item in `docs/research/13-benchmark-landscape-2026.md` | memory benchmark | build | checked 2026-11-26: the benchmark shape is cited, but no harness runs it; the public harness is the plan item. |
+| 2410.10813 | LongMemEval (Wu et al., 2024) | 2024-10-14 | verify | triaged | gap: no harness in tree; `BENCHMARKS.md:637` explicitly disclaims parity | memory benchmark | build | checked 2026-11-26: named in doc 13 and explicitly not a parity claim; the harness is the plan item. |
+| mem0-product | Mem0 (product) | n/a (product) | verify | triaged | `src/service/suggest.rs:67` record_feedback | UMP feedback | cite | checked 2026-11-26: the memory_id/feedback shape is the UMP feedback surface; a product, not a paper. |
+| letta-product | Letta (product; formerly MemGPT) | n/a (product) | verify | parked | gap: no self-editing memory in tree; not a shipped claim | agent self-editing | park | checked 2026-11-26: nothing implements agent self-editing; no claim depends on it, so parked, not built. |
+| 2501.13956 | Graphiti / Zep (2025) | 2025-01-20 | verify | triaged | `src/graph_supersede.rs:10` valid_at/invalid_at/superseded_at | bi-temporal KB | cite | checked 2026-11-26: the bi-temporal triple and the at-most-one-current invariant are in the tree. |
+| 2502.14802 | HippoRAG 2 (2025) | 2025-02-20 | verify | triaged | `src/search/graph_ppr.rs:199` personalized_pagerank | graph retrieval | cite | checked 2026-11-26: PPR over the graph is the graph leg; the reference is HippoRAG-2-style, not a fork. |
+| NIST-fatigue-2016 | Security fatigue (Stanton et al., NIST, 2016) | 2016 (NIST) | verify | triaged | `src/handlers/gate.rs:314` proposal TTL; `src/handlers/gate.rs:1213` quorum_gate | review queue | cite | checked 2026-11-26: TTL and quorum bound approval load; the fatigue model itself is a design input, not measured here. |
+| Nouwens-2020 | Consent fatigue (Nouwens et al., 2020) | 2020 (USENIX) | verify | triaged | `src/handlers/gate.rs:1544` outreach_consent branch | consent registry | cite | checked 2026-11-26: the consent registry and the outreach_consent gate branch are in the tree. |
 
 ## 3 · Standards / regulation
 
