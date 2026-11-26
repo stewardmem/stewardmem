@@ -30,6 +30,7 @@ cites, the **deterministic** way brain-server implements it, and the **ceiling**
 - [The Agent-Memory Research Sweep, November 2026](./23-agent-memory-research-nov-2026-sweep.md), the subfield crystallizes: one attack shipped its counter in three days, the counter-wave answered, five harness fixtures inherited
 - [The Local-Inference Science Round, November 2026](./24-local-inference-science-nov-2026.md), quantized KV, speculative decoding on hybrids, reasoning budgets, and the split that made thinking a channel
 - [DISCERN and the two seams](./25-discern-two-seams.md), the field's independent arrival at preserve-at-write/resolve-at-read — the diff against shipped behavior, both directions, and the four mechanisms worth adopting
+- [The Research Window Register](./26-research-window-register.md), one row per paper and standard: which layer, what we decided, why, and when it was last verified
 
 Every mechanism is a deterministic implementation of *specific* published
 techniques over a local store, no LLM in the retrieval loop, no data egress.

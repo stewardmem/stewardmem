@@ -6,7 +6,9 @@ compliance documents, gathered into one place with a summary, a canonical
 link, and the verification date. This is the register that
 [the cited-work bibliography](./18-cited-work.md) deliberately excluded:
 that note covers **papers**, this covers **standards and law**, and the two
-belong together only in an index.
+belong together only in an index. Designations and dates live here; the decision
+and the reason for each source live in
+[26 · The Research Window Register](./26-research-window-register.md).
 
 **Why this note exists.** Compliance documents carry precise designations with
 no mechanism to check them. A standard number, an article number, and a

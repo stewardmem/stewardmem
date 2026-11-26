@@ -17,6 +17,8 @@ standard, or a guideline rather than a peer-reviewed paper, it says so. Two
 discrepancies surfaced during that check and are corrected in place; both are
 noted below rather than quietly amended.
 
+**Decisions live elsewhere.** This note says *what is cited*. [26 · The Research Window Register](./26-research-window-register.md) says *what we decided about it, and why*. A source listed here with no register row is a gap, not an endorsement.
+
 ## Retrieval and fusion
 
 ### Reciprocal Rank Fusion
