@@ -44,7 +44,43 @@ Every row carries the nine columns policy §6 lists (the prompt calls it "eight-
 
 ## Cadence
 
-The four commands and the failure rule are recorded in §Cadence (R5). Until then, the policy's §7 is authoritative.
+Four commands, one rule. Run them from `/Users/mark/Sites/arxiv-watch` unless the
+path says otherwise; the register is the record, the commands are how it stays
+true. A command that exits non-zero produces no register change.
+
+**Daily** — the standing digest, the only scheduled run that advances the cursor:
+
+```sh
+python3 arxiv_watch.py --days 5 --mark-seen
+```
+
+**Monthly** — the active-window sweep this register was backfilled from. No
+`--mark-seen`: the monthly run re-reads the window so a paper the daily digest
+missed stays visible.
+
+```sh
+python3 arxiv_watch.py --days 180 --max-per-lane 25 --md /tmp/sweep-180d.md --rss /tmp/sweep-180d.xml
+```
+
+**Quarterly** — the foundation floor, one query per age band, re-verification
+only (`--query` prints and exits; it never touches seen-state):
+
+```sh
+python3 arxiv_watch.py --query 'all:"agent memory" AND submittedDate:[202301010000 TO 202512312359]' --max-results 25
+python3 arxiv_watch.py --query 'all:"information retrieval" AND submittedDate:[200901010000 TO 202012312359]' --max-results 25
+python3 arxiv_watch.py --query 'all:"security fatigue" AND submittedDate:[201601010000 TO 202012312359]' --max-results 25
+```
+
+**Annual** — the standards lane, from the `research-watch` registry, never arXiv:
+
+```sh
+research_sweep(categories=["standards", "regulatory"], days=365)
+```
+
+**The failure rule.** `--mark-seen` is never passed by a scheduled run that did
+not exit 0. The tool enforces it: any lane failure raises, `main` exits 2, and
+neither the digest nor `state.json` is written. A `--mark-seen` run over an empty
+sweep is refused for the same reason. The drill and its receipt are in §Evidence.
 
 ---
 
@@ -226,6 +262,18 @@ Continuous, not date-bounded. Every row carries a canonical URL and `verified YY
 ## Evidence
 
 The sweep command and date, the raw counts, the reconciliation arithmetic, the exclusion list with reasons, and the foundation gaps. Written in R7.
+
+### R5 failure drill — a failed sweep does not advance seen-state
+
+Run 2026-11-26 with `plans/research-window/scratch/R5-failsafe-drill.py` (9 checks, 9 passed). Three runs against the live tool:
+
+| Run | Invocation | Result |
+|---|---|---|
+| A | forced lane failure (all eight `fetch` calls raise) + `--mark-seen` | exit 2, `state.json` byte-identical, no digest written |
+| B | good sweep, no `--mark-seen` | exit 0, `state.json` byte-identical, digest written |
+| C | good sweep + `--mark-seen`, throwaway `HERE` seeded with `{"seen": {}}` | exit 0, seen 0 → 48, real `state.json` untouched |
+
+Run A is the pin: the previous code caught a lane exception, printed to stderr, and returned 0, so a scheduled `--mark-seen` would have advanced the cursor over a partial sweep. The guard makes any lane failure raise `SweepError`, `main` catch it, and return 2 before writing either output.
 
 ### R2 exclusion list — swept but not a register row
 
