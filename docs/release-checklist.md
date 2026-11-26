@@ -13,7 +13,7 @@ steps 2 (no OpenAPI change).
 | 3 | `CHANGELOG.md` | `## [x.y.z]` entry describing the release, honest ceilings included. | `grep "^## \[x.y.z\]" CHANGELOG.md` |
 | 4 | `docs/roadmap.md` | the current-status paragraph names the release. (The root-level `ROADMAP.md` was never git-tracked and moved to the private plans archive on 2026-10-04 — the in-repo roadmap is `docs/roadmap.md`.) | `grep -n "the current server line" docs/roadmap.md` |
 | 5 | `README` badges | version + test-count badges regenerated from the real build. | `scripts/badges.sh` |
-| 6 | `AGENTS.md` | header version note + the Agent entry recording the session. | read the entry you added |
+| 6 | `AGENTS.md` (+ `docs/AGENTS_HISTORY.md`) | the current-release line and any new open commitments in `AGENTS.md`; the round record itself is appended to `docs/AGENTS_HISTORY.md` (append-only — the log does not grow `AGENTS.md`). | read the entry you added |
 
 ## The gates that must stay green
 
