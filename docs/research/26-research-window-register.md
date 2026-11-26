@@ -261,7 +261,50 @@ Continuous, not date-bounded. Every row carries a canonical URL and `verified YY
 
 ## Evidence
 
-The sweep command and date, the raw counts, the reconciliation arithmetic, the exclusion list with reasons, and the foundation gaps. Written in R7.
+### R7 reconciliation — measured 2026-11-26
+
+**The sweep.** `python3 arxiv_watch.py --days 180 --max-per-lane 25 --md plans/research-window/scratch/sweep-180d-2026-11-26.md --rss plans/research-window/scratch/sweep-180d-2026-11-26.xml`, run 2026-11-26 from `/Users/mark/Sites/arxiv-watch`. Eight lanes, 25 per lane, no `--mark-seen`. Output: **169 papers in window (70 new)**. The seen cursor held **350 IDs** (199 dated 2026-10, 151 dated 2026-11) before the run.
+
+| Quantity | Count | Where it comes from |
+|---|---|---|
+| swept | 169 | the sweep's own "169 papers in window" line |
+| decided before this round | 19 | 3 adopted + 16 prior-note rows the sweep returned |
+| register rows from the sweep | 96 | 169 − 73 exclusions |
+| exclusions | 73 | §R2 exclusion list, one line each |
+| adopted rows the per-lane cap did not return | 12 | 15 adopted − 3 the sweep returned |
+| active rows | 108 | 96 + 12 |
+| foundation rows | 14 | §2 |
+| standards rows | 32 | §3 |
+| total rows | 154 | 108 + 14 + 32 |
+
+**The arithmetic.** `169 swept = 96 register rows ∩ sweep + 73 exclusions`. The 12 adopted-but-not-swept rows are extra register IDs; they do not enter the equation. `scripts/check-research-register.py --sweep` asserts both directions: `swept − registered − excluded = ∅` and `excluded − (swept − registered) = ∅`, over a non-empty register and a non-empty report.
+
+**Decisions by outcome.** `build` 16, `cite` 126, `park` 1, `refuse` 7, `test` 4. A `build` is a plan item, not shipped code; `test` is an eval or probe; `cite` is a reference with no integration; `refuse` is a deliberate non-integration; `park` waits on a named trigger.
+
+**Not recoverable.** The November sweep's exclusion count is not in the tree: doc 23 says "sixty-plus relevant papers", names 22 IDs, and never states the exclusion number. It is recorded as a gap, not guessed. This round's 73 are the first exclusion list written down with a reason per line.
+
+### Refused this round — one reason each
+
+| id | paper | reason |
+|---|---|---|
+| 2611.31656 | BRAG: Bayesian Retrieval Augmented Generation | A learned generative retrieval model; the RRF leg is the shipped law and a learned ranker is refused by name. |
+| 2611.25583 | DriftGuard: Online Memory-Drift Detection via Causal Attribution for LLM Agents | Plan proof-hardening §8: drift_census is a census-breach recorder, not drift attribution; scope exclusion. |
+| 2611.23588 | ARISE: Practical Self-Evolving Memory for Accurate and Cost-Efficient Enterprise Agents | Evolves memory from its own failures; the store keeps the human in the policy loop, so the autonomous loop is refused. |
+| 2611.22245 | Multi-Agent Memory Inconsistency: Where Factual Conflicts Disappear in LLM Agents | Plan proof-hardening §8: matters only if delegations ship; parked behind that trigger. |
+| 2611.22102 | EvoDisco: Strategy Discovery for Evolving Agent Memory | Evolutionary discovery of memory operators; a learned policy in the write or recall path is refused by the zero-token law. |
+| 2611.21478 | Jetriever: Shifting Agent Memory Retrieval from Similarity to Utility | An LLM-derived System One scores every memory; a learned ranker in recall is refused, the utility question stays in eval. |
+| 2611.20759 | Instant Weight-Space Consolidation for Long-Term Memory in LLMs | Consolidates into model weights; the model is not the store, refused as out-of-architecture. |
+
+### Foundation gaps — named, not silently fixed
+
+| item | gap | recorded as |
+|---|---|---|
+| LoCoMo | no harness in the tree; doc 13 names it and `BENCHMARKS.md:637` disclaims parity | §2, `build` |
+| LongMemEval | no harness in the tree; same disclaimer | §2, `build` |
+| Letta (self-editing memory) | no implementation, and no shipped claim depends on it | §2, `park` |
+| Product quantization | the tree stores int8 + binary scalar quantization, not PQ codebooks; doc 08 says so in its own words | §2, `cite` |
+| November sweep exclusions | the count was never written down in the prior round | this section |
+| arxiv-watch | not under version control, so the R5 guard has no commit; the drill is the receipt | this section |
 
 ### R5 failure drill — a failed sweep does not advance seen-state
 
