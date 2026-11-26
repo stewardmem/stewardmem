@@ -13,6 +13,31 @@ measured. Those records are kept as they were written (this file is
 append-only), and their heading says `Unreleased` because that is what they
 were when the round landed — not because the work is still unreleased.
 
+## [Unreleased] — 2026-11-26 — the research window register: every cited paper and standard gets a decision, a reason, and a verification date
+
+The research policy now has a working register instead of a rule that points at
+a promise. `docs/research/26-research-window-register.md` holds one row per
+source in three sections: the active window backfilled from a 180-day sweep
+(169 papers, 108 register rows, 73 exclusions with reasons), the foundation
+floor re-checked against the tree (14 rows, each naming a `path:line` anchor or
+an explicit gap), and the standards register audited against the issuing bodies
+(32 rows, two corrections: the GDPR article table and the CRA final-report
+clock). `scripts/check-research-register.py` makes the mechanical pins fail
+loudly. No route, no wire shape, and no shell file moved.
+
+### Release notes
+- **The register:** `docs/research/26-research-window-register.md`, linked from
+  the research index, the cited-work note, and the standards register.
+- **Two corrections in `19-standards-register.md`:** the GDPR article table no
+  longer carries AI Act and CRA articles, and the CRA final report is one month
+  after notification, not 14 days.
+- **The fail-safe:** the arXiv sweep now exits non-zero on any lane failure and
+  writes neither the digest nor the seen cursor, so `--mark-seen` cannot advance
+  over a partial sweep. The drill is `plans/research-window/scratch/R5-failsafe-drill.py`
+  in `brain-steward-ip`.
+- **The check:** `python3 scripts/check-research-register.py --sweep <report.md>`
+  reconciles a sweep against the register and the exclusion list.
+
 ## [1.29.48] — 2026-11-23 — the policy-anchor registry: governance instruments are anchored by hash, and a pack refuses to activate over a policy text it cannot verify
 
 This release gives the kernel a governed registry of the AI policy
