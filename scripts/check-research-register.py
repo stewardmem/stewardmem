@@ -14,6 +14,7 @@ receipts live in the register's Evidence section.
 
 Run from anywhere: python3 scripts/check-research-register.py
 Add --sweep <report.md> to reconcile a sweep report against the register.
+The default run also asserts every arXiv id in 18-cited-work.md has a row.
 """
 import argparse
 import pathlib
@@ -21,6 +22,7 @@ import re
 import sys
 
 REGISTER = pathlib.Path(__file__).resolve().parent.parent / "docs" / "research" / "26-research-window-register.md"
+CITED = pathlib.Path(__file__).resolve().parent.parent / "docs" / "research" / "18-cited-work.md"
 ID = re.compile(r"\b\d{4}\.\d{4,5}\b")
 ISO_DATE = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
 ANCHOR = re.compile(r"\.rs(:\d+)?\b|tests?/|\btest\b|::[a-z_]+|\b[a-z_]+\.rs\b|\bgap:")
@@ -56,6 +58,8 @@ def main():
     ap.add_argument("--register", default=str(REGISTER),
                     help="register to check (default: docs/research/26-research-window-register.md)")
     ap.add_argument("--sweep", help="path to a sweep report .md to reconcile")
+    ap.add_argument("--cited", default=str(CITED),
+                    help="cited-work note whose arXiv ids must all have a row (default: docs/research/18-cited-work.md; pass '' to skip)")
     args = ap.parse_args()
 
     text = pathlib.Path(args.register).read_text(encoding="utf-8")
@@ -98,6 +102,19 @@ def main():
     # pin 8 — anti-vacuity
     if sum(counts.values()) == 0:
         failures.append("anti-vacuity: the register has zero rows")
+
+    # acceptance — every arXiv id the cited-work note cites has a row here
+    if args.cited and pathlib.Path(args.cited).is_file():
+        cited = set(ID.findall(pathlib.Path(args.cited).read_text(encoding="utf-8")))
+        registered_ids = set()
+        for sec in (1, 2, 3):
+            for _line, cells, _bad in rows_of(text, sec):
+                if cells:
+                    registered_ids |= set(ID.findall(cells[0]))
+        missing = sorted(cited - registered_ids)
+        if missing:
+            failures.append(f"cited-work coverage: {len(missing)} cited ids have no row: {missing}")
+        counts["cited"] = len(cited)
 
     # pin 7 — reconciliation
     if args.sweep:

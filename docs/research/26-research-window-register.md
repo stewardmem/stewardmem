@@ -208,7 +208,7 @@ Reference implementations, benchmarks, and standards that are older than the ada
 | RRF-2009 | RRF (Cormack, Clarke & Büttcher, 2009) | 2009 (SIGIR) | verify | triaged | `src/search/mod.rs:31` RRF_K=60; `src/search/mod.rs:1088` rrf_fuse | hybrid fusion | cite | checked 2026-11-26: RRF_K=60 and rrf_fuse are in the tree; the 2009 paper is the reference, not re-adopted. |
 | BM25-2009 | BM25 (Robertson & Zaragoza, 2009) | 2009 (FnT IR) | verify | triaged | `src/search/mod.rs:1838` bm25(knowledge_fts) | lexical leg | cite | checked 2026-11-26: FTS5 bm25 ranking is the lexical leg; no separate BM25 implementation. |
 | PQ-2011 | Product Quantization (Jégou et al., 2011) | 2011 (TPAMI) | verify | triaged | `src/migration.rs:552` vec_quantize_int8 + vec_quantize_binary | vector storage | cite | checked 2026-11-26: int8+binary scalar quantization in the PQ family, not PQ itself; the docs say so. |
-| RAG-2020 | RAG (Lewis et al., 2020) | 2020 (NeurIPS) | verify | triaged | `src/chunker.rs:75` chunk_markdown | chunk-then-retrieve | cite | checked 2026-11-26: heading-aware splitter exists; RAG is framing, retrieval stays deterministic. |
+| 2005.11401 | RAG (Lewis et al., 2020) | 2020-05-22 | verify | triaged | `src/chunker.rs:75` chunk_markdown | chunk-then-retrieve | cite | checked 2026-11-26: heading-aware splitter exists; RAG is framing, retrieval stays deterministic. |
 | 2310.08560 | MemGPT (Packer et al., 2023) | 2023-10-12 | verify | triaged | `src/service/suggest.rs:67` record_feedback + the suggest surface | opt-in anticipation | cite | checked 2026-11-26: anticipation is reviewable and nothing is silently injected; the paging metaphor is not implemented. |
 | 2304.03442 | Generative Agents (Park et al., 2023) | 2023-04-07 | verify | triaged | `src/handlers/ump_ops.rs:45` retrieval_signals | recall scoring | cite | checked 2026-11-26: similarity, recency, salience, scope, and provenance are explicit signals. |
 | 2402.17753 | LoCoMo (Maharana et al., 2024) | 2024-02-27 | verify | triaged | gap: no LoCoMo harness in tree; plan item in `docs/research/13-benchmark-landscape-2026.md` | memory benchmark | build | checked 2026-11-26: the benchmark shape is cited, but no harness runs it; the public harness is the plan item. |
@@ -219,6 +219,16 @@ Reference implementations, benchmarks, and standards that are older than the ada
 | 2502.14802 | HippoRAG 2 (2025) | 2025-02-20 | verify | triaged | `src/search/graph_ppr.rs:199` personalized_pagerank | graph retrieval | cite | checked 2026-11-26: PPR over the graph is the graph leg; the reference is HippoRAG-2-style, not a fork. |
 | NIST-fatigue-2016 | Security fatigue (Stanton et al., NIST, 2016) | 2016 (NIST) | verify | triaged | `src/handlers/gate.rs:314` proposal TTL; `src/handlers/gate.rs:1213` quorum_gate | review queue | cite | checked 2026-11-26: TTL and quorum bound approval load; the fatigue model itself is a design input, not measured here. |
 | Nouwens-2020 | Consent fatigue (Nouwens et al., 2020) | 2020 (USENIX) | verify | triaged | `src/handlers/gate.rs:1544` outreach_consent branch | consent registry | cite | checked 2026-11-26: the consent registry and the outreach_consent gate branch are in the tree. |
+| 1706.04599 | On Calibration of Modern Neural Networks (Guo et al., 2017) | 2017-06-14 | verify | triaged | `src/handlers/recall.rs:964` abstention_decision | calibrated abstention | cite | checked 2026-11-26: the gate is threshold-based; temperature scaling is not fitted, so the calibration reference is cited, not implemented. |
+| 2312.10997 | Retrieval-Augmented Generation for Large Language Models: A Survey (Gao et al., 2023) | 2023-12-18 | verify | triaged | `src/chunker.rs:75` chunk_markdown | RAG taxonomy | cite | checked 2026-11-26: a survey of the chunk-then-retrieve shape the chunker implements; no mechanism adopted. |
+| 2404.16130 | From Local to Global: A Graph RAG Approach to Query-Focused Summarization (Edge et al., 2024) | 2024-04-24 | verify | triaged | `src/search/graph_ppr.rs:199` personalized_pagerank | graph retrieval | cite | checked 2026-11-26: the graph leg is PPR; GraphRAG's community-summary pipeline is not implemented and is not claimed. |
+| 2507.09089 | Measuring the Impact of Early-2025 AI on Experienced Open-Source Developer Productivity (METR, 2025) | 2025-07-12 | verify | triaged | gap: no productivity measurement in the tree | honest ceilings | cite | checked 2026-11-26: counter-evidence that AI tooling can slow experts; no shipped claim depends on a speedup, and none is made. |
+| 2512.13564 | Memory in the Age of AI Agents (survey, 2025) | 2025-12-15 | verify | triaged | gap: framing only; the design space is implemented across docs 01-17 | memory taxonomy | cite | checked 2026-11-26: cited in the index as the survey that taxonomizes the deterministic design space; no mechanism to adopt. |
+| 2602.03578 | Use Graph When It Needs: Efficiently and Adaptively Integrating RAG with Graphs (2026) | 2026-02-03 | verify | triaged | `src/search/mod.rs:1617` complexity-gated graph activation | graph activation | cite | checked 2026-11-26: the code names this paper at the gate; the graph leg engages only above the complexity threshold. |
+| 2602.05665 | Graph-based Agent Memory: Taxonomy, Techniques, and Applications (2026) | 2026-02-05 | verify | triaged | gap: framing only; the graph store is `src/search/graph_ppr.rs` | graph-memory direction | cite | checked 2026-11-26: the index cites it as institutionalizing the direction; a taxonomy, no mechanism. |
+| 2603.27910 | GAAMA: Graph Augmented Associative Memory for Agents (2026) | 2026-03-29 | verify | triaged | `src/search/graph_ppr.rs:137` dampen_hubs | hub dampening | cite | checked 2026-11-26: the `w_ij · min(1, θ/deg(i))` dampening is implemented with θ = 50. |
+| 2605.01386 | MemORAI: Memory Organization and Retrieval via Adaptive Graph Intelligence (2026) | 2026-05-02 | verify | triaged | `src/search/graph_ppr.rs:64` type_base_weight | static-type weighting | cite | checked 2026-11-26: relation-type base weights are static, as the paper argues; no learned adaptation. |
+| 2606.01435 | Reliable Post-Retrieval Assembly for Agent Memory (2026) | 2026-05-31 | verify | triaged | `src/consolidate.rs:473` find_subject_conflicts | deterministic conflict resolution | cite | checked 2026-11-26: conflicts are detected and put to a human, not resolved autonomously; the posture matches, the code is independent. |
 
 ## 3 · Standards / regulation
 
@@ -273,13 +283,13 @@ Continuous, not date-bounded. Every row carries a canonical URL and `verified YY
 | exclusions | 73 | §R2 exclusion list, one line each |
 | adopted rows the per-lane cap did not return | 12 | 15 adopted − 3 the sweep returned |
 | active rows | 108 | 96 + 12 |
-| foundation rows | 14 | §2 |
+| foundation rows | 24 | §2 |
 | standards rows | 32 | §3 |
-| total rows | 154 | 108 + 14 + 32 |
+| total rows | 164 | 108 + 24 + 32 |
 
 **The arithmetic.** `169 swept = 96 register rows ∩ sweep + 73 exclusions`. The 12 adopted-but-not-swept rows are extra register IDs; they do not enter the equation. `scripts/check-research-register.py --sweep` asserts both directions: `swept − registered − excluded = ∅` and `excluded − (swept − registered) = ∅`, over a non-empty register and a non-empty report.
 
-**Decisions by outcome.** `build` 16, `cite` 126, `park` 1, `refuse` 7, `test` 4. A `build` is a plan item, not shipped code; `test` is an eval or probe; `cite` is a reference with no integration; `refuse` is a deliberate non-integration; `park` waits on a named trigger.
+**Decisions by outcome.** `build` 16, `cite` 136, `park` 1, `refuse` 7, `test` 4. A `build` is a plan item, not shipped code; `test` is an eval or probe; `cite` is a reference with no integration; `refuse` is a deliberate non-integration; `park` waits on a named trigger.
 
 **Not recoverable.** The November sweep's exclusion count is not in the tree: doc 23 says "sixty-plus relevant papers", names 22 IDs, and never states the exclusion number. It is recorded as a gap, not guessed. This round's 73 are the first exclusion list written down with a reason per line.
 
@@ -308,7 +318,7 @@ Continuous, not date-bounded. Every row carries a canonical URL and `verified YY
 
 ### Pin drills — pins 1–4 and 6–8
 
-Run 2026-11-26 with `plans/research-window/scratch/drill_register.py` (11 checks, 11 passed). Each case copies the live register, applies one mutation, and asserts the checker's failure text; the untouched copy is the control.
+Run 2026-11-26 with `plans/research-window/scratch/drill_register.py` (12 checks, 12 passed). Each case copies the live register, applies one mutation, and asserts the checker's failure text; the untouched copy is the control.
 
 | Pin | Mutation | Expected failure |
 |---|---|---|
@@ -320,6 +330,7 @@ Run 2026-11-26 with `plans/research-window/scratch/drill_register.py` (11 checks
 | 6 | spot check: adopted rows link to `plans/`, no phase table copied | 15 adopted rows, 15 name a plan; 0 phase rows |
 | 7 | one exclusion line removed | `swept ids neither registered nor excluded` |
 | 8 | the register reduced to its header | `anti-vacuity: the register has zero rows` |
+| acceptance | the `1706.04599` row removed | `cited-work coverage` |
 
 ### R5 failure drill — a failed sweep does not advance seen-state
 
