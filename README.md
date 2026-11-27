@@ -6,7 +6,7 @@ One open-source Rust binary. One SQLite file. No cloud, no account, no subscript
 
 <p align="center">
   <a href="#"><img alt="Version 1.29.49" src="https://img.shields.io/badge/version-1.29.49-blue.svg"></a>
-  <a href="#proof-not-promises"><img alt="4254 tests passed" src="https://img.shields.io/badge/tests-4254%20passed-brightgreen.svg"></a>
+  <a href="#proof-not-promises"><img alt="4255 tests passed" src="https://img.shields.io/badge/tests-4255%20passed-brightgreen.svg"></a>
   <a href="openapi.yaml"><img alt="OpenAPI 1.29.49" src="https://img.shields.io/badge/OpenAPI-1.29.49-6b4bff.svg"></a>
   <a href="sbom/brain-server-1.29.49.cdx.json"><img alt="CycloneDX 1.5 SBOM" src="https://img.shields.io/badge/SBOM-CycloneDX%201.5-013243.svg"></a>
 </p>
