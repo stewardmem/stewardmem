@@ -134,6 +134,10 @@ pub struct ParsedFile {
     pub symbols: Vec<SymbolDraft>,
     pub refs: Vec<RefDraft>,
     pub has_error: bool,
+    /// Byte ranges of TOP-LEVEL nodes that belong to no definition — the
+    /// windowed-chunk material (§2 S4). Empty when every top-level node is a
+    /// definition.
+    pub nondef_top_ranges: Vec<(usize, usize)>,
 }
 
 fn rust_visibility(node: Node, src: &str) -> Option<&'static str> {
@@ -194,6 +198,25 @@ pub fn parse(lang: FileLang, src: &str) -> Result<ParsedFile, CodeIndexError> {
     let mut symbols: Vec<SymbolDraft> = Vec::new();
     let mut def_name_nodes: Vec<(Node, usize)> = Vec::new();
     let mut stack: Vec<Scope> = Vec::new();
+
+    // Top-level stretches that belong to no definition — the windowed-chunk
+    // material (§2 S4).
+    let mut nondef_top_ranges: Vec<(usize, usize)> = Vec::new();
+    {
+        let root = tree.root_node();
+        let mut cursor = root.walk();
+        for child in root.children(&mut cursor) {
+            let kind = child.kind();
+            if defs.iter().any(|(k, _)| *k == kind) {
+                continue;
+            }
+            let text = &src[child.start_byte()..child.end_byte()];
+            if text.trim().is_empty() {
+                continue;
+            }
+            nondef_top_ranges.push((child.start_byte(), child.end_byte()));
+        }
+    }
 
     // Pass 1: definitions and the qualification stack.
     walk(tree.root_node(), &mut |node| {
@@ -327,6 +350,7 @@ pub fn parse(lang: FileLang, src: &str) -> Result<ParsedFile, CodeIndexError> {
         symbols,
         refs,
         has_error,
+        nondef_top_ranges,
     })
 }
 

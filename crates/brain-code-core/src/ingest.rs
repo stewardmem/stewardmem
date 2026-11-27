@@ -11,6 +11,7 @@ use std::path::Path;
 use rusqlite::OptionalExtension;
 use serde::Serialize;
 
+use crate::chunk;
 use crate::encoder::Encoder;
 use crate::error::CodeIndexError;
 use crate::inventory::{self, Inventory};
@@ -26,12 +27,13 @@ pub struct ExtCoverage {
     pub errors: usize,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct IngestReport {
     pub commit: String,
     pub files_indexed: usize,
     pub symbols: usize,
     pub occurrences: usize,
+    pub chunks: usize,
     pub unparsed_files: usize,
     pub files_with_errors: usize,
     pub coverage: Vec<ExtCoverage>,
@@ -128,7 +130,7 @@ pub fn ingest(
     // 5. TX2: all data, atomically — counts verified INSIDE the transaction,
     //    before the commit. Any failure rolls back to an empty store; the
     //    run row is then finalized as failed in its own transaction.
-    let result = ingest_data(index, repo_id, run_id, &inv, hook);
+    let result = ingest_data(index, repo_id, run_id, &inv, encoder, hook);
 
     match result {
         Ok(report) => {
@@ -136,14 +138,15 @@ pub fn ingest(
             tx.execute(
                 "UPDATE code_index_run SET status = 'ok', finished = \
                    strftime('%Y-%m-%dT%H:%M:%fZ','now'), files = ?2, symbols = ?3, \
-                   occurrences = ?4, chunks = 0, unparsed_files = ?5, files_with_errors = ?6, \
-                   detail = ?7
+                   occurrences = ?4, chunks = ?5, unparsed_files = ?6, files_with_errors = ?7, \
+                   detail = ?8
                  WHERE id = ?1",
                 rusqlite::params![
                     run_id,
                     report.files_indexed as i64,
                     report.symbols as i64,
                     report.occurrences as i64,
+                    report.chunks as i64,
                     report.unparsed_files as i64,
                     report.files_with_errors as i64,
                     unparsed_detail(&report.coverage),
@@ -183,6 +186,7 @@ fn ingest_data(
     repo_id: i64,
     run_id: i64,
     inv: &Inventory,
+    encoder: &dyn Encoder,
     hook: FileHook<'_>,
 ) -> Result<IngestReport, CodeIndexError> {
     parse::assert_grammar_abis_in_range()?;
@@ -190,14 +194,24 @@ fn ingest_data(
     let tx = conn.unchecked_transaction()?;
 
     // A fresh C0 ingest replaces this repo's file rows wholesale; FK cascades
-    // take symbols and occurrences with them. (S5 refines to per-file deltas
-    // via content_hash; pin 5's no-op law lands there.)
+    // take symbols and occurrences with them. The vec table has no FK to the
+    // chunk rows (R-6: chunk_id only), so its stale rows go FIRST, while the
+    // chunk ids are still findable. (S5 refines to per-file deltas via
+    // content_hash; pin 5's no-op law lands there.)
+    tx.execute(
+        "DELETE FROM code_chunk_vec WHERE chunk_id IN (SELECT c.id FROM code_chunk c \
+         JOIN code_file f ON f.id = c.file_id WHERE f.repo_id = ?1)",
+        [repo_id],
+    )?;
     tx.execute("DELETE FROM code_file WHERE repo_id = ?1", [repo_id])?;
 
     let mut tally: BTreeMap<&'static str, LangTally> = BTreeMap::new();
     let mut symbols_total = 0usize;
     let mut occurrences_total = 0usize;
+    let mut chunks_total = 0usize;
     let mut files_with_errors = 0usize;
+    // (chunk row id, chunk text) — embedded in one port pass after all files.
+    let mut to_embed: Vec<(i64, String)> = Vec::new();
 
     for (file_index, draft) in inv.files.iter().enumerate() {
         let entry = tally.entry(draft.lang.as_str()).or_default();
@@ -296,6 +310,31 @@ fn ingest_data(
             }
             symbols_total += parsed.symbols.len();
             occurrences_total += parsed.symbols.len() + parsed.refs.len();
+
+            // Chunk by symbol; windowed chunks only for top-level code with
+            // no symbol, tagged `window` (§2 S4).
+            for draft in chunk::chunks_for(&draft.content, parsed) {
+                let symbol_id = draft
+                    .symbol_index
+                    .and_then(|index| symbol_ids.get(index).copied());
+                tx.execute(
+                    "INSERT INTO code_chunk(file_id, symbol_id, kind, text, token_estimate, \
+                       content_hash)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    rusqlite::params![
+                        file_id,
+                        symbol_id,
+                        draft.kind,
+                        draft.text,
+                        draft.token_estimate as i64,
+                        draft.content_hash,
+                    ],
+                )?;
+                let chunk_id: i64 =
+                    tx.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
+                to_embed.push((chunk_id, draft.text));
+                chunks_total += 1;
+            }
         }
         if has_errors {
             entry.errors += 1;
@@ -303,6 +342,37 @@ fn ingest_data(
         }
         if let Some(hook) = hook {
             hook(file_index)?;
+        }
+    }
+
+    // Vectors through the port (P-5): one embed pass over every chunk, then
+    // the vec rows — f32 little-endian blobs, the compact exact form.
+    if !to_embed.is_empty() {
+        let texts: Vec<String> = to_embed.iter().map(|(_, text)| text.clone()).collect();
+        let vectors = encoder.embed(&texts)?;
+        if vectors.len() != to_embed.len() {
+            return Err(CodeIndexError::Refusal(format!(
+                "the encoder returned {} vectors for {} chunks — refusing the mismatch",
+                vectors.len(),
+                to_embed.len()
+            )));
+        }
+        for ((chunk_id, _), vector) in to_embed.iter().zip(vectors) {
+            if vector.len() != encoder.dim() {
+                return Err(CodeIndexError::Refusal(format!(
+                    "a vector of width {} left the port; the port declared dim {}",
+                    vector.len(),
+                    encoder.dim()
+                )));
+            }
+            let mut blob = Vec::with_capacity(vector.len() * 4);
+            for value in &vector {
+                blob.extend_from_slice(&value.to_le_bytes());
+            }
+            tx.execute(
+                "INSERT INTO code_chunk_vec(chunk_id, embedding) VALUES (?1, ?2)",
+                rusqlite::params![chunk_id, blob],
+            )?;
         }
     }
 
@@ -333,6 +403,7 @@ fn ingest_data(
         files_indexed: inv.files.len(),
         symbols: symbols_total,
         occurrences: occurrences_total,
+        chunks: chunks_total,
         unparsed_files: inv.unparsed.iter().map(|(_, n)| n).sum(),
         files_with_errors,
         coverage,
@@ -358,15 +429,24 @@ fn ingest_data(
         [repo_id],
         |r| r.get(0),
     )?;
+    let stored_chunks: i64 = tx.query_row(
+        "SELECT COUNT(*) FROM code_chunk c JOIN code_file f ON f.id = c.file_id \
+         WHERE f.repo_id = ?1",
+        [repo_id],
+        |r| r.get(0),
+    )?;
+    let stored_vecs: i64 = tx.query_row("SELECT COUNT(*) FROM code_chunk_vec", [], |r| r.get(0))?;
     if stored_files != report.files_indexed as i64
         || stored_symbols != report.symbols as i64
         || stored_occurrences != report.occurrences as i64
+        || stored_chunks != report.chunks as i64
+        || stored_vecs != report.chunks as i64
     {
         return Err(CodeIndexError::Refusal(format!(
             "run counts disagree with the tables after ingest (run {run_id}): \
              files {stored_files} vs {}, symbols {stored_symbols} vs {}, \
-             occurrences {stored_occurrences} vs {}",
-            report.files_indexed, report.symbols, report.occurrences
+             occurrences {stored_occurrences} vs {}, chunks {stored_chunks} vs {} (vec {stored_vecs})",
+            report.files_indexed, report.symbols, report.occurrences, report.chunks
         )));
     }
 
@@ -519,6 +599,38 @@ mod tests {
         assert_eq!(files, report.files_indexed as i64);
         assert_eq!(symbols, report.symbols as i64);
         assert_eq!(occurrences, report.occurrences as i64);
+        let chunks: i64 = conn
+            .query_row("SELECT COUNT(*) FROM code_chunk", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            chunks, report.chunks as i64,
+            "the run's chunk count equals the table"
+        );
+        let vecs: i64 = conn
+            .query_row("SELECT COUNT(*) FROM code_chunk_vec", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(vecs, chunks, "every chunk carries exactly one vector");
+        let windows: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM code_chunk WHERE kind = 'window'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            windows > 0,
+            "windowed chunks are tagged so they can be counted"
+        );
+        let (embed_dim, embed_profile): (i64, String) = conn
+            .query_row("SELECT embed_dim, embed_profile FROM code_repo", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .unwrap();
+        assert_eq!(
+            embed_dim, 8,
+            "the recorded dim is the PORT's width (pin 13)"
+        );
+        assert_eq!(embed_profile, "test");
         let status: String = conn
             .query_row("SELECT status FROM code_index_run", [], |r| r.get(0))
             .unwrap();
@@ -567,6 +679,17 @@ mod tests {
         assert_eq!(
             symbols, 0,
             "a generated file never yields symbol work (pin 9)"
+        );
+        let chunks: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM code_chunk c JOIN code_file f ON f.id = c.file_id \n                 WHERE f.is_generated = 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            chunks, 0,
+            "a generated file never yields a symbol chunk (pin 9)"
         );
         let _ = std::fs::remove_dir_all(&repo);
         let _ = std::fs::remove_file(&index_path);
