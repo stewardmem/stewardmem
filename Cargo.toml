@@ -173,17 +173,26 @@ fastembed = { version = "=7.1.0", optional = true, default-features = false }
 # requirement is satisfied unchanged, so the pool stack did not move).
 # 2026-11-12 SECURITY ACT (IMPROVE16 S0): RUSTSEC-2026-0459 / CVE-2026-119375 —
 # bundled SQLite < 3.54.0 can return uninitialized page-cache memory on a
-# mismatched-page-size DB+WAL pair; 0.38.2 bundled 3.53.2 (affected). Target
-# pinned by the pool: r2d2_sqlite's newest (0.36.0) requires rusqlite ^0.41, so
-# rusqlite 0.42.0 forks the graph — the coherent set is rusqlite 0.41.1 +
-# r2d2_sqlite 0.36.0 + libsqlite3-sys 0.39.1 (bundled SQLite 3.54.1). The tree's
-# whole 0.41 API-break surface is one line (migrate_merge.rs column_names
-# returns an Iterator; `.iter()` dropped). sqlite-vec stays 0.1.9 (0.1.10 is
-# alphas only); `sqlite3_auto_extension` loading persists in 0.41. Both edges
-# were already declared directly here — ZERO new dependency lines (the count
-# stays 58); the erasure law (secure_delete + wal_checkpoint + VACUUM) is
-# re-verified ON 3.54.1 by the round's pins (SA-1..SA-4).
-rusqlite = { version = "0.41.1", features = ["bundled"] }
+# mismatched-page-size DB+WAL pair; 0.38.2 bundled 3.53.2 (affected).
+# 2026-11-27 (c0-close S2): rusqlite 0.41.1 → 0.42.0 — NOT 0.43.0: the pool
+# caps it. r2d2_sqlite's newest (0.37.2, published 2026-11-22, after 0.43.0's
+# release) still requires rusqlite ^0.42, and cargo's caret on 0.x means
+# >=0.42.0 <0.43.0 — so 0.43.0 would fork the graph (measured: it pinned a
+# second rusqlite 0.42.0 into Cargo.lock). The coherent set is rusqlite
+# 0.42.0 + r2d2_sqlite 0.37.2 + libsqlite3-sys 0.40.0, single-version across
+# both workspaces (verified with the named-update + single-version check).
+# libsqlite3-sys 0.40.0 still bundles SQLite 3.54.1 (read from the registry
+# source's sqlite3.h), so the security act's engine is unchanged. The drill
+# (D1–D5) proved the 0.41.1 binary and the 0.42.0 binary read each other's
+# stores byte-identically — recall table, status, served-copy integrity
+# `ok`, and the vec0/KNN crates tests. Re-check trigger for 0.43.0: the
+# first r2d2_sqlite release whose rusqlite requirement admits ^0.43.
+# sqlite-vec stays 0.1.9 (0.1.10 is alphas only); `sqlite3_auto_extension`
+# loading persists in 0.42. Both edges were already declared directly here —
+# ZERO new dependency lines (the count stays 59); the erasure law
+# (secure_delete + wal_checkpoint + VACUUM) was re-verified on 3.54.1 by
+# IMPROVE16's pins (SA-1..SA-4) and the engine is unchanged.
+rusqlite = { version = "0.42.0", features = ["bundled"] }
 # Renamed in the dependency table (the crate name `sqlite-vec` imports as
 # `sqlite_vec`, which 1.100's unused-dependency lint counts by Rust path —
 # this workspace consumes the lib by LINKAGE (`-l sqlite_vec0` in
@@ -192,7 +201,7 @@ rusqlite = { version = "0.41.1", features = ["bundled"] }
 # the dependency honest to the lint while the link law stays byte-identical.
 sqlite_vec_rs = { package = "sqlite-vec", version = "0.1.9" }
 r2d2 = "0.8.10"
-r2d2_sqlite = "0.36.0"
+r2d2_sqlite = "0.37.2"
 
 # Async Stack - Axum 0.8.x Standard
 # `sse` feature: v1.17.3 "UMP" M2 `GET /ump/subscribe` (§3.8 change feed).

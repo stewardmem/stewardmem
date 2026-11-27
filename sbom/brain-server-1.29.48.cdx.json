@@ -2,9 +2,9 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
   "version": 1,
-  "serialNumber": "urn:uuid:d512d6a5-575e-4a16-935f-bb9f776e0447",
+  "serialNumber": "urn:uuid:5e5a242a-9a5d-4e0e-b819-217c824f1e78",
   "metadata": {
-    "timestamp": "2026-11-23T11:54:53.103992000Z",
+    "timestamp": "2026-11-27T12:50:46.589694000Z",
     "tools": [
       {
         "vendor": "CycloneDX",
@@ -198,6 +198,20 @@
     ]
   },
   "components": [
+    {
+      "type": "library",
+      "bom-ref": "path+file:///Users/mark/Sites/brain-server/crates/brain-code-core#0.1.0",
+      "name": "brain-code-core",
+      "version": "0.1.0",
+      "description": "The code-index substrate core: the per-repo SQLite index (schema, tree-sitter ingest, symbol chunks, lexical and vector tables) behind an encoder port the kernel fills. The crate loads no model and makes no network call. C0: nothing consumes the index yet.",
+      "scope": "required",
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "purl": "pkg:cargo/brain-code-core@0.1.0?download_url=file://crates/brain-code-core"
+    },
     {
       "type": "library",
       "bom-ref": "path+file:///Users/mark/Sites/brain-server/crates/brain-consensus-core#1.27.29",
@@ -5705,16 +5719,16 @@
     },
     {
       "type": "library",
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#libsqlite3-sys@0.39.1",
+      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#libsqlite3-sys@0.40.0",
       "author": "The rusqlite developers",
       "name": "libsqlite3-sys",
-      "version": "0.39.1",
+      "version": "0.40.0",
       "description": "Native bindings to the libsqlite3 library",
       "scope": "required",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "14a5f01b87b92705d07b433c06f96cbc764637d81a0bffb5734ce17cf0f9a2b3"
+          "content": "b06e69070b7e12262b0cd90832f0a7396f142a2b330181255562decf9f0c6215"
         }
       ],
       "licenses": [
@@ -5722,7 +5736,7 @@
           "expression": "MIT"
         }
       ],
-      "purl": "pkg:cargo/libsqlite3-sys@0.39.1",
+      "purl": "pkg:cargo/libsqlite3-sys@0.40.0",
       "externalReferences": [
         {
           "type": "other",
@@ -8149,16 +8163,16 @@
     },
     {
       "type": "library",
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#r2d2_sqlite@0.36.0",
+      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#r2d2_sqlite@0.37.2",
       "author": "Jovansonlee Cesar <ivanceras@gmail.com>, Hugo Woesthuis <hugo@woesthuis.eu>, Jerebtw <jeremialp41@gmail.com>",
       "name": "r2d2_sqlite",
-      "version": "0.36.0",
+      "version": "0.37.2",
       "description": "SQLite and SQLCipher support for the r2d2 connection pool",
       "scope": "required",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "7c9d912daf39c2fffcb3b93409f025f5de84f6bfa1e902c2700dd5eb558026fc"
+          "content": "a89832adb95bd6369b0bd49a854688cbb4053df4485b25b3faab3a4ede7ab86e"
         }
       ],
       "licenses": [
@@ -8166,7 +8180,7 @@
           "expression": "MIT"
         }
       ],
-      "purl": "pkg:cargo/r2d2_sqlite@0.36.0",
+      "purl": "pkg:cargo/r2d2_sqlite@0.37.2",
       "externalReferences": [
         {
           "type": "documentation",
@@ -8907,16 +8921,16 @@
     },
     {
       "type": "library",
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#rusqlite@0.41.1",
+      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#rusqlite@0.42.0",
       "author": "The rusqlite developers",
       "name": "rusqlite",
-      "version": "0.41.1",
+      "version": "0.42.0",
       "description": "Ergonomic wrapper for SQLite",
       "scope": "required",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "da9bba6f3506135e120a6586df05be18b48d18896600646a4bec8f993d91a594"
+          "content": "a4edff0039f148731aee2fd80f76dbfeb12d204ab3d1c544838d34e02151049b"
         }
       ],
       "licenses": [
@@ -8924,7 +8938,7 @@
           "expression": "MIT"
         }
       ],
-      "purl": "pkg:cargo/rusqlite@0.41.1",
+      "purl": "pkg:cargo/rusqlite@0.42.0",
       "externalReferences": [
         {
           "type": "documentation",
@@ -10264,6 +10278,33 @@
     },
     {
       "type": "library",
+      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#streaming-iterator@0.1.9",
+      "author": "Steven Fackler <sfackler@gmail.com>",
+      "name": "streaming-iterator",
+      "version": "0.1.9",
+      "description": "Streaming iterators",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "2b2231b7c3057d5e4ad0156fb3dc807d900806020c5ffa3ee6ff2c8c76fb8520"
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "purl": "pkg:cargo/streaming-iterator@0.1.9",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://github.com/sfackler/streaming-iterator"
+        }
+      ]
+    },
+    {
+      "type": "library",
       "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#stringprep@0.1.5",
       "author": "Steven Fackler <sfackler@gmail.com>",
       "name": "stringprep",
@@ -11250,6 +11291,138 @@
         {
           "type": "vcs",
           "url": "https://github.com/tokio-rs/tracing"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#tree-sitter-language@0.1.9",
+      "author": "Max Brunsfeld <maxbrunsfeld@gmail.com>, Amaan Qureshi <amaanq12@gmail.com>",
+      "name": "tree-sitter-language",
+      "version": "0.1.9",
+      "description": "The tree-sitter Language type, used by the library and by language implementations",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "d0af592be68c579aa78a16846bd19422978c3c52e438523d45ff5d1bff1f9d4a"
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:cargo/tree-sitter-language@0.1.9",
+      "externalReferences": [
+        {
+          "type": "documentation",
+          "url": "https://docs.rs/tree-sitter-language"
+        },
+        {
+          "type": "website",
+          "url": "https://tree-sitter.github.io/tree-sitter"
+        },
+        {
+          "type": "other",
+          "url": "tree-sitter-language"
+        },
+        {
+          "type": "vcs",
+          "url": "https://github.com/tree-sitter/tree-sitter"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#tree-sitter-rust@0.24.2",
+      "author": "Max Brunsfeld <maxbrunsfeld@gmail.com>, Amaan Qureshi <amaanq12@gmail.com>",
+      "name": "tree-sitter-rust",
+      "version": "0.24.2",
+      "description": "Rust grammar for tree-sitter",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "439e577dbe07423ec2582ac62c7531120dbfccfa6e5f92406f93dd271a120e45"
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:cargo/tree-sitter-rust@0.24.2",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://github.com/tree-sitter/tree-sitter-rust"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#tree-sitter-typescript@0.23.2",
+      "author": "Max Brunsfeld <maxbrunsfeld@gmail.com>, Amaan Qureshi <amaanq12@gmail.com>",
+      "name": "tree-sitter-typescript",
+      "version": "0.23.2",
+      "description": "TypeScript and TSX grammars for tree-sitter",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "6c5f76ed8d947a75cc446d5fccd8b602ebf0cde64ccf2ffa434d873d7a575eff"
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:cargo/tree-sitter-typescript@0.23.2",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://github.com/tree-sitter/tree-sitter-typescript"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#tree-sitter@0.27.2",
+      "author": "Max Brunsfeld <maxbrunsfeld@gmail.com>, Amaan Qureshi <amaanq12@gmail.com>",
+      "name": "tree-sitter",
+      "version": "0.27.2",
+      "description": "Rust bindings to the Tree-sitter parsing library",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "37b2bed8f39a73439f3b0b7ed8f452be5d2911b5e9da69d352ef113bb7448fb8"
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:cargo/tree-sitter@0.27.2",
+      "externalReferences": [
+        {
+          "type": "documentation",
+          "url": "https://docs.rs/tree-sitter"
+        },
+        {
+          "type": "website",
+          "url": "https://tree-sitter.github.io/tree-sitter"
+        },
+        {
+          "type": "other",
+          "url": "tree-sitter"
+        },
+        {
+          "type": "vcs",
+          "url": "https://github.com/tree-sitter/tree-sitter"
         }
       ]
     },
@@ -12626,6 +12799,7 @@
         "registry+https://github.com/rust-lang/crates.io-index#base64@0.23.1",
         "registry+https://github.com/rust-lang/crates.io-index#blake2@0.11.0",
         "registry+https://github.com/rust-lang/crates.io-index#blake3@1.8.7",
+        "path+file:///Users/mark/Sites/brain-server/crates/brain-code-core#0.1.0",
         "path+file:///Users/mark/Sites/brain-server/crates/brain-consensus-core#1.27.29",
         "path+file:///Users/mark/Sites/brain-server/crates/brain-delivery-core#1.29.0",
         "path+file:///Users/mark/Sites/brain-server/crates/brain-engine-sdk#1.28.23",
@@ -12646,11 +12820,11 @@
         "registry+https://github.com/rust-lang/crates.io-index#pdf-extract@0.12.1",
         "registry+https://github.com/rust-lang/crates.io-index#pulldown-cmark@0.13.6",
         "registry+https://github.com/rust-lang/crates.io-index#r2d2@0.8.10",
-        "registry+https://github.com/rust-lang/crates.io-index#r2d2_sqlite@0.36.0",
+        "registry+https://github.com/rust-lang/crates.io-index#r2d2_sqlite@0.37.2",
         "registry+https://github.com/rust-lang/crates.io-index#rand@0.10.3",
         "registry+https://github.com/rust-lang/crates.io-index#reqwest@0.13.5",
         "registry+https://github.com/rust-lang/crates.io-index#rsa@0.10.0-rc.19",
-        "registry+https://github.com/rust-lang/crates.io-index#rusqlite@0.41.1",
+        "registry+https://github.com/rust-lang/crates.io-index#rusqlite@0.42.0",
         "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.229",
         "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.154",
         "registry+https://github.com/rust-lang/crates.io-index#sha2@0.11.1",
@@ -12667,6 +12841,18 @@
         "registry+https://github.com/rust-lang/crates.io-index#uuid@1.29.2",
         "registry+https://github.com/rust-lang/crates.io-index#xxhash-rust@0.8.19",
         "registry+https://github.com/rust-lang/crates.io-index#zerocopy@0.8.63"
+      ]
+    },
+    {
+      "ref": "path+file:///Users/mark/Sites/brain-server/crates/brain-code-core#0.1.0",
+      "dependsOn": [
+        "registry+https://github.com/rust-lang/crates.io-index#rusqlite@0.42.0",
+        "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.229",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.154",
+        "registry+https://github.com/rust-lang/crates.io-index#sha2@0.11.1",
+        "registry+https://github.com/rust-lang/crates.io-index#tree-sitter@0.27.2",
+        "registry+https://github.com/rust-lang/crates.io-index#tree-sitter-rust@0.24.2",
+        "registry+https://github.com/rust-lang/crates.io-index#tree-sitter-typescript@0.23.2"
       ]
     },
     {
@@ -12701,7 +12887,7 @@
     {
       "ref": "path+file:///Users/mark/Sites/brain-server/crates/brain-evolve-core#1.29.2",
       "dependsOn": [
-        "registry+https://github.com/rust-lang/crates.io-index#rusqlite@0.41.1"
+        "registry+https://github.com/rust-lang/crates.io-index#rusqlite@0.42.0"
       ]
     },
     {
@@ -12718,7 +12904,7 @@
       "ref": "path+file:///Users/mark/Sites/brain-server/crates/legal-rules-db#1.28.7",
       "dependsOn": [
         "path+file:///Users/mark/Sites/brain-server/crates/brain-engine-sdk#1.28.23",
-        "registry+https://github.com/rust-lang/crates.io-index#rusqlite@0.41.1",
+        "registry+https://github.com/rust-lang/crates.io-index#rusqlite@0.42.0",
         "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.229"
       ]
     },
@@ -13922,7 +14108,7 @@
       "ref": "registry+https://github.com/rust-lang/crates.io-index#libm@0.2.16"
     },
     {
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#libsqlite3-sys@0.39.1",
+      "ref": "registry+https://github.com/rust-lang/crates.io-index#libsqlite3-sys@0.40.0",
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#cc@1.11.2",
         "registry+https://github.com/rust-lang/crates.io-index#pkg-config@0.3.34",
@@ -14457,10 +14643,10 @@
       ]
     },
     {
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#r2d2_sqlite@0.36.0",
+      "ref": "registry+https://github.com/rust-lang/crates.io-index#r2d2_sqlite@0.37.2",
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#r2d2@0.8.10",
-        "registry+https://github.com/rust-lang/crates.io-index#rusqlite@0.41.1",
+        "registry+https://github.com/rust-lang/crates.io-index#rusqlite@0.42.0",
         "registry+https://github.com/rust-lang/crates.io-index#uuid@1.29.2"
       ]
     },
@@ -14653,13 +14839,13 @@
       ]
     },
     {
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#rusqlite@0.41.1",
+      "ref": "registry+https://github.com/rust-lang/crates.io-index#rusqlite@0.42.0",
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#bitflags@2.13.2",
         "registry+https://github.com/rust-lang/crates.io-index#fallible-iterator@0.3.0",
         "registry+https://github.com/rust-lang/crates.io-index#fallible-streaming-iterator@0.1.9",
         "registry+https://github.com/rust-lang/crates.io-index#hashlink@0.12.2",
-        "registry+https://github.com/rust-lang/crates.io-index#libsqlite3-sys@0.39.1",
+        "registry+https://github.com/rust-lang/crates.io-index#libsqlite3-sys@0.40.0",
         "registry+https://github.com/rust-lang/crates.io-index#smallvec@1.16.5"
       ]
     },
@@ -14785,6 +14971,8 @@
     {
       "ref": "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.154",
       "dependsOn": [
+        "registry+https://github.com/rust-lang/crates.io-index#foldhash@0.2.0",
+        "registry+https://github.com/rust-lang/crates.io-index#indexmap@2.14.2",
         "registry+https://github.com/rust-lang/crates.io-index#itoa@1.0.19",
         "registry+https://github.com/rust-lang/crates.io-index#memchr@2.8.3",
         "registry+https://github.com/rust-lang/crates.io-index#serde_core@1.0.229",
@@ -14931,6 +15119,9 @@
     },
     {
       "ref": "registry+https://github.com/rust-lang/crates.io-index#static_assertions@1.1.0"
+    },
+    {
+      "ref": "registry+https://github.com/rust-lang/crates.io-index#streaming-iterator@0.1.9"
     },
     {
       "ref": "registry+https://github.com/rust-lang/crates.io-index#stringprep@0.1.5",
@@ -15218,6 +15409,33 @@
         "registry+https://github.com/rust-lang/crates.io-index#pin-project-lite@0.2.17",
         "registry+https://github.com/rust-lang/crates.io-index#tracing-attributes@0.1.31",
         "registry+https://github.com/rust-lang/crates.io-index#tracing-core@0.1.36"
+      ]
+    },
+    {
+      "ref": "registry+https://github.com/rust-lang/crates.io-index#tree-sitter-language@0.1.9"
+    },
+    {
+      "ref": "registry+https://github.com/rust-lang/crates.io-index#tree-sitter-rust@0.24.2",
+      "dependsOn": [
+        "registry+https://github.com/rust-lang/crates.io-index#cc@1.11.2",
+        "registry+https://github.com/rust-lang/crates.io-index#tree-sitter-language@0.1.9"
+      ]
+    },
+    {
+      "ref": "registry+https://github.com/rust-lang/crates.io-index#tree-sitter-typescript@0.23.2",
+      "dependsOn": [
+        "registry+https://github.com/rust-lang/crates.io-index#cc@1.11.2",
+        "registry+https://github.com/rust-lang/crates.io-index#tree-sitter-language@0.1.9"
+      ]
+    },
+    {
+      "ref": "registry+https://github.com/rust-lang/crates.io-index#tree-sitter@0.27.2",
+      "dependsOn": [
+        "registry+https://github.com/rust-lang/crates.io-index#cc@1.11.2",
+        "registry+https://github.com/rust-lang/crates.io-index#regex@1.13.1",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.154",
+        "registry+https://github.com/rust-lang/crates.io-index#streaming-iterator@0.1.9",
+        "registry+https://github.com/rust-lang/crates.io-index#tree-sitter-language@0.1.9"
       ]
     },
     {

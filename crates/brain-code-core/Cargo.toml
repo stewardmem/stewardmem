@@ -15,7 +15,7 @@ sha2 = "0.11"
 # loading a SQLite extension is an FFI act and this crate forbids unsafe
 # outright (§R2). The FFI shim lives in brain-code-vec0; production fills the
 # Vec0Host port with the kernel's own registration.
-rusqlite = { version = "0.41.1", features = ["bundled"] }
+rusqlite = { version = "0.42.0", features = ["bundled"] }
 # The S0-confirmed set (R-5, re-run 2026-11-27): versions pinned by the
 # committed lockfile; the ABI pin (pin 15) guards upgrades at build time.
 tree-sitter = "0.27.2"

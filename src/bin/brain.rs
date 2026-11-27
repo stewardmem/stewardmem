@@ -904,6 +904,13 @@ const VALUE_FLAGS: &[&str] = &[
     // `brain plugin install`: the detached signature's path
     // (default: beside the archive, minisign's own convention).
     "sig",
+    // `brain code-index ingest|status|recall --index PATH`: the index store's
+    // path override — documented in the verb's usage line and in
+    // docs/cli-reference.md, so it sits in the closed vocabulary (the lesson
+    // of `principal grant`'s flag-vocabulary fix holds). Found by the S2
+    // read-both-ways drill: the flag errored "unknown flag" before any
+    // handler could see it.
+    "index",
 ];
 
 /// Exit-code discipline: parse/flag misuse is a usage error (2), distinct from

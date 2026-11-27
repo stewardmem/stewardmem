@@ -9,8 +9,11 @@ publish = false
 
 [dependencies]
 # rusqlite ONLY, matching the version legal-rules-db pins in this workspace.
-# The server's root manifest locks the same 0.41.1 + bundled, so the path edge
+# The server's root manifest locks the same 0.42.0 + bundled, so the path edge
 # adds one [[package]] entry to each lockfile and ZERO registry entries.
 # 2026-11-12: 0.40.1 → 0.41.1 in lockstep with the root + legal-rules-db (the
 # S0 SQLite security act, RUSTSEC-2026-0459 — bundled SQLite 3.53.2 → 3.54.1).
-rusqlite = { version = "0.41.1", features = ["bundled"] }
+# 2026-11-27 (c0-close S2): 0.41.1 → 0.42.0 in lockstep with the root (the
+# pool caps rusqlite at ^0.42; see the root manifest's comment for the full
+# reasoning and the read-both-ways drill evidence).
+rusqlite = { version = "0.42.0", features = ["bundled"] }

@@ -8,7 +8,7 @@ description = "The sqlite-vec FFI registration shim for the code-index substrate
 publish = false
 
 [dependencies]
-rusqlite = { version = "0.41.1", features = ["bundled"] }
+rusqlite = { version = "0.42.0", features = ["bundled"] }
 # Load-bearing for its build script: `cc` compiles sqlite-vec.c into the
 # `sqlite_vec0` static library and emits the link directives the extern block
 # in src/lib.rs resolves at link time. The underscore import marks the
