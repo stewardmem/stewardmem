@@ -22,8 +22,12 @@ read-both-ways drill proved the old and new binaries read each other's
 stores byte-identically. The customer portal's template engine moves to
 the current line with the unmaintained `basic-toml` parser out of the
 graph entirely. One CLI repair: the `code-index` subcommands' documented
-`--index PATH` flag actually parses now. No route, no wire shape, and no
-shell file moved.
+`--index PATH` flag actually parses now. Two whole rounds ride the same
+range and ship here because their `Unreleased` sections predate this
+tag: the C0 per-repo code-index substrate (three new `brain code-index`
+commands; nothing consumes the index yet) and the research-window
+register (every cited paper and standard gets a decision, a reason, and
+a verification date). No route, no wire shape, and no shell file moved.
 
 ### Release notes
 
@@ -68,14 +72,18 @@ shell file moved.
 
 ### Engineering record
 
-**c0-close S1–S3 (2026-11-27/28).** Range `v1.29.48..HEAD`, four commits:
-`e0455c8f` S1 (the records: the C0 CHANGELOG's ingest numbers re-measured
-at `1919ca34` — 827 files / 20,209 symbols / 693,878 occurrences /
-71,604 chunks — and "five commits" corrected to eight; the stale counts
-in docs/retrieval-and-recall.md and docs/cli-reference.md fixed in the
-same commit) · `a3a339ba` S2 (rusqlite 0.42 coherent set + the --index
-vocabulary fix; the drill evidence is in the commit message) ·
-`197c3a25` S3a+S3b (askama 0.16 + the ttf-parser waiver) · this wrap.
+**c0-close S1–S3 (2026-11-27/28).** Range `v1.29.48..v1.29.49`, 25
+commits, all accounted for: this round's three · the wrap and the
+badge re-derivation · the C0 substrate's eight (S1–S8) · the
+research-window register's ten · two docs-only commits. This round's
+own commits: `e0455c8f` S1 (the records: the C0 CHANGELOG's ingest
+numbers re-measured at `1919ca34` — 827 files / 20,209 symbols /
+693,878 occurrences / 71,604 chunks — and "five commits" corrected to
+eight; the stale counts in docs/retrieval-and-recall.md and
+docs/cli-reference.md fixed in the same commit) · `a3a339ba` S2
+(rusqlite 0.42 coherent set + the --index vocabulary fix; the drill
+evidence is in the commit message) · `197c3a25` S3a+S3b (askama 0.16 +
+the ttf-parser waiver).
 
 - **The commits that ship inside another round's record.** The C0
   substrate's eight commits (S1–S8, `2c9215e6`..`1919ca34`) and the
