@@ -13,6 +13,36 @@ measured. Those records are kept as they were written (this file is
 append-only), and their heading says `Unreleased` because that is what they
 were when the round landed — not because the work is still unreleased.
 
+## [Unreleased] — 2026-11-27 — the C0 code-index substrate: a per-repo code index behind an encoder port, and the frozen lexical baseline it must beat
+
+The C0 round (`crates/brain-code-core` + the kernel's three `code-index` CLI rows) landed
+in five commits (S1 `2c9215e6` · S2 `e0a73654` · S3 `ed618a42` · S4 `a60a5821` · S5 `70e694b5`
+· S6 `ee644298` · S7 `7fc6256b`). The substrate: eleven presence-guarded SQLite tables (three
+FTS legs — file unicode61, chunk unicode61, symbol trigram — plus a `vec0` table carrying
+`chunk_id` only, no metadata columns), tree-sitter parsing into scope-qualified symbols
+(`Widget::refresh`), chunks by symbol with windowed fallback tagged for counting, incremental
+ingest keyed by content hash (never mtime), and a `code-index recall` harness that runs a
+frozen 46-question set through three lexical control arms. **Nothing consumes the index yet**
+— no route, no retrieval surface, no token claim. The crate loads no model and makes no network
+call; the kernel fills its two ports (the audited vec0 registration and the active profile's
+embedder). Twenty pins drilled red-first; the frozen set is SHA-256-pinned; the lexical floor
+is measured and recorded: **file-level recall@5 = 0.652** (the carry-forward ceiling of 0.70
+binds C1, not C0). Evidence: `plans/cowork-ip/C0_CODE_INDEX_EVIDENCE_2026-11-27.md` in
+brain-steward-ip. Full test count derives from `scripts/badges.sh --selfcheck`, never typed.
+
+Proof invocations (each names what it shows):
+- `brain code-index ingest <repo-root>` — builds the index; the no-op re-ingest moves zero files;
+  the full-corpus build at brain-server is 823 files / 20,139 symbols / 690,765 occurrences /
+  71,404 chunks in ~65 s wall.
+- `brain code-index status <repo-root>` — fresh/stale by the commit alone; the per-extension
+  coverage table names what is never parsed (`.svelte` 58 seen / 0 parsed, counted, not skipped).
+- `brain code-index recall <repo-root> [--misses]` — the frozen baseline, the set's hash beside
+  the table; `--misses` names every entry any arm failed to fully recall.
+
+### Release notes
+- (C0 is substrate only — nothing user-facing moves; the release notes section is carried by
+  the next shipped version.)
+
 ## [Unreleased] — 2026-11-26 — the research window register: every cited paper and standard gets a decision, a reason, and a verification date
 
 The research policy now has a working register instead of a rule that points at

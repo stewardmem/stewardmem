@@ -110,6 +110,34 @@ Instead of returning top-1 garbage. This is driven by a **calibrated multi-signa
 
 Chunks can carry `expires_at` (strict decay, default-excludes) and `min_relevance` tiers. Decayed chunks are excluded by default and surfaced via `GET /decayed` for operator review — nothing decays autonomously.
 
+## Code index (C0)
+
+A separate, per-repo **code index** now exists as substrate: `brain code-index ingest <repo-root>`
+walks the tracked corpus, parses Rust and TypeScript with tree-sitter into scope-qualified
+symbols, chunks by symbol (windows only where a file has no symbol, and tagged), and fills three
+lexical tables plus a vector table. `brain code-index status <repo-root>` reports what the index
+holds — counts, a per-extension coverage table that names what is counted but never parsed, and
+`fresh` or `stale` decided by the commit alone. Incremental: a re-ingest reparses exactly the
+files whose content hash moved (never mtime), and a same-commit re-ingest writes zero data rows.
+
+**Nothing consumes it yet.** No route, no retrieval surface, no token claim — the code index is
+not part of `/recall` or any other pipeline in this page. What exists is the baseline: a frozen
+46-question set (SHA-256-pinned in the crate; a changed set fails the build) run through three
+lexical control arms — file-level BM25, chunk+symbol lexical, and the two fused by reciprocal
+rank. `brain code-index recall <repo-root>` prints recall@1/5/10 (file level), recall@10 (symbol
+level), each split by whether the question carries a code identifier, with the set's hash beside
+the table. The measured floor at C0 (2026-11-27, brain-server: 823 files, 20,139 symbols,
+71,404 chunks): **file-level recall@5 = 0.652 overall, 0.800 for identifier questions, 0.611
+without**. No vector number may ever be quoted without this table beside it — that is the round's
+preregistered claim, and the vector layer (C1) must clear 0.70 at recall@5 or the plan's
+stop-and-reassess clause fires.
+
+The index lives in one file per repo (`<root>/.brain-code-index.db`, `--index` overrides) —
+rebuildable from a commit, never in the DSAR, legal-hold, or retention surface. The crate that
+owns it (`brain-code-core`) loads no model and makes no network call; the embedding profile's
+model is supplied by the kernel through a port, so the same index builds under any profile
+(C0's measurements use the default `local` profile, 512-d).
+
 ## Next steps
 
 - **[Knowledge Graph](./knowledge-graph.md)** — the graph layer that powers the third recall leg (default-on).

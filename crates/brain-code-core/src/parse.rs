@@ -355,7 +355,9 @@ pub fn parse(lang: FileLang, src: &str) -> Result<ParsedFile, CodeIndexError> {
 }
 
 /// A pre-order walk that never relies on a definition's own subtree being
-/// entered through its name: every child is visited.
+/// entered through its name: every child is visited. The explicit lifetime
+/// is load-bearing: eliding it makes walk higher-ranked and the parse fn's
+/// captured `def_name_nodes` can no longer accept the walked node (E0521).
 fn walk<'a>(node: Node<'a>, visit: &mut dyn FnMut(Node<'a>)) {
     visit(node);
     let mut cursor = node.walk();

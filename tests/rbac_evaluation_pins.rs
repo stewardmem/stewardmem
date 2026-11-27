@@ -993,9 +993,11 @@ fn r47_rbac_adds_no_table_no_stamp_no_dependency() {
         .collect();
     assert_eq!(
         names.len(),
-        58,
-        "the dependency count is 58 — the oracle is a const table and pure, needing no crate \
-         functions; the ceiling is re-pinned by each round that legitimately adds one (the \
+        59,
+        "the dependency count is 59 — the oracle is a const table and pure, needing no crate \
+         functions; C0 (2026-11-27) moved the ceiling 58 → 59 with the brain-code-core \
+         workspace path edge (the code-index substrate; workspace-internal, no registry \
+         source); the ceiling is re-pinned by each round that legitimately adds one (the \
          knowledge-version axis extraction moved it 52 → 53 with the brain-evolve-core \
          workspace path edge; the pack round moved it 53 → 55 with blake2 + flate2, both \
          already in the lock as transitives; IMPROVE04 moved it 55 → 57 with pdf-extract + \

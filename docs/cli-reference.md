@@ -190,6 +190,16 @@ credential — the trust boundary is the operator's.
 | `brain census --print-baseline` | Emits the measured vector in the committed baseline's exact shape. Re-anchoring is a **deliberate, diffable act**: commit the result with a message saying WHY the scores moved. A baseline that drifts without a reason in the log is a census that has stopped measuring. Needs no database. |
 | `brain shred [--db PATH] --yes` | The operator-invoked physical residue drop after a logical purge. `--yes` is REQUIRED (there is no interactive prompt — the refusal without it is deliberate); `--db` is optional and defaults to `BRAIN_DB_PATH`/the default DB. Steps: `secure_delete=ON` (readback asserted) → `wal_checkpoint(TRUNCATE)` → `VACUUM` (rebuild from live pages only) → `wal_checkpoint(TRUNCATE)` → `integrity_check`, evidenced by one hash-chained `forget` audit row. Freelist reads back 0. Does NOT touch filesystem copies, `<db>.bak` snapshots, standby follower chunks, or SSD wear-leveling — printed on every run. Run per domain DB, ideally in a quiet moment (VACUUM holds the writer). |
 
+## Code index (C0)
+
+The per-repo code index substrate: schema + tree-sitter parse + symbol chunks + lexical/vector tables, incremental by content hash. **Nothing consumes the index yet** — no route, no retrieval surface, no token claim (C0's standing honesty note). The index lives in one file per repo (`<root>/.brain-code-index.db`, `--index` overrides); the crate that owns it loads no model and makes no network call — the embedding profile's model arrives through a port the kernel fills.
+
+| Command | Purpose |
+|---|---|
+| `brain code-index ingest <repo-root> [--index PATH] [--profile NAME]` | Build (or incrementally refresh) the code index: reparses exactly the files whose content hash moved (never mtime); a same-commit re-ingest writes zero data rows. Prints the store counts, the per-extension coverage table (what is counted but never parsed is named — `.svelte` counted, not skipped), and errors are counted not hidden. A profile change refuses until rebuilt, naming both profiles. Proof: `time brain code-index ingest .` twice — the second run says `unchanged, 0 files moved` |
+| `brain code-index status <repo-root> [--index PATH]` | What the index holds: the indexed commit vs HEAD, `index_version`, embed dim/profile, store counts, and the coverage table — and **`fresh` or `stale` decided by the commit alone, never by mtime** (stale = HEAD ≠ the indexed commit). Proof: `brain code-index status .` after a commit moves HEAD |
+| `brain code-index recall <repo-root> [--index PATH] [--misses]` | The frozen 46-question set (SHA-256-pinned in the crate; a changed set fails the build) through the three lexical control arms — file BM25 / chunk+symbol / RRF-fused — recall@1/5/10 file level, recall@10 symbol level, each split by `has_identifier`, the set's hash printed beside the table. The measured floor at C0 (brain-server: 823 files, 71,404 chunks): recall@5 = 0.652. `--misses` names every entry any arm failed to fully recall. The BASELINE — no vector result may ever be quoted without it |
+
 ## Examples
 
 ```bash

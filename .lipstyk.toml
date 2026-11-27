@@ -247,3 +247,15 @@ enabled = false
 # Full scan (--config /dev/null) still surfaces it for manual review.
 [rules.generic-naming]
 enabled = false
+
+# C0 diff: `fn walk<'a>` in crates/brain-code-core/src/parse.rs (the
+# tree-sitter pre-order walk). The explicit lifetime is LOAD-BEARING, not
+# decoration: the hint's own advice (`Node<'_>`) makes walk higher-ranked,
+# and the parse fn's captured `def_name_nodes: Vec<(Node, usize)>` can then
+# no longer accept the walked node — rustc E0521, observed 2026-11-27. The
+# rule cannot see the escape into the caller's captured mutable state. A
+# per-site `#[allow]` is not available (brain-code-core carries a zero-allow
+# law); the crate's own tests pin the walk's behaviour. Full scan for real
+# cases elsewhere: lipstyk --config /dev/null --exclude-tests src crates
+[rules.needless-lifetimes]
+enabled = false

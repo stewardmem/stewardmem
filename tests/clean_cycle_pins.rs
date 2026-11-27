@@ -402,8 +402,12 @@ fn r48_adds_no_table_no_stamp_no_dependency() {
         .collect();
     assert_eq!(
         names.len(),
-        58,
-        "the dependency count is 58 — R48 added no crate; each later round that legitimately \
+        59,
+        "the dependency count is 59 — C0 (2026-11-27) moved it 58 → 59 with the \
+         brain-code-core workspace path edge (the code-index substrate crate; \
+         the same class as the R5 brain-evolve-core edge — workspace-internal, \
+         no registry source, no checksum; the crate's OWN tree-sitter set is \
+         the crate's Cargo.toml, not the kernel's); each later round that legitimately \
          adds one re-pins the ceiling (the knowledge-version axis extraction moved it \
          52 → 53 with the brain-evolve-core workspace path edge; C2 moved it 53 → 55 with \
          blake2 + flate2 — both ALREADY in the lock as transitives, declared directly for \
@@ -413,9 +417,8 @@ fn r48_adds_no_table_no_stamp_no_dependency() {
          cross-check, so the graph gains ONE new crate — the deny gate's named act; \
          IMPROVE15 moved it 57 → 58 with askama — the thin customer portal's \
          build-time templates, the stack the round preregistered; the lock gains FIVE \
-         crates (askama, askama_derive, askama_parser, basic-toml, winnow), the deny \
-         gate's bans/licenses/sources green on all five) \
-         (found {}: {names:?})",
+         crates (askama, askama_derive, askama_parser, basic-toml, winnow), \
+         the deny gate's bans/licenses/sources green on all five) (found {}: {names:?})",
         names.len()
     );
     // the round's completeness half: the guard must not pass on an empty round

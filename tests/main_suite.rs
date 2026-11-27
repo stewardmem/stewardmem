@@ -22891,12 +22891,16 @@ mod r42_authority_bindings {
             .collect();
         assert_eq!(
             names.len(),
-            58,
-            "the dependency ceiling is 58 — IMPROVE16 S0 (2026-11-12) added ZERO lines: \
+            59,
+            "the dependency ceiling is 59 — C0 (2026-11-27) moved it 58 → 59 with the \
+             brain-code-core workspace path edge (the code-index substrate crate; \
+             workspace-internal, no registry source, no checksum — the same class as the \
+             R5 brain-evolve-core edge; the crate's OWN tree-sitter set lives in the \
+             crate's Cargo.toml, not the kernel's). IMPROVE16 S0 (2026-11-12) added ZERO lines: \
              the SQLite security act (RUSTSEC-2026-0459) bumped the ALREADY-declared \
              rusqlite 0.40.2 → 0.41.1 and r2d2_sqlite 0.35.0 → 0.36.0 in place \
              (libsqlite3-sys 0.38.2 → 0.39.1, bundled SQLite 3.53.2 → 3.54.1), so the \
-             count stays 58 and the caveat below is retired: the advisories arm is GREEN \
+             count stayed 58 and the caveat below is retired: the advisories arm is GREEN \
              on this tree — the whole deny gate, all four arms. IMPROVE15 (2026-11-12) \
              moved it 57 → 58 with \
              askama (the thin customer portal's build-time templates): FIVE crates enter \
@@ -22914,7 +22918,7 @@ mod r42_authority_bindings {
              declared directly for the pack key's verifier and the pack archive's gzip \
              framing (zero new crates enter the lock); a round that adds a crate moves this \
              number, and the lockfile diff is the other half of the proof. Tail entries: {:?}",
-            &names[45..]
+            &names[46..]
         );
     }
 
@@ -23697,11 +23701,16 @@ mod r43_releases {
             .collect();
         assert_eq!(
             names.len(),
-            58,
-            "the dependency count is 58 — IMPROVE16 S0 (2026-11-12) added ZERO lines: the \
+            59,
+            "the dependency count is 59 — C0 (2026-11-27) moved it 58 → 59 with the \
+             brain-code-core workspace path edge (the code-index substrate crate; \
+             workspace-internal, no registry source, no checksum — the same class as \
+             the R5 brain-evolve-core edge; the crate's OWN tree-sitter set lives in \
+             the crate's Cargo.toml, not the kernel's); IMPROVE16 S0 (2026-11-12) \
+             added ZERO lines: the \
              SQLite security act bumped the already-declared rusqlite 0.40.2 → 0.41.1 and \
              r2d2_sqlite 0.35.0 → 0.36.0 in place (libsqlite3-sys → 0.39.1, SQLite \
-             3.54.1), so the count stays 58; IMPROVE04 (2026-11-07) moved it 55 → 57 with \
+             3.54.1), so the count stayed 58; IMPROVE04 (2026-11-07) moved it 55 → 57 with \
              pdf-extract + lopdf (one new crate in the graph — the deny gate's named act); \
              IMPROVE15 (2026-11-12) moved it 57 → 58 with askama (the thin customer \
              portal's build-time templates; the lock gains five crates, the deny gate's \
@@ -24325,11 +24334,16 @@ mod r44_outcomes {
             .collect();
         assert_eq!(
             names.len(),
-            58,
-            "the dependency count is 58 — IMPROVE16 S0 (2026-11-12) added ZERO lines: the \
+            59,
+            "the dependency count is 59 — C0 (2026-11-27) moved it 58 → 59 with the \
+             brain-code-core workspace path edge (the code-index substrate crate; \
+             workspace-internal, no registry source, no checksum — the same class as \
+             the R5 brain-evolve-core edge; the crate's OWN tree-sitter set lives in \
+             the crate's Cargo.toml, not the kernel's); IMPROVE16 S0 (2026-11-12) \
+             added ZERO lines: the \
              SQLite security act bumped the already-declared rusqlite 0.40.2 → 0.41.1 and \
              r2d2_sqlite 0.35.0 → 0.36.0 in place (libsqlite3-sys → 0.39.1, SQLite \
-             3.54.1), so the count stays 58; IMPROVE04 (2026-11-07) moved it 55 → 57 with \
+             3.54.1), so the count stayed 58; IMPROVE04 (2026-11-07) moved it 55 → 57 with \
              pdf-extract + lopdf (one new crate in the graph — the deny gate's named act); \
              IMPROVE15 (2026-11-12) moved it 57 → 58 with askama (the thin customer \
              portal's build-time templates; the lock gains five crates, the deny gate's \
