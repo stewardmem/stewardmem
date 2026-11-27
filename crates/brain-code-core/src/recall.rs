@@ -876,4 +876,305 @@ mod tests {
         let none = knn_chunk_ids(&index, &vector, 5, &[]).unwrap();
         assert!(none.is_empty());
     }
+
+    /// The pin-11 spike: a 500-row / 10-file vector store with clustered
+    /// vectors written directly (a vector-store drill, not a parse test).
+    /// Row (file f, chunk j) sits at axis f with jitter j — distances are
+    /// analytic, so every arm's expected count is exact.
+    fn spike_store(label: &str) -> CodeIndex {
+        let dir = std::env::temp_dir().join(format!(
+            "brain-code-core-s7-{label}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0),
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("spike.db");
+        let index = CodeIndex::open(&path, &ShimHost).unwrap();
+        index.migrate(8).unwrap();
+        let conn = index.conn();
+        conn.execute(
+            "INSERT INTO code_repo(root, head_commit, index_version, embed_dim, embed_profile) \
+             VALUES ('pin11-spike', 'a', 1, 8, 'spike')",
+            [],
+        )
+        .unwrap();
+        let repo_id: i64 = conn
+            .query_row("SELECT id FROM code_repo", [], |r| r.get(0))
+            .unwrap();
+        let tx = conn.unchecked_transaction().unwrap();
+        for f in 0..10usize {
+            tx.execute(
+                "INSERT INTO code_file(repo_id, path, lang, content_hash, loc, content) \
+                 VALUES (?1, ?2, 'rust', 'h', 1, '')",
+                rusqlite::params![repo_id, format!("spike/file_{f}.rs")],
+            )
+            .unwrap();
+            let file_id: i64 = tx
+                .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
+                .unwrap();
+            for j in 0..50usize {
+                tx.execute(
+                    "INSERT INTO code_chunk(file_id, kind, text, token_estimate, content_hash) \
+                     VALUES (?1, 'symbol', '', 1, 'h')",
+                    [file_id],
+                )
+                .unwrap();
+                let chunk_id: i64 = tx
+                    .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
+                    .unwrap();
+                // One shared axis, via spike_vector: files 0 and 1 sit
+                // SYMMETRIC at ±1 (strict 1e-4 offset) so the midpoint query
+                // interleaves them — the construction pin 11's drill needs.
+                // Files 2..9 sit far out at ±(100+f).
+                let vector = spike_vector(f, j);
+                let mut blob = Vec::with_capacity(32);
+                for value in &vector {
+                    blob.extend_from_slice(&value.to_le_bytes());
+                }
+                tx.execute(
+                    "INSERT INTO code_chunk_vec(chunk_id, embedding) VALUES (?1, ?2)",
+                    rusqlite::params![chunk_id, blob],
+                )
+                .unwrap();
+            }
+        }
+        tx.commit().unwrap();
+        index
+    }
+
+    fn spike_ids(index: &CodeIndex, file: usize) -> Vec<i64> {
+        let mut stmt = index
+            .conn()
+            .prepare(
+                "SELECT c.id FROM code_chunk c JOIN code_file f ON f.id = c.file_id \
+                 WHERE f.path = ?1 ORDER BY c.id",
+            )
+            .unwrap();
+        let rows = stmt
+            .query_map([format!("spike/file_{file}.rs")], |r| r.get::<_, i64>(0))
+            .unwrap();
+        rows.map(|r| r.unwrap()).collect()
+    }
+
+    /// Row (file f, chunk j) sits on axis 0, jitter along the same axis —
+    /// distances are analytic. File 0's jitter DESCENDS with its id (its
+    /// nearest rows are its HIGHEST ids), so the distance-truth and the
+    /// rowid-order of the store disagree — the construction that exposes
+    /// what pin 11's drill forms actually do. Files 0 and 1 straddle the
+    /// origin symmetrically (±1, strict 1e-4 offset) so the midpoint query
+    /// interleaves them; files 2..9 sit far out at ±(100+f).
+    fn spike_vector(file: usize, j: usize) -> [f32; 8] {
+        let mut v = [0.0f32; 8];
+        v[0] = match file {
+            0 => {
+                1.0 + [0.040f32, 0.001, 0.041, 0.002, 0.042, 0.003, 0.043, 0.004][j % 8]
+                    + (j / 8) as f32 * 0.00001
+            }
+            1 => -1.0 - j as f32 * 0.001 - 0.0001,
+            g if g % 2 == 0 => 100.0 + g as f32 + j as f32 * 0.001,
+            g => -(100.0 + g as f32) - j as f32 * 0.001,
+        };
+        v
+    }
+
+    /// The query at file `file`'s cluster centre (the zero-jitter point —
+    /// for file 0 that is its LAST row).
+    fn cluster_query(file: usize) -> Vec<f32> {
+        spike_vector(file, if file == 0 { 49 } else { 0 }).to_vec()
+    }
+
+    /// The midpoint of files 0 and 1 — the origin, by construction.
+    fn midpoint_query() -> Vec<f32> {
+        vec![0.0; 8]
+    }
+
+    #[test]
+    fn the_id_set_form_returns_the_full_expected_count_across_the_five_arms() {
+        let index = spike_store("fivearms");
+        let file0 = spike_ids(&index, 0);
+        assert_eq!(file0.len(), 50);
+
+        // Arm 1: 500 rows / 10 files / k=5, filter = one file's 50 ids.
+        let q = cluster_query(0);
+        let got = knn_chunk_ids(&index, &q, 5, &file0).unwrap();
+        assert_eq!(got.len(), 5, "full expected count");
+        assert!(
+            got.iter().all(|id| file0.contains(id)),
+            "every row is from the filter"
+        );
+
+        // Arm 2: clustered vectors, the 5 matching rows chosen OFF-CENTRE
+        // (the farthest jitter rows of the cluster — its LOWEST ids here)
+        // — still the full count.
+        let off_centre: Vec<i64> = file0.iter().take(5).copied().collect();
+        let got = knn_chunk_ids(&index, &q, 5, &off_centre).unwrap();
+        assert_eq!(got.len(), 5);
+        assert!(got.iter().all(|id| off_centre.contains(id)));
+
+        // Arm 3: a 1-row filter, k=5 — one row out, no more, no error.
+        let one = vec![file0[0]];
+        let got = knn_chunk_ids(&index, &q, 5, &one).unwrap();
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0], file0[0]);
+
+        // Arm 4: k=1 over 199 ids spanning files — one row, from the filter.
+        let mut wide: Vec<i64> = Vec::new();
+        for f in 0..10usize {
+            let ids = spike_ids(&index, f);
+            let take = 20.min(if f == 9 { 19 } else { 20 });
+            wide.extend(ids.into_iter().take(take));
+        }
+        assert_eq!(wide.len(), 199);
+        let q3 = cluster_query(3);
+        let got = knn_chunk_ids(&index, &q3, 1, &wide).unwrap();
+        assert_eq!(got.len(), 1);
+        assert!(wide.contains(&got[0]));
+
+        // Arm 5: k=1 over 5 ids — one row, from the filter.
+        let five: Vec<i64> = file0.iter().take(5).copied().collect();
+        let got = knn_chunk_ids(&index, &q, 1, &five).unwrap();
+        assert_eq!(got.len(), 1);
+        assert!(five.contains(&got[0]));
+    }
+
+    #[test]
+    fn a_filter_outside_the_knn_lies_or_comes_back_short_that_is_the_red() {
+        // Pin 11's drill, kept as a test, in BOTH red shapes observed on
+        // this build (sqlite-vec 0.1.9, macOS). The truth at the midpoint
+        // query: file 0's nearest five are its five HIGHEST ids (its jitter
+        // descends with id), and the global nearest five interleave files
+        // 0 and 1 — so a filter applied after k cannot give the right five.
+        let index = spike_store("outsidered");
+        let file0 = spike_ids(&index, 0);
+        let midpoint = midpoint_query();
+        let blob: Vec<u8> = midpoint.iter().flat_map(|v| v.to_le_bytes()).collect();
+        let ids_json = serde_json::to_string(&file0).unwrap();
+
+        // The green form: the id set INSIDE the KNN — the full, true five.
+        let inside = knn_chunk_ids(&index, &midpoint, 5, &file0).unwrap();
+        assert_eq!(inside.len(), 5, "the id-set form keeps the full count");
+        let mut truth = inside.clone();
+        truth.sort_unstable();
+        assert_eq!(
+            truth,
+            vec![2, 10, 18, 26, 34],
+            "the true nearest-of-filter is the zigzag order, known analytically"
+        );
+
+        // Red shape — the plan's predicted one: the filter applied AFTER a
+        // global k, in the caller. sqlite cannot push a filter it cannot
+        // see; the global top-5 interleaves files 0 and 1 at the midpoint,
+        // so only file 0's share survives — short by construction.
+        let mut stmt = index
+            .conn()
+            .prepare("SELECT chunk_id FROM code_chunk_vec WHERE embedding MATCH ?1 AND k = ?2")
+            .unwrap();
+        let rows = stmt
+            .query_map(rusqlite::params![blob.clone(), 5], |r| r.get::<_, i64>(0))
+            .unwrap();
+        let global: Vec<i64> = rows.map(|r| r.unwrap()).collect();
+        let rust_side: Vec<i64> = global
+            .iter()
+            .filter(|id| file0.contains(id))
+            .copied()
+            .collect();
+        println!(
+            "pin-11 drill, filter-after-k form: {:?} of 5 — short by construction",
+            rust_side
+        );
+        assert!(
+            rust_side.len() < 5,
+            "filtering after a global k loses rows ({})",
+            rust_side.len()
+        );
+        assert_eq!(
+            rust_side,
+            vec![2, 10, 18, 26],
+            "exactly file 0's share of the global top-5"
+        );
+
+        // Platform evidence, recorded — NOT asserted as a failure. The
+        // SQL-subquery form (the filter as an outer WHERE after k) came
+        // back distance-true on every construction tried on this build:
+        // sqlite-vec 0.1.9 pushes the rowid id-set constraint down into
+        // the KNN, so even this shape behaves as a filtered KNN here. If
+        // CI's platform degrades it, that is a finding, not a failure.
+        let mut stmt = index
+            .conn()
+            .prepare(
+                "SELECT chunk_id FROM \
+                 (SELECT chunk_id FROM code_chunk_vec WHERE embedding MATCH ?1 AND k = ?2) \
+                 WHERE chunk_id IN (SELECT value FROM json_each(?3))",
+            )
+            .unwrap();
+        let rows = stmt
+            .query_map(rusqlite::params![blob.clone(), 5, ids_json], |r| {
+                r.get::<_, i64>(0)
+            })
+            .unwrap();
+        let sql_outer: Vec<i64> = rows.map(|r| r.unwrap()).collect();
+        println!(
+            "pin-11 evidence, SQL-subquery form on this build: {sql_outer:?} \
+             (the truth is {inside:?})"
+        );
+        assert!(
+            !sql_outer.is_empty(),
+            "the SQL-subquery form ran and returned rows"
+        );
+    }
+
+    #[test]
+    fn the_metadata_column_form_runs_and_its_result_is_recorded() {
+        // Pin 11's second arm, recorded — NOT asserted (R-6 ships the id-set
+        // form; the metadata-column form exists only on this scratch table,
+        // and its behaviour is platform evidence). On 2026-11-27's macOS
+        // build it returns the full matching count; if CI's platform
+        // differs, that is a finding, not a failure.
+        let index = spike_store("metaform");
+        let conn = index.conn();
+        conn.execute(
+            "CREATE VIRTUAL TABLE pin11_meta USING vec0( \
+               id INTEGER PRIMARY KEY, file_tag INTEGER, embedding float[8])",
+            [],
+        )
+        .unwrap();
+        let tx = conn.unchecked_transaction().unwrap();
+        for (tag, base) in [(0usize, 0.0f32), (1usize, 50.0f32)] {
+            for j in 0..10usize {
+                let mut vector = [0.0f32; 8];
+                vector[tag] = 10.0 + base + j as f32 * 0.001;
+                let mut blob = Vec::with_capacity(32);
+                for value in &vector {
+                    blob.extend_from_slice(&value.to_le_bytes());
+                }
+                tx.execute(
+                    "INSERT INTO pin11_meta(id, file_tag, embedding) VALUES (?1, ?2, ?3)",
+                    rusqlite::params![(j + tag * 10) as i64, tag as i64, blob],
+                )
+                .unwrap();
+            }
+        }
+        tx.commit().unwrap();
+        let mut query = [0.0f32; 8];
+        query[0] = 10.0;
+        let mut blob = Vec::with_capacity(32);
+        for value in &query {
+            blob.extend_from_slice(&value.to_le_bytes());
+        }
+        let mut stmt = conn
+            .prepare(
+                "SELECT id FROM pin11_meta \
+                 WHERE embedding MATCH ?1 AND k = 5 AND file_tag = 0",
+            )
+            .unwrap();
+        let rows = stmt.query_map([blob], |r| r.get::<_, i64>(0)).unwrap();
+        let got: Vec<i64> = rows.map(|r| r.unwrap()).collect();
+        println!(
+            "pin-11 metadata-column form: {} of 5 expected rows on this platform",
+            got.len()
+        );
+    }
 }

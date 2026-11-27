@@ -276,4 +276,58 @@ mod tests {
         let _ = std::fs::remove_dir_all(&repo);
         let _ = std::fs::remove_file(&path);
     }
+
+    #[test]
+    fn an_mtime_decision_would_say_fresh_while_the_commit_says_stale() {
+        // Pin 3's drill, kept as a test: mtime is the WRONG decision input.
+        // Move HEAD by committing a NEW file — every indexed source file's
+        // mtime stays older than the store's, so an mtime comparison calls
+        // the index fresh while the commit alone knows it is stale.
+        let repo = fixture_repo("mtimedrill");
+        let path = std::env::temp_dir().join(format!(
+            "brain-code-core-s7-mtimedrill-{}.db",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let index = CodeIndex::open(&path, &ShimHost).unwrap();
+        index.migrate(8).unwrap();
+        ingest(&index, &repo, &FakeEncoder::new("test", 8), None).unwrap();
+
+        std::fs::write(repo.join("src/brand_new.rs"), "pub fn fresh() {}\n").unwrap();
+        let git = |args: &[&str]| {
+            let out = Command::new("git")
+                .arg("-C")
+                .arg(&repo)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(out.status.success());
+        };
+        git(&["add", "-A"]);
+        git(&[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-m",
+            "move head",
+        ]);
+
+        let report = status(&index, &repo).unwrap();
+        assert!(!report.fresh, "the commit says stale");
+        let store_mtime = std::fs::metadata(&path).unwrap().modified().unwrap();
+        let newest_source = std::fs::metadata(repo.join("src/main.rs"))
+            .unwrap()
+            .modified()
+            .unwrap();
+        assert!(
+            store_mtime > newest_source,
+            "the store is newer than every indexed file — mtime would say fresh"
+        );
+        assert_ne!(report.commit, report.head_now);
+
+        let _ = std::fs::remove_dir_all(&repo);
+        let _ = std::fs::remove_file(&path);
+    }
 }
