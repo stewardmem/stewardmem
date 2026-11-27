@@ -151,6 +151,7 @@ notary_submit() {
 }
 
 TAG=""
+TOOLS_ONLY=0
 REPO_SLUG="stewardmem/stewardmem"
 SECRET_KEY="$DEFAULT_SECRET_KEY"
 PUBLIC_KEY="$DEFAULT_PUBLIC_KEY"
@@ -196,6 +197,11 @@ options:
   --notes <text>          the manifest's release notes.
   --repo <slug>           the GitHub repository the release lives in.
   --dry-run               stage everything and publish NOTHING.
+  --tools-only            run ONLY the Tools leg: the chain three and the
+                          first-install DMG stay exactly as published — for
+                          a post-release repair of the Tools step, where a
+                          full re-run would re-seal or rebuild beside the
+                          release (CH-149).
   --red-proof             no release: witness the lane refusing every
                           identity that is not the pinned Developer ID
                           (the self-signed one, BY NAME; ad-hoc; a missing
@@ -218,6 +224,7 @@ while [[ $# -gt 0 ]]; do
 		--notes) NOTES="${2:-}"; shift 2;;
 		--repo) REPO_SLUG="${2:-}"; shift 2;;
 		--dry-run) DRY_RUN=1; shift;;
+		--tools-only) TOOLS_ONLY=1; shift;;
 		--red-proof) RED_PROOF=1; shift;;
 		-h|--help) usage;;
 		*) usage;;
@@ -625,6 +632,11 @@ process.stdout.write(String(config?.version ?? ""));
 
 # ── 2 · THE ARTEFACT ───────────────────────────────────────────────────────
 #
+# CH-149: steps 2–6 live in run_chain — they are the tree-truth-bound half
+# (the sealed provenance verifies only at the commit the stage named), and
+# the --tools-only dispatch below skips them without weakening a gate.
+run_chain() {
+#
 # Built by the BUNDLER (never by hand: a hand-made archive stalls the
 # install), and signed by the Tauri CLI. `--bundles app` plus the release
 # configuration turns the updater artifacts on, which is what makes the CLI
@@ -980,6 +992,8 @@ gh release upload "$TAG" "$ARTIFACT" "$SIGNATURE" "$MANIFEST" --repo "$REPO_SLUG
 [[ -f "$DMG" ]] || die "the stapled first-install DMG is absent: $DMG"
 gh release upload "$TAG" "$DMG" --repo "$REPO_SLUG" --clobber
 echo ">> published. The updater's endpoint now resolves to this release's latest.json."
+}
+# end run_chain — everything below runs in BOTH modes.
 
 # ── THE TOOLS STEP (the first trimmed release, 2026-11-01) ─────────────────
 #
@@ -1300,5 +1314,11 @@ print(next(a["sha256"] for a in rec["artifacts"] if a["name"]=="brain-afm-aarch6
 	echo ">> the stapled Tools DMG is published; the page's SHA256SUMS describes the page as published."
 }
 
-publish_tools_dmg
+if [[ "$TOOLS_ONLY" == "1" ]]; then
+	echo ">> tools-only: the chain three and the first-install DMG stay exactly as published — this run is the Tools leg only."
+	publish_tools_dmg
+else
+	run_chain
+	publish_tools_dmg
+fi
 
