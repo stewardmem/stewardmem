@@ -181,6 +181,7 @@ CREATE TABLE IF NOT EXISTS code_file (
   is_generated INTEGER NOT NULL DEFAULT 0 CHECK (is_generated IN (0,1)),
   is_test      INTEGER NOT NULL DEFAULT 0 CHECK (is_test IN (0,1)),
   has_errors   INTEGER NOT NULL DEFAULT 0 CHECK (has_errors IN (0,1)),
+  parsed       INTEGER NOT NULL DEFAULT 0 CHECK (parsed IN (0,1)),
   UNIQUE(repo_id, path)
 );
 

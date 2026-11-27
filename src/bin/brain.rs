@@ -221,6 +221,18 @@ const SUBCOMMANDS: &[Subcommand] = &[
         usage: "brain policy-anchor gate --pack ID [--db PATH]\n                 (exit 0 = the pack may activate; exit 2 = refused, naming every blocking\n                 anchor and its reason; the refusal is recorded and audited)",
     },
     Subcommand {
+        name: "code-index ingest",
+        json: false,
+        run: cmd_code_index_ingest,
+        usage: "brain code-index ingest <repo-root> [--index PATH] [--profile NAME]\n                 (C0: builds the per-repo code index — schema, tree-sitter parse, symbol\n                 chunks, lexical + vector tables; incremental by content hash; the encoder\n                 comes from the active profile through the port; NOTHING consumes the index yet)",
+    },
+    Subcommand {
+        name: "code-index status",
+        json: false,
+        run: cmd_code_index_status,
+        usage: "brain code-index status <repo-root> [--index PATH]\n                 (commit, index_version, embed dim/profile, counts, the per-extension coverage\n                 table — unparsed extensions named, never skipped — and fresh or stale: stale =\n                 HEAD ≠ the indexed commit, decided by the commit alone, never by mtime)",
+    },
+    Subcommand {
         name: "watch add",
         json: false,
         run: cmd_watch_add,
@@ -2164,6 +2176,190 @@ fn cmd_policy_anchor_gate(args: &[String]) -> Result<(), String> {
             Ok(())
         }
     }
+}
+
+// ————— code-index (C0) — the kernel's rows are WIRING ONLY (pin 19): flags,
+// parse, print, exit. No SQL, no tree-sitter, no hashing lives here; the
+// crate owns every statement and the kernel fills its two ports.
+
+/// The Vec0Host port, filled with the kernel's own audited registration —
+/// the same function the server boot and the registry verbs ride.
+struct CodeIndexVecHost;
+
+impl brain_code_core::host::Vec0Host for CodeIndexVecHost {
+    fn ensure_vec0_registered(&self) -> Result<(), brain_code_core::error::CodeIndexError> {
+        brain_server::register_sqlite_vec::register_sqlite_vec();
+        Ok(())
+    }
+}
+
+/// The encoder port (P-5), filled with the ACTIVE profile's embedder. A
+/// failed input reaches the port as a named refusal — the kernel embedder's
+/// empty-vec-for-failed contract never becomes a silent gap in the index.
+struct CodeIndexEncoder {
+    inner: std::sync::Arc<dyn brain_server::embed::Embedder>,
+    profile: String,
+}
+
+impl brain_code_core::encoder::Encoder for CodeIndexEncoder {
+    fn profile(&self) -> &str {
+        &self.profile
+    }
+
+    fn dim(&self) -> usize {
+        self.inner.store_dim()
+    }
+
+    fn embed(
+        &self,
+        texts: &[String],
+    ) -> Result<Vec<Vec<f32>>, brain_code_core::error::CodeIndexError> {
+        let refs: Vec<&str> = texts.iter().map(String::as_str).collect();
+        let vectors = self.inner.encode(&refs);
+        if vectors.iter().any(Vec::is_empty) {
+            return Err(brain_code_core::error::CodeIndexError::Refusal(format!(
+                "the active embedder ({}) returned an empty vector for at least one of {} texts",
+                self.profile,
+                texts.len()
+            )));
+        }
+        Ok(vectors)
+    }
+}
+
+/// The index file's default home: a hidden file AT the repo root — one per
+/// repo (P-1), rebuildable from the commit, obviously tied to its tree.
+fn code_index_path(root: &Path, flags: &FlagMap) -> PathBuf {
+    flags
+        .get("index")
+        .and_then(|o| o.clone())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| root.join(".brain-code-index.db"))
+}
+
+fn code_index_encoder(profile_flag: Option<String>) -> Result<CodeIndexEncoder, String> {
+    let profile = profile_flag
+        .or_else(|| std::env::var("BRAIN_EMBED_PROFILE").ok())
+        .unwrap_or_else(|| "local".to_string());
+    let inner = brain_server::embed::embedder_for_profile(&profile)
+        .map_err(|e| format!("no embedder for profile '{profile}': {e}"))?;
+    Ok(CodeIndexEncoder { inner, profile })
+}
+
+/// `brain code-index ingest <repo-root> [--index PATH] [--profile NAME]` —
+/// builds (or incrementally refreshes) the per-repo code index. Thin binary:
+/// every statement lives in brain-code-core; this wires, prints, exits.
+fn cmd_code_index_ingest(args: &[String]) -> Result<(), String> {
+    use brain_code_core::encoder::Encoder as _;
+    let (positionals, flags) = parse_flags(args)?;
+    let Some(root) = positionals.first() else {
+        return usage_err(
+            "usage: brain code-index ingest <repo-root> [--index PATH] [--profile NAME]"
+                .to_string(),
+        );
+    };
+    let root = PathBuf::from(root);
+    if !root.is_dir() {
+        return Err(format!(
+            "no directory at {} — ingest refuses",
+            root.display()
+        ));
+    }
+    let encoder = code_index_encoder(flags.get("profile").cloned().flatten())?;
+    let index_path = code_index_path(&root, &flags);
+    let index = brain_code_core::schema::CodeIndex::open(&index_path, &CodeIndexVecHost)
+        .map_err(|e| format!("open {}: {e}", index_path.display()))?;
+    index
+        .migrate(encoder.dim())
+        .map_err(|e| format!("migrate: {e}"))?;
+    let started = std::time::Instant::now();
+    let report = brain_code_core::ingest::ingest(&index, &root, &encoder, None)
+        .map_err(|e| format!("ingest refused: {e}"))?;
+    println!(
+        "code index at {} — commit {} ({}{} files moved):",
+        index_path.display(),
+        &report.commit[..8.min(report.commit.len())],
+        if report.files_changed == 0 {
+            "unchanged, "
+        } else {
+            ""
+        },
+        report.files_changed,
+    );
+    println!(
+        "  files {} · symbols {} · occurrences {} · chunks {}",
+        report.files_indexed, report.symbols, report.occurrences, report.chunks
+    );
+    println!(
+        "  errors {} · unparsed {} ({} ms)",
+        report.files_with_errors,
+        report.unparsed_files,
+        started.elapsed().as_millis()
+    );
+    println!("  coverage: seen / parsed / errors per extension");
+    for ext in &report.coverage {
+        println!(
+            "    {:10} {:6} / {:6} / {:6}",
+            ext.ext, ext.seen, ext.parsed, ext.errors
+        );
+    }
+    println!("  NOTHING consumes this index yet (C0)");
+    Ok(())
+}
+
+/// `brain code-index status <repo-root> [--index PATH]` — what the index
+/// holds, and whether it is honest about freshness.
+fn cmd_code_index_status(args: &[String]) -> Result<(), String> {
+    let (positionals, flags) = parse_flags(args)?;
+    let Some(root) = positionals.first() else {
+        return usage_err("usage: brain code-index status <repo-root> [--index PATH]".to_string());
+    };
+    let root = PathBuf::from(root);
+    let index_path = code_index_path(&root, &flags);
+    if !index_path.exists() {
+        return Err(format!(
+            "no index at {} — run `brain code-index ingest {}` first",
+            index_path.display(),
+            root.display()
+        ));
+    }
+    let index = brain_code_core::schema::CodeIndex::open(&index_path, &CodeIndexVecHost)
+        .map_err(|e| format!("open {}: {e}", index_path.display()))?;
+    let report = brain_code_core::status::status(&index, &root)
+        .map_err(|e| format!("status refused: {e}"))?;
+    println!(
+        "code index at {} — {} ({}):",
+        index_path.display(),
+        report.root,
+        if report.fresh { "fresh" } else { "stale" }
+    );
+    println!(
+        "  indexed commit {} · HEAD {} · index_version {}",
+        &report.commit[..8.min(report.commit.len())],
+        &report.head_now[..8.min(report.head_now.len())],
+        report.index_version
+    );
+    println!(
+        "  embed dim {} profile '{}' · last run: {}",
+        report.embed_dim, report.embed_profile, report.last_run_status
+    );
+    println!(
+        "  files {} · symbols {} · occurrences {} · chunks {} · errors {} · unparsed {}",
+        report.files,
+        report.symbols,
+        report.occurrences,
+        report.chunks,
+        report.files_with_errors,
+        report.unparsed_files
+    );
+    println!("  coverage: seen / parsed / errors per extension");
+    for ext in &report.coverage {
+        println!(
+            "    {:10} {:6} / {:6} / {:6}",
+            ext.ext, ext.seen, ext.parsed, ext.errors
+        );
+    }
+    Ok(())
 }
 
 /// The `--db` flag's resolved path (shared with the registry verbs' echoes).

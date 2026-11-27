@@ -31,6 +31,9 @@ pub struct ExtCoverage {
 pub struct IngestReport {
     pub commit: String,
     pub files_indexed: usize,
+    /// Files rebuilt this run — changed or removed. Zero on an unchanged
+    /// re-ingest (pin 5), exactly the movers on a change (pin 6).
+    pub files_changed: usize,
     pub symbols: usize,
     pub occurrences: usize,
     pub chunks: usize,
@@ -42,14 +45,6 @@ pub struct IngestReport {
 /// The test seam for pin 4: a hook called after each file's rows are written.
 /// Returning an error must roll the whole data transaction back.
 pub type FileHook<'a> = Option<&'a dyn Fn(usize) -> Result<(), CodeIndexError>>;
-
-/// Per-extension aggregation built during the file loop.
-#[derive(Default)]
-struct LangTally {
-    seen: usize,
-    parsed: usize,
-    errors: usize,
-}
 
 /// One repo per index file: the `code_repo` row must already carry the same
 /// profile, or the ingest refuses naming both (pin 14's mechanism; P-5).
@@ -193,29 +188,111 @@ fn ingest_data(
     let conn = index.conn();
     let tx = conn.unchecked_transaction()?;
 
-    // A fresh C0 ingest replaces this repo's file rows wholesale; FK cascades
-    // take symbols and occurrences with them. The vec table has no FK to the
-    // chunk rows (R-6: chunk_id only), so its stale rows go FIRST, while the
-    // chunk ids are still findable. (S5 refines to per-file deltas via
-    // content_hash; pin 5's no-op law lands there.)
-    tx.execute(
-        "DELETE FROM code_chunk_vec WHERE chunk_id IN (SELECT c.id FROM code_chunk c \
-         JOIN code_file f ON f.id = c.file_id WHERE f.repo_id = ?1)",
-        [repo_id],
-    )?;
-    tx.execute("DELETE FROM code_file WHERE repo_id = ?1", [repo_id])?;
+    // The incremental rule (S5): reparse exactly the files whose content_hash
+    // moved; delete and rebuild only those files' rows (plus the tracked files
+    // that disappeared). The vec table has no FK to the chunk rows (R-6:
+    // chunk_id only), so its stale rows go FIRST, while the doomed chunk ids
+    // are still findable. The content hash — never mtime (D-g) — is the
+    // change detector, so an unchanged re-ingest writes zero data rows (pin 5).
+    let stored: BTreeMap<String, (i64, String)> = {
+        let mut stmt =
+            tx.prepare("SELECT path, id, content_hash FROM code_file WHERE repo_id = ?1")?;
+        let rows = stmt.query_map([repo_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                (row.get::<_, i64>(1)?, row.get::<_, String>(2)?),
+            ))
+        })?;
+        rows.collect::<Result<BTreeMap<String, (i64, String)>, rusqlite::Error>>()?
+    };
+    let mut doomed_ids: Vec<i64> = Vec::new();
+    for (path, (id, hash)) in &stored {
+        let still_tracked = inv.files.iter().any(|f| &f.path == path);
+        let moved = inv
+            .files
+            .iter()
+            .any(|f| &f.path == path && &f.content_hash != hash);
+        if !still_tracked || moved {
+            doomed_ids.push(*id);
+        }
+    }
+    // The movers: files that are new or whose content_hash moved — exactly
+    // the set this ingest (re)parses, so the report's changed-file figure
+    // counts every file it touched, including a fresh store's full build.
+    let changed_paths: std::collections::BTreeSet<&str> = inv
+        .files
+        .iter()
+        .filter(|f| {
+            stored
+                .get(&f.path)
+                .is_none_or(|(_, stored_hash)| stored_hash != &f.content_hash)
+        })
+        .map(|f| f.path.as_str())
+        .collect();
+    let files_changed = changed_paths.len();
+    // The doomed files' contribution to the totals, read before deletion —
+    // the totals stay independently derived (pin 12 stays honest).
+    let mut removed = (0i64, 0i64, 0i64, 0i64); // symbols, occurrences, chunks, error-files
+    for id in &doomed_ids {
+        removed.0 += tx.query_row(
+            "SELECT COUNT(*) FROM code_symbol WHERE file_id = ?1",
+            [id],
+            |r| r.get::<_, i64>(0),
+        )?;
+        removed.1 += tx.query_row(
+            "SELECT COUNT(*) FROM code_occurrence WHERE file_id = ?1",
+            [id],
+            |r| r.get::<_, i64>(0),
+        )?;
+        removed.2 += tx.query_row(
+            "SELECT COUNT(*) FROM code_chunk WHERE file_id = ?1",
+            [id],
+            |r| r.get::<_, i64>(0),
+        )?;
+        removed.3 += tx.query_row(
+            "SELECT has_errors FROM code_file WHERE id = ?1",
+            [id],
+            |r| r.get::<_, i64>(0),
+        )?;
+    }
+    let before = (
+        tx.query_row("SELECT COUNT(*) FROM code_symbol", [], |r| {
+            r.get::<_, i64>(0)
+        })?,
+        tx.query_row("SELECT COUNT(*) FROM code_occurrence", [], |r| {
+            r.get::<_, i64>(0)
+        })?,
+        tx.query_row("SELECT COUNT(*) FROM code_chunk", [], |r| {
+            r.get::<_, i64>(0)
+        })?,
+        tx.query_row(
+            "SELECT COUNT(*) FROM code_file WHERE has_errors = 1",
+            [],
+            |r| r.get::<_, i64>(0),
+        )?,
+    );
+    for id in &doomed_ids {
+        tx.execute(
+            "DELETE FROM code_chunk_vec WHERE chunk_id IN (SELECT id FROM code_chunk \
+             WHERE file_id = ?1)",
+            [id],
+        )?;
+        tx.execute("DELETE FROM code_file WHERE id = ?1", [id])?;
+    }
 
-    let mut tally: BTreeMap<&'static str, LangTally> = BTreeMap::new();
-    let mut symbols_total = 0usize;
-    let mut occurrences_total = 0usize;
-    let mut chunks_total = 0usize;
-    let mut files_with_errors = 0usize;
+    let mut inserted_symbols = 0usize;
+    let mut inserted_occurrences = 0usize;
+    let mut inserted_chunks = 0usize;
+    let mut inserted_error_files = 0usize;
     // (chunk row id, chunk text) — embedded in one port pass after all files.
     let mut to_embed: Vec<(i64, String)> = Vec::new();
 
     for (file_index, draft) in inv.files.iter().enumerate() {
-        let entry = tally.entry(draft.lang.as_str()).or_default();
-        entry.seen += 1;
+        // Unchanged since the last ingest: the rows stay, nothing is written
+        // (pin 5's no-op law; the content hash — never mtime — decides).
+        if !changed_paths.contains(draft.path.as_str()) {
+            continue;
+        }
 
         let parsed_file = if draft.is_generated || draft.read_error {
             // Generated files are indexed for their text (the file-level
@@ -230,8 +307,8 @@ fn ingest_data(
 
         tx.execute(
             "INSERT INTO code_file(repo_id, path, lang, content_hash, loc, content, \
-               is_generated, is_test, has_errors)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+               is_generated, is_test, has_errors, parsed)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             rusqlite::params![
                 repo_id,
                 draft.path,
@@ -242,12 +319,12 @@ fn ingest_data(
                 draft.is_generated as i64,
                 draft.is_test as i64,
                 has_errors as i64,
+                parsed_file.is_some() as i64,
             ],
         )?;
         let file_id: i64 = tx.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
 
         if let Some(parsed) = &parsed_file {
-            entry.parsed += 1;
             let mut symbol_ids: Vec<i64> = Vec::with_capacity(parsed.symbols.len());
             for symbol in &parsed.symbols {
                 let parent_id = symbol
@@ -308,8 +385,8 @@ fn ingest_data(
                     ],
                 )?;
             }
-            symbols_total += parsed.symbols.len();
-            occurrences_total += parsed.symbols.len() + parsed.refs.len();
+            inserted_symbols += parsed.symbols.len();
+            inserted_occurrences += parsed.symbols.len() + parsed.refs.len();
 
             // Chunk by symbol; windowed chunks only for top-level code with
             // no symbol, tagged `window` (§2 S4).
@@ -333,12 +410,11 @@ fn ingest_data(
                 let chunk_id: i64 =
                     tx.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
                 to_embed.push((chunk_id, draft.text));
-                chunks_total += 1;
+                inserted_chunks += 1;
             }
         }
         if has_errors {
-            entry.errors += 1;
-            files_with_errors += 1;
+            inserted_error_files += 1;
         }
         if let Some(hook) = hook {
             hook(file_index)?;
@@ -376,17 +452,29 @@ fn ingest_data(
         }
     }
 
-    // The coverage table: per extension, seen / parsed / with errors —
-    // including the extensions the index never parses. The schema's language
-    // names (rust/typescript/tsx) map to the coverage table's extensions.
+    // The coverage table: per extension, seen / parsed / with errors, derived
+    // from the store itself (the `parsed` column keeps the fact on the row),
+    // plus the extensions the index never parses (R-4/P-6) from the
+    // inventory. The schema's language names map to the table's extensions.
     let mut coverage: Vec<ExtCoverage> = Vec::new();
     for (ext, lang_key) in [("rs", "rust"), ("ts", "typescript"), ("tsx", "tsx")] {
-        let tally = tally.remove(lang_key).unwrap_or_default();
+        let row = tx.query_row(
+            "SELECT COUNT(*), COALESCE(SUM(parsed), 0), COALESCE(SUM(has_errors), 0) \
+             FROM code_file WHERE repo_id = ?1 AND lang = ?2",
+            rusqlite::params![repo_id, lang_key],
+            |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, i64>(2)?,
+                ))
+            },
+        )?;
         coverage.push(ExtCoverage {
             ext: ext.to_string(),
-            seen: tally.seen,
-            parsed: tally.parsed,
-            errors: tally.errors,
+            seen: row.0 as usize,
+            parsed: row.1 as usize,
+            errors: row.2 as usize,
         });
     }
     for (ext, count) in &inv.unparsed {
@@ -398,14 +486,18 @@ fn ingest_data(
         });
     }
 
+    // Totals for the run row: the store's post-write state, derived
+    // independently of the verification SELECTs below (pin 12 stays honest):
+    // before − removed + inserted.
     let report = IngestReport {
         commit: String::new(),
         files_indexed: inv.files.len(),
-        symbols: symbols_total,
-        occurrences: occurrences_total,
-        chunks: chunks_total,
+        files_changed,
+        symbols: (before.0 - removed.0 + inserted_symbols as i64) as usize,
+        occurrences: (before.1 - removed.1 + inserted_occurrences as i64) as usize,
+        chunks: (before.2 - removed.2 + inserted_chunks as i64) as usize,
         unparsed_files: inv.unparsed.iter().map(|(_, n)| n).sum(),
-        files_with_errors,
+        files_with_errors: (before.3 - removed.3 + inserted_error_files as i64) as usize,
         coverage,
     };
 
@@ -759,6 +851,155 @@ mod tests {
             "an empty index is never written for an unreadable repo"
         );
         let _ = std::fs::remove_dir_all(&bare);
+        let _ = std::fs::remove_file(&index_path);
+    }
+
+    #[test]
+    fn re_ingesting_the_same_commit_adds_one_run_row_and_zero_data_rows() {
+        let repo = fixture_repo("noop");
+        let (index, index_path) = scratch_index("noop");
+        ingest(&index, &repo, &FakeEncoder::new("test", 8), None).unwrap();
+        let conn = index.conn();
+        let counts_before: Vec<i64> = ["code_file", "code_symbol", "code_occurrence", "code_chunk"]
+            .iter()
+            .map(|t| {
+                conn.query_row(&format!("SELECT COUNT(*) FROM {t}"), [], |r| r.get(0))
+                    .unwrap()
+            })
+            .collect();
+        let max_ids_before: Vec<i64> = ["code_file", "code_symbol", "code_chunk"]
+            .iter()
+            .map(|t| {
+                conn.query_row(&format!("SELECT COALESCE(MAX(id), 0) FROM {t}"), [], |r| {
+                    r.get(0)
+                })
+                .unwrap()
+            })
+            .collect();
+
+        let report = ingest(&index, &repo, &FakeEncoder::new("test", 8), None).unwrap();
+        assert_eq!(
+            report.files_changed, 0,
+            "an unchanged re-ingest moves nothing"
+        );
+        let runs: i64 = conn
+            .query_row("SELECT COUNT(*) FROM code_index_run", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(runs, 2, "the re-run adds exactly one run row");
+        for (table, before) in ["code_file", "code_symbol", "code_occurrence", "code_chunk"]
+            .iter()
+            .zip(counts_before)
+        {
+            let after: i64 = conn
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(
+                after, before,
+                "{table} gains zero rows on re-ingest (pin 5)"
+            );
+        }
+        for (table, before) in ["code_file", "code_symbol", "code_chunk"]
+            .iter()
+            .zip(max_ids_before)
+        {
+            let after: i64 = conn
+                .query_row(
+                    &format!("SELECT COALESCE(MAX(id), 0) FROM {table}"),
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(
+                after, before,
+                "{table} rowids untouched — no delete+rewrite happened"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&repo);
+        let _ = std::fs::remove_file(&index_path);
+    }
+
+    #[test]
+    fn a_ten_file_change_reparses_exactly_ten_files() {
+        let repo = fixture_repo("tenchange");
+        // Grow the fixture to 12 rust files, all tracked in one commit.
+        for i in 0..11 {
+            std::fs::write(
+                repo.join(format!("src/unit_{i}.rs")),
+                format!("pub fn unit_{i}() -> u8 {{\n    {i}\n}}\n"),
+            )
+            .unwrap();
+        }
+        let git = |args: &[&str]| {
+            let out = Command::new("git")
+                .arg("-C")
+                .arg(&repo)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(out.status.success(), "git {args:?} failed");
+        };
+        git(&["add", "-A"]);
+        git(&[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-m",
+            "12 files",
+        ]);
+
+        let (index, index_path) = scratch_index("tenchange");
+        ingest(&index, &repo, &FakeEncoder::new("test", 8), None).unwrap();
+        let conn = index.conn();
+        let id_of = |path: &str| -> i64 {
+            conn.query_row("SELECT id FROM code_file WHERE path = ?1", [path], |r| {
+                r.get(0)
+            })
+            .unwrap()
+        };
+        let untouched_before = id_of("src/unit_0.rs");
+        let moved_before: Vec<i64> = (1..=10)
+            .map(|i| id_of(&format!("src/unit_{i}.rs")))
+            .collect();
+
+        // Move exactly ten files; unit_0 stays; unit_11 stays.
+        for i in 1..=10 {
+            std::fs::write(
+                repo.join(format!("src/unit_{i}.rs")),
+                format!("pub fn unit_{i}() -> u8 {{\n    {i} + 100\n}}\n"),
+            )
+            .unwrap();
+        }
+        git(&["add", "-A"]);
+        git(&[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-m",
+            "move ten",
+        ]);
+
+        let report = ingest(&index, &repo, &FakeEncoder::new("test", 8), None).unwrap();
+        assert_eq!(
+            report.files_changed, 10,
+            "exactly the ten movers were rebuilt (pin 6)"
+        );
+        assert_eq!(
+            id_of("src/unit_0.rs"),
+            untouched_before,
+            "an unmoved file keeps its row untouched"
+        );
+        for (i, before) in (1..=10).zip(moved_before) {
+            let after = id_of(&format!("src/unit_{i}.rs"));
+            assert_ne!(
+                after, before,
+                "unit_{i} was deleted and rebuilt, not edited in place"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&repo);
         let _ = std::fs::remove_file(&index_path);
     }
 

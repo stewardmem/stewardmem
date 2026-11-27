@@ -21,3 +21,4 @@ pub mod parse;
 pub mod recall_set;
 pub mod schema;
 pub mod snapshot;
+pub mod status;
