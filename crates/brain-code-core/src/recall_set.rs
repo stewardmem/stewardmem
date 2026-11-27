@@ -68,6 +68,10 @@ impl std::error::Error for RecallError {
 /// number — the set fails loudly, never silently truncated.
 pub fn load(path: &Path) -> Result<Vec<RecallEntry>, RecallError> {
     let text = fs::read_to_string(path).map_err(RecallError::Io)?;
+    parse_jsonl(&text)
+}
+
+fn parse_jsonl(text: &str) -> Result<Vec<RecallEntry>, RecallError> {
     let mut entries = Vec::new();
     for (idx, line) in text.lines().enumerate() {
         if line.trim().is_empty() {
@@ -163,6 +167,27 @@ pub fn fixture_path() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/code_index_recall.jsonl")
 }
 
+/// The frozen set, embedded at compile time — the harness rides inside the
+/// binary, and the CLI needs no checkout to reproduce the baseline. The
+/// `the_embedded_set_is_the_frozen_file` pin proves these bytes are the
+/// file's bytes, and the hash pin above proves the file's bytes are the
+/// frozen set's.
+pub const EMBEDDED_JSONL: &str = include_str!("../fixtures/code_index_recall.jsonl");
+
+/// Parse the embedded bytes (same loader rules as `load`: empty lines
+/// skipped, a malformed line names its number).
+pub fn load_embedded() -> Result<Vec<RecallEntry>, RecallError> {
+    parse_jsonl(EMBEDDED_JSONL)
+}
+
+/// SHA-256 of the embedded bytes, hex-encoded lowercase — what the recall
+/// print puts beside the baseline table.
+pub fn embedded_sha256() -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(EMBEDDED_JSONL.as_bytes());
+    to_hex(&hasher.finalize())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -218,6 +243,23 @@ mod tests {
         let total = ids.len();
         ids.dedup();
         assert_eq!(ids.len(), total, "duplicate ids in the frozen set");
+    }
+
+    #[test]
+    fn the_embedded_set_is_the_frozen_file() {
+        let file_bytes = fs::read(fixture_path()).unwrap();
+        assert_eq!(
+            file_bytes,
+            EMBEDDED_JSONL.as_bytes(),
+            "the embedded set drifted from the fixture file"
+        );
+        assert_eq!(
+            embedded_sha256(),
+            FROZEN_SHA256,
+            "the embedded bytes no longer hash to the frozen pin"
+        );
+        let entries = load_embedded().unwrap();
+        validate(&entries).unwrap();
     }
 
     #[test]

@@ -233,6 +233,12 @@ const SUBCOMMANDS: &[Subcommand] = &[
         usage: "brain code-index status <repo-root> [--index PATH]\n                 (commit, index_version, embed dim/profile, counts, the per-extension coverage\n                 table — unparsed extensions named, never skipped — and fresh or stale: stale =\n                 HEAD ≠ the indexed commit, decided by the commit alone, never by mtime)",
     },
     Subcommand {
+        name: "code-index recall",
+        json: false,
+        run: cmd_code_index_recall,
+        usage: "brain code-index recall <repo-root> [--index PATH] [--misses]\n                 (C0 S6: the frozen 46-question set through the three lexical control arms —\n                 file BM25 / chunk+symbol / fused — recall@1/5/10 file level, recall@10 symbol\n                 level, each split by has_identifier; the hash of the frozen set prints beside\n                 the table; --misses names every entry any arm failed to fully recall; this is\n                 the BASELINE — no vector result may ever be quoted without it)",
+    },
+    Subcommand {
         name: "watch add",
         json: false,
         run: cmd_watch_add,
@@ -787,6 +793,10 @@ const BOOL_FLAGS: &[&str] = &[
     // because it takes no value — it re-anchors against the compiled-in corpus,
     // never against something a caller supplies.
     "print-baseline",
+    // `brain code-index recall --misses`: after the baseline table, name every
+    // frozen-set entry any arm failed to fully recall at 10. A bool flag
+    // because it adds a listing, it does not parameterize one.
+    "misses",
     "help",
     "version",
 ];
@@ -2359,6 +2369,89 @@ fn cmd_code_index_status(args: &[String]) -> Result<(), String> {
             ext.ext, ext.seen, ext.parsed, ext.errors
         );
     }
+    Ok(())
+}
+
+/// `brain code-index recall <repo-root> [--index PATH]` — the frozen set
+/// through the three lexical control arms. The set rides embedded in the
+/// binary (hash-pinned); the table is the baseline the vector work must
+/// quote beside every later claim. Wiring only: the crate owns the arms,
+/// the scoring, and the SQL.
+fn cmd_code_index_recall(args: &[String]) -> Result<(), String> {
+    let (positionals, flags) = parse_flags(args)?;
+    let Some(root) = positionals.first() else {
+        return Err("usage: brain code-index recall <repo-root> [--index PATH]".to_string());
+    };
+    let root = PathBuf::from(root);
+    let index_path = code_index_path(&root, &flags);
+    if !index_path.exists() {
+        return Err(format!(
+            "no index at {} — run `brain code-index ingest {}` first",
+            index_path.display(),
+            root.display()
+        ));
+    }
+    let index = brain_code_core::schema::CodeIndex::open(&index_path, &CodeIndexVecHost)
+        .map_err(|e| format!("open {}: {e}", index_path.display()))?;
+    let entries = brain_code_core::recall_set::load_embedded()
+        .map_err(|e| format!("the embedded recall set failed to load: {e}"))?;
+    let report = brain_code_core::recall::run_baseline(&index, &entries)
+        .map_err(|e| format!("recall refused: {e}"))?;
+    println!(
+        "recall set {} entries (sha {}, {}/{} with/without identifier) — the frozen baseline:",
+        report.entries,
+        &brain_code_core::recall_set::embedded_sha256()[..8],
+        report.with_identifier,
+        report.without_identifier
+    );
+    println!(
+        "  {:14} {:16} {:>7} {:>8} {:>8} {:>8} {:>7}",
+        "arm", "kind", "entries", "r@1", "r@5", "r@10", "hit@5"
+    );
+    for arm in &report.arms {
+        println!(
+            "  {:14} {:16} {:>7} {:>8.3} {:>8.3} {:>8.3} {:>7.3}",
+            arm.arm,
+            arm.kind,
+            arm.entries,
+            arm.recall_at_1,
+            arm.recall_at_5,
+            arm.recall_at_10,
+            arm.hit_at_5
+        );
+    }
+    println!("  symbol recall@10 (the chunk+symbol arm's symbol leg):");
+    for row in &report.symbols {
+        println!(
+            "    {:16} entries {:>3} · recall {:>6.3}",
+            row.kind, row.entries, row.recall_at_10
+        );
+    }
+    if flags.contains_key("misses") {
+        println!("  misses (any arm below full recall at 10):");
+        for entry in &report.detail {
+            let worst = entry
+                .file_bm25
+                .at_10
+                .min(entry.chunk_symbol.at_10)
+                .min(entry.fused.at_10);
+            if worst < 1.0 {
+                println!(
+                    "    {}{}  file-bm25 {:.2} · chunk+symbol {:.2} · fused {:.2}{}",
+                    entry.id,
+                    if entry.has_identifier { " (id)" } else { "" },
+                    entry.file_bm25.at_10,
+                    entry.chunk_symbol.at_10,
+                    entry.fused.at_10,
+                    entry
+                        .symbol_recall_at_10
+                        .map(|s| format!(" · symbols {:.2}", s))
+                        .unwrap_or_default()
+                );
+            }
+        }
+    }
+    println!("  NOTHING consumes this index yet (C0) — the baseline, not a claim");
     Ok(())
 }
 

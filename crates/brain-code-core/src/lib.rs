@@ -18,6 +18,7 @@ pub mod host;
 pub mod ingest;
 pub mod inventory;
 pub mod parse;
+pub mod recall;
 pub mod recall_set;
 pub mod schema;
 pub mod snapshot;
