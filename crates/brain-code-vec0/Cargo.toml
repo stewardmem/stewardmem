@@ -1,0 +1,24 @@
+[package]
+name = "brain-code-vec0"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "The sqlite-vec FFI registration shim for the code-index substrate: the kernel's audited auto-extension registration, isolated so the engine crates that forbid unsafe outright can still host vec0. No API beyond the registrar and its proof test."
+publish = false
+
+[dependencies]
+rusqlite = { version = "0.41.1", features = ["bundled"] }
+# Load-bearing for its build script: `cc` compiles sqlite-vec.c into the
+# `sqlite_vec0` static library and emits the link directives the extern block
+# in src/lib.rs resolves at link time. The underscore import marks the
+# dependency used so the manifest lint stays quiet.
+sqlite_vec_rs = { package = "sqlite-vec", version = "0.1.9" }
+
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"

@@ -11,6 +11,14 @@ publish = false
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 sha2 = "0.11"
+# At the workspace's existing pins (P-3). sqlite-vec itself is NOT named here:
+# loading a SQLite extension is an FFI act and this crate forbids unsafe
+# outright (§R2). The FFI shim lives in brain-code-vec0; production fills the
+# Vec0Host port with the kernel's own registration.
+rusqlite = { version = "0.41.1", features = ["bundled"] }
+
+[dev-dependencies]
+brain-code-vec0 = { path = "../brain-code-vec0" }
 
 [lints.rust]
 unsafe_code = "forbid"

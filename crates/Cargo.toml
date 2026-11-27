@@ -30,6 +30,7 @@ members = [
     "brain-evolve-core",
     "brain-troubleshoot-core",
     "brain-code-core",
+    "brain-code-vec0",
     "legal-rules-db",
 ]
 
