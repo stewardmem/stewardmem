@@ -16,8 +16,8 @@ were when the round landed — not because the work is still unreleased.
 ## [Unreleased] — 2026-11-27 — the C0 code-index substrate: a per-repo code index behind an encoder port, and the frozen lexical baseline it must beat
 
 The C0 round (`crates/brain-code-core` + the kernel's three `code-index` CLI rows) landed
-in five commits (S1 `2c9215e6` · S2 `e0a73654` · S3 `ed618a42` · S4 `a60a5821` · S5 `70e694b5`
-· S6 `ee644298` · S7 `7fc6256b`). The substrate: eleven presence-guarded SQLite tables (three
+in eight commits (S1 `2c9215e6` · S2 `e0a73654` · S3 `ed618a42` · S4 `a60a5821` · S5 `70e694b5`
+· S6 `ee644298` · S7 `7fc6256b` · S8 `1919ca34`). The substrate: eleven presence-guarded SQLite tables (three
 FTS legs — file unicode61, chunk unicode61, symbol trigram — plus a `vec0` table carrying
 `chunk_id` only, no metadata columns), tree-sitter parsing into scope-qualified symbols
 (`Widget::refresh`), chunks by symbol with windowed fallback tagged for counting, incremental
@@ -32,8 +32,8 @@ brain-steward-ip. Full test count derives from `scripts/badges.sh --selfcheck`, 
 
 Proof invocations (each names what it shows):
 - `brain code-index ingest <repo-root>` — builds the index; the no-op re-ingest moves zero files;
-  the full-corpus build at brain-server is 823 files / 20,139 symbols / 690,765 occurrences /
-  71,404 chunks in ~65 s wall.
+  measured at `1919ca34` (2026-11-27): 827 files / 20,209 symbols / 693,878 occurrences /
+  71,604 chunks in ~65 s wall.
 - `brain code-index status <repo-root>` — fresh/stale by the commit alone; the per-extension
   coverage table names what is never parsed (`.svelte` 58 seen / 0 parsed, counted, not skipped).
 - `brain code-index recall <repo-root> [--misses]` — the frozen baseline, the set's hash beside

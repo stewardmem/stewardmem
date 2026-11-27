@@ -126,8 +126,8 @@ not part of `/recall` or any other pipeline in this page. What exists is the bas
 lexical control arms — file-level BM25, chunk+symbol lexical, and the two fused by reciprocal
 rank. `brain code-index recall <repo-root>` prints recall@1/5/10 (file level), recall@10 (symbol
 level), each split by whether the question carries a code identifier, with the set's hash beside
-the table. The measured floor at C0 (2026-11-27, brain-server: 823 files, 20,139 symbols,
-71,404 chunks): **file-level recall@5 = 0.652 overall, 0.800 for identifier questions, 0.611
+the table. The measured floor at C0 (2026-11-27, brain-server at `1919ca34`: 827 files, 20,209 symbols,
+71,604 chunks): **file-level recall@5 = 0.652 overall, 0.800 for identifier questions, 0.611
 without**. No vector number may ever be quoted without this table beside it — that is the round's
 preregistered claim, and the vector layer (C1) must clear 0.70 at recall@5 or the plan's
 stop-and-reassess clause fires.
