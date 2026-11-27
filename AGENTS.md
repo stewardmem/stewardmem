@@ -1,6 +1,6 @@
 # brain-server — agent instructions
 
-**Release:** v1.29.48 (2026-11-23) · notes in `CHANGELOG.md` §[1.29.48].
+**Release:** v1.29.49 (2026-11-27) · notes in `CHANGELOG.md` §[1.29.49].
 Round history is `docs/AGENTS_HISTORY.md` (append-only, load on demand).
 New rounds are appended there — not here.
 
@@ -44,7 +44,11 @@ dry-run, and the release ritual are in `.agents/skills/release/SKILL.md`.
 
 ## Open commitments
 
-- **v1.29.48** — the claim gate should also scan the newest changelog section.
+- **v1.29.49** — the claim gate should also scan the newest changelog section.
+- **c0-close S4–S7** — the remaining direct bumps (sha2, model2vec-rs,
+  jsonwebtoken, ureq), the unused-dep scan, the lipstyk scoping decision,
+  and the round's own close section are ASKED and OWED (the S0 baselines
+  in `/tmp/c0close/` serve them).
 - **UI2** — the sessions e2e drill proof rides the next bridge-available session.
 - **R152** — the next stage run exercises the cryptex guard and the arm64 build
   natively; the site copy syncs to the front door's voice.

@@ -13,6 +13,89 @@ measured. Those records are kept as they were written (this file is
 append-only), and their heading says `Unreleased` because that is what they
 were when the round landed — not because the work is still unreleased.
 
+## [1.29.49] — 2026-11-27 — the dependency refresh: the SQLite stack moves, the audit goes silent, and a documented CLI flag starts working
+
+This release moves the database stack to the newest band the pool allows
+and silences the unmaintained-crate warnings `cargo audit` was carrying.
+The served store's engine is unchanged (bundled SQLite 3.54.1), and the
+read-both-ways drill proved the old and new binaries read each other's
+stores byte-identically. The customer portal's template engine moves to
+the current line with the unmaintained `basic-toml` parser out of the
+graph entirely. One CLI repair: the `code-index` subcommands' documented
+`--index PATH` flag actually parses now. No route, no wire shape, and no
+shell file moved.
+
+### Release notes
+
+**Improvements**
+
+- the database stack moves in one coherent set — rusqlite 0.41.1 → 0.42.0
+  with the pool (r2d2_sqlite 0.36.0 → 0.37.2) and libsqlite3-sys
+  0.39.1 → 0.40.0 — single-version across both workspaces; the bundled
+  SQLite engine stays 3.54.1, and a five-part drill proved the previous
+  binary and this one read each other's stores byte-identically (recall
+  table, status, integrity, the vec0/KNN crates tests). rusqlite 0.43.0
+  is deliberately NOT taken: the newest pool release still caps rusqlite
+  at ^0.42, and 0.43 would fork the graph into two copies. (a3a339ba)
+- the `cargo audit` unmaintained-crate warnings go from two to one
+  waived: the customer portal's template engine moves askama 0.13 →
+  0.16.1 with the unmaintained `basic-toml` parser OUT of the graph
+  (RUSTSEC-2026-0374 cleared for real — the edge sat behind an optional
+  feature the templates never needed), and the remaining `ttf-parser`
+  warning (RUSTSEC-2026-0192) is waived with a measured reason and a
+  re-check trigger: the PDF stack's newest release still pins the old
+  lopdf band, so the bump would fork the graph and not clear the
+  warning. (197c3a25)
+- `brain code-index ingest|status|recall --index PATH` — the flag the
+  usage lines and the CLI reference have always documented now actually
+  parses; before this release it errored "unknown flag" before any
+  handler ran. (a3a339ba)
+- the per-repo code index ships as a command-line surface: three new
+  `brain code-index` subcommands build, describe, and baseline a repo's
+  symbol index (eleven presence-guarded SQLite tables, tree-sitter
+  parsing, incremental by content hash, a frozen 46-question recall
+  harness). NOTHING consumes the index yet — no route, no retrieval
+  surface, no token claim; this is the C0 substrate and its measured
+  lexical floor (file-level recall@5 = 0.652). (2c9215e6, e0a73654,
+  ed618a42, a60a5821, 70e694b5, ee644298, 7fc6256b, 1919ca34)
+- the research-window register: every paper and standard the docs cite
+  gets a register row with a decision, a reason, and a verification
+  date — the active window backfilled from a 169-paper sweep, the
+  standards register audited against the issuing bodies, and a
+  mechanical checker that fails the build when a cited source's window
+  lapses. (024eea16, 11b93179, ccc3590c, 6fcbe54f, 5186466c, c9117719,
+  f67118a5, 2cbd1ab6, c3a3ee22, 5e3c2284)
+
+### Engineering record
+
+**c0-close S1–S3 (2026-11-27/28).** Range `v1.29.48..HEAD`, four commits:
+`e0455c8f` S1 (the records: the C0 CHANGELOG's ingest numbers re-measured
+at `1919ca34` — 827 files / 20,209 symbols / 693,878 occurrences /
+71,604 chunks — and "five commits" corrected to eight; the stale counts
+in docs/retrieval-and-recall.md and docs/cli-reference.md fixed in the
+same commit) · `a3a339ba` S2 (rusqlite 0.42 coherent set + the --index
+vocabulary fix; the drill evidence is in the commit message) ·
+`197c3a25` S3a+S3b (askama 0.16 + the ttf-parser waiver) · this wrap.
+
+- **The commits that ship inside another round's record.** The C0
+  substrate's eight commits (S1–S8, `2c9215e6`..`1919ca34`) and the
+  research-window register's ten (`024eea16`..`5e3c2284`) carry their
+  own engineering records in the CHANGELOG sections below; the two
+  docs-only commits (`dca0e677` prune AGENTS.md, `376cdd2d` the project
+  skills under .agents/skills) moved no runtime surface.
+- **The pins that did NOT move, and why.** rusqlite 0.43.0 — the pool's
+  ^0.42 caret excludes it (a measured duplicate proved it); re-check on
+  the first r2d2_sqlite release admitting ^0.43. lopdf 0.47.0 —
+  pdf-extract 0.12.1 (newest) requires ^0.42; the waiver's trigger is a
+  pdf-extract release with lopdf >= 0.43. sha2, model2vec-rs,
+  jsonwebtoken, ureq, hf-hub — the c0-close plan's S4 bumps are NOT in
+  this release; they ride the next session with their own goldens.
+- **The drill's own finding.** D2 needed `--index`; the flag was in the
+  usage text and the docs but not in the CLI's closed flag vocabulary —
+  the one-word fix is the vocabulary lesson's own case.
+- The reference binary, the recall baseline, and the served-store copy
+  from S0 live under `/tmp/c0close/` with every gate log.
+
 ## [Unreleased] — 2026-11-27 — the C0 code-index substrate: a per-repo code index behind an encoder port, and the frozen lexical baseline it must beat
 
 The C0 round (`crates/brain-code-core` + the kernel's three `code-index` CLI rows) landed

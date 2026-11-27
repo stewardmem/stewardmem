@@ -2,9 +2,9 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
   "version": 1,
-  "serialNumber": "urn:uuid:5e5a242a-9a5d-4e0e-b819-217c824f1e78",
+  "serialNumber": "urn:uuid:69cd00d9-11a5-4860-bfbc-7f97decb21aa",
   "metadata": {
-    "timestamp": "2026-11-27T12:50:46.589694000Z",
+    "timestamp": "2026-11-27T13:40:28.582282000Z",
     "tools": [
       {
         "vendor": "CycloneDX",
@@ -14,9 +14,9 @@
     ],
     "component": {
       "type": "application",
-      "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.48",
+      "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.49",
       "name": "brain-server",
-      "version": "1.29.48",
+      "version": "1.29.49",
       "description": "Local-first agent memory server: UMP 1.0 L3, zero-token embeddings, human-in-the-loop write gate, tamper-evident audit chain, DSAR/GDPR tooling.",
       "scope": "required",
       "licenses": [
@@ -24,7 +24,7 @@
           "expression": "Apache-2.0"
         }
       ],
-      "purl": "pkg:cargo/brain-server@1.29.48?download_url=file://.",
+      "purl": "pkg:cargo/brain-server@1.29.49?download_url=file://.",
       "externalReferences": [
         {
           "type": "vcs",
@@ -34,159 +34,159 @@
       "components": [
         {
           "type": "library",
-          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.48 bin-target-0",
+          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.49 bin-target-0",
           "name": "brain_server",
-          "version": "1.29.48",
+          "version": "1.29.49",
           "licenses": [
             {
               "expression": "Apache-2.0"
             }
           ],
-          "purl": "pkg:cargo/brain-server@1.29.48?download_url=file://.#src/lib.rs"
+          "purl": "pkg:cargo/brain-server@1.29.49?download_url=file://.#src/lib.rs"
         },
         {
           "type": "application",
-          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.48 bin-target-1",
+          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.49 bin-target-1",
           "name": "bench",
-          "version": "1.29.48",
+          "version": "1.29.49",
           "licenses": [
             {
               "expression": "Apache-2.0"
             }
           ],
-          "purl": "pkg:cargo/brain-server@1.29.48?download_url=file://.#src/bin/bench.rs"
+          "purl": "pkg:cargo/brain-server@1.29.49?download_url=file://.#src/bin/bench.rs"
         },
         {
           "type": "application",
-          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.48 bin-target-2",
+          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.49 bin-target-2",
           "name": "brain",
-          "version": "1.29.48",
+          "version": "1.29.49",
           "licenses": [
             {
               "expression": "Apache-2.0"
             }
           ],
-          "purl": "pkg:cargo/brain-server@1.29.48?download_url=file://.#src/bin/brain.rs"
+          "purl": "pkg:cargo/brain-server@1.29.49?download_url=file://.#src/bin/brain.rs"
         },
         {
           "type": "application",
-          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.48 bin-target-3",
+          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.49 bin-target-3",
           "name": "brain-connector-crm",
-          "version": "1.29.48",
+          "version": "1.29.49",
           "licenses": [
             {
               "expression": "Apache-2.0"
             }
           ],
-          "purl": "pkg:cargo/brain-server@1.29.48?download_url=file://.#src/bin/brain-connector-crm.rs"
+          "purl": "pkg:cargo/brain-server@1.29.49?download_url=file://.#src/bin/brain-connector-crm.rs"
         },
         {
           "type": "application",
-          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.48 bin-target-4",
+          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.49 bin-target-4",
           "name": "brain-connector-gh",
-          "version": "1.29.48",
+          "version": "1.29.49",
           "licenses": [
             {
               "expression": "Apache-2.0"
             }
           ],
-          "purl": "pkg:cargo/brain-server@1.29.48?download_url=file://.#src/bin/brain-connector-gh.rs"
+          "purl": "pkg:cargo/brain-server@1.29.49?download_url=file://.#src/bin/brain-connector-gh.rs"
         },
         {
           "type": "application",
-          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.48 bin-target-5",
+          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.49 bin-target-5",
           "name": "brain-connector-stub",
-          "version": "1.29.48",
+          "version": "1.29.49",
           "licenses": [
             {
               "expression": "Apache-2.0"
             }
           ],
-          "purl": "pkg:cargo/brain-server@1.29.48?download_url=file://.#src/bin/brain-connector-stub.rs"
+          "purl": "pkg:cargo/brain-server@1.29.49?download_url=file://.#src/bin/brain-connector-stub.rs"
         },
         {
           "type": "application",
-          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.48 bin-target-6",
+          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.49 bin-target-6",
           "name": "brain-migrate-rehearse",
-          "version": "1.29.48",
+          "version": "1.29.49",
           "licenses": [
             {
               "expression": "Apache-2.0"
             }
           ],
-          "purl": "pkg:cargo/brain-server@1.29.48?download_url=file://.#src/bin/brain_migrate_rehearse.rs"
+          "purl": "pkg:cargo/brain-server@1.29.49?download_url=file://.#src/bin/brain_migrate_rehearse.rs"
         },
         {
           "type": "application",
-          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.48 bin-target-7",
+          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.49 bin-target-7",
           "name": "brain-server",
-          "version": "1.29.48",
+          "version": "1.29.49",
           "licenses": [
             {
               "expression": "Apache-2.0"
             }
           ],
-          "purl": "pkg:cargo/brain-server@1.29.48?download_url=file://.#src/main.rs"
+          "purl": "pkg:cargo/brain-server@1.29.49?download_url=file://.#src/main.rs"
         },
         {
           "type": "application",
-          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.48 bin-target-8",
+          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.49 bin-target-8",
           "name": "cascade_bench",
-          "version": "1.29.48",
+          "version": "1.29.49",
           "licenses": [
             {
               "expression": "Apache-2.0"
             }
           ],
-          "purl": "pkg:cargo/brain-server@1.29.48?download_url=file://.#src/bin/cascade_bench.rs"
+          "purl": "pkg:cargo/brain-server@1.29.49?download_url=file://.#src/bin/cascade_bench.rs"
         },
         {
           "type": "application",
-          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.48 bin-target-9",
+          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.49 bin-target-9",
           "name": "classify-probe",
-          "version": "1.29.48",
+          "version": "1.29.49",
           "licenses": [
             {
               "expression": "Apache-2.0"
             }
           ],
-          "purl": "pkg:cargo/brain-server@1.29.48?download_url=file://.#src/bin/classify_probe.rs"
+          "purl": "pkg:cargo/brain-server@1.29.49?download_url=file://.#src/bin/classify_probe.rs"
         },
         {
           "type": "application",
-          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.48 bin-target-10",
+          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.49 bin-target-10",
           "name": "extract-document",
-          "version": "1.29.48",
+          "version": "1.29.49",
           "licenses": [
             {
               "expression": "Apache-2.0"
             }
           ],
-          "purl": "pkg:cargo/brain-server@1.29.48?download_url=file://.#src/bin/extract-document.rs"
+          "purl": "pkg:cargo/brain-server@1.29.49?download_url=file://.#src/bin/extract-document.rs"
         },
         {
           "type": "application",
-          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.48 bin-target-11",
+          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.49 bin-target-11",
           "name": "mcp",
-          "version": "1.29.48",
+          "version": "1.29.49",
           "licenses": [
             {
               "expression": "Apache-2.0"
             }
           ],
-          "purl": "pkg:cargo/brain-server@1.29.48?download_url=file://.#src/bin/mcp.rs"
+          "purl": "pkg:cargo/brain-server@1.29.49?download_url=file://.#src/bin/mcp.rs"
         },
         {
           "type": "application",
-          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.48 bin-target-12",
+          "bom-ref": "path+file:///Users/mark/Sites/brain-server#1.29.49 bin-target-12",
           "name": "portal",
-          "version": "1.29.48",
+          "version": "1.29.49",
           "licenses": [
             {
               "expression": "Apache-2.0"
             }
           ],
-          "purl": "pkg:cargo/brain-server@1.29.48?download_url=file://.#src/bin/portal.rs"
+          "purl": "pkg:cargo/brain-server@1.29.49?download_url=file://.#src/bin/portal.rs"
         }
       ]
     },
@@ -727,15 +727,15 @@
     },
     {
       "type": "library",
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#askama@0.13.1",
+      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#askama@0.16.1",
       "name": "askama",
-      "version": "0.13.1",
+      "version": "0.16.1",
       "description": "Type-safe, compiled Jinja-like templates for Rust",
       "scope": "required",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "5d4744ed2eef2645831b441d8f5459689ade2ab27c854488fbab1fbe94fce1a7"
+          "content": "6024d73179f43f15ccd2b881bfea6fee7f3a46ec53f33b52210dea749ebebaa4"
         }
       ],
       "licenses": [
@@ -743,11 +743,11 @@
           "expression": "MIT OR Apache-2.0"
         }
       ],
-      "purl": "pkg:cargo/askama@0.13.1",
+      "purl": "pkg:cargo/askama@0.16.1",
       "externalReferences": [
         {
           "type": "website",
-          "url": "https://askama.readthedocs.io/"
+          "url": "https://askama.rs/"
         },
         {
           "type": "vcs",
@@ -757,15 +757,45 @@
     },
     {
       "type": "library",
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#askama_derive@0.13.1",
+      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#askama_derive@0.16.1",
       "name": "askama_derive",
-      "version": "0.13.1",
+      "version": "0.16.1",
+      "description": "Code generator of Askama templating engine",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "071ee5ebf2138e3ad180e0aacf6940c2cab5e6d8333741d9925c7bee2b153f39"
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "purl": "pkg:cargo/askama_derive@0.16.1",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/askama-rs/askama"
+        },
+        {
+          "type": "vcs",
+          "url": "https://github.com/askama-rs/askama"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#askama_macros@0.16.1",
+      "name": "askama_macros",
+      "version": "0.16.1",
       "description": "Procedural macro package for Askama",
       "scope": "required",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "d661e0f57be36a5c14c48f78d09011e67e0cb618f269cca9f2fd8d15b68c46ac"
+          "content": "643e1c7cbb6aec1d920332fe51a7c0d8219e273dcb8602db03f5263e4d16487b"
         }
       ],
       "licenses": [
@@ -773,11 +803,11 @@
           "expression": "MIT OR Apache-2.0"
         }
       ],
-      "purl": "pkg:cargo/askama_derive@0.13.1",
+      "purl": "pkg:cargo/askama_macros@0.16.1",
       "externalReferences": [
         {
           "type": "website",
-          "url": "https://github.com/askama-rs/askama"
+          "url": "https://askama.rs/"
         },
         {
           "type": "vcs",
@@ -787,15 +817,15 @@
     },
     {
       "type": "library",
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#askama_parser@0.13.0",
+      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#askama_parser@0.16.1",
       "name": "askama_parser",
-      "version": "0.13.0",
+      "version": "0.16.1",
       "description": "Parser for Askama templates",
       "scope": "required",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "cf315ce6524c857bb129ff794935cf6d42c82a6cff60526fe2a63593de4d0d4f"
+          "content": "2c5ae75772275d268b03ab8bdccdd12117b6169ee23256942b34e46c9f476583"
         }
       ],
       "licenses": [
@@ -803,7 +833,7 @@
           "expression": "MIT OR Apache-2.0"
         }
       ],
-      "purl": "pkg:cargo/askama_parser@0.13.0",
+      "purl": "pkg:cargo/askama_parser@0.16.1",
       "externalReferences": [
         {
           "type": "documentation",
@@ -811,7 +841,7 @@
         },
         {
           "type": "website",
-          "url": "https://github.com/askama-rs/askama"
+          "url": "https://askama.rs/"
         },
         {
           "type": "vcs",
@@ -1225,37 +1255,6 @@
         {
           "type": "vcs",
           "url": "https://github.com/RustCrypto/formats"
-        }
-      ]
-    },
-    {
-      "type": "library",
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#basic-toml@0.1.10",
-      "author": "Alex Crichton <alex@alexcrichton.com>, David Tolnay <dtolnay@gmail.com>",
-      "name": "basic-toml",
-      "version": "0.1.10",
-      "description": "Minimal TOML library with few dependencies",
-      "scope": "required",
-      "hashes": [
-        {
-          "alg": "SHA-256",
-          "content": "ba62675e8242a4c4e806d12f11d136e626e6c8361d6b829310732241652a178a"
-        }
-      ],
-      "licenses": [
-        {
-          "expression": "MIT OR Apache-2.0"
-        }
-      ],
-      "purl": "pkg:cargo/basic-toml@0.1.10",
-      "externalReferences": [
-        {
-          "type": "documentation",
-          "url": "https://docs.rs/basic-toml"
-        },
-        {
-          "type": "vcs",
-          "url": "https://github.com/dtolnay/basic-toml"
         }
       ]
     },
@@ -12250,15 +12249,15 @@
     },
     {
       "type": "library",
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#winnow@0.7.15",
+      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#winnow@1.0.5",
       "name": "winnow",
-      "version": "0.7.15",
+      "version": "1.0.5",
       "description": "A byte-oriented, zero-copy, parser combinators library",
       "scope": "required",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "df79d97927682d2fd8adb29682d1140b343be4ac0f08fd68b7765d9c059d3945"
+          "content": "8c3b93199df0ab874cdf0c6a94f0a0dc3423fe41f1cafb62b8bd7b1deb277aef"
         }
       ],
       "licenses": [
@@ -12266,7 +12265,7 @@
           "expression": "MIT"
         }
       ],
-      "purl": "pkg:cargo/winnow@0.7.15",
+      "purl": "pkg:cargo/winnow@1.0.5",
       "externalReferences": [
         {
           "type": "vcs",
@@ -12788,13 +12787,13 @@
   ],
   "dependencies": [
     {
-      "ref": "path+file:///Users/mark/Sites/brain-server#1.29.48",
+      "ref": "path+file:///Users/mark/Sites/brain-server#1.29.49",
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#aes-gcm@0.11.1",
         "registry+https://github.com/rust-lang/crates.io-index#aho-corasick@1.1.5",
         "registry+https://github.com/rust-lang/crates.io-index#anyhow@1.0.104",
         "registry+https://github.com/rust-lang/crates.io-index#argon2@0.6.0",
-        "registry+https://github.com/rust-lang/crates.io-index#askama@0.13.1",
+        "registry+https://github.com/rust-lang/crates.io-index#askama@0.16.1",
         "registry+https://github.com/rust-lang/crates.io-index#axum@0.8.9",
         "registry+https://github.com/rust-lang/crates.io-index#base64@0.23.1",
         "registry+https://github.com/rust-lang/crates.io-index#blake2@0.11.0",
@@ -12992,9 +12991,9 @@
       "ref": "registry+https://github.com/rust-lang/crates.io-index#arrayvec@0.7.8"
     },
     {
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#askama@0.13.1",
+      "ref": "registry+https://github.com/rust-lang/crates.io-index#askama@0.16.1",
       "dependsOn": [
-        "registry+https://github.com/rust-lang/crates.io-index#askama_derive@0.13.1",
+        "registry+https://github.com/rust-lang/crates.io-index#askama_macros@0.16.1",
         "registry+https://github.com/rust-lang/crates.io-index#itoa@1.0.19",
         "registry+https://github.com/rust-lang/crates.io-index#percent-encoding@2.3.2",
         "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.229",
@@ -13002,26 +13001,28 @@
       ]
     },
     {
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#askama_derive@0.13.1",
+      "ref": "registry+https://github.com/rust-lang/crates.io-index#askama_derive@0.16.1",
       "dependsOn": [
-        "registry+https://github.com/rust-lang/crates.io-index#askama_parser@0.13.0",
-        "registry+https://github.com/rust-lang/crates.io-index#basic-toml@0.1.10",
+        "registry+https://github.com/rust-lang/crates.io-index#askama_parser@0.16.1",
         "registry+https://github.com/rust-lang/crates.io-index#memchr@2.8.3",
         "registry+https://github.com/rust-lang/crates.io-index#proc-macro2@1.0.107",
         "registry+https://github.com/rust-lang/crates.io-index#quote@1.0.47",
         "registry+https://github.com/rust-lang/crates.io-index#rustc-hash@2.1.3",
-        "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.229",
-        "registry+https://github.com/rust-lang/crates.io-index#serde_derive@1.0.229",
-        "registry+https://github.com/rust-lang/crates.io-index#syn@2.0.119"
+        "registry+https://github.com/rust-lang/crates.io-index#syn@3.0.10"
       ]
     },
     {
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#askama_parser@0.13.0",
+      "ref": "registry+https://github.com/rust-lang/crates.io-index#askama_macros@0.16.1",
       "dependsOn": [
-        "registry+https://github.com/rust-lang/crates.io-index#memchr@2.8.3",
-        "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.229",
-        "registry+https://github.com/rust-lang/crates.io-index#serde_derive@1.0.229",
-        "registry+https://github.com/rust-lang/crates.io-index#winnow@0.7.15"
+        "registry+https://github.com/rust-lang/crates.io-index#askama_derive@0.16.1"
+      ]
+    },
+    {
+      "ref": "registry+https://github.com/rust-lang/crates.io-index#askama_parser@0.16.1",
+      "dependsOn": [
+        "registry+https://github.com/rust-lang/crates.io-index#rustc-hash@2.1.3",
+        "registry+https://github.com/rust-lang/crates.io-index#unicode-ident@1.0.27",
+        "registry+https://github.com/rust-lang/crates.io-index#winnow@1.0.5"
       ]
     },
     {
@@ -13119,12 +13120,6 @@
     },
     {
       "ref": "registry+https://github.com/rust-lang/crates.io-index#base64ct@1.8.3"
-    },
-    {
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#basic-toml@0.1.10",
-      "dependsOn": [
-        "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.229"
-      ]
     },
     {
       "ref": "registry+https://github.com/rust-lang/crates.io-index#bitflags@2.13.2"
@@ -15566,7 +15561,7 @@
       "ref": "registry+https://github.com/rust-lang/crates.io-index#weezl@0.1.12"
     },
     {
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#winnow@0.7.15",
+      "ref": "registry+https://github.com/rust-lang/crates.io-index#winnow@1.0.5",
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#memchr@2.8.3"
       ]

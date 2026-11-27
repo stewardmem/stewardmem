@@ -11,7 +11,15 @@ private plans archive on 2026-10-04 — this page is the in-repo roadmap.)
 
 ## Current status
 
-**v1.29.x — the current server line (1.29.48 — the policy-anchor
+**v1.29.x — the current server line (1.29.49 — the dependency refresh:
+the SQLite stack moves to the newest pool-allowed band as one coherent
+set — rusqlite 0.42.0 + r2d2_sqlite 0.37.2 + libsqlite3-sys 0.40.0,
+engine unchanged at 3.54.1, the read-both-ways drill proving the old
+and new binaries read each other's stores byte-identically; the audit
+silences — askama 0.16 drops the unmaintained basic-toml from the graph
+and the ttf-parser warning is waived with a measured trigger; the
+code-index subcommands' documented --index flag actually parses;
+before it, 1.29.48 — the policy-anchor
 registry: the kernel gains a governed registry of the AI policy
 instruments a deployment is governed by, every instrument carrying the
 SHA-256 of its original text or an honest statement that the text is not
