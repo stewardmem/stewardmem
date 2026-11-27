@@ -76,6 +76,24 @@
 # model2vec-rs 0.3.0 — the newest published — requires BOTH `hf-hub ^0.4` and
 # `ureq ^2` directly, so the shim cannot leave any tracked lockfile today.
 #
+# RUSTSEC-2026-0192 (ttf-parser 0.25.1, unmaintained): measured 2026-11-27
+# (c0-close S3b) as NOT clearable in this graph. lopdf 0.42.0 carries it as a
+# hard dependency, and pdf-extract 0.12.1 — the NEWEST release on crates.io
+# (published 2026-09-16; verified live) — requires lopdf ^0.42, which still
+# carries ttf-parser (lopdf's font stack moved to skrifa in 0.43+, but the
+# ^0.42 caret excludes those). Bumping our direct lopdf to 0.47 would fork
+# the graph into lopdf 0.47 + lopdf 0.42 (pdf-extract's) — a NEW duplicate,
+# which the round forbids — and ttf-parser would remain via pdf-extract's
+# 0.42 anyway. So the direct lopdf stays 0.42.0 (the RUSTSEC-2026-0187
+# patched band) and this advisory is waived, not fixed. Unmaintained ≠
+# vulnerable: zero known vulns; the surface is embedded-font parsing inside
+# document ingest, which runs on already-sandboxed, size-capped inputs.
+#
+# Re-check trigger (any one → this ignore is PRUNED, not re-dated):
+#   - pdf-extract releases with lopdf >= 0.43 (ttf-parser leaves with it)
+#   - lopdf 0.43+ drops ttf-parser AND pdf-extract's requirement admits it
+#   - a real vulnerability lands against ttf-parser (re-evaluate posture)
+#
 # RUSTSEC-2026-0387 (crypto-bigint: multiple timing-variability issues in
 # operations intended to be constant-time; published 2026-10-23 — the day
 # AFTER v1.29.30 shipped green, which is why this entry did not exist for
@@ -136,4 +154,5 @@ ignore = [
     "RUSTSEC-2026-0381", # webpki-roots
     "RUSTSEC-2026-0387", # crypto-bigint — the 0.7 copy was UPDATED to 0.7.7 (the fixed release); the remaining 0.5.5 copy is unreachable ECDSA code under RS256-pinned jsonwebtoken; clears when elliptic-curve/p256 0.14 (or jsonwebtoken moving to crypto-bigint >= 0.7.6) — the 0.26.11 semver shim compiles in the FIXED 1.0.10 roots (4x emSign G3 in 1.0.9, 0x in 1.0.10); clears when ureq 3.x / model2vec-rs drops ureq ^2
     "RUSTSEC-2026-0543", # chrono — UNMAINTAINED (not a vulnerability; triaged 2026-11-17 by the 22A round's S7 deny lane): chrono 0.4.45 is a DIRECT dependency (timestamps: audit rows, retention, webhooks) with no fixed upstream — unmaintained ≠ vulnerable, and the replacement (jiff or time) is a migration round of its own (chrono's use sites span the tree). Review by 2027-02-17 or the migration round, whichever lands first; a SECURITY finding against chrono re-evaluates the posture immediately.
+    "RUSTSEC-2026-0192", # ttf-parser — clears when pdf-extract releases with lopdf >= 0.43 (measured 2026-11-27: pdf-extract 0.12.1 is the newest and requires lopdf ^0.42; bumping our direct lopdf would fork the graph)
 ]
