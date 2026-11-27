@@ -8,6 +8,12 @@
 # crate (1.27.32-1.27.34), legal-rules-db in 1.27.37. The driver harness
 # lives in tools/steward-harness/ (1.27.35), NOT here — the cores stay
 # harness-independent.
+#
+# The exception is brain-code-core (C0, 2026-11-27): the per-repo code-index
+# substrate — schema, tree-sitter ingest, symbol chunks, lexical + vector
+# tables behind an encoder port the kernel fills. It owns its own SQLite
+# file, writes through no workflow substrate, and NOTHING consumes its index
+# yet (C0's honesty law).
 resolver = "2"
 
 members = [
@@ -23,6 +29,7 @@ members = [
     "brain-evidence-core",
     "brain-evolve-core",
     "brain-troubleshoot-core",
+    "brain-code-core",
     "legal-rules-db",
 ]
 
