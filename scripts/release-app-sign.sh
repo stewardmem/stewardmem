@@ -1018,6 +1018,7 @@ publish_tools_dmg() {
 	local assets=(brain-server-darwin-arm64 brain-server-darwin-x86_64
 		brain-darwin-arm64 brain-darwin-x86_64
 		mcp-darwin-arm64 mcp-darwin-x86_64
+		brain-afm-darwin-arm64
 		bench-darwin-arm64 bench-darwin-x86_64
 		brain-migrate-rehearse-darwin-arm64 brain-migrate-rehearse-darwin-x86_64
 		brain-connector-stub-darwin-arm64 brain-connector-stub-darwin-x86_64
@@ -1051,9 +1052,25 @@ publish_tools_dmg() {
 	#       truncated or altered binary cannot carry a valid signature over
 	#       its pages.
 	# Any disagreement is fatal BEFORE anything signs.
+	#
+	# THE CH-149 PROVENANCE LAW — brain-afm and mlx-swift_Cmlx.bundle come
+	# from the run's `sidecar-staged` artifact, NEVER from the operator's
+	# local `shell/src-tauri/binaries/`. The workflow builds brain-afm ONLY
+	# there (the macOS 27 SDK; the release.yml stage step's own comment), and
+	# the artifact carries SIDECAR_PROVENANCE.json pinning the kernel commit
+	# and each sidecar's sha256 — a third arm the dist artifacts never had.
+	# Measured on v1.29.49 (2026-11-28): the locally staged brain-afm hashed
+	# c090cd96… while the CI artifact hashed e63733a7…, exactly the
+	# provenance record's value — the local bytes are a DIFFERENT build, so
+	# a local source would ship an unwitnessed writer. The naming seam is
+	# ONE mapping, made once, below: CI's target-triple name
+	# (brain-afm-aarch64-apple-darwin) becomes the staged set's release-asset
+	# name (brain-afm-darwin-arm64). The pkg builder's gates (the missing-
+	# pair refusals) stay exactly as they are — this staging is what they
+	# were always demanding.
 	local name art_id f leg2="$dir/leg2"
 	mkdir -p "$leg2"
-	for name in dist-darwin-arm64 dist-darwin-x86_64; do
+	for name in dist-darwin-arm64 dist-darwin-x86_64 sidecar-staged; do
 		echo ">> downloading the run's $name artifact (leg 1: gh run download)…"
 		gh run download "$run_id" --repo "$REPO_SLUG" --name "$name" --dir "$dir/download" ||
 			die "refusing: the $name artifact would not download"
@@ -1068,13 +1085,53 @@ publish_tools_dmg() {
 		unzip -q "$leg2/$name.zip" -d "$leg2/$name"
 	done
 
-	for f in "$leg2"/*/*; do
-		name="$(basename "$f")"
-		[[ -f "$dir/download/$name" ]] || die "refusing: leg 2 carries $name but leg 1 does not — the transports disagree"
-		[[ "$(shasum -a 256 "$dir/download/$name" | awk '{print $1}')" == \
-			"$(shasum -a 256 "$f" | awk '{print $1}')" ]] ||
-			die "refusing: $name's two download legs disagree — a truncated or altered transport; re-run the lane"
-	done
+	# The leg-2 walk is file-level (find, not a bare glob): sidecar-staged
+	# carries mlx-swift_Cmlx.bundle as a DIRECTORY, and the transports must
+	# agree on every byte inside it too, not only on the top-level files.
+	local rel base
+	while IFS= read -r rel; do
+		base="${rel#./}"; base="${base#*/}"   # strip the artifact-dir component
+		[[ -f "$dir/download/$base" ]] || die "refusing: leg 2 carries $base but leg 1 does not — the transports disagree"
+		[[ "$(shasum -a 256 "$dir/download/$base" | awk '{print $1}')" == \
+			"$(shasum -a 256 "$leg2/$rel" | awk '{print $1}')" ]] ||
+			die "refusing: $base's two download legs disagree — a truncated or altered transport; re-run the lane"
+	done < <( cd "$leg2" && find . -type f | LC_ALL=C sort )
+
+	# ── 2b · THE PAIR'S SEAM — provenance, mapping, and the bundle's shape ─
+	# Every check here refuses BY NAME before anything signs.
+	local sidecar_dir="$dir/download/sidecar-staged"
+	[[ -f "$sidecar_dir/SIDECAR_PROVENANCE.json" ]] ||
+		die "refusing: the sidecar-staged artifact carries no SIDECAR_PROVENANCE.json — the writer pair has no provenance record"
+	grep -q "\"kernel_commit\": \"$sha\"" "$sidecar_dir/SIDECAR_PROVENANCE.json" ||
+		die "refusing: the sidecar provenance names a commit other than $sha — the writer pair is not this release's build"
+	local afm_src="$sidecar_dir/brain-afm-aarch64-apple-darwin"
+	local afm_want afm_got
+	afm_want="$(python3 -c 'import json,sys;
+rec=json.load(open(sys.argv[1]));
+print(next(a["sha256"] for a in rec["artifacts"] if a["name"]=="brain-afm-aarch64-apple-darwin"))' "$sidecar_dir/SIDECAR_PROVENANCE.json")" ||
+		die "refusing: the sidecar provenance records no brain-afm-aarch64-apple-darwin artifact"
+	[[ -f "$afm_src" ]] || die "refusing: the sidecar-staged artifact is missing brain-afm-aarch64-apple-darwin — the writer tier cannot be staged"
+	afm_got="$(shasum -a 256 "$afm_src" | awk '{print $1}')"
+	[[ "$afm_got" == "$afm_want" ]] ||
+		die "refusing: brain-afm's bytes ($afm_got) do not match its own provenance record ($afm_want) — a truncated or altered transport; re-run the lane"
+	codesign --verify --strict "$afm_src" ||
+		die "refusing: brain-afm fails the CI ad-hoc signature check — truncated or altered bytes never reach the signing pass"
+	# THE MAPPING — one line, one place: CI's target-triple name becomes the
+	# builder's release-asset name. Nothing downstream knows the triple.
+	cp "$afm_src" "$dir/download/brain-afm-darwin-arm64"
+
+	# THE METALLIB LAW's staging leg: the bundle rides ONLY beside brain-afm.
+	local bundle_src="$sidecar_dir/mlx-swift_Cmlx.bundle"
+	[[ -d "$bundle_src" ]] || die "refusing: the sidecar-staged artifact is missing mlx-swift_Cmlx.bundle — brain-afm without it dies at first MLX use; refusing a broken writer tier"
+	[[ -f "$bundle_src/Contents/Resources/default.metallib" ]] ||
+		die "refusing: the staged mlx-swift_Cmlx.bundle carries no Contents/Resources/default.metallib — the resource bundle without its metallib is the broken shape; refusing"
+	[[ -f "$bundle_src/Contents/Info.plist" ]] ||
+		die "refusing: the staged mlx-swift_Cmlx.bundle carries no Contents/Info.plist — the bundle cannot carry a signature; refusing"
+	# The artifact's bundle copy travels UNSIGNED (the CI place-step signs
+	# only the .app's copy) — there is no ad-hoc signature to verify here;
+	# the bundle's FIRST signature is this lane's Developer ID pass below.
+	cp -R "$bundle_src" "$dir/Binaries-Signed/mlx-swift_Cmlx.bundle"
+
 	for name in "${assets[@]}"; do
 		[[ -f "$dir/download/$name" ]] || die "refusing: the run's artifacts are missing $name — the Tools set cannot be cut from a partial build"
 		codesign --verify --strict "$dir/download/$name" ||
@@ -1091,6 +1148,14 @@ publish_tools_dmg() {
 			grep -v "replacing existing signature" || true
 		verify_apple_signature "$dir/Binaries-Signed/$name"
 	done
+
+	# The bundle joins the signing pass: Developer ID + secure timestamp,
+	# the same posture as every binary — its resources seal under the
+	# signature, and the Notary pass below covers it with the zip.
+	codesign --force --options runtime --timestamp \
+		--sign "$SIGNING_IDENTITY" "$dir/Binaries-Signed/mlx-swift_Cmlx.bundle" 2>&1 |
+		grep -v "replacing existing signature" || true
+	verify_apple_signature "$dir/Binaries-Signed/mlx-swift_Cmlx.bundle"
 
 	# One zip, one submission — each Mach-O inside is notarized.
 	( cd "$dir" && ditto -c -k --keepParent Binaries-Signed StewardMem-CLI-darwin.zip ) ||
@@ -1172,10 +1237,16 @@ publish_tools_dmg() {
 	[[ "$quarantine_fail" == "0" ]] ||
 		die "refusing: the quarantine-exec arm failed — a notarized binary that Gatekeeper refuses must never ship"
 
-	# The sums over the SIGNED bytes (signing changed them — the drill's law).
-	( cd "$dir/Binaries-Signed" && shasum -a 256 ./* | sed 's|  \./|  |' > SHA256SUMS )
+	# The sums over the SIGNED bytes (signing changed them — the drill's
+	# law). File-level find, NOT a bare glob: the bundle is a directory and
+	# shasum refuses a directory argument — the sums cover the signed set's
+	# regular files, and the bundle's integrity lives in its signature (the
+	# DMG builder re-sums the whole volume, metallib included).
+	( cd "$dir/Binaries-Signed" && find . -maxdepth 1 -type f | LC_ALL=C sort | xargs shasum -a 256 | sed 's|  \./|  |' > SHA256SUMS )
 	( cd "$dir/Binaries-Signed" && shasum -a 256 --check SHA256SUMS > /dev/null ) ||
 		die "refusing: the signed set's own sums do not check"
+	[[ "$(wc -l < "$dir/Binaries-Signed/SHA256SUMS" | tr -d ' ')" == "${#assets[@]}" ]] ||
+		die "refusing: the signed set's sums describe $(wc -l < "$dir/Binaries-Signed/SHA256SUMS" | tr -d ' ') files, expected ${#assets[@]} — the sums must cover every staged binary"
 
 	# ── 5 · THE BUILDERS (notarize + staple are IN the builders) ───────────
 	local tools_version="${TAG#v}"
