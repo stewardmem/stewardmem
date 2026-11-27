@@ -10,7 +10,13 @@
 // fixtures); the production-code denies stay absolute.
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+pub mod encoder;
 pub mod error;
+pub(crate) mod hashing;
 pub mod host;
+pub mod ingest;
+pub mod inventory;
+pub mod parse;
 pub mod recall_set;
 pub mod schema;
+pub mod snapshot;

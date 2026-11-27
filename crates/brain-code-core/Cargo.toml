@@ -16,6 +16,11 @@ sha2 = "0.11"
 # outright (§R2). The FFI shim lives in brain-code-vec0; production fills the
 # Vec0Host port with the kernel's own registration.
 rusqlite = { version = "0.41.1", features = ["bundled"] }
+# The S0-confirmed set (R-5, re-run 2026-11-27): versions pinned by the
+# committed lockfile; the ABI pin (pin 15) guards upgrades at build time.
+tree-sitter = "0.27.2"
+tree-sitter-rust = "0.24.2"
+tree-sitter-typescript = "0.23.2"
 
 [dev-dependencies]
 brain-code-vec0 = { path = "../brain-code-vec0" }

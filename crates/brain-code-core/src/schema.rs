@@ -91,9 +91,6 @@ impl CodeIndex {
 
     /// The raw connection for the crate's own modules. The CLI adapter never
     /// sees it (pin 19: the adapter is wiring only).
-    // S3 (the ingest module) takes this seam — dead between S2 and S3, by
-    // the one-commit-per-step law. Removed there.
-    #[allow(dead_code)]
     pub(crate) fn conn(&self) -> &rusqlite::Connection {
         &self.conn
     }
@@ -152,7 +149,7 @@ fn migration_sql(embed_dim: usize) -> String {
         r#"
 CREATE TABLE IF NOT EXISTS code_repo (
   id            INTEGER PRIMARY KEY,
-  root          TEXT NOT NULL,
+  root          TEXT NOT NULL UNIQUE,
   vcs           TEXT NOT NULL DEFAULT 'git' CHECK (vcs IN ('git')),
   head_commit   TEXT NOT NULL,
   index_version INTEGER NOT NULL,
@@ -183,6 +180,7 @@ CREATE TABLE IF NOT EXISTS code_file (
   content      TEXT NOT NULL,
   is_generated INTEGER NOT NULL DEFAULT 0 CHECK (is_generated IN (0,1)),
   is_test      INTEGER NOT NULL DEFAULT 0 CHECK (is_test IN (0,1)),
+  has_errors   INTEGER NOT NULL DEFAULT 0 CHECK (has_errors IN (0,1)),
   UNIQUE(repo_id, path)
 );
 
