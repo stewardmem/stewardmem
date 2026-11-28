@@ -1,7 +1,8 @@
 # Security
 
-> Coverage current through the 2026-11-23 policy-anchor round — the arc
-> since the R82 stamp (2026-10-07): the R68–R76 remediation programme, the
+> Coverage current through 1.29.49 (2026-11-27, the dependency refresh —
+> the SQLite stack move with the read-both-ways drill, `cargo audit`
+> silenced at the mechanism) — the arc since the R82 stamp (2026-10-07): the R68–R76 remediation programme, the
 > 1.29.x governed model-identity line (the digest-pinned model registry
 > `/workflow/model-registry*`, decision-run execute/read/replay routes, and
 > DPO/Admin-gated evaluation records; see
@@ -153,7 +154,7 @@ what it may. Capability/scope denials return `403`; resource-visibility paths
   only through the human gate. See [**Human in the loop**](./human-in-the-loop.md).
 - No **agent-callable erasure**: an agent can read memory and propose writes, but cannot
   delete it. The `memory_forget` agent tool was removed (v1.20.25); erasure is human-only via
-  the operator console and the HTTP API (`DELETE /memory/{id}`, `POST /purge`, DSAR — the
+  the shell's review-free paths and the HTTP API (`DELETE /memory/{id}`, `POST /purge`, DSAR — the
   CLI's only delete surface is `brain source-delete`, which sweeps and tombstones a whole
   source). The
   full authority split is in [**Human in the loop**](./human-in-the-loop.md).
