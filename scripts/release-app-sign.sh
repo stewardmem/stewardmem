@@ -1104,8 +1104,9 @@ publish_tools_dmg() {
 	# agree on every byte inside it too, not only on the top-level files.
 	local rel base
 	while IFS= read -r rel; do
-		[[ "$rel" == *"/"* ]] || continue   # the leg-2 dir holds the API ZIPs themselves — only the artifact dirs' files compare
-		base="${rel#./}"; base="${base#*/}"   # strip the artifact-dir component
+		base="${rel#./}"
+		[[ "$base" == *"/"* ]] || continue   # the leg-2 dir holds the API ZIPs themselves — only the artifact dirs' files compare
+		base="${base#*/}"   # strip the artifact-dir component
 		[[ -f "$dir/download/$base" ]] || die "refusing: leg 2 carries $base but leg 1 does not — the transports disagree"
 		[[ "$(shasum -a 256 "$dir/download/$base" | awk '{print $1}')" == \
 			"$(shasum -a 256 "$leg2/$rel" | awk '{print $1}')" ]] ||
