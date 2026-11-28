@@ -124,10 +124,8 @@ fn tail_at_most_selection_level(b: u32, c: u32, k: u32) -> Option<bool> {
     let levelled = tail_sum
         .checked_mul(u128::from(ALPHA_DENOMINATOR))
         .and_then(|v| v.checked_mul(u128::from(k)));
-    match levelled {
-        Some(product) => Some(product <= two_pow_n),
-        None => Some(false), // the product exceeds any representable bound, so it exceeds 2^n
-    }
+    // overflow ⇒ the product exceeds any representable bound, so it exceeds 2^n
+    Some(levelled.map_or(false, |product| product <= two_pow_n))
 }
 
 /// Σ C(n, i) for i in b..=n, exact in u128: C(n, b) by the multiplicative

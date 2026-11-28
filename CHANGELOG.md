@@ -94,8 +94,9 @@ release lane's signing chain gains a post-release Tools leg.
 
 ### Engineering record
 
-**SI0 S1–S2 (2026-11-28).** Range `v1.29.49..v1.29.50`, 12 commits, all
-accounted for: this round's two · the docs truth pass's two · the
+**SI0 S1–S2 (2026-11-28).** Range `v1.29.49..v1.29.50`, 13 commits, all
+accounted for: this round's two + the pre-push lipstyk simplification ·
+the docs truth pass's two · the
 1.29.49 record completion (released content landing after the tag — the
 engineering record's own completion commit) · the CH-149 signing-chain
 seven. This round's own commits: `440e2228` S1 (the crate; the pins
