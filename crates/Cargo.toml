@@ -14,6 +14,11 @@
 # tables behind an encoder port the kernel fills. It owns its own SQLite
 # file, writes through no workflow substrate, and NOTHING consumes its index
 # yet (C0's honesty law).
+#
+# brain-scaffold-core (SI0, 2026-11-28) joins the same shape differently: the
+# scaffold registry's decision core holds the closed vocabulary, the pure
+# verdict and the three tables' DML on the CALLER's connection — it owns no
+# SQLite file, holds zero DDL, and never opens a transaction of its own.
 resolver = "2"
 
 members = [
@@ -31,6 +36,7 @@ members = [
     "brain-troubleshoot-core",
     "brain-code-core",
     "brain-code-vec0",
+    "brain-scaffold-core",
     "legal-rules-db",
 ]
 

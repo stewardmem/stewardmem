@@ -141,6 +141,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "brain-scaffold-core"
+version = "0.1.0"
+dependencies = [
+ "rusqlite",
+]
+
+[[package]]
 name = "brain-troubleshoot-core"
 version = "1.27.38"
 dependencies = [

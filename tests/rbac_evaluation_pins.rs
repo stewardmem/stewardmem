@@ -993,8 +993,12 @@ fn r47_rbac_adds_no_table_no_stamp_no_dependency() {
         .collect();
     assert_eq!(
         names.len(),
-        59,
-        "the dependency count is 59 — the oracle is a const table and pure, needing no crate \
+        60,
+        "the dependency count is 60 — SI0 (2026-11-28) moved it 59 → 60 with the \
+         brain-scaffold-core workspace path edge (the scaffold registry's decision \
+         core; workspace-internal, no registry source, no checksum — rusqlite is \
+         already locked at this root, so the lock gains one [[package]] entry and \
+         zero registry crates); the oracle is a const table and pure, needing no crate \
          functions; C0 (2026-11-27) moved the ceiling 58 → 59 with the brain-code-core \
          workspace path edge (the code-index substrate; workspace-internal, no registry \
          source); the ceiling is re-pinned by each round that legitimately adds one (the \

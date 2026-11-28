@@ -1,0 +1,23 @@
+[package]
+name = "brain-scaffold-core"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "The scaffold registry's decision core (SI0): the closed scaffold vocabulary, the pure paired-sign-test verdict, the body gate, and the three registry tables' DML on the caller's connection. Zero DDL — the server's migration owns the tables; no transaction of its own — the service core owns the boundaries; no model call and no network path — pinned by source."
+publish = false
+
+[dependencies]
+# rusqlite ONLY, matching the version brain-code-core and brain-evolve-core
+# pin in this workspace. The root manifest locks the same 0.42.0 + bundled,
+# so the path edge adds one [[package]] entry to the root lockfile and ZERO
+# registry entries.
+rusqlite = { version = "0.42.0", features = ["bundled"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"

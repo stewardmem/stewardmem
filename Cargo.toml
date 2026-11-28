@@ -113,6 +113,13 @@ legal-rules-db = { path = "crates/legal-rules-db" }
 # port this kernel fills (P-5) and the Vec0Host port its own registration
 # satisfies. NOTHING consumes the index yet; the CLI rows are wiring only.
 brain-code-core = { path = "crates/brain-code-core" }
+# The scaffold registry's decision core (SI0): the closed scaffold
+# vocabulary, the pure paired-sign-test verdict, the body gate, and the three
+# registry tables' DML on the CALLER's connection. Zero DDL — src/migration.rs
+# owns the tables; zero transactions of its own — the service core owns the
+# boundaries; no model call and no network path — pinned by source in
+# tests/scaffold_registry_pins.rs.
+brain-scaffold-core = { path = "crates/brain-scaffold-core" }
 # The delivery loop's pure decision core: the closed phase machine, the tier
 # vocabulary, the trace-mode mapping, and the saturating budget arithmetic.
 # R38 is the first round to consume it, so this is the edge that moves the

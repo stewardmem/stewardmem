@@ -402,8 +402,12 @@ fn r48_adds_no_table_no_stamp_no_dependency() {
         .collect();
     assert_eq!(
         names.len(),
-        59,
-        "the dependency count is 59 — C0 (2026-11-27) moved it 58 → 59 with the \
+        60,
+        "the dependency count is 60 — SI0 (2026-11-28) moved it 59 → 60 with the \
+         brain-scaffold-core workspace path edge (the scaffold registry's decision \
+         core; workspace-internal, no registry source, no checksum — rusqlite is \
+         already locked at this root, so the lock gains one [[package]] entry and \
+         zero registry crates); C0 (2026-11-27) moved it 58 → 59 with the \
          brain-code-core workspace path edge (the code-index substrate crate; \
          the same class as the R5 brain-evolve-core edge — workspace-internal, \
          no registry source, no checksum; the crate's OWN tree-sitter set is \
