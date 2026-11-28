@@ -94,8 +94,12 @@ release lane's signing chain gains a post-release Tools leg.
 
 ### Engineering record
 
-**SI0 S1–S2 (2026-11-28).** Range `v1.29.49..v1.29.50`, 13 commits, all
-accounted for: this round's two + the pre-push lipstyk simplification ·
+**SI0 S1–S2 (2026-11-28).** Range `v1.29.49..v1.29.50`, 14 commits, all
+accounted for: this round's two + the pre-push lipstyk simplification and
+its CI-clippy follow-up (the local clippy accepted `map_or`; the public
+runner's newer lint demanded `is_some_and` — the first cut of v1.29.50
+was tagged at that red and RETAGGED after the fix, nothing having
+published: release.yml's fail-closed gate held) ·
 the docs truth pass's two · the
 1.29.49 record completion (released content landing after the tag — the
 engineering record's own completion commit) · the CH-149 signing-chain
