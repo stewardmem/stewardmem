@@ -1,6 +1,6 @@
 # RFP Response Kit — brain-server
 
-**Applies to:** brain-server 1.29.2 · **Last updated:** 2026-10-04
+**Applies to:** brain-server 1.29.49 · **Last updated:** 2026-10-04 (pointers re-verified 2026-11-28)
 
 A two-to-three page map from common enterprise RFP sections to the concrete
 brain-server features that satisfy them, so a procurement response can cite

@@ -129,7 +129,9 @@ digest-pinned model registry), delivery persistence, and the engine executor
 the loop can actually call — with the bindings, governed-release (replay-gate
 promoted), and operate/delivery-read-model rounds continuing unreleased on
 top. The server core (retrieval, graph, governance) is stable and heavily tested
-(3,120 tests across the workspace at HEAD — `scripts/badges.sh`).
+(4,342 tests across the workspace, machine-derived by `scripts/test-census.py`;
+the README badge's 4,255 counts the passed-after-skips run the build performs —
+[test-census.md](./test-census.md) explains the difference).
 
 ---
 

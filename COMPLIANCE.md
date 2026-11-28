@@ -2,6 +2,10 @@
 
 **Version:** 1.28.92 "Ledger" · **Last updated:** 2026-10-25 (AI Act posture: the
 three public notices reconciled and the Art 2(12) open-source analysis added — §6.6, §7.1)
+**Re-verified against the tree 2026-11-28** at 1.29.49: the erasure paths
+(`brain source-delete`, `brain shred`, the DSAR workflow, `/forget`), the keyed
+hash chain, and the UMP L3 posture are unchanged; section-level stamps are as of
+their own dates.
 
 This is the buyer-facing technical file: what brain-server IS, what it logs,
 how it erases, and how it maps to the frameworks procurement asks about. It is

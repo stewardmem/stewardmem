@@ -3,7 +3,12 @@
 The `brain` binary is the operator command-line surface. This page is the command reference.
 The CLI covers retrieval, ingest (directories), self-correction, domain/retention/backup/key
 management, UMP, clients, and health — the commands it ships in `src/bin/brain.rs` (hand-rolled argument
-parsing, no clap). Global flags on every invocation: `--json` (machine-readable envelope for the
+parsing, no clap). Counted, the `SUBCOMMANDS` table (`src/bin/brain.rs:131-574`) carries **65
+entries** — 51 single-token verbs plus 14 two-token families (`policy-anchor`, `code-index`,
+`watch`, `principal`, `rules`, `plugin`) whose verbs expand to the per-command forms below; this
+page documents **84 distinct command forms across 93 rows**, every one resolving to a dispatch
+site in `brain.rs`. (The repo brief's "48 cli commands" counts a shallower cut — the top-level
+verbs at one indentation level — not a different surface.) Global flags on every invocation: `--json` (machine-readable envelope for the
 commands that support it) and `-V/--version`. Per-client DSAR and legal hold are exposed here via `brain client`; the actions
 the CLI does **not** expose (erasure of a bare chunk, proposal approval, the global audit log) live
 on the HTTP API or the client console.

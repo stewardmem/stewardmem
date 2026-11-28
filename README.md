@@ -45,7 +45,7 @@ The server listens on `127.0.0.1:8765`, reachable only from your machine. The lo
 | `brain-server` | The memory server. REST API with streaming chat, on your machine. |
 | `brain` | The command line tool. Ask, add, verify, back up. |
 | `mcp` | The MCP server for AI clients. |
-| StewardMem.app | The macOS desktop app, with chat and review screens. |
+| StewardMem.app | The macOS desktop app and the web seat at `/app` (one SvelteKit + Tauri shell): chat first, then memory, review, audit, governance, journey, and decisions. See [the shell guide](docs/shell.md). |
 | OpenClaw plugin | Memory for OpenClaw agents, checked before every prompt. |
 
 Finding things works three ways at once: by meaning, by keyword, and by the links between memories. The best hits become the answer's evidence. Recall costs zero tokens and needs no outside service.

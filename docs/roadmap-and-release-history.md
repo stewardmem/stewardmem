@@ -4,10 +4,19 @@ StewardMem ships on a strict linear release chain. This page is the roadmap summ
 
 ## Current status
 
-- **Latest server version:** 1.29.44 (2026-11-14) — the standing-state repair
-  release: every CI red since 2026-11-09 closed at its mechanism (the no-SQL
+- **Latest server version:** 1.29.49 (2026-11-27) — the dependency refresh:
+  the SQLite stack moves to the newest band the pool allows (bundled SQLite
+  3.54.1, the served engine unchanged, the read-both-ways drill proving old
+  and new binaries read each other's stores byte-identically) and
+  `cargo audit`'s unmaintained-crate warnings go silent. The four releases
+  before it: 1.29.48 anchored governance instruments by hash (the
+  policy-anchor registry), 1.29.47 landed thirteen UI2 shell steps (sessions
+  that name themselves, the date-grouped history, the plain-language law),
+  1.29.46 quieted the chat canvas, and 1.29.45 made the cite-truth verdict
+  and the writer-posture round the measured default. The standing-state
+  repairs named in 1.29.44 (2026-11-14) — every CI red closed at its
+  mechanism (the no-SQL
   handler pin, the `cargo deny` license allowlist, the `cargo machete` vendor
-  marker, the plugin drift guard's retired client pointers), RUSTSEC-2026-0459
   + 0502 closed through the vendored `[patch]` override, both CodeQL
   `non-https-url` alerts fixed at the transport sink, an OCR capability probe
   that names a machine unable to recognize, and the dependency tree re-derived

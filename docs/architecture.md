@@ -22,10 +22,11 @@ OIDC/JWKS fetch, the CRM connectors, and the GitHub delivery read adapters
 (all behind the SSRF-hardened egress policy — see Governance layer).
 
 > **This page is measured against the tree.** Every path, count and constant
-> below was re-verified against the source on 2026-10-04; the private IP repo
-> carries a claim-verification script that re-checks paths, line references
-> and line counts mechanically. Correct this page when the tree moves — never
-> the other way round.
+> below was re-verified against the source on 2026-10-04; the chat-surface
+> section was added and verified against the source on 2026-11-28. The
+> private IP repo carries a claim-verification script that re-checks paths,
+> line references and line counts mechanically. Correct this page when the
+> tree moves — never the other way round.
 
 ## How memory moves — four stages and a return path
 
@@ -1114,6 +1115,32 @@ declarations have a governed writer.
 > collapses into "send the ambiguous cases to a human" while scoring well, which is the
 > documented failure mode of routing systems **[R15]**, and the reason a deployment whose
 > task mix differs from the evaluation's loses more than the table predicts **[R16]**.
+
+---
+
+## The chat surface — receipts, verdicts, and the tiered cascade
+
+The chat turn is a kernel act, not a passthrough. `POST /chat/turns` streams the answer
+over SSE while the kernel grounds it in its own recall; every claim in the answer is
+judged by the kernel's span law against the evidence it served (the cite-truth verdict:
+**supported / partial / unsupported / abstained**, since 1.29.45 — an `unsupported`
+answer is stored flagged, never silently an answer). The turn pair persists, and the
+decision rides the audit chain like every other act.
+
+When the routing gate is armed (`BRAIN_CHAT_CASCADE=1`, OFF at rest — set-but-unrecognized
+is not armed), the turn's own grounding feeds the tiered cascade:
+
+- **`deterministic`** — the top hit's content IS the answer; zero generative tokens.
+- **read_more** — the deeper recall rebuilds the turn's evidence universe before the
+  first frame leaves, so every arm shares one universe.
+- **`synthesize`** — the writer tier turns the evidence into prose.
+- **`escalate_frontier`** — no grant exists in a chat turn; the refusal is audited and
+  the execution falls back to the writer.
+
+The writer's default posture is the measured one (1.29.45): an unset `BRAIN_CHAT_MODEL`
+selects the on-device 4B tier, and `BRAIN_CASCADE_WRITER_MODEL` names the cascade
+writer. The four-tier law page is [TIERED_CASCADE.md](./TIERED_CASCADE.md); the shell's
+rendering of it (receipts, verdict chips, the tier badge) is [The shell](./shell.md).
 
 ---
 

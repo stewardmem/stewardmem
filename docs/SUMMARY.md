@@ -58,6 +58,7 @@
 - [Who it's for — target audiences](audiences.md)
 - [One brain for the whole team](team-workflow.md)
 - [Human in the loop](human-in-the-loop.md)
+- [The shell (the desktop + web GUI)](shell.md)
 - [Agent write posture (who may write memory)](agent-write-posture.md)
 - [The capture taint (origin labels)](taint-labels.md)
 - [The memory lifecycle](memory-lifecycle.md)

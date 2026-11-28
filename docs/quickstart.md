@@ -108,12 +108,11 @@ curl -X POST "http://localhost:8765/proposals/1/approve?digest=$D"   # optionall
 curl -X POST http://localhost:8765/proposals/1/reject
 ```
 
-The web client at `/app` puts this in a control room: the **Review** panel (scoring
-breakdown + sourcing prompt + screen verdict + raw evidence), the **Memory Operations**
-panel (live SLA clocks + flagged inventory + gate health), and the **Agent Memory
-Register** (a read-only provenance ledger). See
+The shell at `/app` (and the StewardMem desktop app) is chat-first; the **Review**
+surface at `/review` is where new memories wait for your yes — scoring labels, the
+screen's verdict, the provenance stamps, and a digest-bound Approve. See
 [**Human in the loop**](./human-in-the-loop.md) for how to evaluate a proposal well —
-not just clear the queue.
+not just clear the queue — and [**The shell**](./shell.md) for the full GUI tour.
 
 ---
 

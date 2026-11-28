@@ -1,4 +1,4 @@
-# OWASP 2026 Compliance Matrix — brain-server (v1.27.12 "Agentic")
+# OWASP 2026 Compliance Matrix — brain-server (origin v1.27.12 "Agentic"; re-verified through 1.29.49, 2026-11-28)
 
 **Last reviewed:** 2026-11-07 against the two 2026 OWASP agentic frameworks
 + the ATLAS v6.1.0 re-map and the 2026 incident/research classes (the

@@ -1,4 +1,4 @@
-# US State AI Map - Operator Runbook (re-verified against 1.29.2)
+# US State AI Map - Operator Runbook (mechanisms re-verified against 1.29.49, 2026-11-28)
 
 Scope: brain-server is a single-node loopback-first memory component. It does not train frontier models, does not make consequential decisions by itself, and serves no UI to consumers. Most US duties fall on the deployer / operator for their use case. This file lists what the component gives you live, and what you must still do.
 

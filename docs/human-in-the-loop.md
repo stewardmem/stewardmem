@@ -198,76 +198,61 @@ Deterministic operations that a human would not add value to:
 
 ---
 
-## 3. The dashboard is the control room
+## 3. The shell is where the human decides
 
-The web client (`/app`) is not a settings screen — it is the operator's **control room**,
-and every surface maps to one of the four conditions. Four surfaces do the heavy lifting.
+The shell (`/app`, and the StewardMem desktop app) is the product's one GUI. It is
+chat-first — the home route is the conversation — and the human-in-the-loop work lives
+one click away on the **Review** surface. The full GUI tour lives in
+[The shell](./shell.md); this section covers the surfaces that carry the four control
+conditions.
 
-### Review panel — the write-back queue (`/review`)
+### Review — the write-back queue (`/review`)
 
-The heart of the human-in-the-loop job (the app's landing page is Overview —
-`/review` is its own route one keystroke away). Each card is built to
-make *comprehensibility* real:
+The heart of the human-in-the-loop job. Each card is built to make *comprehensibility*
+real:
 
-- **Scoring breakdown** — novelty, conflict, and salience, shown as numbers with their
-  meaning, not a single opaque "score."
-- **Conflict surface** — if the proposal conflicts with a stored chunk, the card says
-  *"conflicts with chunk #N — approve to supersede,"* making the trade-off explicit
-  rather than hidden behind a default.
-- **Sourcing prompt** — `source_prompt` is PII-screened at persist and shown so you can
-  compare the captured fragment against *what the model was doing*, not just a summary.
+- **Scoring breakdown** — novelty, salience, and any conflict, shown as readable labels,
+  not a single opaque score.
 - **Screen verdict** — a `clean` / `quarantined` badge from the injection screen, so you
-  know a layer-2 classifier flagged it. Note (v1.20.28): approving a `quarantined`/`Reject`
-  verdict **re-screens the content and stamps the promoted chunk `flagged=1`** — the flag
-  survives HITL promotion as provenance, so the Ops panel's flagged inventory and recall
-  segregation still reflect that the memory originated from a screen hit. This is advisory
-  metadata, not a recall deny: your approval is final and the chunk remains retrievable.
-- **Evidence on demand** — every row opens the shared evidence modal (`GET /get/{id}`),
-  showing the *verbatim* span, `source_uri`, revision, heading, and line range. Not a
-  paraphrase. Raw evidence.
+  know a layer-2 classifier flagged it. Approving a quarantined proposal **re-screens the
+  content and stamps the promoted chunk `flagged=1`** — the flag survives HITL promotion
+  as provenance. Advisory metadata, not a recall deny: your approval is final and the
+  chunk remains retrievable.
+- **Provenance, stamped.** Each row carries the kernel's provenance markers: who or what
+  produced it (`derived_from`: operator, agent, watch, or legacy) and the producer
+  reference where one exists. A batch filing shows that it shares one producer reference
+  with its siblings, so you read them together.
+- **The digest, and nothing else.** The approve call binds to the digest shown on the
+  card; if the row changed since it was rendered, the approval refuses with "this row
+  changed since it was shown: reload the queue and decide again."
 
-Every outcome is tracked per row (`RowOutcome`): **Done**, **AlreadyDone** (a 404 with
-nothing pending counts as success), **Queued** (offline — replayed later, never dropped),
-and **Failed** (surfaced, never silently dropped). Keyboard `A/S/R/J/K` approve/reject/
-skip with a WCAG 2.1.4 toggle, and a reject-with-reason editor.
+Approve is the **only** write the surface offers: there is no reject and no edit button
+here (the approve-action round removed them; the kernel's `reject`/`edit` roles still
+exist API-side — `POST /proposals/{id}/reject` — so the decision procedure keeps its
+teeth). The page says so plainly: "Display for everyone; approve for the authorized."
 
-### Memory Operations panel — the pulse (`/ops`)
+When the kernel cannot be reached, the queue shows its **last known state, metadata
+only** — the proposal text is never written to the session's storage, and the page says
+what it is showing and how old it is. Nothing approves offline.
 
-Added in v1.20.6, this is where the *reviewability* and *consequentiality* conditions are
-made operational:
+### The rest of the operator's surfaces
 
-- **Live pending queue with SLA clocks.** The queue is a clock. Every pending proposal
-  shows a live countdown to its expiry (`DEFAULT_PROPOSAL_TTL_SECS`, default 7 days).
-  Expiring-first ordering means you are never surprised by a silent auto-reject — the
-  panel tells you which decisions are *time-critical right now*. (`< 5 min` critical,
-  `< 1 hr` warn.)
-- **Flagged & quarantined inventory.** What the injection screen caught, read-only, with
-  invisible smuggling characters stripped at display so you can actually read it. The
-  safety decision is visible and overridable.
-- **Gate-health strip.** Approved / rejected / expired counts over a rolling window feed a
-  severity hint: **over-rejecting** (are you blocking good captures?) and **under-reviewing**
-  (are decisions expiring on you?) are surfaced as operational risks, not hidden in a log.
-- **Reviewer calibration strip** (v1.20.23). Directly above the Review queue, four
-  evaluative signals about *your own decision habits* — **approve-rate**, **median decision
-  latency** (`decided_at − created_at`), **edit-rate**, and **screen-override rate** — plus a
-  **rubber-stamp warning** when approve-rate exceeds `0.9` over ≥ 20 decisions. This is the
-  anti-rubber-stamp feedback loop: it shows you not just the queue, but *how you are
-  reviewing* it. (Dismissable; fetched once per mount/refresh; if the fetch fails nothing
-  renders — offline degrade.)
+- **Audit** (`/audit`) — the keyed hash chain of every recorded act, with the verify
+  action. This is how *consequentiality* is proven, not asserted.
+- **Governance** (`/governance`) — what the kernel enforces: the registered domains, the
+  role bundles with their scopes and verbs, and the retention policy. Three reads with
+  three scopes; a section you may not read shows its own named refusal instead of a page
+  that collapsed onto its weakest read.
+- **Journey** (`/journey`) — the customer-facing chain projection, rendered verbatim from
+  the kernel's own sentences. No local merge, no derived timeline.
+- **Decisions** (`/decisions`) — the decision-run ledger, one detail view per run,
+  including the trust tiers a run saw.
+- **Memory** (`/recall`) — the recall grid and the trace viewer
+  (`/recall/{trace_id}/trace`) that shows how one answer was built, step by step.
 
-### Agent Memory Register — the provenance ledger (`/register`)
-
-Added in v1.20.9. A read-only ledger of *who wrote every memory and what it is based on*,
-partitions into the three **origin** tiers — `human`, `model`, `imported` — with live
-counts and owner/source/memory-kind filters. This makes *consequentiality* auditable: you
-can see, at a glance, how much of the store is model-originated and where it came from,
-and drill into any row's evidence (source URI, revision, heading, line range).
-
-### Overview — the one-glance dashboard (`/`)
-
-The decision-first home: a 4-card status row (Health / Snapshot / Retention / UMP), a
-DAR-chain alert list, and a **top-5 pending queue preview** with one-click Approve/Reject
-and a deep link into each review card.
+The proposal's own clock has not changed: a pending proposal expires after
+`DEFAULT_PROPOSAL_TTL_SECS` (default 7 days), so an ignored queue auto-rejects rather
+than silently approving. The Review queue is where you keep that from happening.
 
 ---
 

@@ -179,6 +179,7 @@ root.
 | [Quickstart](./quickstart.md) | Build, run, and make your first recall in minutes |
 | [Architecture](./architecture.md) | How recall, ingest, the knowledge graph, and governance fit together |
 | [Human in the loop](./human-in-the-loop.md) | Meaningful human control: what reaches a human, and how to evaluate it |
+| [The shell](./shell.md) | The one GUI: the SvelteKit + Tauri shell's chat-first surfaces, review queue, settings, and languages |
 | [Deployment](./deployment.md) | Service install, configuration, backup/restore, operational health |
 | [Docker](./docker.md) | Container image, compose, offline model bake, container ops |
 | [Proxy SSO](./proxy-sso.md) | Reverse-proxy SSO (OAuth2-Proxy / Caddy / Authentik) in front of the server |

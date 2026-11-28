@@ -60,6 +60,9 @@ A provider failure after GDL admission is recorded as a terminal, non-retryable 
 
 The least-privilege `workflow-operator` role can be granted through the public role contract. It carries `workflow` only; the `agent` preset remains without `workflow`, and role-less or unknown-role JWTs remain denied.
 
+| `BRAIN_GDL_PROVIDER_KIND` | `http` | The provider transport kind: `http` (the byte-unchanged default) or `afm-stdio`; any other value — including empty — refuses at boot (fail-closed: an unknown kind must never silently mean http) |
+| `BRAIN_GDL_CASE_TOKEN_BUDGET` | derived | Explicit generation token budget for a GDL case run; unparsable values fall back to the derived default. The derivation seeds through the eval runner and sets the default from the observed p99 |
+
 ## Delivery bindings (R61)
 
 The delivery loop's standing authority over external systems is a server-owned
@@ -133,6 +136,42 @@ request path). Model resolution, in order: the golden **`mixedbread-ai/mxbai-rer
 | `BRAIN_RERANK_MODEL_DIR` | `models/mxbai-rerank-large-v1/` (never loads) | Local dir holding the mxbai-rerank-large-v1 files (`onnx/model_quantized.onnx` + the 4 tokenizer files) for the BYO-ONNX seam. Supply-chain guard: a CWD-relative path is REFUSED with a warning — the compiled default is inert by design; only an ABSOLUTE path (via this env) loads the mxbai model, otherwise the tier falls back to the in-enum `bge-reranker-v2-m3`. |
 | `BRAIN_RERANK_TOP_N` | `50` | Max candidates scored per rerank call; beyond this the provenance `rerank_truncated` flag reports the drop honestly. |
 
+## Chat & the model bridges
+
+The served chat's writer and the bridge children it runs.
+
+| Variable | Default | Description |
+|---|---|---|
+| `BRAIN_CHAT_MODEL` | `qwen3.5-4b-4bit` | The served chat's on-device writer model id (the 1.29.45 measured default). An explicit EMPTY value omits the model field from the bridge wire — the documented escape for a kernel that runs no writer |
+| `BRAIN_CHAT_CASCADE` | OFF | Arms the chat routing gate (armed-values law: set-but-unrecognized is NOT armed). Armed, each turn routes by its grounding: `answer_from_memory` (deterministic, zero generative tokens), `read_more` (deeper recall, one shared evidence universe), `synthesize` (the writer tier), `escalate_frontier` (no grant in a chat turn — the refusal is audited and execution falls back to the writer). See [TIERED_CASCADE.md](./TIERED_CASCADE.md) |
+| `BRAIN_AFM_BRIDGE` | resolved | Explicit path to the AFM bridge child binary; absent, the resolver walks its default order (there is no exe-sibling default) |
+| `BRAIN_CASCADE_WRITER_MODEL` | `qwen3.5-4b-4bit` | The cascade writer's model id |
+| `BRAIN_VISION_BRIDGE` | resolved | Explicit path to the shell-vision sidecar — the OCR tier's child process |
+| `BRAIN_VLM_OCR_PATH` | resolved | Explicit path override for the VLM OCR binary |
+
+## Document lanes
+
+| Variable | Default | Description |
+|---|---|---|
+| `BRAIN_DOCLING_PATH` | — | The Tier-2 document converter's path (IMPROVE04 S4). Docling is a Python tool, so there is no exe-sibling default; Tier 0 (deterministic) is the default tier and needs zero configuration |
+| `BRAIN_DOC_CORRECTOR_BASE_URL` | — | The doc-correction lane's provider base URL — the round-trip that re-extracts a corrected document through the same doors |
+| `BRAIN_DOC_CORRECTOR_MODEL` | — | The doc-correction lane's model |
+| `BRAIN_DOC_CORRECTOR_SECRET_FILE` | — | The doc-correction lane's provider secret file |
+| `BRAIN_DOC_CORRECTOR_SECRET_ROOT` | — | The doc-correction lane's secret root |
+
+## Research & scholar adapters
+
+| Variable | Default | Description |
+|---|---|---|
+| `BRAIN_RESEARCH_PROVIDER_BASE_URL` | — | The research watch's provider base URL (the fetch lane the watch's runs call) |
+| `BRAIN_RESEARCH_PROVIDER_API_KEY_FILE` | — | The research watch's provider key file |
+| `BRAIN_RESEARCH_PROVIDER_MODEL` | — | The research watch's provider model |
+| `BRAIN_SCHOLAR_CROSSREF_MAILTO` | — | The Crossref adapter's polite-pool mailto contact |
+| `BRAIN_SCHOLAR_EPMC_ENABLED` | off | Enables the Europe PMC scholar adapter |
+| `BRAIN_SCHOLAR_PUBMED_ENABLED` | off | Enables the PubMed scholar adapter |
+| `BRAIN_SCHOLAR_PUBMED_API_KEY_FILE` | — | The PubMed adapter's API key file |
+| `BRAIN_SCHOLAR_RATE_PER_SEC` | — | The scholar adapters' shared request rate ceiling (per second) |
+
 ## Write-back gating (v1.14)
 
 PII control is deterministic **read-time output redaction** (always-on for
@@ -185,6 +224,8 @@ and no `BRAIN_REDACT_PII` knob (removed v1.20.19).
 | `BRAIN_RECALL_GRAPH_ENABLED` | `true` | v1.12 kill switch for the graph (Personalized PageRank) recall leg — `false` disables it process-wide (per-request `graph=false` still works). |
 | `BRAIN_MAX_DOMAIN_DBS` | `256` | v1.27.16 cap on registered per-domain SQLite files; registration beyond the cap fails closed (`507 insufficient_storage`). |
 
+| `BRAIN_RECALL_NEARMISS` | OFF | `1` (or `true`) arms the near-miss detector: the deterministic attribute-swap contamination guard that stands a confused hit down and abstains with the kernel's own clarify vocabulary. OFF at rest — the default is the exact pre-S3 behavior, read per call, the kill-switch pattern |
+
 ## Capacity envelope (v0.9.9)
 
 | Variable | Default | Description |
@@ -216,6 +257,9 @@ and no `BRAIN_REDACT_PII` knob (removed v1.20.19).
 
 > **The source of truth** for every tunable is `src/config.rs` and the owning modules named above (`src/server/bootstrap.rs`, `src/capacity.rs`, `src/search/`, `src/bin/mcp.rs`) in the repository.
 
+| `BRAIN_SUBJECT_MATTER_LABEL` | identifier | The procedural lane's subject-matter display label; unset ships no engagement name and the identifier is used |
+| `BRAIN_SUBJECT_MATTER_TERMS` | empty | The procedural lane's subject-matter keyword vocabulary, supplied by the DEPLOYMENT (comma-separated). Unset, the pool is empty and the category scores zero — INERT, never a silent default |
+
 ## Next steps
 
 - **[Installation](./deployment.md)** — applying these in practice.
@@ -232,8 +276,33 @@ server process — so they sit outside the main table.
 | `BRAIN_URL` | `http://127.0.0.1:8765` | Base URL every client-side binary addresses (`brain`, `mcp`, `bench`, the connector stubs). **Loopback plain HTTP only, and that is enforced at parse time:** an `https://` base refuses with a fixed message (these binaries have no TLS stack, and the old behavior stripped the scheme and sent the bearer in cleartext on port 80), and a non-loopback host refuses for the same reason. Off-host means the steward harness, which can speak TLS. The refusal is a fixed string, not a rendered URL — a URL does not belong in a logged error |
 | `BRAIN_MCP_SCOPE` | `full` | MCP dispatch scope (`read\|full`, fail-closed parse): `read` refuses `brain_ingest`, `ump.remember`, `ump.revise`, `ump.forget` at the dispatch seam and annotates them `x-brain-scope: read-denied` in `tools/list` |
 | `BRAIN_MCP_IDENTITY` | `agent` | Which lane of the token file the `mcp` binary presents (`agent\|operator`, fail-closed parse — an unknown or empty value refuses to start). In the installer's two-lane file (line 1 operator, line 2 agent) the default takes **line 2**, so a model's tool call authenticates as the typed `AgentLoopback` principal and Admin routes refuse it by class; `operator` takes line 1 explicitly. A single-token file has no agent lane, so the bridge keeps working and names the ambient-authority posture on its startup line — `BRAIN_MCP_SCOPE=read` is what bounds it |
-| `BRAIN_GH_APP_TOKEN` | — | GitHub App installation token for `brain-connector-gh` (the binary refuses to run on the placeholder) |
+| `BRAIN_GH_APP_TOKEN` | — | GitHub App installation token, read by the `#[ignore]`d live smoke test in the GitHub connector's test module (`src/connector/github/client.rs`) — the `brain-connector-gh` binary itself takes its credential on the command line and never reads this var |
 | `BRAIN_EVAL_JUDGMENTS` | — | Judged-query fixture path for `bench --eval` (missing file fails the eval run) |
+
+| `BRAIN_EMBED_PROFILE` | profile default | Override for the `brain code-index ingest` embedding profile (the CLI flag wins when both are given) |
+| `BRAIN_SERVER_AUTH_TOKEN` | installer-managed | The openclaw plugin's auth-token env reference; the installer writes the AGENT token line here and `brain setup sync` keeps the plugin in step with it |
+| `BRAIN_WATCH_LIVE_PROBE` | offline harness | `1` switches the research watch's tick probe to the live transport instead of the offline harness |
+| `BRAIN_POLICY_PACK_REQUIRED_ANCHORS` | unset | The policy-pack activation gate's required-anchors minimum (GOVPACK-1): a pack activates only when its policy text anchors to at least this many verified instruments |
+| `BRAIN_PACK_PUBKEY` | `pack.pub` beside the data root | The plugin-pack signature verification key (0644) — deliberately NOT the updater's key's post |
+| `BRAIN_RELEASE_PUBKEY` | install time | The updater's release-signing public key, installed by `install-service.sh`; the pack verifier deliberately never reads it (two keys, two lanes) |
+| `BRAIN_PORTAL_BIND` | portal default | The customer portal's bind address |
+| `BRAIN_PORTAL_KERNEL_URL` | loopback | The kernel base URL the portal process calls |
+| `BRAIN_PORTAL_KERNEL_TOKEN` | required | The bearer token the portal presents to the kernel |
+| `BRAIN_PORTAL_CLIENT` | required | The portal's client assets directory |
+| `BRAIN_PORTAL_PASSCODE` | required | The portal's login passcode |
+| `BRAIN_FPR_CORPUS` | bench default | The false-positive-rate corpus path for the `bench` harness |
+| `BRAIN_FPR_VERBOSE` | off | `1` prints the bench harness's per-query FPR detail |
+| `BRAIN_PILOT_LIVE` | off | `1` permits the GDL pilot's LIVE provider calls; without it the pilot eval never leaves the machine |
+| `BRAIN_S0_AFM` | resolved | The cascade-bench S0 harness's AFM bridge path |
+| `BRAIN_S0_ARMS` | all arms | The S0 harness's arm selection (which tiers the run exercises) |
+| `BRAIN_S0_FIXTURES` | default fixture | The S0 harness's judged-query fixture path |
+| `BRAIN_S0_MLX` | `http://127.0.0.1:8792` | The MLX server URL the S0 harness's writer calls hit |
+| `BRAIN_S0_NOISE` | off | `1` runs the S0 harness's noise arm |
+| `BRAIN_S0_OUT` | `/tmp/i17-run` | The S0 harness's output directory |
+| `BRAIN_S0_QUERY_LIMIT` | all | Caps the S0 harness's query count (a smoke run's knob) |
+| `BRAIN_S0_QWEN_LABEL` | model id | The display label the S0 harness stamps on the writer tier |
+| `BRAIN_S0_T1_STABILITY` | off | Enables the S0 harness's T1 stability probe |
+| `BRAIN_S0_TRAP` | off | `1` runs the DISCERN trap arm (the trap taxonomy's classification run) |
 
 `BENCH_*` harness knobs (`BENCH_SCALES`, `BENCH_SEARCHES`, `BENCH_CLIENTS`,
 `BENCH_SEED`, `BENCH_ENVELOPE`, …) are documented in the `bench` binary's

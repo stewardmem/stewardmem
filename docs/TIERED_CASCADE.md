@@ -6,7 +6,7 @@ classifier routes the rest to a Qwen writer whose every claim the KERNEL
 span-verifies, and the frontier exists only behind an explicit per-task grant
 that is audited before it ever touches the network.
 
-**Status:** S0 EXECUTED 2026-11-13 — the gate PASSED as found; S1–S5 wired.
+**Status:** S0 EXECUTED 2026-11-13 — the gate PASSED as found; S1–S5 wired. Re-stamped 2026-11-28 for the writer-posture default (1.29.45) and the shipped lane names; the measurement table is the recorded S0 verdict, not a re-run.
 The gate's evidence lives in the plans repo
 (`plans/improvements/IMPROVE17_EVIDENCE_2026-11-13.md` +
 `plans/10_EVIDENCE_RAW/improve17-cascade/`); the benchmark harness is
@@ -42,8 +42,14 @@ exists); **the frontier is the ~1% tail** (T1's measured classification rate).
 |---|---|---|---|
 | T1 the coordinator | `agentloop::cascade::classify_route` — a fresh-session guided turn through the brain-afm bridge | afm3-core (never a `model` field — absent IS afm3-core) | measured, audited |
 | T2 the reader | `run_recall` (the same core `/recall` serves) + `evidence_from_results` + `fenced_evidence_block` | **none — deterministic by construction** (the module's async surface is pinned; the reader adds none) | **zero** |
-| T3 the writer | `writer_turn` through the bridge's MLX tier (the CG-10 session-kind door) + `judge_answer` | `BRAIN_CASCADE_WRITER_MODEL`, default the S0-measured `qwen3.5-9b-4bit` | measured, audited |
+| T3 the writer | `writer_turn` through the bridge's MLX tier (the CG-10 session-kind door) + `judge_answer` | `BRAIN_CASCADE_WRITER_MODEL`, default `qwen3.5-4b-4bit` — the writer-posture round (1.29.45) moved the S0-era `qwen3.5-9b-4bit` default to the measured 4B pair, scripted everywhere | measured, audited |
 | T4 the frontier | `escalate_frontier` through `HttpProvider` (the operator's existing `BRAIN_GDL_PROVIDER_*` seam — SSRF-screened at construction, redirect-none) | the provider profile's model | per-task, audited twice |
+
+The wire's tier stamps name the arms the chat surface shows: `deterministic`
+(T2), `on_device` (the served chat's own AFM/MLX writer), `mlx_native` (this
+cascade's writer), and the frontier — the vocabulary `chat.tier` renders and
+the sessions ledger stores. The T-numbers are this page's measurement
+vocabulary; the stamps are what the kernel emits.
 
 ## The laws (what this cascade is and is not)
 
@@ -93,8 +99,9 @@ phase proved necessary (whole-document chunks).
 # T1/T3 need the bridge child (prebuilt or via `swift build` in shell-macos):
 export BRAIN_AFM_BRIDGE=/path/to/brain-afm        # or install beside the kernel
 
-# T3's writer tier — the S0-measured default needs no configuration:
-# export BRAIN_CASCADE_WRITER_MODEL=qwen3.5-9b-4bit   # (the default)
+# T3's writer tier — the 1.29.45 measured default needs no configuration:
+# export BRAIN_CASCADE_WRITER_MODEL=qwen3.5-4b-4bit   # (the default; the
+# S0-era default was qwen3.5-9b-4bit)
 
 # T4 exists ONLY behind the operator's existing GDL seam — OFF = the named
 # refusal, and every escalation still needs the per-task grant:
