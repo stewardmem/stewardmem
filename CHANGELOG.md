@@ -13,6 +13,121 @@ measured. Those records are kept as they were written (this file is
 append-only), and their heading says `Unreleased` because that is what they
 were when the round landed — not because the work is still unreleased.
 
+## [1.29.50] — 2026-11-28 — the scaffold registry's foundation lands empty, and every doc is re-derived from source
+
+This release carries no wire change and no new route: openapi's 235 paths
+are untouched (the version stamps move in lockstep with the package, and
+the regenerated typed client is byte-identical). What lands is the first
+half of the self-improvement scaffold registry (the SI0 round): the pure
+decision crate and the store half — three tables and the `1.32.37` schema
+stamp in lockstep. Nothing consumes the tables yet; no production path
+writes a `bench_run` row; the registry ends the round with zero `active`
+rows and every sign refused — those are the round's laws, and S3–S7 (the
+sign core, the routes, the wire, the drill, the close) are still open.
+The rest of the range is truth work: the whole documentation surface is
+re-derived from source (the shell gets its authoritative page; the stale
+GUI claims are rewritten to the shipped surfaces; `configuration.md`
+gains 48 source-verified environment rows; `SECURITY.md`'s model
+boundary is restated for the served chat's local writer tiers), and the
+release lane's signing chain gains a post-release Tools leg.
+
+### Release notes
+
+**Improvements**
+
+- `brain-scaffold-core` lands — the scaffold registry's decision core
+  (`crates/brain-scaffold-core`): the closed vocabulary (six scaffold
+  kinds, three statuses, two warrants, two splits, ten refusal codes
+  whose `Display` IS the wire code), the paired-sign-test rule as pinned constants
+  (the selection level as the exact fraction 1/20, the floor of ten
+  changed entries, the four-guard list, `retrieval` as the only
+  validated kind, the provisional 200-line diff cap), and ONE pure
+  function — the verdict decided guards-first, then the floor, then the
+  exact one-sided binomial tail in checked u128 against `0.05/k` (the
+  overflow-or-over-126 answer is always refuse, never guess). The
+  upstream sign-test table is pinned row by row with its boundary, and
+  was re-verified independently in exact binomial arithmetic before the
+  crate compiled. The crate holds zero DDL, never opens a transaction,
+  and has no model or network path — pinned by source. The pins were
+  written RED first (the compile failure saved) and green 11/11 in the
+  same step. (440e2228)
+- the store half of the registry — three guarded CREATEs after the
+  policy-anchor block (`scaffold` with ONE active row per kind enforced
+  by a partial unique index, `bench_run` with the raw output living in
+  the row so its hash is re-verifiable at sign, `scaffold_proposal`
+  carrying the diff, warrant, and signer), and the schema stamp moves
+  `1.32.36` → `1.32.37` in the lockstep triple with the refuse-newer
+  probe moving one ABOVE the new ceiling (1.32.38). The sweep was driven
+  by the pins: 17 failing tests named every stale literal, 69 changed
+  lines across 15 files, every message's history chain gains its dated
+  clause. The migration rehearsal's parity walk carries the three
+  tables, and the v0.9.x fixture drills prove them copying row-for-row.
+  (e06fdf36)
+- the documentation surface is re-derived from source — `docs/shell.md`
+  is new (the one GUI's authoritative page: chat-first with receipts and
+  the kernel's own support verdict, the tier stamps, the six other
+  surfaces, three settings categories, five locales, seven e2e lanes);
+  the retired-client and pre-chat-first GUI claims in `features.md`,
+  `human-in-the-loop.md`, and `quickstart.md` are rewritten to the
+  shipped surfaces; `api.md` names wire-exact paths on five shorthand
+  rows and gives the deprecated `POST /add` its row;
+  `configuration.md` gains 48 environment rows written from each
+  variable's read site; the counts are re-derived (the roadmap test
+  count is now census-anchored; the release history names 1.29.49).
+  (cb95378b)
+- `SECURITY.md`'s model boundary is restated precisely: memory
+  operations stay deterministic and zero-token; model capability is now
+  LOCAL-only (the served chat's `on_device`/`mlx_native` writer tiers)
+  except the one optional, operator-configured, ticket-only GDL lane
+  whose output never auto-promotes. The release ledger extends through
+  1.29.49, and `features.md` gains its chat section with the stale GUI
+  bullets rewritten. (5db1e85e)
+- the release lane's signing chain gains `--tools-only` — the
+  post-release Tools leg dispatches straight to the tree-truth-bound
+  half (same pairing, dirty-tree, and tag gates, same signing recipe)
+  without touching the published chain three or the first-install DMG,
+  whose sealed provenance verifies only at the commit it named. The
+  fixes the leg's first run surfaced ride with it: the sidecar-staged
+  writer pair, the download-dir pair read, the `./`-prefix strip, the
+  API-ZIP walk skip, and the shellcheck cleanup. (8a670748, f4ba4288,
+  18376c0b, 74d84097, c5bec298, 4ee5a22f, 14cac29d)
+
+### Engineering record
+
+**SI0 S1–S2 (2026-11-28).** Range `v1.29.49..v1.29.50`, 12 commits, all
+accounted for: this round's two · the docs truth pass's two · the
+1.29.49 record completion (released content landing after the tag — the
+engineering record's own completion commit) · the CH-149 signing-chain
+seven. This round's own commits: `440e2228` S1 (the crate; the pins
+born red, the census re-derived 4331 → 4342, the Cargo.lock +exactly one
+`[[package]]`, `cargo audit` green, the five dependency-ceiling pins
+re-pinned 59 → 60 with the dated SI0 clause) · `e06fdf36` S2 (the three
+tables + the stamp sweep; the rehearse binary 12/12 under
+`--features migrate`).
+
+- **The commits that ship inside another round's record.** The CH-149
+  signing-chain fixes (`f4ba4288`..`14cac29d`, seven commits) carry
+  their own record in the CH-149 round; `1c2afdcf` completes THIS
+  changelog's 1.29.49 record and is named there. The two docs commits
+  (`cb95378b`, `5db1e85e`) moved no runtime surface — `.md` files and
+  the sitemap only.
+- **The pins that did NOT move, and why.** The frozen recall set
+  (`FROZEN_SHA256` `250c7b83…`, 46 entries, 10/36) — the recall table
+  re-run byte-identical before S1 began (hard stop 4's own check);
+  re-check trigger: any `brain-code-core` recall-arm edit (none in this
+  range). No route, no wire shape, no shell file moved — openapi's path
+  count and the regenerated typed client prove it; re-check on the
+  first scaffold route (SI0 S4/S5). The registry holds zero `active`
+  rows by law — a succeeding sign is a hard stop that ends the round
+  (SI0 S3–S7 still open, one round at a time; c0-close S4–S7's
+  dependency bumps stay deferred until SI0 closes).
+- **The sweep's own finding.** The five dependency-ceiling pins broke
+  as one class (the C0 S8 precedent — each path edge re-pins the
+  ceiling with its dated clause); the pins' messages had drifted from
+  the chain twice before (rbac's said IMPROVE15 "moved it last" while
+  two rounds had moved it since) — the SI0 clauses now name every
+  mover, so the next re-pin appends rather than repairs.
+
 ## [1.29.49] — 2026-11-27 — the dependency refresh: the SQLite stack moves, the audit goes silent, and a documented CLI flag starts working
 
 This release moves the database stack to the newest band the pool allows

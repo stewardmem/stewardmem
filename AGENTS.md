@@ -1,6 +1,6 @@
 # brain-server — agent instructions
 
-**Release:** v1.29.49 (2026-11-27) · notes in `CHANGELOG.md` §[1.29.49].
+**Release:** v1.29.50 (2026-11-28) · notes in `CHANGELOG.md` §[1.29.50].
 Round history is `docs/AGENTS_HISTORY.md` (append-only, load on demand).
 New rounds are appended there — not here.
 
@@ -45,6 +45,7 @@ dry-run, and the release ritual are in `.agents/skills/release/SKILL.md`.
 ## Open commitments
 
 - **v1.29.49** — the claim gate should also scan the newest changelog section.
+- **SI0 S3–S7** — the sign service core, the four routes, the wire, the drill, and the close; the registry stays empty until a sign passes every law.
 - **c0-close S4–S7** — the remaining direct bumps (sha2, model2vec-rs,
   jsonwebtoken, ureq), the unused-dep scan, the lipstyk scoping decision,
   and the round's own close section are ASKED and OWED (the S0 baselines

@@ -11,7 +11,19 @@ private plans archive on 2026-10-04 — this page is the in-repo roadmap.)
 
 ## Current status
 
-**v1.29.x — the current server line (1.29.49 — the dependency refresh:
+**v1.29.x — the current server line (1.29.50 — the scaffold registry's
+foundation lands empty: `crates/brain-scaffold-core` — the closed
+vocabulary, the paired-sign-test verdict in exact u128 arithmetic,
+zero DDL and zero transactions, pinned by source with 11 pins born
+red — and the store half: `scaffold` / `bench_run` /
+`scaffold_proposal` + the `1.32.37` schema stamp in the lockstep
+triple with the probe at 1.32.38; nothing consumes the tables yet,
+the registry holds zero `active` rows by law, and S3–S7 stay open.
+The range also re-derives the whole documentation surface from source
+— `docs/shell.md` new, the stale GUI claims rewritten to the shipped
+shell, 48 source-verified env rows in `configuration.md`, wire-exact
+api.md paths, and SECURITY.md's model boundary restated for the local
+writer tiers — before it, 1.29.49 — the dependency refresh:
 the SQLite stack moves to the newest pool-allowed band as one coherent
 set — rusqlite 0.42.0 + r2d2_sqlite 0.37.2 + libsqlite3-sys 0.40.0,
 engine unchanged at 3.54.1, the read-both-ways drill proving the old
