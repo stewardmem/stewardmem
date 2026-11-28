@@ -1082,7 +1082,7 @@ publish_tools_dmg() {
 	# name (brain-afm-darwin-arm64). The pkg builder's gates (the missing-
 	# pair refusals) stay exactly as they are — this staging is what they
 	# were always demanding.
-	local name art_id f leg2="$dir/leg2"
+	local name art_id leg2="$dir/leg2"
 	mkdir -p "$leg2"
 	for name in dist-darwin-arm64 dist-darwin-x86_64 sidecar-staged; do
 		echo ">> downloading the run's $name artifact (leg 1: gh run download)…"
