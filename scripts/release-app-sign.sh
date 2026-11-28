@@ -1114,8 +1114,11 @@ publish_tools_dmg() {
 	done < <( cd "$leg2" && find . -type f | LC_ALL=C sort )
 
 	# ── 2b · THE PAIR'S SEAM — provenance, mapping, and the bundle's shape ─
-	# Every check here refuses BY NAME before anything signs.
-	local sidecar_dir="$dir/download/sidecar-staged"
+	# Every check here refuses BY NAME before anything signs. `gh run
+	# download --dir` extracts the artifact's CONTENTS into the download
+	# dir — the pair sits beside the dist binaries, not under an
+	# artifact-named subdirectory.
+	local sidecar_dir="$dir/download"
 	[[ -f "$sidecar_dir/SIDECAR_PROVENANCE.json" ]] ||
 		die "refusing: the sidecar-staged artifact carries no SIDECAR_PROVENANCE.json — the writer pair has no provenance record"
 	grep -q "\"kernel_commit\": \"$sha\"" "$sidecar_dir/SIDECAR_PROVENANCE.json" ||
