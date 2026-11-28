@@ -956,7 +956,7 @@ fn r47_single_authorize_decision_still_holds() {
 fn r47_rbac_adds_no_table_no_stamp_no_dependency() {
     let layout = read_repo("src/storage_layout.rs");
     assert!(
-        layout.contains("LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_36;"),
+        layout.contains("LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_37;"),
         "the schema stamp is untouched: R47 adds no table and no stamp (the ceiling itself is \
          re-pinned by each schema round — R57b moved it, for the trace citation, R60 moved it \
          for the disproof condition's six columns on `claims`, the scope round moved it for the \
@@ -964,8 +964,10 @@ fn r47_rbac_adds_no_table_no_stamp_no_dependency() {
          model-citation-key round moved it for `delivery_traces`' registry-key pair, the \
          proposal-edge round moved it for `proposals.promoted_chunk_id`, the \
          approve-action round moved it for the roster's manages column, the \
-         uninstall round moved it for the register's removed_at column, and \
-         IMPROVE11 moved it last, for the HITL decision-event ledger)"
+         uninstall round moved it for the register's removed_at column, \
+         IMPROVE11 moved it for the HITL decision-event ledger, GOVPACK-1 moved \
+         it for the policy-anchor registry, and SI0 moved it for the scaffold \
+         registry's three tables)"
     );
     let rehearse = read_repo("src/bin/brain_migrate_rehearse.rs");
     assert!(

@@ -452,22 +452,22 @@ fn rw_s1_schema_three_tables_and_the_stamp() {
         )
         .expect("stamp");
     assert_eq!(
-        stamp, "1.32.36",
+        stamp, "1.32.37",
         "run_migration must stamp the CURRENT ceiling — the stamp and the tables moved \
          together at 1.32.32 (IMPROVE08), and each later schema round re-pins the stamp \
          (1.32.33 at IMPROVE11's hitl_decision_events, 1.32.35 at IMPROVE13's MemformStamps, \
-         1.32.36 at GOVPACK-1's policy-anchor registry)"
+         1.32.36 at GOVPACK-1's policy-anchor registry, 1.32.37 at SI0's scaffold registry)"
     );
     // Re-run is a no-op (the guarded CREATEs skip).
     run_migration(&mut conn, brain_server::config::DB_MMAP_SIZE_MIB).expect("re-migration");
 
     // The lockstep, structurally: ceiling == stamp == the upsert's both arms;
     // the probe one ABOVE the ceiling.
-    assert_eq!(storage_layout::LATEST_KNOWN_SCHEMA, "1.32.36");
+    assert_eq!(storage_layout::LATEST_KNOWN_SCHEMA, "1.32.37");
     let migration = std::fs::read_to_string("src/migration.rs").expect("migration src");
     assert!(
-        migration.contains("'schema_version', '1.32.36'")
-            && migration.contains("DO UPDATE SET value = '1.32.36'"),
+        migration.contains("'schema_version', '1.32.37'")
+            && migration.contains("DO UPDATE SET value = '1.32.37'"),
         "both arms of the schema_version upsert must move together"
     );
     assert!(
@@ -478,8 +478,8 @@ fn rw_s1_schema_three_tables_and_the_stamp() {
     );
     let layout = std::fs::read_to_string("src/storage_layout.rs").expect("layout src");
     assert!(
-        layout.contains(r#"assert!(is_newer_than_known(Some("1.32.37")));"#)
-            && layout.contains(r#"assert!(!is_newer_than_known(Some("1.32.36")));"#),
+        layout.contains(r#"assert!(is_newer_than_known(Some("1.32.38")));"#)
+            && layout.contains(r#"assert!(!is_newer_than_known(Some("1.32.37")));"#),
         "the refuse-newer probe must sit above the new ceiling, or it silently tests Equal"
     );
     let rehearsal =

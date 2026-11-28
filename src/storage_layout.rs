@@ -365,6 +365,16 @@ pub const SCHEMA_VERSION_V1_32_35: &str = "1.32.35";
 /// queryable as-of their own quarters) — a table-level UNIQUE would make that
 /// history unpersistable. No column dropped, none rebuilt.
 pub const SCHEMA_VERSION_V1_32_36: &str = "1.32.36";
+/// SI0 (the scaffold registry): THREE guarded CREATEs — `scaffold` (the
+/// candidate/active/retired registry, ONE active row per kind enforced by a
+/// PARTIAL unique index — the sign retires the parent and actives the
+/// candidate, and the index is the last line of defence with the core
+/// bypassed), `bench_run` (the immutable paired evidence a sign re-derives
+/// its verdict from — raw output LIVING IN THE ROW so raw_sha256 is
+/// re-verifiable against it), and `scaffold_proposal` (the diff + warrant +
+/// signer record). Append-only by schema: nothing is ever deleted; retired
+/// is the only exit. Additive + idempotent; no column dropped, none rebuilt.
+pub const SCHEMA_VERSION_V1_32_37: &str = "1.32.37";
 
 /// v1.32.33 (IMPROVE11): the HITL decision-event ledger — ONE additive
 /// guarded CREATE (`hitl_decision_events`, append-only, one row per decided
@@ -391,7 +401,7 @@ pub const SCHEMA_VERSION_V0_9_9: &str = "0.9.9";
 /// Security posture: a source DB stamped NEWER than this is refused loudly
 /// ([`refuse_newer_schema`]) — migrating *down* would silently drop columns
 /// the newer release added, i.e. data loss dressed as a migration.
-pub const LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_36;
+pub const LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_37;
 
 /// Numeric dotted-version compare (std-only, no semver dependency).
 /// Non-numeric components are skipped (the `schema_ge` precedent in the
@@ -869,13 +879,15 @@ mod tests {
         // IMPROVE15 round (the CustomerProvenance schema act) moved
         // the ceiling to 1.32.35, so the probe moved to 1.32.36, and the
         // GOVPACK-1 round (the policy-anchor registry) moved the ceiling
-        // to 1.32.36, so the probe moved to 1.32.37.
+        // to 1.32.36, so the probe moved to 1.32.37, and the
+        // SI0 round (the scaffold registry's three tables) moved
+        // the ceiling to 1.32.37, so the probe moved to 1.32.38.
         // A probe
         // pinned AT the ceiling silently tests `Equal`, not `Greater` — the assertion
         // would keep passing while a NEWER-schema database was blessed instead of
         // refused, which is the one failure this function exists to prevent.
-        assert!(is_newer_than_known(Some("1.32.37")));
-        assert!(!is_newer_than_known(Some("1.32.36")));
+        assert!(is_newer_than_known(Some("1.32.38")));
+        assert!(!is_newer_than_known(Some("1.32.37")));
         assert!(!is_newer_than_known(Some("1.32.9")));
         assert!(!is_newer_than_known(Some("1.28.9")));
     }

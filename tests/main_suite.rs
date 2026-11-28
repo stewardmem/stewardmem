@@ -3616,6 +3616,13 @@ Final paragraph after the rule.";
             // the pack→anchor bindings a gate decision was made against.
             "policy_anchor",
             "policy_pack_binding",
+            // SI0: the scaffold registry — candidates and their parents,
+            // the immutable paired bench evidence a sign re-derives from,
+            // and the proposal a sign acts on. Nothing is ever deleted;
+            // retired is the only exit.
+            "scaffold",
+            "bench_run",
+            "scaffold_proposal",
         ];
         let missing: Vec<String> = expected_tables
             .iter()
@@ -19952,12 +19959,12 @@ mod r38_delivery {
         let db = test_db();
         assert_eq!(
             brain_server::storage_layout::schema_version(&db).as_deref(),
-            Some(brain_server::storage_layout::SCHEMA_VERSION_V1_32_36),
+            Some(brain_server::storage_layout::SCHEMA_VERSION_V1_32_37),
             "the migration literal and the ceiling const must agree on the current stamp"
         );
         assert_eq!(
             brain_server::storage_layout::LATEST_KNOWN_SCHEMA,
-            "1.32.36",
+            "1.32.37",
             "LATEST_KNOWN_SCHEMA must move with the stamp — refuse_newer must not bless a DB \
              this binary cannot migrate"
         );
@@ -20694,12 +20701,12 @@ mod r40_attestations {
         // round; what moves is the ceiling, and it moves for both.
         assert_eq!(
             brain_server::storage_layout::schema_version(&db).as_deref(),
-            Some(brain_server::storage_layout::SCHEMA_VERSION_V1_32_36),
+            Some(brain_server::storage_layout::SCHEMA_VERSION_V1_32_37),
             "the ceiling const and the migration literal must move together"
         );
         assert_eq!(
             brain_server::storage_layout::LATEST_KNOWN_SCHEMA,
-            "1.32.36",
+            "1.32.37",
             "LATEST_KNOWN_SCHEMA must move with the stamp — refuse_newer must not bless a DB \
              this binary cannot migrate"
         );
@@ -21495,7 +21502,7 @@ mod r41_replay {
         // The stamp moved, and moved with the table.
         assert_eq!(
             brain_server::storage_layout::LATEST_KNOWN_SCHEMA,
-            "1.32.36",
+            "1.32.37",
             "the release round is a schema round: the stamp moves with the table that earns it. \
              Later schema rounds re-pin the CURRENT stamp — the model-citation-key round moved \
              it to 1.32.25, the proposal-edge round moved it to 1.32.26, the approve-action \
@@ -21504,11 +21511,12 @@ mod r41_replay {
              round moved it to 1.32.29 for the chat turn's support_decision column, and \
              IMPROVE13 moved it to 1.32.34 for the MemForm provenance stamps, and \
              IMPROVE15 moved it to 1.32.35 for the CustomerProvenance schema act, and \
-             GOVPACK-1 moved it to 1.32.36 for the policy-anchor registry"
+             GOVPACK-1 moved it to 1.32.36 for the policy-anchor registry, and \
+             SI0 moved it to 1.32.37 for the scaffold registry's three tables"
         );
         assert_eq!(
             brain_server::storage_layout::schema_version(&db).as_deref(),
-            Some(brain_server::storage_layout::SCHEMA_VERSION_V1_32_36),
+            Some(brain_server::storage_layout::SCHEMA_VERSION_V1_32_37),
         );
         // ...and the parity table the migration rehearsal walks carries the new
         // table: a rehearsal that came back with zero bindings would produce a
@@ -21998,15 +22006,16 @@ mod r42_authority_bindings {
         let db = test_db();
         assert_eq!(
             brain_server::storage_layout::LATEST_KNOWN_SCHEMA,
-            "1.32.36",
-            "the bindings stamp pin moves with each schema round's stamp (last: GOVPACK-1, \
-             the policy-anchor registry's two tables — before it IMPROVE15, the \
+            "1.32.37",
+            "the bindings stamp pin moves with each schema round's stamp (last: SI0, \
+             the scaffold registry's three tables — before it GOVPACK-1, \
+             the policy-anchor registry's two tables — before that IMPROVE15, the \
              CustomerProvenance schema act): each schema round re-pins the \
              CURRENT stamp, so a stale ceiling fails loudly here"
         );
         assert_eq!(
             brain_server::storage_layout::schema_version(&db).as_deref(),
-            Some("1.32.36"),
+            Some("1.32.37"),
             "what the migration stamps must be what the ceiling declares"
         );
     }
@@ -22935,7 +22944,7 @@ mod r42_authority_bindings {
             .find("CREATE TABLE IF NOT EXISTS delivery_bindings")
             .expect("the table DDL must exist in the migration's production region");
         let stamp_at = migration
-            .find("'schema_version', '1.32.36'")
+            .find("'schema_version', '1.32.37'")
             .expect("the stamp must move to the current schema round's stamp");
         assert!(
             ddl_at < stamp_at,
@@ -22944,7 +22953,7 @@ mod r42_authority_bindings {
         // The stamp's two arms stay in lockstep — the lockstep pin derives both
         // sides, and a half-edited stamp makes `refuse-newer` lie.
         assert!(
-            migration.contains("DO UPDATE SET value = '1.32.36'"),
+            migration.contains("DO UPDATE SET value = '1.32.37'"),
             "both arms of the schema_version upsert must move together"
         );
         // Rehearsal parity: the new table is walked by the migration rehearsal,
@@ -23165,7 +23174,7 @@ mod r43_releases {
         let db = test_db();
         assert_eq!(
             brain_server::storage_layout::LATEST_KNOWN_SCHEMA,
-            "1.32.36",
+            "1.32.37",
             "the release round is a schema round: the stamp moves with the table that earns it. \
              Each schema round re-pins the CURRENT stamp — the per-domain axis round left it at \
              1.32.24, the model-citation-key round moved it to 1.32.25 for the two registry-key \
@@ -23180,20 +23189,21 @@ mod r43_releases {
              moved it to 1.32.33 for the HITL decision-event ledger, and IMPROVE13 \
              moved it to 1.32.34 for the MemForm provenance stamps, and IMPROVE15 \
              moved it to 1.32.35 for the CustomerProvenance schema act, and GOVPACK-1 \
-             moved it to 1.32.36 for the policy-anchor registry"
+             moved it to 1.32.36 for the policy-anchor registry, and SI0 \
+             moved it to 1.32.37 for the scaffold registry's three tables"
         );
         assert_eq!(
             brain_server::storage_layout::schema_version(&db).as_deref(),
-            Some("1.32.36"),
+            Some("1.32.37"),
         );
         let migration = src("src/migration.rs");
         assert!(
-            migration.contains("DO UPDATE SET value = '1.32.36'"),
+            migration.contains("DO UPDATE SET value = '1.32.37'"),
             "both arms of the schema_version upsert must move together"
         );
         let layout = src("src/storage_layout.rs");
         assert!(
-            layout.contains("is_newer_than_known(Some(\"1.32.36\"))"),
+            layout.contains("is_newer_than_known(Some(\"1.32.37\"))"),
             "the probe must move one ABOVE the new ceiling, or it silently tests Equal"
         );
     }
@@ -24305,7 +24315,7 @@ mod r44_outcomes {
         // approve-action round moved it again for the roster's manages column, and the
         // uninstall round moved it again for the register's removed_at column.
         assert!(
-            layout.contains("pub const LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_36;")
+            layout.contains("pub const LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_37;")
                 && layout.contains("\"1.32.31\""),
             "the schema stamp is the lockstep triple: LATEST_KNOWN_SCHEMA must name the \
              newest SCHEMA_VERSION_* const and that const must carry the same literal. R44 \
@@ -24320,7 +24330,9 @@ mod r44_outcomes {
              uninstall round moved it to 1.32.28 for the register's removed_at column, the \
              LL-04 round moved it to 1.32.29 for the chat turn's support_decision column, and \
              IMPROVE11 moved it to 1.32.33 for the HITL decision-event ledger, and IMPROVE13 \
-             moved it to 1.32.34 for the MemForm provenance stamps."
+             moved it to 1.32.34 for the MemForm provenance stamps, and GOVPACK-1 moved \
+             it to 1.32.36 for the policy-anchor registry, and SI0 moved it to 1.32.37 \
+             for the scaffold registry's three tables."
         );
         let rehearse = src("src/bin/brain_migrate_rehearse.rs");
         assert!(

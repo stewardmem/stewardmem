@@ -369,7 +369,7 @@ fn r48_the_runbook_names_the_offsite_approval_requirement() {
 fn r48_adds_no_table_no_stamp_no_dependency() {
     let layout = read_repo("src/storage_layout.rs");
     assert!(
-        layout.contains("LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_36;"),
+        layout.contains("LATEST_KNOWN_SCHEMA: &str = SCHEMA_VERSION_V1_32_37;"),
         "the schema stamp is re-pinned by each schema round: R48 adds no table and no stamp \
          (the ceiling itself is re-pinned by each schema round — R57b moved it, for the \
          trace citation, R60 moved it for the disproof condition's six columns on `claims`, \
@@ -383,9 +383,11 @@ fn r48_adds_no_table_no_stamp_no_dependency() {
          for the knowledge row's scholarly provenance column, IMPROVE08 moved it \
          for the research watch's three tables, IMPROVE11 moved it \
          for the HITL decision-event ledger, IMPROVE13 moved it \
-         for the MemForm provenance stamps, and IMPROVE15 moved it last, \
+         for the MemForm provenance stamps, IMPROVE15 moved it \
          for the CustomerProvenance schema act — the appeal's provenance \
-         value joining the derived_from CHECK)"
+         value joining the derived_from CHECK, GOVPACK-1 moved it for \
+         the policy-anchor registry's two tables, and SI0 moved it for \
+         the scaffold registry's three tables)"
     );
     let manifest = read_repo("Cargo.toml");
     let deps = manifest

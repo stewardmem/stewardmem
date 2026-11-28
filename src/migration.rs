@@ -3536,8 +3536,8 @@ pub fn run_migration_with_store_dim(
     }
 
     db.execute(
-        "INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1.32.36')
-         ON CONFLICT(key) DO UPDATE SET value = '1.32.36';",
+        "INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1.32.37')
+         ON CONFLICT(key) DO UPDATE SET value = '1.32.37';",
         [],
     )?;
 
@@ -3988,6 +3988,69 @@ pub fn run_migration_with_store_dim(
              pack_id TEXT NOT NULL,
              anchor_row_id INTEGER NOT NULL REFERENCES policy_anchor(id),
              PRIMARY KEY (pack_id, anchor_row_id)
+         );",
+    )?;
+
+    // ── the scaffold registry (SI0, 2026-11-28): three guarded CREATEs ──────
+    // The crate (brain-scaffold-core) owns the vocabulary these CHECK lists
+    // name and ALL of the DML; this migration owns the shapes. Nothing is
+    // ever deleted from any of the three — retired is the only exit, so the
+    // registry is append-only by schema.
+    //
+    // `scaffold` — one row per candidate: its kind, its content + hash, the
+    // parent it evolved from. The PARTIAL unique index enforces ONE active
+    // row per kind: the sign retires the parent and actives the candidate in
+    // its own transaction, and the index is the last line of defence against
+    // a second active row even with the core bypassed.
+    //
+    // `bench_run` — the immutable paired evidence a sign re-derives its
+    // verdict from: the split, the corpus hash, the commit, the typed
+    // metric + value, and the raw output LIVING IN THE ROW so raw_sha256 can
+    // be re-verified against it. No production path writes one in SI0
+    // (plan law 3); SI1's runner fills it through the audited seam.
+    //
+    // `scaffold_proposal` — the proposal a sign acts on: the diff, the
+    // rationale, the warrant (a cited trace or the explicit
+    // not_applicable), who recorded it and when, and — after a lawful sign —
+    // who signed it and when.
+    db.execute_batch(
+        "CREATE TABLE IF NOT EXISTS scaffold(
+            id         INTEGER PRIMARY KEY,
+            kind       TEXT NOT NULL CHECK(kind IN ('prompt','frame','retrieval','tool_policy','routing','diff_format')),
+            body       TEXT NOT NULL,
+            body_hash  TEXT NOT NULL,
+            parent_id  INTEGER REFERENCES scaffold(id),
+            status     TEXT NOT NULL CHECK(status IN ('candidate','active','retired')),
+            created_by TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+         );
+         CREATE UNIQUE INDEX IF NOT EXISTS idx_scaffold_one_active_per_kind
+             ON scaffold(kind)
+             WHERE status = 'active';
+
+         CREATE TABLE IF NOT EXISTS bench_run(
+             id          INTEGER PRIMARY KEY,
+             scaffold_id INTEGER NOT NULL REFERENCES scaffold(id),
+             split       TEXT NOT NULL CHECK(split IN ('dev','held_out')),
+             corpus_hash TEXT NOT NULL,
+             \"commit\"    TEXT NOT NULL,
+             metric      TEXT NOT NULL,
+             value       REAL NOT NULL,
+             raw_output  TEXT NOT NULL,
+             raw_sha256  TEXT NOT NULL
+         );
+
+         CREATE TABLE IF NOT EXISTS scaffold_proposal(
+             id            INTEGER PRIMARY KEY,
+             scaffold_id   INTEGER NOT NULL REFERENCES scaffold(id),
+             diff          TEXT NOT NULL,
+             rationale     TEXT NOT NULL,
+             cites_trace   TEXT,
+             warrant       TEXT NOT NULL CHECK(warrant IN ('cited','not_applicable')),
+             recorded_by   TEXT NOT NULL,
+             created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+             signed_by     TEXT,
+             signed_at     TEXT
          );",
     )?;
 

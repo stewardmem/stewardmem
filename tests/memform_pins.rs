@@ -631,10 +631,11 @@ fn mf1_migration_stamps_1_32_34() {
         )
         .expect("stamp");
     assert_eq!(
-        stamp, "1.32.36",
-        "run_migration must stamp the CURRENT ceiling — 1.32.36 is the policy-anchor \
-         registry (GOVPACK-1; the 1.32.35 ceiling was the CustomerProvenance schema act, \
-         IMPROVE15, and the MemformStamps ceiling moved before it); the stamp and the \
+        stamp, "1.32.37",
+        "run_migration must stamp the CURRENT ceiling — 1.32.37 is the scaffold \
+         registry (SI0; the 1.32.36 ceiling was GOVPACK-1's policy-anchor registry, \
+         and the 1.32.35 ceiling was the CustomerProvenance schema act IMPROVE15, \
+         and the MemformStamps ceiling moved before it); the stamp and the \
          vocabulary move together"
     );
 }
@@ -693,19 +694,21 @@ fn mf1_migration_adds_the_closed_column_with_its_check() {
 /// MF-1, the structural half: the known-version bound and the migration's
 /// stamp string agree — either side moving alone reds here. (The const-name
 /// agreement is held by storage_layout's own probe test, which moves to
-/// 1.32.37 in the same commit — the GOVPACK-1 policy-anchor round moved the
-/// ceiling to 1.32.36; IMPROVE15 had moved it to 1.32.35.)
+/// 1.32.38 in the same commit — the SI0 round moved the ceiling to 1.32.37
+/// for the scaffold registry's three tables; the GOVPACK-1 policy-anchor
+/// round had moved it to 1.32.36; IMPROVE15 had moved it to 1.32.35.)
 #[test]
 fn mf1_lockstep_ceiling_moves_with_the_stamp() {
     assert_eq!(
         brain_server::storage_layout::LATEST_KNOWN_SCHEMA,
-        "1.32.36",
-        "the ceiling is the policy-anchor registry (GOVPACK-1; IMPROVE15's 1.32.35 before it)"
+        "1.32.37",
+        "the ceiling is the scaffold registry (SI0; GOVPACK-1's 1.32.36 and \
+         IMPROVE15's 1.32.35 before it)"
     );
     let migration = read_repo("src/migration.rs");
     assert!(
-        migration.contains("'schema_version', '1.32.36'"),
-        "run_migration must stamp 1.32.36 — the stamp and the ceiling move together"
+        migration.contains("'schema_version', '1.32.37'"),
+        "run_migration must stamp 1.32.37 — the stamp and the ceiling move together"
     );
 }
 

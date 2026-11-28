@@ -189,6 +189,13 @@ const PARITY_TABLES: &[&str] = &[
     // instrument it is anchored to, and would say so nowhere.
     "policy_anchor",
     "policy_pack_binding",
+    // the scaffold registry (SI0). The candidates, the paired bench evidence
+    // a sign re-derives from, and the proposals: a rehearsal that lost them
+    // would produce a server that has forgotten every self-improvement
+    // candidate it ever held, and would say so nowhere.
+    "scaffold",
+    "bench_run",
+    "scaffold_proposal",
 ];
 
 /// Size of the random vec0 spot-check. ponytail: 50 is a heuristic — the formal
