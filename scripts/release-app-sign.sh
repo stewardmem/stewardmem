@@ -1257,11 +1257,13 @@ print(next(a["sha256"] for a in rec["artifacts"] if a["name"]=="brain-afm-aarch6
 		die "refusing: the quarantine-exec arm failed — a notarized binary that Gatekeeper refuses must never ship"
 
 	# The sums over the SIGNED bytes (signing changed them — the drill's
-	# law). File-level find, NOT a bare glob: the bundle is a directory and
+	# File-level find, NOT a bare glob: the bundle is a directory and
 	# shasum refuses a directory argument — the sums cover the signed set's
-	# regular files, and the bundle's integrity lives in its signature (the
-	# DMG builder re-sums the whole volume, metallib included).
-	( cd "$dir/Binaries-Signed" && find . -maxdepth 1 -type f | LC_ALL=C sort | xargs shasum -a 256 | sed 's|  \./|  |' > SHA256SUMS )
+	# regular files EXCEPT the sums file itself (the > redirect creates it
+	# before find walks, and a self-describing line can never check), and
+	# the bundle's integrity lives in its signature (the DMG builder re-sums
+	# the whole volume, metallib included).
+	( cd "$dir/Binaries-Signed" && find . -maxdepth 1 -type f ! -name SHA256SUMS | LC_ALL=C sort | xargs shasum -a 256 | sed 's|  \./|  |' > SHA256SUMS )
 	( cd "$dir/Binaries-Signed" && shasum -a 256 --check SHA256SUMS > /dev/null ) ||
 		die "refusing: the signed set's own sums do not check"
 	[[ "$(wc -l < "$dir/Binaries-Signed/SHA256SUMS" | tr -d ' ')" == "${#assets[@]}" ]] ||
